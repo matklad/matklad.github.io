@@ -4,20 +4,20 @@ title:  "Min Of Three"
 date:   2017-03-12 19:39:15 +0300
 ---
 
-How to find a minimal of three `double` numbers?  It may be surprising to you
-(it certainly was to me), but there may be more than one way to do it, and with
-big difference in performance as well.  It is possible to make this simple
+How to find a minimum of three `double` numbers?  It may be surprising to you
+(it certainly was to me), but there is more than one way to do it, and with big
+difference in performance as well. It is possible to make this simple
 calculation significantly faster by utilizing CPU level parallelism.
 
-The phenomenon described here was observed in [this thread] of the Rust forum.
-I am not the one who found out what is going on, I am just writing it down as a
-blog post :)
+The phenomenon described in this blog post was observed in [this thread] of the
+Rust forum.  I am not the one who found out what is going on, I am just writing
+it down :)
 
 [this thread]: https://users.rust-lang.org/t/performance-issue-with-c-array-like-computation-2-times-worst-than-naive-java/9807
 
-We will be using Rust for the post, but the language is not important,
-the original program was in Java. What will turn out to be important is CPU architecture.
-The laptop on which the measurements are done has `i7-3612QM`.
+We will be using Rust, but the language is not important, the original program
+was in Java. What will turn out to be important is CPU architecture.  The laptop
+on which the measurements are done has `i7-3612QM`.
 
 ## Test subject
 
@@ -42,12 +42,12 @@ as a table where each cell depends on three others:
 
 ![Dynamic programming 2D table]({{ site.url }}/assets/min3_table.png)
 
-It is possible to avoid storing the whole table explicitly and keep only two rows at a time:
+It is possible to avoid storing the whole table explicitly. Each row depends
+only on the previous one, so we need to store only two rows at a time.
 
 ![Dynamic programming 2 row]({{ site.url }}/assets/min3_rows.png)
 
-The Rust code for this variation looks like this:
-
+Here is the Rust code for this version:
 
 ~~~rust
 fn dtw(xs: &[f64], ys: &[f64]) -> f64 {
@@ -65,6 +65,8 @@ fn dtw(xs: &[f64], ys: &[f64]) -> f64 {
             let d01 = curr[iy - 1];
             let d10 = prev[iy];
 
+            // Find the minimum of d11, d01, d10
+            // by enumerating all the cases. 
             let d = if d11 < d01 {
                 if d11 < d10 { d11 } else { d10 }
             } else {
@@ -88,12 +90,12 @@ fn dtw(xs: &[f64], ys: &[f64]) -> f64 {
 
 ## Profile first
 
-Is it fast? If I compile it in `--release` mode and with `[build] rustflags =
-"-C target-cpu=native"` in my `~/.cargo/config`, it takes 435 milliseconds for
-two random sequences of length 10000.
+Is it fast? If we compile it in `--release` mode with `[build] rustflags = "-C
+target-cpu=native"` in `~/.cargo/config`, it takes 435 milliseconds for two
+random sequences of length 10000.
 
-What is the bottleneck? Using [`perf annotate`] command we can look at the
-instruction level profile of the main loop:
+What is the bottleneck? Let's look at the instruction level profile of the main
+loop using [`perf annotate`] command:
 
 [`perf annotate`]: https://perf.wiki.kernel.org/index.php/Main_Page
 
@@ -117,16 +119,15 @@ instruction level profile of the main loop:
    10.67 :       vmovsd %xmm0,(%rdi,%rsi,8)
 ~~~
 
-`perf annotate` uses AT&T assembly syntax, this means that instruction
-destination registry is on the right.
+`perf annotate` uses AT&T assembly syntax, this means that the destination
+registry is on the right.
 
 The `xmm0` registry holds the value of `curr[iy]`, which was calculated on the
 previous iteration. Values of `prev[iy - 1]` and `prev[iy]` are fetched into
-`xmm1` and `xmm2`. It is nice that although the original code contained three
-`if` expressions, the assembly does not have any jumps and instead uses two
-`min` and one `blend` instruction to select the minimum. Nevertheless, a
-significant amount of time, according to `perf`, is spent calculating the
-minimum.
+`xmm1` and `xmm2`. Note that although the original code contained three `if`
+expressions, the assembly does not have any jumps and instead uses two `min` and
+one `blend` instruction to select the minimum. Nevertheless, a significant
+amount of time, according to `perf`, is spent calculating the minimum.
 
 
 ## Optimization
@@ -149,8 +150,8 @@ fn dtw(xs: &[f64], ys: &[f64]) -> f64 {
 [Code on Rust playground](http://play.integer32.com/?gist=c69968bb572f2973b1c314f92e4fb332&version=stable)
 
 This version completes in 430 milliseconds, which is a nice win of 5
-milliseconds, but is not that impressive. The assembly looks somewhat nicer
-though:
+milliseconds over the first version, but is not that impressive. The assembly
+looks cleaner though:
 
 ~~~
     0.00 :       vmovsd -0x8(%rax,%rsi,8),%xmm1
@@ -181,7 +182,7 @@ fn dtw(xs: &[f64], ys: &[f64]) -> f64 {
 [Code on Rust playground](http://play.integer32.com/?gist=caf7609db82341fb7ccf13033738232e&version=stable)
 
 This version takes only 287 milliseconds to run, which is roughly 1.5 times
-faster than the previous one! But the assembly looks almost the same ...
+faster than the previous one! However, the assembly looks almost the same ...
 
 ~~~
     0.08 :       vmovsd -0x8(%rax,%rsi,8),%xmm1
@@ -218,17 +219,17 @@ update rule:
 
 ![Parallel update]({{ site.url }}/assets/min3_par.png)
 
-The nice thing about this update rule is that we can calculate two cells
-simultaneously in parallel. There is no data dependency between `curr[i]` and
-`curr[i + 1]`.
+The important property of this update rule is that CPU can calculate two cells
+simultaneously in parallel, because there is no data dependency between
+`curr[i]` and `curr[i + 1]`.
 
 We do have `vminsd %xmm0,%xmm1,%xmm0`, but it is equivalent to `vmovsd
-%xmm1,%xmm0` if `xmm1` is smaller then `xmm0`. And this is often the case:
+%xmm1,%xmm0` if `xmm1` is smaller than `xmm0`. And this is often the case:
 `xmm1` holds the minimum of upper and diagonal cell, so it is likely to be less
 then a single cell to the left. Also, the diagonal path is taken slightly more
 often then the two alternatives, which adds to the bias.
 
-So it looks like my CPU is able to speculatively execute `vminsd` and
+So it looks like the CPU is able to speculatively execute `vminsd` and
 parallelise the following computation based on this speculation! Isn't that
 awesome?
 
