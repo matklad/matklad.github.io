@@ -244,6 +244,11 @@ the cells diagonally:
 
 I have not tried this yet though.
 
+**UPDATE:** I have tried it now ([Code on Rust playground](http://play.integer32.com/?gist=c883197de6f7e8f26afe730838d2f556&version=stable)).
+The diagonal indexing is really tricky to get right, and the resulting code is not faster, even with explicit [`rayon`] parallelism.
+
+[`rayon`]: https://github.com/nikomatsakis/rayon
+
 
 ## Conclusion
 
