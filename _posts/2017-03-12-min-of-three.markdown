@@ -4,19 +4,18 @@ title:  "Min Of Three"
 date:   2017-03-12 19:39:15 +0300
 ---
 
-What is the fastest way to find a minimal of three `double` numbers?
-It may be surprising to you (it certainly was to me), but there may be
-more than one way to do it, and with big difference in performance as well.
-It is possible to make this simple calculation significantly faster by utilizing
-CPU level parallelism.
+How to find a minimal of three `double` numbers?  It may be surprising to you
+(it certainly was to me), but there may be more than one way to do it, and with
+big difference in performance as well.  It is possible to make this simple
+calculation significantly faster by utilizing CPU level parallelism.
 
 The phenomenon described here was observed in [this thread] of the Rust forum.
-I am not the one who found out what the hell is going on,
-I am just writing it down as a blog post :)
+I am not the one who found out what is going on, I am just writing it down as a
+blog post :)
 
 [this thread]: https://users.rust-lang.org/t/performance-issue-with-c-array-like-computation-2-times-worst-than-naive-java/9807
 
-I will be using Rust for the post, but the language is not important,
+We will be using Rust for the post, but the language is not important,
 the original program was in Java. What will turn out to be important is CPU architecture.
 The laptop on which the measurements are done has `i7-3612QM`.
 
