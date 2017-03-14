@@ -7,7 +7,9 @@ date:   2017-03-12 19:39:15 +0300
 How to find a minimum of three `double` numbers?  It may be surprising to you
 (it certainly was to me), but there is more than one way to do it, and with big
 difference in performance as well. It is possible to make this simple
-calculation significantly faster by utilizing CPU level parallelism.
+calculation significantly faster by utilizing [CPU level parallelism].
+
+[CPU level parallelism]: https://en.wikipedia.org/wiki/Superscalar_processor
 
 The phenomenon described in this blog post was observed in [this thread] of the
 Rust forum.  I am not the one who found out what is going on, I am just writing
