@@ -21,14 +21,14 @@ on which the measurements are done has `i7-3612QM`.
 
 ## Test subject
 
-We will be measuring [dynamic time wrapping] algorithm. This algorithm
+We will be measuring [dynamic time warping] algorithm. This algorithm
 calculates a distance between two real number sequences, `xs` and `ys`. It is
 very similar to [edit distance] or [Needleman–Wunsch], because it uses the same
 dynamic programming structure.
 
 [Needleman–Wunsch]: https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm
 [edit distance]: https://en.wikipedia.org/wiki/Wagner%E2%80%93Fischer_algorithm
-[dynamic time wrapping]: https://en.wikipedia.org/wiki/Dynamic_time_warping
+[dynamic time warping]: https://en.wikipedia.org/wiki/Dynamic_time_warping
 
 The main equation is
 
@@ -132,7 +132,7 @@ amount of time, according to `perf`, is spent calculating the minimum.
 
 ## Optimization
 
-Can we do better? Let's use `min2` function to calculate minimum of there
+Can we do better? Let's use `min2` function to calculate minimum of three
 elements recursively:
 
 ~~~rust
