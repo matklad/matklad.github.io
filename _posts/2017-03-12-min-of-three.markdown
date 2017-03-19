@@ -244,13 +244,9 @@ the cells diagonally:
 
 ![Diagonal update]({{ site.url }}/assets/min3_diag.png)
 
-I have not tried this yet though.
+This is explored in [the second part] of this post.
 
-**UPDATE:** I have tried it now ([Code on Rust playground](http://play.integer32.com/?gist=c883197de6f7e8f26afe730838d2f556&version=stable)).
-The diagonal indexing is really tricky to get right, and the resulting code is not faster, even with explicit [`rayon`] parallelism.
-
-[`rayon`]: https://github.com/nikomatsakis/rayon
-
+[the second part]: {{ site.baseurl }}{% post_url 2017-03-18-min-of-three-part-2 %}
 
 ## Conclusion
 
