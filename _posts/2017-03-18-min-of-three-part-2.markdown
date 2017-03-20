@@ -10,7 +10,7 @@ grid based dynamic programming algorithm for [CPU level parallelism].
 [previous post]:  {{ site.baseurl }}{% post_url 2017-03-12-min-of-three %}
 [CPU level parallelism]: https://en.wikipedia.org/wiki/Superscalar_processor
     
-## In The Previous Series
+## In The Previous Episode
 
 This is the code we are trying to make faster:
 
@@ -110,9 +110,9 @@ Check the [previous post] for more details!
 
 ## The parallel plan
 
-Can we loosen dependencies between cells even more to make parallel
-computation possible? What if instead of filling the table row by row,
-we work by diagonals?
+Can we loosen dependencies between cells even more to benefit from instruction
+level parallelism? What if instead of filling the table row by row, we do it
+diagonals?
 
 ![Diagonal update]({{ site.url }}/assets/min3_diag_color.png)
 
@@ -164,7 +164,7 @@ For our grand plan, we need to fit a rhombus peg in a square hole:
 * On each iteration we remember three columns (`d1`, `d2` `d3` in the
   code).
 * There is a phase transition once we've crossed the main diagonal.
-* Sum of `ix` and `iy` is equal to the number of the diagonal.
+* We can derive `iy` from the fact that `ix + iy = id`.
 
 
 ## Code
