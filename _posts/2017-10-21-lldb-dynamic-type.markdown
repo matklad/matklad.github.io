@@ -46,11 +46,11 @@ dynamicly.
 As usual, there's no magic. For example, LLDB has a hard-coded knowledge of C++
 programming language, which allows debugger to inspect types at runtime.
 Specifically, this is handled by `LanguageRuntime` LLDB *plugin*, which has a
-curious function [`GetDynamicTypeAndAddress`], whose job is to poke the 
+curious function [`GetDynamicTypeAndAddress`], whose job is to poke the
 representation of value to get its real type and adjust pointer, if necessary (
 remember, with multiple inheritance, casts may change the value of the pointer).
 
-[`GetDynamicTypeAndAddress`](https://github.com/llvm-mirror/lldb/blob/bc19e289f759c26e4840aab450443d4a85071139/include/lldb/Target/LanguageRuntime.h#L82)
+[`GetDynamicTypeAndAddress`]: https://github.com/llvm-mirror/lldb/blob/bc19e289f759c26e4840aab450443d4a85071139/include/lldb/Target/LanguageRuntime.h#L82
 
 The implementation of this function for C++ language lives in
 [ItaniumABILanguageRuntime.cpp]: although, unlike C, C++ lacks a standardized
