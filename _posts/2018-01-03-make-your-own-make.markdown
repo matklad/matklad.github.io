@@ -136,3 +136,5 @@ todo = "run --package tools --bin todo"
 ~~~
 
 Voilà! Now, running `cargo gen` or `cargo todo` will execute the tasks!
+
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/7v0q3h/blog_post_i_accidentally_a_build_system_almost/).
