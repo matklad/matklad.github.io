@@ -21,7 +21,7 @@ elaborate release procedure.
 
 For such use-cases, a general purpose task automation solution is needed. In
 this blog post I want to describe one possible approach, which leans heavily on
-Cargo's build-in functionality.
+Cargo's built-in functionality.
 
 
 ## Existing Solutions
@@ -50,7 +50,7 @@ An obvious idea is to use Rust for task automation. Originally, I have proposed
 creating a special Cargo subcommand to execute build tasks, implemented as Rust
 programs, in [this
 thread](https://users.rust-lang.org/t/idea-for-a-crate-tool-cargo-task/15300/).
-However, since then I realized that there are build-in tools in Cargo which
+However, since then I realized that there are built-in tools in Cargo which
 allow one to get a pretty ergonomic solution. Namely, the combination of
 workspaces, aliases and ability to define binaries seems to do the trick.
 
