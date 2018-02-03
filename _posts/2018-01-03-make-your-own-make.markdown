@@ -135,4 +135,4 @@ gen  = "run --package tools --bin gen"
 todo = "run --package tools --bin todo"
 ~~~
 
-Voila! Now, running `cargo gen` or `cargo todo` will execute the tasks!
+Voilà! Now, running `cargo gen` or `cargo todo` will execute the tasks!
