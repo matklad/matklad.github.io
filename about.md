@@ -4,13 +4,9 @@ title: About
 permalink: /about/
 ---
 
+<img align="right" src="/assets/matklad.jpeg" width="30%">
+
 Hi! I am Aleksey Kladov, a programmer interested in simple code
-and programming languages.  
+and programming languages.
 
-Among other things, I've worked on [rosalind],
-[stepik], [intellij-rust] and [cargo].
-
-[rosalind]: http://rosalind.info
-[stepik]: https://stepik.org
-[intellij-rust]: https://github.com/intellij-rust/intellij-rust
-[cargo]: https://github.com/rust-lang/cargo
+You can find my resume [here](/resume/).
