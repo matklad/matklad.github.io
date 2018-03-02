@@ -410,3 +410,5 @@ Bye!
 ## Conclusion
 
 So, yeah, this all was written just to say "in Rust, cancellation is `drop`" :-)
+
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/81j1gd/blog_stropping_a_rust_worker/).
