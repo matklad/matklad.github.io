@@ -410,4 +410,4 @@ love to know a proper solution for this problem: the described trait
 object workaround is closer to code golf than to the practical
 approach.
 
-Discussion on [/r/rust]().
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/8h2kt5/blog_post_encapsulating_lifetime_of_the_field/).
