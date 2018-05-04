@@ -1,0 +1,413 @@
+---
+layout: post
+title:  "Encapsulating Lifetime of the Field"
+date:   2018-05-04 20:47:23 +0300
+---
+
+This is a post about an annoying Rust pattern and an annoying
+workaround, without a good solution :) 
+
+
+# Problem Statement
+
+Suppose you have some struct which holds some references inside. Now,
+you want to store a reference to this structure inside some larger
+struct. It could look like this:
+
+~~~rust
+struct Foo<'a> {
+    buff: &'a String
+}
+
+struct Context<'f> {
+    foo: &'f Foo
+}
+~~~
+
+The code, as written, does not compile:
+
+~~~
+error[E0106]: missing lifetime specifier
+ --> src/main.rs:8:14
+  |
+8 |     foo: &'f Foo
+  |              ^^^ expected lifetime parameter
+~~~
+
+To fix it, we need to get `Foo` an additional lifetime:
+
+~~~rust
+struct Foo<'a> {
+    buff: &'a String
+}
+
+struct Context<'f, 'a: 'f> {
+    foo: &'f Foo<'a>
+}
+~~~
+
+And this is the problem which is the subject of this post. Although
+`Foo` is supposed to be an implementation detail, its lifetime, `'a`,
+bleeds to `Context`'s interface, so most of the clients of `Context`
+would need to name this lifetime together with `'a: 'f` bound. Note
+that this effect is transitive: in general, rust struct has to name
+lifetimes of contained types, and their contained types, and their
+contained types, ... But let's concentrate on this two-level example!
+
+The question is, can we somehow hide this `'a` from users of
+`Context`? It's interesting that I've first distilled this problem
+about half a year ago in this [urlo
+post](https://users.rust-lang.org/t/dealing-with-references-to-references/14065),
+and today, while refactoring some of Cargo internals in
+[#5476](https://github.com/rust-lang/cargo/pull/5476) with
+[@dwijnand](https://github.com/dwijnand), I've stumbled upon
+something, which could be called a solution, if you squint hard
+enough.
+
+
+# Extended Example
+
+Let's create a somewhat longer example to check that lifetime setup
+actually works out in practice.
+
+~~~rust
+struct Foo<'a> {
+    buff: &'a String
+}
+
+impl<'a> Foo<'a> {
+    fn len(&self) -> usize {
+        self.buff.len()
+    }
+}
+
+struct Context<'f, 'a: 'f> {
+    foo: &'f Foo<'a>
+}
+
+// Note how we have to repeat ugly `'a: 'f` bound here!
+impl<'f, 'a: 'f> Context<'f, 'a> {
+    fn new(foo: &'f Foo<'a>) -> Self {
+        Context { foo }
+    }
+
+    fn len(&self) -> usize {
+        self.foo.len()
+    }
+}
+
+// Check, that we actually can create a `Context` 
+// from `Foo` and call a method.
+fn test<'f, 'a>(foo: &'f Foo<'a>) {
+    let ctx = Context::new(foo);
+    ctx.len();
+}
+~~~
+
+[playground](https://play.rust-lang.org/?gist=874046bf74f60644a59f75023518fa0c&version=stable&mode=debug)
+
+# First fix
+
+The first natural idea is to try to use the same lifetime, `'f` for
+both `&` and `Foo`: it fits syntactically, so why not give it a try?
+
+~~~rust
+struct Foo<'a> {
+    buff: &'a String
+}
+
+impl<'a> Foo<'a> {
+    fn len(&self) -> usize {
+        self.buff.len()
+    }
+}
+
+struct Context<'f> {
+    foo: &'f Foo<'f>
+}
+
+impl<'f> Context<'f> {
+    fn new<'a>(foo: &'f Foo<'a>) -> Self {
+        Context { foo }
+    }
+
+    fn len(&self) -> usize {
+        self.foo.len()
+    }
+}
+
+fn test<'f, 'a>(foo: &'f Foo<'a>) {
+    let ctx = Context::new(foo);
+    ctx.len();
+}
+~~~
+
+[playground](https://play.rust-lang.org/?gist=5be80cbb6d896399953ece71babf4f70&version=stable&mode=debug)
+
+Surprisingly, it works! I'll show a case where this approach breaks down
+in a moment, but let's first understand *why* this works. The magic
+happens in the `new` method, which could be written more explicitly as
+
+~~~rust
+fn new<'a: 'f>(foo: &'f Foo<'a>) -> Self {
+    let foo1: &'f Foo<'f> = foo;
+    Context { foo: foo1 }
+}
+~~~
+
+Here, we assign a `&'f Foo<'a>` to a variable of a different type `&'f
+Foo<'f>`. Why is this allowed? We use `'a` lifetime in `Foo` only for
+a shared reference. That means that `Foo` is
+[variant](https://doc.rust-lang.org/nomicon/subtyping.html) over
+`'a`. And that means that the compiler can use `Foo<'a>` instead of
+`Foo<'f>` if `'a: 'f`. In other words rustc is allowed to shorten the
+lifetime.
+
+It's interesting to note that the original `new` function didn't say
+that `'a: 'f`, although we had to add this bound to the `impl` block
+explicitly. For functions, the compiler infers such bounds from
+parameters.
+
+Hopefully, I've mixed polarity an even number of times in this
+variance discussion :-)
+
+
+# Going invariant
+
+Let's through a wrench in the works by adding some unique references:
+
+~~~rust
+struct Foo<'a> {
+    buff: &'a mut String
+}
+
+impl<'a> Foo<'a> {
+    fn push(&mut self, c: char) {
+        self.buff.push(c)
+    }
+}
+
+struct Context<'f, 'a: 'f> {
+    foo: &'f mut  Foo<'a>
+}
+
+impl<'f, 'a: 'f> Context<'f, 'a> {
+    fn new(foo: &'f mut Foo<'a>) -> Self {
+        Context { foo }
+    }
+
+    fn push(&mut self, c: char) {
+        self.foo.push(c)
+    }
+}
+
+fn test<'f, 'a>(foo: &'f mut Foo<'a>) {
+    let mut ctx = Context::new(foo);
+    ctx.push('9');
+}
+~~~
+
+[playground](https://play.rust-lang.org/?gist=e9353288e05a31ce504bc073fd05ead0&version=stable&mode=debug)
+
+
+`Foo` is now invariant, so the previous solution does not work:
+
+~~~rust
+struct Context<'f> {
+    foo: &'f mut  Foo<'f>
+}
+
+impl<'f> Context<'f> {
+    fn new<'a: 'f>(foo: &'f mut Foo<'a>) -> Self {
+        let foo1: &'f mut Foo<'f> = foo;
+        Context { foo: foo1 }
+    }
+
+    fn push(&mut self, c: char) {
+        self.foo.push(c)
+    }
+}
+~~~
+
+~~~
+error[E0308]: mismatched types
+  --> src/main.rs:17:37
+   |
+17 |         let foo1: &'f mut Foo<'f> = foo;
+   |                                     ^^^ lifetime mismatch
+   |
+   = note: expected type `&'f mut Foo<'f>`
+              found type `&'f mut Foo<'a>`
+~~~
+
+[playground](https://play.rust-lang.org/?gist=f2b6ceab4e82d9f02d605befabe59524&version=stable&mode=debug)
+
+
+# Unsheathing existentials
+
+Let's look again at the `Context` type:
+
+~~~rust
+struct Context<'f, 'a: 'f> {
+    foo: &'f mut  Foo<'a>
+}
+~~~
+
+What we want to say is that, inside the `Context`, there is *some*
+lifetime `'a` which the consumers of `Context` need not care about,
+because it outlives `'f` anyway. I *think* that the syntax for that
+would be something like 
+
+~~~rust
+struct Context<'f> {
+    foo: &'f mut for<'a: f> Foo<'a>
+}
+~~~
+
+Alas, `for` is supported only for traits and function pointers, and
+there it has the opposite polarity of `for all` instead of `exists`,
+so using it for a struct gives
+
+~~~
+error[E0404]: expected trait, found struct `Foo`
+  --> src/main.rs:12:30
+   |
+12 |     foo: &'f mut for<'a: 'f> Foo<'a>
+   |                              ^^^^^^^ not a trait
+~~~
+
+
+# A hack
+
+However, and this is what I realized reading the Cargo's source code,
+we *can* use a trait here!
+
+~~~rust
+struct Foo<'a> {
+    buff: &'a mut String
+}
+
+impl<'a> Foo<'a> {
+    fn push(&mut self, c: char) {
+        self.buff.push(c)
+    }
+}
+
+trait Push {
+    fn push(&mut self, c: char);
+}
+
+impl<'a> Push for Foo<'a> {
+    fn push(&mut self, c: char) {
+        self.push(c)
+    }
+}
+
+struct Context<'f> {
+    foo: &'f mut (Push + 'f)
+}
+
+impl<'f> Context<'f> {
+    fn new<'a>(foo: &'f mut Foo<'a>) -> Self {
+        let foo: &'f mut Push = foo;
+        Context { foo }
+    }
+
+    fn push(&mut self, c: char) {
+        self.foo.push(c)
+    }
+}
+
+fn test<'f, 'a>(foo: &'f mut Foo<'a>) {
+    let mut ctx = Context::new(foo);
+    ctx.push('9');
+}
+~~~
+
+[playground](https://play.rust-lang.org/?gist=7d94842bad6cc92652e3d175e6cf435f&version=stable&mode=debug)
+
+We've added a `Push` trait, which has the same interface as the `Foo`
+struct, but is **not** parametrized over the lifetime. This is
+possible because `Foo`'s interface doesn't actually depend on the `'a`
+lifetime. And this allows us to magically write `foo: &'f mut (Push + 'f)`.
+This `+ 'f` is what hides `'a` as "some unknown lifetime, which outlives 'f'".
+
+
+# A hack, refined
+
+There are many problems with the previous solution: it is ugly,
+complicated and introduces dynamic dispatch. I don't know how to solve
+those problems, so let's talk about something I know how to deal with
+:-)
+
+The `Push` trait duplicated the interface of the `Foo` struct. It
+wasn't *that* bad, because `Foo` had only one method. But what if
+`Bar` has a dozen of methods? Could we write a more general trait,
+which gives us access to `Foo` directly? Looks like it is possible, at
+least to some extent:
+
+~~~rust
+struct Foo<'a> {
+    buff: &'a mut String
+}
+
+impl<'a> Foo<'a> {
+    fn push(&mut self, c: char) {
+        self.buff.push(c)
+    }
+}
+
+trait WithFoo {
+    fn with_foo<'f>(&'f mut self, f: &mut FnMut(&'f mut Foo));
+}
+
+impl<'a> WithFoo for Foo<'a> {
+    fn with_foo<'f>(&'f mut self, f: &mut FnMut(&'f mut Foo)) {
+        f(self)
+    }
+}
+
+struct Context<'f> {
+    foo: &'f mut (WithFoo + 'f)
+}
+
+impl<'f> Context<'f> {
+    fn new<'a>(foo: &'f mut Foo<'a>) -> Self {
+        let foo: &'f mut WithFoo = foo;
+        Context { foo }
+    }
+
+    fn push(&mut self, c: char) {
+        self.foo.with_foo(&mut |foo| foo.push(c))
+    }
+}
+
+fn test<'f, 'a>(foo: &'f mut Foo<'a>) {
+    let mut ctx = Context::new(foo);
+    ctx.push('9');
+}
+~~~
+
+[playground](https://play.rust-lang.org/?gist=419d72db0b34c6cdc69a507a1fab2689&version=stable&mode=debug)
+
+How does this work? Generally, we want to say that "there exists some
+lifetime `'a`, which we know nothing about except that `'a: 'f`". Rust
+supports similar constructions only for functions, where `for<'a> fn
+foo(&'a i32)` means that a function works for all lifetimes `'a`. The
+trick is to turn one into another! The desugared type of callback `f`,
+is `&mut for<'x> FnMut(&'f mut Foo<'x>)`. That is, it is a function
+which accepts `Foo` with any lifetime. Given that callback, we are
+able to feed our `Foo` with a particular lifetime to it.
+
+
+# Conclusion
+
+While the code examples in the post juggled `Foo`s and `Bar`s, the
+core problem is real and greatly affects the design of Rust code. When
+you add a lifetime to a struct, you "poison" it, and all structs which
+contain it as a member need to declare this lifetime as well. I would
+love to know a proper solution for this problem: the described trait
+object workaround is closer to code golf than to the practical
+approach.
+
+Discussion on [/r/rust]().
