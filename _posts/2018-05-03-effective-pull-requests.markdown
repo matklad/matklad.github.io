@@ -57,9 +57,8 @@ $ $EDITOR hack-hack-hack
 $ git commit -am'A very important fix'
 $ echo "urgh, should have done this on a separate branch"
 
-$ git checkout -b pr-branch
-$ git checkout master
-$ git reset --hard HEAD~1
+$ git branch pr-branch
+$ git reset --hard origin/master
 $ git checkout pr-branch
 ```
 
