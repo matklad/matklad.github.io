@@ -14,6 +14,9 @@ documents the workflow. In a nutshell, it is
 * use the master branch to track upstream repository
 * automate
 
+Note that [hub](https://hub.github.com/) utility exist to handle these
+issues automatically. I personally haven't used for no real reason,
+you definitely should check it out!
 
 # Avoiding the master branch
 
