@@ -174,7 +174,7 @@ variance discussion :-)
 
 # Going invariant
 
-Let's through a wrench in the works by adding some unique references:
+Let's throw a wrench in the works by adding some unique references:
 
 ~~~rust
 struct Foo<'a> {
