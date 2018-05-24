@@ -24,7 +24,7 @@ type-erased `Any` objects as well.
 In the common case of statically known configuration, the awesome
 solution that Rust offers is [serde]. You stick `derive(Deserialize)`
 in front of the `Config` struct and read it from JSON, YML, TOML or
-event just [environment variables]!
+even just [environment variables]!
 
 ~~~rust
 #[derive(Deserialize)]
