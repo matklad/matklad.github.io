@@ -40,7 +40,7 @@ fn parse_config(data: &str) -> Result<Config> {
 
 
 
-[serde]: crates.io/crates/serde
+[serde]: https://crates.io/crates/serde
 [environment variables]: https://github.com/softprops/envy
 
 
