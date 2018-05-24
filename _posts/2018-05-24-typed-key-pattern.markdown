@@ -184,7 +184,7 @@ impossible.
 
 Finally, I've written a small crate for this [`typed_key`] :) 
 
-Discussion on [/r/rust]().
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/8ls25e/blog_post_typed_key_pattern/).
 
 [IntelliJ]: https://github.com/JetBrains/intellij-community/blob/16bfca92199dca383b66c69c3427b4639ea8e213/platform/util/src/com/intellij/openapi/util/Key.java
 [`UserDataHolder`]: https://github.com/JetBrains/intellij-community/blob/16bfca92199dca383b66c69c3427b4639ea8e213/platform/util/src/com/intellij/openapi/util/UserDataHolder.java
