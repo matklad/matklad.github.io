@@ -223,6 +223,6 @@ fn main() {
 [crate]: https://crates.io/crates/typed_index_derive
 
 
-Discussion on [/r/rust]().
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/8ohaj4/blog_post_newtype_index_pattern/).
 
 
