@@ -662,4 +662,4 @@ These are the main points:
 * Parsing is an unsolved problem :)
 
 
-Discussion on [/r/rust]().
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/8pbi54/blog_post_modern_parser_generator/).
