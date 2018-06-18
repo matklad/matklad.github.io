@@ -138,4 +138,4 @@ was intended to check.
 
 
 Once again, if you know how this thing is called, please do enlighten
-me in comments! Discussion on [/r/rust]().
+me in comments! Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/8s1eu1/blog_post_a_trick_for_test_maintenance/).
