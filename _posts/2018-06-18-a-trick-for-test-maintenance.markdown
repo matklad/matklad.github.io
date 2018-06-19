@@ -110,9 +110,9 @@ the corresponding `covered_by` line then the error will be raised at
 the end of the block.
 
 Under the hood, this is implemented as a global `HashMap<String, u64>`
-which counts how many times each line was executed. So `covers!`
+which counts how many times each line was executed. So `covered_by!`
 [increments](https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L146)
-the corresponding count, and `covered_by!` returns a guard object that
+the corresponding count, and `covers!` returns a guard object that
 [checks](https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L174-L176)
 in `Drop` that the count was incremented. It is possible to disable
 these checks at compile time. And yes, the library actually [exposes a
