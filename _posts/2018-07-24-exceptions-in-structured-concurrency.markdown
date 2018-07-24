@@ -225,4 +225,4 @@ native OS threads that:
 * allows to (optionally?) share stack data between the threads.
 
 
-Discussion on [r/rust]().
+Discussion on [r/rust](https://www.reddit.com/r/rust/comments/91d0u2/blog_post_exceptions_versus_structured_concurrency/).
