@@ -18,8 +18,8 @@ structured concurrency, which was recently popularized by
 
 In the blog post, @vorner argues that unwinding sometimes may do more
 harm than good, if it manages to break some \[unsafe\] invariants,
-cross FFI boundary or put the application into the impossible state. I
-fully agree that these all are indeed significant drawbacks of panics.
+cross FFI boundary or put the application into an impossible state. I
+fully agree that these all are indeed significant dangers of panics.
 
 However, I don't think that just disabling unwinding and using `panic
 = "abort"` is the proper fix to the problem for the majority of use
@@ -30,11 +30,11 @@ be able to handle bugs in requests gracefully.
 I've spent quite some time working on the
 [IDE](https://github.com/intellij-rust/intellij-rust), and, although
 it might not be apparent on the first sight, IDEs are also based on
-request/responses: 
+requests/responses:
 
-* users types a character, IDE updates it's internal data structures
-* users requests completion, IDE runs some calculation on the data and
-  gives results
+* users types a character, IDE updates its internal data structures
+* users requests completion, IDE runs some calculations on the data
+  and gives results
   
 As IDEs are large and have a huge number of features, it is inevitable
 that some not very important linting inspection will fail due to index
@@ -51,25 +51,25 @@ applicable to a significant number of applications. Of course, even in
 this setting a bug in the code can in theory have dire consequences,
 but in practice this is mitigated by the following:
 
-* Majority of requests are readonly, and so can't corrupt data.
+* Majority of requests are readonly and can't corrupt data.
 
 * The low-level implementation of write requests usually has a
   relatively bug-free transnational semantics, so bugs in write
   requests which lead to transaction aborts don't corrupt data as
   well.
   
-* Most applications have some kind of backup/undo functionality, so
-  even if a bug leads to a commit of invalid transactions, user often
-  can restore good state (of course this works only for relatively
+* Most applications have some kind of backup/undo functionality, and
+  even if a bug leads to a commit of invalid data, user often can
+  restore good state (of course this works only for relatively
   unimportant data).
   
   
 However, @vorner identifies a very interesting specific problem with
 unwinding which I feel we should really try to solve better: if you
-have a bunch of the threads running, and one of them catches fire,
-what happens? It turns out that often nothing particular happens: some
-more threads might die from the poisoned mutexes and closed channels,
-but other treads might continue, and, as a result the application will
+have a bunch of threads running, and one of them catches fire, what
+happens? It turns out that often nothing particular happens: some more
+threads might die from the poisoned mutexes and closed channels, but
+other treads might continue, and, as a result the application will
 exist in a half-dead state for indefinite period of time.
   
 
@@ -82,8 +82,8 @@ At this point, some of you might be silently screaming "Erlang!":
 
 
 You are right! Erlang and especially OTP behaviors are great for
-managing errors at scale. However I think a full actor system might be
-an overkill if all you want is just an OS thread.
+managing errors at scale. However a full actor system might be an
+overkill if all you want is just an OS thread.
 
 
 If you haven't done this already, pack some snacks, prepare lots of
@@ -121,9 +121,9 @@ fn structured() {
 
 
 The benefit of this organization is that all threads form a tree,
-which gives you much greater control, because you know for sure which
-parts are sequential, and which are concurrent. Concurrency is
-explicitly scoped.
+which gives you greater control, because you know for sure which parts
+are sequential and which are concurrent. Concurrency is explicitly
+scoped.
 
 
 
@@ -157,12 +157,11 @@ panic at scope exit. The problem with this approach is that there's a
 potentially unbounded window between the instant the panic is created,
 and its propagation. 
 
-This is not a theoretical concern: a couple of weeks ago a friend of
-mine had a fascinating debugging session for a Python machine learning
-application. The program used was processing a huge amount of data,
-so, to speed things up, it partitioned the date and spawned a thread
-per partition (actual processing was in native code, so GIL was
-avoided):
+This is not a theoretical concern: some time ago a friend of mine had
+a fascinating debugging session with a Python machine learning
+application. The program was processing a huge amount of data, so, to
+speed things up, it partitioned the data and spawned a thread per
+partition (actual processing was in native code, so GIL was avoided):
 
 
 ~~~python
@@ -182,23 +181,23 @@ The observed behavior was that a singe thread died, but no exception
 or stack trace were printed anywhere. This was because the `executor`
 was waiting for all other threads before propagating the
 exception. Although technically the exception was not lost, in
-practice you'd have to wait for several ours to actually see it!
+practice you'd have to wait for several hours to actually see it!
 
 
 The Trio library uses an [interesting
 refinement](https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/#automated-error-propagation-works)
 of this strategy: when one of the tasks in scope fails, all others are
-first cancelled, and than waited upon. I think this should work well
-for Trio, because it has first-class support for cancellation; *any*
-async operation is a cancellation point. So all child tasks will be
-cancelled in a timely manner, although I wouldn't be surprised if
-there are some pathological cases where exception propagation is
+immediately cancelled, and then awaited for. I think this should work
+well for Trio, because it has first-class support for cancellation;
+*any* async operation is a cancellation point. So all children tasks
+will be cancelled in a timely manner, although I wouldn't be surprised
+if there are some pathological cases where exception propagation is
 delayed.
 
 
-Unfortunately, this solution won't work for native threads, because
+Unfortunately, this solution does't work for native threads, because
 there are just no good cancellation points. And I don't know of any
-approach that would work :( 
+approach that would work :(
 
 
 One vague idea I have is inspired by handling of orphaned processes in
