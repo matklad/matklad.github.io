@@ -15,7 +15,8 @@ This is the code we are trying to make faster:
 [source,rust]
 ----
 fn dtw(xs: &[f64], ys: &[f64]) -> f64 {
-    assert_eq!(xs.len(), ys.len()); // assume equal lengths for simplicity
+    // assume equal lengths for simplicity
+    assert_eq!(xs.len(), ys.len());
     let n = xs.len();
     let mut prev = vec![0f64; n + 1];
     let mut curr = vec![std::f64::MAX; n + 1];
