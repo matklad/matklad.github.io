@@ -1,20 +1,54 @@
 <!DOCTYPE html>
 <html>
 
-  {% include head.html %}
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <body>
+  <title>{% if page.title %}{{ page.title }}{% else %}{{ site.title }}{% endif %}</title>
+  <meta name="description"
+    content="{% if page.excerpt %}{{ page.excerpt | strip_html | strip_newlines | truncate: 160 }}{% else %}{{ site.description }}{% endif %}">
 
-    {% include header.html %}
+  <link rel="stylesheet" href="{{ "/css/asciidoctor.css" | prepend: site.baseurl }}">
+  <link rel="stylesheet" href="{{ "/css/asciidoctor-pygments.css" | prepend: site.baseurl }}">
+  <link rel="stylesheet" href="{{ "/css/main.css" | prepend: site.baseurl }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+  <link rel="canonical" href="{{ page.url | replace:'index.html','' | prepend: site.baseurl | prepend: site.url }}">
+  <link rel="alternate" type="application/rss+xml" title="{{ site.title }}"
+    href="{{ "/feed.xml" | prepend: site.baseurl | prepend: site.url }}">
+</head>
 
-    <div class="page-content">
-      <div class="wrapper">
-        {{ content }}
-      </div>
-    </div>
+<body lang="en-US">
+  <header>
+    <a class="nav-link site-title" href="{{ site.baseurl }}/">{{ site.title }}</a>
 
-    {% include footer.html %}
+    <nav class="site-nav">
+      {% for my_page in site.pages %}
+      {% if my_page.title %}
+      <a class="nav-link" href="{{ my_page.url | prepend: site.baseurl }}">{{ my_page.title }}</a>
+      {% endif %}
+      {% endfor %}
+    </nav>
+  </header>
 
-  </body>
+  <main>
+    {{ content }}
+  </main>
+
+  <footer>
+    <p class="about-text">Yet another programmer's blog</p>
+
+    <p>
+      <a href="{{ "/feed.xml" | prepend: site.baseurl }}" class="footer-link">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a class="footer-link" href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
 
 </html>

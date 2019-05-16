@@ -1,23 +1,19 @@
----
-layout: post
-title:  "Exceptions vs Structured Concurrency"
-date:   2018-06-18 18:00:16 +0300
----
+= Exceptions vs Structured Concurrency
+:page-liquid:
+:page-layout: post
+
+This is partially a mild instance of https://xkcd.com/386/[xkcd://386] with
+respect to the great https://vorner.github.io/2018/07/22/dont_panic.html[don't
+panic] post by https://github.com/vorner/[@vorner] (yes, it's 2 am here) and
+partially a discussion of error-handling in the framework of structured
+concurrency, which was recently popularized by
+https://github.com/njsmith/[@njsmith].
 
 
-This is partially a mild instance of
-[xkcd://386](https://xkcd.com/386/) with respect to the great [don't
-panic](https://vorner.github.io/2018/07/22/dont_panic.html) post by
-[@vorner](https://github.com/vorner/) (yes, it's 2 am here) and
-partially a discussion of error-handling in the framework of
-structured concurrency, which was recently popularized by
-[@njsmith](https://github.com/njsmith/).
-
-
-## Panics
+== Panics
 
 In the blog post, @vorner argues that unwinding sometimes may do more
-harm than good, if it manages to break some \[unsafe\] invariants,
+harm than good, if it manages to break some [unsafe] invariants,
 cross FFI boundary or put the application into an impossible state. I
 fully agree that these all are indeed significant dangers of panics.
 
@@ -27,15 +23,14 @@ cases. A lot of programs work in a series of requests and responses
 (often implicit), and I argue that for this pattern it is desirable to
 be able to handle bugs in requests gracefully.
 
-I've spent quite some time working on the
-[IDE](https://github.com/intellij-rust/intellij-rust), and, although
-it might not be apparent on the first sight, IDEs are also based on
-requests/responses:
+I've spent quite some time working on an
+https://github.com/intellij-rust/intellij-rust[IDE], and, although it might not
+be apparent on the first sight, IDEs are also based on requests/responses:
 
 * users types a character, IDE updates its internal data structures
 * users requests completion, IDE runs some calculations on the data
   and gives results
-  
+
 As IDEs are large and have a huge number of features, it is inevitable
 that some not very important linting inspection will fail due to index
 out of bounds access on this particular macro invocation in this
@@ -57,13 +52,13 @@ but in practice this is mitigated by the following:
   relatively bug-free transnational semantics, so bugs in write
   requests which lead to transaction aborts don't corrupt data as
   well.
-  
+
 * Most applications have some kind of backup/undo functionality, and
   even if a bug leads to a commit of invalid data, user often can
   restore good state (of course this works only for relatively
   unimportant data).
-  
-  
+
+
 However, @vorner identifies a very interesting specific problem with
 unwinding which I feel we should really try to solve better: if you
 have a bunch of threads running, and one of them catches fire, what
@@ -71,28 +66,29 @@ happens? It turns out that often nothing particular happens: some more
 threads might die from the poisoned mutexes and closed channels, but
 other treads might continue, and, as a result the application will
 exist in a half-dead state for indefinite period of time.
-  
 
-## Structured Concurrency 
+
+== Structured Concurrency
 
 At this point, some of you might be silently screaming "Erlang!":
 
-![Destroy one of my processes & I will only grow stronger]({{ site.url }}/assets/PPerlang.png)
-*Source: [http://leftoversalad.com/c/015_programmingpeople/](http://leftoversalad.com/c/015_programmingpeople/)*
+image::/assets/PPerlang.png[Destroy one of my processes & I will only grow stronger]
+
+**Source: http://leftoversalad.com/c/015_programmingpeople/**
 
 
-You are right! Erlang and especially OTP behaviors are great for
-managing errors at scale. However a full actor system might be an
-overkill if all you want is just an OS thread.
+You are right! Erlang and especially OTP behaviors are great for managing errors
+at scale. However a full actor system might be an overkill if all you want is
+just an OS thread.
 
-
-If you haven't done this already, pack some snacks, prepare lots of
-coffee/tea and do read the [structured
-concurrency](https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/)
-blog post. The crux of the pattern is to avoid fire and forget
+If you haven't done this already, pack some snacks, prepare lots of coffee/tea
+and do read the
+https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/[structured
+concurrency] blog post. The crux of the pattern is to avoid fire and forget
 concurrency:
 
-~~~rust
+[source,rust]
+----
 use std::thread;
 
 fn unstructured() {
@@ -101,12 +97,13 @@ fn unstructured() {
     });
     // The thread is "leaked" out of `unstructured` function
 }
-~~~
+----
 
 Instead, each thread should be confined to some lexical scope and
 never escape it:
 
-~~~rust
+[source,rust]
+----
 extern crate crossbeam;
 
 fn structured() {
@@ -117,7 +114,7 @@ fn structured() {
     });
     // The thread is finished and joined at this point.
 }
-~~~
+----
 
 
 The benefit of this organization is that all threads form a tree,
@@ -127,20 +124,21 @@ scoped.
 
 
 
-## Panics and Structured Concurrency
+== Panics and Structured Concurrency
 
 And we have a really, really interesting API design problem if we
 combine structured concurrency and unwinding. What should be the
 behavior of the following program?
 
-~~~rust
+[source,rust]
+----
 fn everything_is_terrible() {
     crossbeam::scope(|scope| {
         scope.spawn(|| do_work());
         scope.spawn(|| panic!("this hurts"));
     });
 }
-~~~
+----
 
 
 Now, for `crossbeam` specifically there's little choice here due to
@@ -148,14 +146,14 @@ the boring requirement for memory safety. But let's pretend for now
 that this is a garbage collected language.
 
 So, we have two concurrent threads in a single scope, one of which is
-currently running and another one is, unfortunately, dead. 
+currently running and another one is, unfortunately, dead.
 
 
 The most obvious choice is to wait for the running thread to finish
 (we don't want to let it escape the scope) and then to reraise the
 panic at scope exit. The problem with this approach is that there's a
 potentially unbounded window between the instant the panic is created,
-and its propagation. 
+and its propagation.
 
 This is not a theoretical concern: some time ago a friend of mine had
 a fascinating debugging session with a Python machine learning
@@ -164,7 +162,8 @@ speed things up, it partitioned the data and spawned a thread per
 partition (actual processing was in native code, so GIL was avoided):
 
 
-~~~python
+[source,python]
+----
 with ThreadPoolExecutor() as executor:
     futures = []
     for task_type, hosts in reversed(tasks):
@@ -175,7 +174,7 @@ with ThreadPoolExecutor() as executor:
     # Re-raise the exception.
     for future in as_completed(futures):
         future.result()
-~~~
+----
 
 The observed behavior was that a singe thread died, but no exception
 or stack trace were printed anywhere. This was because the `executor`
@@ -184,15 +183,14 @@ exception. Although technically the exception was not lost, in
 practice you'd have to wait for several hours to actually see it!
 
 
-The Trio library uses an [interesting
-refinement](https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/#automated-error-propagation-works)
-of this strategy: when one of the tasks in scope fails, all others are
-immediately cancelled, and then awaited for. I think this should work
-well for Trio, because it has first-class support for cancellation;
-*any* async operation is a cancellation point. So all children tasks
-will be cancelled in a timely manner, although I wouldn't be surprised
-if there are some pathological cases where exception propagation is
-delayed.
+The Trio library uses an
+https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/#automated-error-propagation-works[interesting
+refinement] of this strategy: when one of the tasks in scope fails, all others
+are immediately cancelled, and then awaited for. I think this should work well
+for Trio, because it has first-class support for cancellation; *any* async
+operation is a cancellation point. So all children tasks will be cancelled in a
+timely manner, although I wouldn't be surprised if there are some pathological
+cases where exception propagation is delayed.
 
 
 Unfortunately, this solution does't work for native threads, because
@@ -207,7 +205,7 @@ that is thrown. If anyone wants to handle the failure, they *must*
 wait for all attached threads to finish first. This way, the initial
 panic and all in-progress threads could be propagated to the top-level
 `init` scope, which then can attempt either a clean exit by waiting
-for all children, or do a `process::abort`. 
+for all children, or do a `process::abort`.
 
 However this attachment to the parent violates the property that a
 thread never leaves its original scope. Because crossbeam relies on
@@ -224,4 +222,4 @@ native OS threads that:
 * allows to (optionally?) share stack data between the threads.
 
 
-Discussion on [r/rust](https://www.reddit.com/r/rust/comments/91d0u2/blog_post_exceptions_versus_structured_concurrency/).
+Discussion on https://www.reddit.com/r/rust/comments/91d0u2/blog_post_exceptions_versus_structured_concurrency/[r/rust].

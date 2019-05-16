@@ -1,23 +1,19 @@
----
-layout: post
-title:  "A Trick For Test Maintenance"
-date:   2018-06-18 18:00:16 +0300
----
+= A Trick For Test Maintenance
+:page-liquid:
+:page-layout: post
+
+This is a post about an interesting testing technique which feels like it should
+be well known. However, I haven't seen it mentioned anywhere. I don't even have
+a good name for it, I've semi-discovered it in the wild. If you know how this
+thing is called, please leave a comment!
 
 
-This is a post about an interesting testing technique which feels like
-it should be well known. However, I haven't seen it mentioned
-anywhere. I don't even have a good name for it, I've semi-discovered
-it in the wild. If you know how this thing is called, please leave a
-comment!
+== A long time ago...
 
-
-# A long time ago...
-
-I was reading Dart analysis server source code, and came across [this
-line](https://github.com/dart-lang/sdk/blob/f6d2c2378a00160ca1b79f8f7bd45df97b1275e4/pkg/analysis_server/lib/src/services/correction/assist_internal.dart#L1063). Immediately
-I was struck as if by lighting. Well, not exactly in the same way, but
-you get the idea.
+I was reading Dart analysis server source code, and came across
+https://github.com/dart-lang/sdk/blob/f6d2c2378a00160ca1b79f8f7bd45df97b1275e4/pkg/analysis_server/lib/src/services/correction/assist_internal.dart#L1063[this
+line]. Immediately I was struck as if by lighting. Well, not exactly in the same
+way, but you get the idea.
 
 What does this line do? I actually don't know, but I have a guess. My
 explanation is further down (to give you a chance to discover the
@@ -25,7 +21,7 @@ trick as well!), but the general idea is that this line helps
 tremendously with making tests more maintainable.
 
 
-# The two mundane problems
+== The two mundane problems
 
 Two tasks which programmers typically enjoy less than furiously
 cranking out new features are maintaining existing code and writing
@@ -65,32 +61,34 @@ questions:
 * Given a test, where is the code that is being tested?
 
 
-# The solution 
+== The solution
 
 The beautiful solution to this problem (which I *hypothesise* the
-`_coverageMarer()` line in Dart does) is to track code coverage on the
+`_coverageMarker()` line in Dart does) is to track code coverage on the
 test-by-test basis. That is, when running a test, verify that
 *specific* lines of code were covered by this test.
 
 I've put together a small Rust library to do this, called
-[`uncover`](https://crates.io/crates/uncover). It provides two macros:
+https://crates.io/crates/uncover[`uncover`]. It provides two macros:
 `covered_by` and `covers`.
 
 
-The first macro is used in the code under test, [like
-this](https://github.com/matklad/tom/blob/081b09e90b4ff64246969783fe9fb9261ba188f1/src/factory.rs#L72-L75):
+The first macro is used in the code under test, https://github.com/matklad/tom/blob/081b09e90b4ff64246969783fe9fb9261ba188f1/src/factory.rs#L72-L75[like
+this]:
 
-~~~rust
+[source,rust]
+----
 if !self.keys.is_empty() {
     covered_by!("table_with_two_names");
     panic!("table header is already specified, can't reset to {:?}", key)
 }
-~~~
+----
 
-The second macro is used in the [corresponding test](https://github.com/matklad/tom/blob/081b09e90b4ff64246969783fe9fb9261ba188f1/tests/suite/factory.rs#L55-L64):
+The second macro is used in the https://github.com/matklad/tom/blob/081b09e90b4ff64246969783fe9fb9261ba188f1/tests/suite/factory.rs#L55-L64[corresponding test]:
 
 
-~~~rust
+[source,rust]
+----
 #[test]
 fn table_with_two_names() {
     covers!("table_with_two_names");
@@ -102,23 +100,22 @@ fn table_with_two_names() {
             .build();
     })
 }
-~~~
+----
 
 
 If the block where `covers` is used does not cause the execution of
 the corresponding `covered_by` line then the error will be raised at
 the end of the block.
 
-Under the hood, this is implemented as a global `HashMap<String, u64>`
-which counts how many times each line was executed. So `covered_by!`
-[increments](https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L146)
+Under the hood, this is implemented as a global `HashMap<String, u64>` which
+counts how many times each line was executed. So `covered_by!`
+https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L146[increments]
 the corresponding count, and `covers!` returns a guard object that
-[checks](https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L174-L176)
-in `Drop` that the count was incremented. It is possible to disable
-these checks at compile time. And yes, the library actually [exposes a
-macro which defines
-macros](https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L110-L137)
-:)
+https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L174-L176[checks]
+in `Drop` that the count was incremented. It is possible to disable these checks
+at compile time. And yes, the library actually
+https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L110-L137[exposes
+a macro which defines macros] :)
 
 I haven't had a chance to apply this technique in large projects (and
 it is less useful for smaller ones), but it looks very promising.
@@ -138,4 +135,4 @@ was intended to check.
 
 
 Once again, if you know how this thing is called, please do enlighten
-me in comments! Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/8s1eu1/blog_post_a_trick_for_test_maintenance/).
+me in comments! Discussion on https://www.reddit.com/r/rust/comments/8s1eu1/blog_post_a_trick_for_test_maintenance/[/r/rust].

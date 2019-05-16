@@ -1,20 +1,14 @@
----
-layout: post
-title:  "Newtype Index Pattern"
-date:   2018-06-04 00:21:45 +0300
----
+= Newtype Index Pattern
+:page-liquid:
+:page-layout: post
 
+:prev: link:{{ site.baseurl }}{% post_url 2018-05-24-typed-key-pattern %}
 
-Similarly to the [previous post], we will once again add types to the
-Rust code which works perfectly fine without them. This time, we'll
-try to improve the pervasive pattern of using indexes to manage cyclic
-data structures.
+Similarly to the {prev}[previous post], we will once again add types to the Rust
+code which works perfectly fine without them. This time, we'll try to improve
+the pervasive pattern of using indexes to manage cyclic data structures.
 
-
-[previous post]:  {{ site.baseurl }}{% post_url 2018-05-24-typed-key-pattern %}
-
-
-# The problem
+== The problem
 
 Often one wants to work with a data structure which contains a cycle
 of some form: object `foo` references `bar`, which references `baz`
@@ -34,19 +28,18 @@ created first, and so it can not point to the other immediately after
 construction. You can paper over this mutability with `let rec`, as in
 OCaml, or with laziness, as in Haskell, but it is still there.
 
+:rc: https://github.com/nrc/r4cppp/blob/master/graphs/README.md#rcrefcellnode
+:arena: https://exyr.org/2018/rust-arenas-vs-dropck/
+:idx: http://smallcultfollowing.com/babysteps/blog/2015/04/06/modeling-graphs-in-rust-using-vector-indices/
+
 Rust tends to surface subtle problems in the form of compile-time
 errors, so implementing such graphs in Rust is challenging. The three
 usual approaches are:
 
-  * reference counting, explanation by [nrc][rc],
-  * arena and real cyclic references, explanation by
-    [simonsapin][arena] (this one is really neat!),
-  * arena and integer indices, explanation by [nikomatsakis][idx].
-  
-  
-[rc]: https://github.com/nrc/r4cppp/blob/master/graphs/README.md#rcrefcellnode 
-[arena]: https://exyr.org/2018/rust-arenas-vs-dropck/
-[idx]: http://smallcultfollowing.com/babysteps/blog/2015/04/06/modeling-graphs-in-rust-using-vector-indices/ 
+* reference counting, explanation by {rc}[nrc],
+* arena and real cyclic references, explanation by
+{arena}[simonsapin] (this one is really neat!),
+* arena and integer indices, explanation by {idx}[nikomatsakis].
 
 (apparently, rewriting a Haskell monad tutorial in Rust results in a
 graphs blog post).
@@ -64,13 +57,14 @@ wrong index type), reading it later is more complicated, because
 `usize` is much less suggestive of what you could do.
 
 
-# Newtype trick
+== Newtype trick
 
 One way to ameliorate this problem is to introduce a newtype wrapper
 around `usize`:
 
 
-~~~rust
+[source,rust]
+----
 struct Foo;
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -85,24 +79,26 @@ impl Arena {
         &self.foos[foo.0]
     }
 }
-~~~
+----
 
-Here, "one should use `FooIdx` to index into `Vec<Foo>`" is still just
+Here, "one should use `FooIdx` to index into ``Vec<Foo>``" is still just
 a convention. A cool thing about Rust is that we can turn this
 convention into a property verified during type checking. By adding an
 appropriate impl, we should be able to index into `Vec<Foo>` with
 `FooIdx` directly:
 
-~~~rust
+[source,rust]
+----
 #[test]
 fn direct_indexing(foos: Vec<Foo>, idx: FooIdx) {
     let _foo: &Foo = &foos[idx];
 }
-~~~
+----
 
 The impl would look like this:
 
-~~~rust
+[source,rust]
+----
 use std::ops;
 
 impl ops::Index<FooIdx> for Vec<Foo> {
@@ -112,10 +108,10 @@ impl ops::Index<FooIdx> for Vec<Foo> {
         &self[index.0]
     }
 }
-~~~
+----
 
 
-# Coherence
+== Coherence
 
 It's insightful to study why this impl is allowed. In Rust, types,
 traits and impls are separate. This creates a room for a problem: what
@@ -149,6 +145,7 @@ the crate that defines `Foo`, or in the one that defines
 `Bar`. Crucially, whichever one defines the impl has to use the other,
 which makes it possible to detect the conflict.
 
+:coh: https://github.com/rust-lang/rfcs/pull/2451
 
 This is all really nifty, but we've just defined an `Index` impl for
 `Vec`, and both `Index` and `Vec` are from the standard library! How
@@ -156,18 +153,17 @@ is it possible? The trick is that `Index` has a type parameter: `trait
 Index<Idx: ?Sized>`. It is a template for a trait of sorts, and we get
 a "real" trait when we substitute type parameter with a type. Because
 `FooIdx` is a local type, the resulting `Index<FromIdx>` trait is also
-considered local. The precise rules here are quite tricky, [this
-RFC][coh] explains them pretty well.
+considered local. The precise rules here are quite tricky, {coh}[this
+RFC] explains them pretty well.
 
-[coh]: https://github.com/rust-lang/rfcs/pull/2451
-
-# More impls
+== More impls
 
 Because `Index<FooIdx>` and `Index<BarIdx>` are different traits, one
 type can implement both of them. This is convenient for containers
 which hold distinct types:
 
-~~~rust
+[source,rust]
+----
 struct Arena {
     foos: Vec<Foo>,
     bars: Vec<Bar>,
@@ -176,14 +172,17 @@ struct Arena {
 impl ops::Index<FooIdx> for Arena { ... }
 
 impl ops::Index<BarIdx> for Arena { ... }
-~~~
+----
+
+:crate: https://crates.io/crates/typed_index_derive
 
 It's also helpful to define arithmetic operations and conversions for
 the newtyped indexes. I've put together a
-[`typed_index_derive`][crate] crate to automate this boilerplate via a
+{crate}[`typed_index_derive`] crate to automate this boilerplate via a
 proc macro, the end result looks like this:
 
-~~~rust
+[source,rust]
+----
 #[macro_use]
 extern crate typed_index_derive;
 
@@ -218,11 +217,8 @@ fn main() {
     // The difference between two indices is `usize`
     assert_eq!(idx - idx, 0usize);
 }
-~~~
+----
 
-[crate]: https://crates.io/crates/typed_index_derive
-
-
-Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/8ohaj4/blog_post_newtype_index_pattern/).
+Discussion on https://www.reddit.com/r/rust/comments/8ohaj4/blog_post_newtype_index_pattern/[/r/rust].
 
 
