@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Typed Key Pattern</title>
+  <meta name="description"
+    content="">
+
+  <link rel="stylesheet" href="/css/asciidoctor.css">
+  <link rel="stylesheet" href="/css/asciidoctor-pygments.css">
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+  <link rel="canonical" href="http://localhost:4000/2018/05/24/typed-key-pattern.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad"
+    href="http://localhost:4000/feed.xml">
+</head>
+
+<body lang="en-US">
+  <header>
+    <a class="nav-link site-title" href="/">matklad</a>
+
+    <nav class="site-nav">
+      
+      
+      <a class="nav-link" href="/about/">About</a>
+      
+      
+      
+      
+      
+      
+      
+      <a class="nav-link" href="/resume/">Resume</a>
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+<h1>Typed Key Pattern</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>In this post, I&#8217;ll talk about a pattern for extracting values from a
+weakly typed map. This pattern applies to all statically typed
+languages, and even to dynamically typed ones, but the post is rather
+Rust-specific.</p>
+</div>
+<div class="paragraph">
+<p>I&#8217;ve put together a small crate which implements the pattern:<br>
+<a href="https://github.com/matklad/typed_key" class="bare">https://github.com/matklad/typed_key</a></p>
+</div>
+<div class="paragraph">
+<p>If you want to skip all the
+blah-blah-blah, you can dig right into the code &amp; docs :)</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="the-problem">The problem</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>You have an untyped <code>Map&lt;String, Object&gt;</code> and you need to get a typed
+<code>Foo</code> out of it by the <code>"foo"</code> key. The untyped map is often some kind
+of configuration, like a JSON file, but it can be a real map with
+type-erased <code>Any</code> objects as well.</p>
+</div>
+<div class="paragraph">
+<p>In the common case of statically known configuration, the awesome
+solution that Rust offers is <a href="https://crates.io/crates/serde">serde</a>. You stick <code>derive(Deserialize)</code>
+in front of the <code>Config</code> struct and read it from JSON, YML, TOML or
+even just <a href="https://github.com/softprops/envy">environment variables</a>!</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-cp">#[derive(Deserialize)]</span><span class="tok-w"></span>
+<span class="tok-k">struct</span> <span class="tok-nc">Config</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-n">foo</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-n">Foo</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span>
+
+<span class="tok-k">fn</span> <span class="tok-nf">parse_config</span><span class="tok-p">(</span><span class="tok-n">data</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-kt">str</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-nb">Result</span><span class="tok-o">&lt;</span><span class="tok-n">Config</span><span class="tok-o">&gt;</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">config</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">serde_json</span><span class="tok-o">::</span><span class="tok-n">from_str</span><span class="tok-p">(</span><span class="tok-n">data</span><span class="tok-p">)</span><span class="tok-o">?</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-nb">Ok</span><span class="tok-p">(</span><span class="tok-n">config</span><span class="tok-p">)</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>However, occasionally you can&#8217;t use serde. Some of the cases where
+this might happen are:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>merging configuration from several sources, which requires writing a
+non-trivial serde deserializer,</p>
+</li>
+<li>
+<p>lazy deserialization, when you don&#8217;t want to care about invalid values
+until you actually use them,</p>
+</li>
+<li>
+<p>extensible plugin architecture, where various independent modules
+contribute options to a shared global config, and so the shape of
+the config is not known upfront.</p>
+</li>
+<li>
+<p>you are working with <code>Any</code> objects or otherwise don&#8217;t do
+serialization per se.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="typical-solutions">Typical solutions</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The simplest approach here is to just grab an untyped object using a
+string literal and specify its type on the call site:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">impl</span><span class="tok-w"> </span><span class="tok-n">Config</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-k">fn</span> <span class="tok-nf">get</span><span class="tok-o">&lt;</span><span class="tok-n">T</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-n">Deserialize</span><span class="tok-o">&gt;</span><span class="tok-p">(</span><span class="tok-o">&amp;</span><span class="tok-bp">self</span><span class="tok-p">,</span><span class="tok-w"> </span><span class="tok-n">key</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-kt">str</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-nb">Result</span><span class="tok-o">&lt;</span><span class="tok-n">T</span><span class="tok-o">&gt;</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">json_value</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-bp">self</span><span class="tok-p">.</span><span class="tok-n">map</span><span class="tok-p">.</span><span class="tok-n">get</span><span class="tok-p">(</span><span class="tok-s">&quot;key&quot;</span><span class="tok-p">)</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-p">.</span><span class="tok-n">ok_or_else</span><span class="tok-p">(</span><span class="tok-o">||</span><span class="tok-w"> </span><span class="tok-n">bail</span><span class="tok-o">!</span><span class="tok-p">(</span><span class="tok-s">&quot;key is missing: `{}`&quot;</span><span class="tok-p">,</span><span class="tok-w"> </span><span class="tok-n">key</span><span class="tok-p">))</span><span class="tok-o">?</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-nb">Ok</span><span class="tok-p">(</span><span class="tok-n">T</span><span class="tok-o">::</span><span class="tok-n">deserialize</span><span class="tok-p">(</span><span class="tok-n">json_value</span><span class="tok-p">)</span><span class="tok-o">?</span><span class="tok-p">)</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span>
+
+<span class="tok-p">...</span><span class="tok-w"></span>
+
+
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">foo</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">config</span><span class="tok-p">.</span><span class="tok-n">get</span><span class="tok-o">::&lt;</span><span class="tok-n">Foo</span><span class="tok-o">&gt;</span><span class="tok-p">(</span><span class="tok-s">&quot;foo&quot;</span><span class="tok-p">)</span><span class="tok-o">?</span><span class="tok-p">;</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>I actually think that this is a fine approach as long as such snippets
+are confined within a single module.</p>
+</div>
+<div class="paragraph">
+<p>One possible way to make it better is to extract <code>"foo"</code> constant to a
+variable:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">const</span><span class="tok-w"> </span><span class="tok-n">FOO</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-kt">str</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-s">&quot;foo&quot;</span><span class="tok-p">;</span><span class="tok-w"></span>
+
+<span class="tok-p">...</span><span class="tok-w"></span>
+
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">foo</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">config</span><span class="tok-p">.</span><span class="tok-n">get</span><span class="tok-o">::&lt;</span><span class="tok-n">Foo</span><span class="tok-o">&gt;</span><span class="tok-p">(</span><span class="tok-n">FOO</span><span class="tok-p">)</span><span class="tok-o">?</span><span class="tok-p">;</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This does bring certain benefits:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>fewer places to make a typo in,</p>
+</li>
+<li>
+<p>behavior is moved from the code (<code>.get("foo")</code>) into data (<code>const FOO</code>), which
+makes it easier to reason about the code (at a glance, you can see all available
+config option and get an idea why they might be useful),</p>
+</li>
+<li>
+<p>there&#8217;s now an obvious place to document keys: write a doc-comment for a
+constant.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>While great in theory, I personally feel that this usually brings little
+tangible benefit in most cases, especially if some constants are used only once.
+This is the case where the implementation, a literal <code>"foo"</code>, is more clear than
+the abstraction, a constant <code>FOO</code>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="adding-types">Adding types</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>However, the last pattern can become much more powerful and
+interesting if we associate types with string constants. The idea is
+to encode that the <code>"foo"</code> key can be used to extract an object of
+type <code>Foo</code>, and make it impossible to use it for, say,
+<code>Vec&lt;String&gt;</code>. To do this, we&#8217;ll need a pinch of
+<a href="https://doc.rust-lang.org/beta/std/marker/struct.PhantomData.html"><code>PhantomData</code></a>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">pub</span><span class="tok-w"> </span><span class="tok-k">struct</span> <span class="tok-nc">Key</span><span class="tok-o">&lt;</span><span class="tok-n">T</span><span class="tok-o">&gt;</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-n">name</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-nb">&#39;static</span><span class="tok-w"> </span><span class="tok-kt">str</span><span class="tok-p">,</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-n">marker</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-n">PhantomData</span><span class="tok-o">&lt;</span><span class="tok-n">T</span><span class="tok-o">&gt;</span><span class="tok-p">,</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span>
+
+<span class="tok-k">impl</span><span class="tok-o">&lt;</span><span class="tok-n">T</span><span class="tok-o">&gt;</span><span class="tok-w"> </span><span class="tok-n">Key</span><span class="tok-o">&lt;</span><span class="tok-n">T</span><span class="tok-o">&gt;</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-k">pub</span><span class="tok-w"> </span><span class="tok-k">const</span><span class="tok-w"> </span><span class="tok-k">fn</span> <span class="tok-nf">new</span><span class="tok-p">(</span><span class="tok-n">name</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-nb">&#39;static</span><span class="tok-w"> </span><span class="tok-kt">str</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-n">Key</span><span class="tok-o">&lt;</span><span class="tok-n">T</span><span class="tok-o">&gt;</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-n">Key</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-n">name</span><span class="tok-p">,</span><span class="tok-w"> </span><span class="tok-n">marker</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-n">PhantomData</span><span class="tok-w"> </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-p">}</span><span class="tok-w"></span>
+
+<span class="tok-w">    </span><span class="tok-k">pub</span><span class="tok-w"> </span><span class="tok-k">fn</span> <span class="tok-nf">name</span><span class="tok-p">(</span><span class="tok-o">&amp;</span><span class="tok-bp">self</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-nb">&#39;static</span><span class="tok-w"> </span><span class="tok-kt">str</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-bp">self</span><span class="tok-p">.</span><span class="tok-n">name</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Now, we can add type knowledge to the <code>"foo"</code> literal:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">const</span><span class="tok-w"> </span><span class="tok-n">FOO</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-n">Key</span><span class="tok-o">&lt;</span><span class="tok-n">Foo</span><span class="tok-o">&gt;</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">Key</span><span class="tok-o">::</span><span class="tok-n">new</span><span class="tok-p">(</span><span class="tok-s">&quot;foo&quot;</span><span class="tok-p">);</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>And we can take advantage of this in the <code>get</code> method:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">impl</span><span class="tok-w"> </span><span class="tok-n">Config</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-k">fn</span> <span class="tok-nf">get</span><span class="tok-o">&lt;</span><span class="tok-n">T</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-n">Deserialize</span><span class="tok-o">&gt;</span><span class="tok-p">(</span><span class="tok-o">&amp;</span><span class="tok-bp">self</span><span class="tok-p">,</span><span class="tok-w"> </span><span class="tok-n">key</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-n">Key</span><span class="tok-o">&lt;</span><span class="tok-n">T</span><span class="tok-o">&gt;</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-nb">Result</span><span class="tok-o">&lt;</span><span class="tok-n">T</span><span class="tok-o">&gt;</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">json_value</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-bp">self</span><span class="tok-p">.</span><span class="tok-n">map</span><span class="tok-p">.</span><span class="tok-n">get</span><span class="tok-p">(</span><span class="tok-n">key</span><span class="tok-p">.</span><span class="tok-n">name</span><span class="tok-p">())</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-p">.</span><span class="tok-n">ok_or_else</span><span class="tok-p">(</span><span class="tok-o">||</span><span class="tok-w"> </span><span class="tok-n">bail</span><span class="tok-o">!</span><span class="tok-p">(</span><span class="tok-s">&quot;key is missing: `{}`&quot;</span><span class="tok-p">,</span><span class="tok-w"> </span><span class="tok-n">key</span><span class="tok-p">))</span><span class="tok-o">?</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-nb">Ok</span><span class="tok-p">(</span><span class="tok-n">T</span><span class="tok-o">::</span><span class="tok-n">deserialize</span><span class="tok-p">(</span><span class="tok-n">json_value</span><span class="tok-p">)</span><span class="tok-o">?</span><span class="tok-p">)</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span>
+
+<span class="tok-p">...</span><span class="tok-w"></span>
+
+
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">foo</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">config</span><span class="tok-p">.</span><span class="tok-n">get</span><span class="tok-p">(</span><span class="tok-n">FOO</span><span class="tok-p">)</span><span class="tok-o">?</span><span class="tok-p">;</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Note how we were able to get rid of the turbofish at the call-site!
+Moreover, the understandably aspect of the previous pattern is also
+enhanced: if you know both the type and the name of the config option,
+you can pretty reliably predict how it is going to be used.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="pattern-in-the-wild">Pattern in the wild</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>I&#8217;ve first encountered this pattern in <a href="https://github.com/JetBrains/intellij-community/blob/16bfca92199dca383b66c69c3427b4639ea8e213/platform/util/src/com/intellij/openapi/util/Key.java">IntelliJ</a> code. It uses
+<a href="https://github.com/JetBrains/intellij-community/blob/16bfca92199dca383b66c69c3427b4639ea8e213/platform/util/src/com/intellij/openapi/util/UserDataHolder.java"><code>UserDataHolder</code></a>, which is basically <code>Map&lt;String, Object&gt;</code>, everywhere.
+It helps plugin authors to extend built-in objects in crazy ways but is rather
+hard to reason about, and type-safety improves the situation a lot. I&#8217;ve also
+changed Exonum&#8217;s config to employ this pattern in this <a href="https://github.com/exonum/exonum/pull/417">PR</a>. It also was a
+case of plugin extensible, where an upfront definition of all configuration
+option is impossible.</p>
+</div>
+<div class="paragraph">
+<p>Finally, I&#8217;ve written a small crate for this <a href="https://crates.io/crates/typed_key"><code>typed_key</code></a> :)</p>
+</div>
+<div class="paragraph">
+<p>Discussion on <a href="https://www.reddit.com/r/rust/comments/8ls25e/blog_post_typed_key_pattern/">/r/rust</a>.</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer>
+    <p class="about-text">Yet another programmer's blog</p>
+
+    <p>
+      <a href="/feed.xml" class="footer-link">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a class="footer-link" href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

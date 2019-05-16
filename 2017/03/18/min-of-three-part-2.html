@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Min of Three Part 2</title>
+  <meta name="description"
+    content="">
+
+  <link rel="stylesheet" href="/css/asciidoctor.css">
+  <link rel="stylesheet" href="/css/asciidoctor-pygments.css">
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+  <link rel="canonical" href="http://localhost:4000/2017/03/18/min-of-three-part-2.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad"
+    href="http://localhost:4000/feed.xml">
+</head>
+
+<body lang="en-US">
+  <header>
+    <a class="nav-link site-title" href="/">matklad</a>
+
+    <nav class="site-nav">
+      
+      
+      <a class="nav-link" href="/about/">About</a>
+      
+      
+      
+      
+      
+      
+      
+      <a class="nav-link" href="/resume/">Resume</a>
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+<h1>Min of Three Part 2</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>This is the continuation of the <a href="/2017/03/12/min-of-three.html">previous post</a> about optimizing 2D grid
+based dynamic programming algorithm for <a href="https://en.wikipedia.org/wiki/Superscalar_processor">CPU level parallelism</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="in-the-previous-episode">In The Previous Episode</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>This is the code we are trying to make faster:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">fn</span> <span class="tok-nf">dtw</span><span class="tok-p">(</span><span class="tok-n">xs</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-p">[</span><span class="tok-kt">f64</span><span class="tok-p">],</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-p">[</span><span class="tok-kt">f64</span><span class="tok-p">])</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-kt">f64</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-c1">// assume equal lengths for simplicity</span>
+<span class="tok-w">    </span><span class="tok-n">assert_eq</span><span class="tok-o">!</span><span class="tok-p">(</span><span class="tok-n">xs</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">(),</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">());</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">xs</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">();</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">prev</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">vec</span><span class="tok-o">!</span><span class="tok-p">[</span><span class="tok-mi">0</span><span class="tok-k">f64</span><span class="tok-p">;</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">];</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">curr</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">vec</span><span class="tok-o">!</span><span class="tok-p">[</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-kt">f64</span><span class="tok-o">::</span><span class="tok-n">MAX</span><span class="tok-p">;</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">];</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-n">curr</span><span class="tok-p">[</span><span class="tok-mi">0</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-mf">0.0</span><span class="tok-p">;</span><span class="tok-w"></span>
+
+<span class="tok-w">    </span><span class="tok-k">for</span><span class="tok-w"> </span><span class="tok-n">ix</span><span class="tok-w"> </span><span class="tok-k">in</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">..(</span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-o">::</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-n">mem</span><span class="tok-o">::</span><span class="tok-n">swap</span><span class="tok-p">(</span><span class="tok-o">&amp;</span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">curr</span><span class="tok-p">,</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">prev</span><span class="tok-p">);</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-n">curr</span><span class="tok-p">[</span><span class="tok-mi">0</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-kt">f64</span><span class="tok-o">::</span><span class="tok-n">MAX</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-k">for</span><span class="tok-w"> </span><span class="tok-n">iy</span><span class="tok-w"> </span><span class="tok-k">in</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">..(</span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d11</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">prev</span><span class="tok-p">[</span><span class="tok-n">iy</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">];</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d01</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">curr</span><span class="tok-p">[</span><span class="tok-n">iy</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">];</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d10</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">prev</span><span class="tok-p">[</span><span class="tok-n">iy</span><span class="tok-p">];</span><span class="tok-w"></span>
+
+<span class="tok-w">            </span><span class="tok-c1">// Find the minimum of d11, d01, d10</span>
+<span class="tok-w">            </span><span class="tok-c1">// by enumerating all the cases.</span>
+<span class="tok-w">            </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-k">if</span><span class="tok-w"> </span><span class="tok-n">d11</span><span class="tok-w"> </span><span class="tok-o">&lt;</span><span class="tok-w"> </span><span class="tok-n">d01</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">                </span><span class="tok-k">if</span><span class="tok-w"> </span><span class="tok-n">d11</span><span class="tok-w"> </span><span class="tok-o">&lt;</span><span class="tok-w"> </span><span class="tok-n">d10</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-n">d11</span><span class="tok-w"> </span><span class="tok-p">}</span><span class="tok-w"> </span><span class="tok-k">else</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-n">d10</span><span class="tok-w"> </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-p">}</span><span class="tok-w"> </span><span class="tok-k">else</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">                </span><span class="tok-k">if</span><span class="tok-w"> </span><span class="tok-n">d01</span><span class="tok-w"> </span><span class="tok-o">&lt;</span><span class="tok-w"> </span><span class="tok-n">d10</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-n">d01</span><span class="tok-w"> </span><span class="tok-p">}</span><span class="tok-w"> </span><span class="tok-k">else</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-n">d10</span><span class="tok-w"> </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-p">};</span><span class="tok-w"></span>
+
+<span class="tok-w">            </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">cost</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">                </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">t</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">xs</span><span class="tok-p">[</span><span class="tok-n">ix</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-p">[</span><span class="tok-n">iy</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">];</span><span class="tok-w"></span>
+<span class="tok-w">                </span><span class="tok-n">t</span><span class="tok-w"> </span><span class="tok-o">*</span><span class="tok-w"> </span><span class="tok-n">t</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-p">};</span><span class="tok-w"></span>
+
+<span class="tok-w">            </span><span class="tok-n">curr</span><span class="tok-p">[</span><span class="tok-n">iy</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">d</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-n">cost</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-n">curr</span><span class="tok-p">[</span><span class="tok-n">n</span><span class="tok-p">]</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><a href="http://play.rust-lang.org/?gist=3d42c67904441279c4cbb1708fb35a06&amp;version=stable">Code on Rust playground</a> (293 ms)</p>
+</div>
+<div class="paragraph">
+<p>It calculates <a href="https://en.wikipedia.org/wiki/Dynamic_time_warping">dynamic time warping</a> distance between two <code>double</code>
+vectors using an update rule which is structured like this:</p>
+</div>
+<div class="imageblock text-center">
+<div class="content">
+<img src="/assets/min3_table.png" alt="Dynamic programming 2D table">
+</div>
+</div>
+<div class="paragraph">
+<p>This code takes 293 milliseconds to run on a particular input
+data. The speedup from 435 milliseconds stated in the previous post is
+due to the Moor&#8217;s law: I&#8217;ve upgraded the CPU :)</p>
+</div>
+<div class="paragraph">
+<p>We can bring run time down by tweaking how we calculate the minimum of
+three elements.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">fn</span> <span class="tok-nf">min2</span><span class="tok-p">(</span><span class="tok-n">x</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-kt">f64</span><span class="tok-p">,</span><span class="tok-w"> </span><span class="tok-n">y</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-kt">f64</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-kt">f64</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-k">if</span><span class="tok-w"> </span><span class="tok-n">x</span><span class="tok-w"> </span><span class="tok-o">&lt;</span><span class="tok-w"> </span><span class="tok-n">y</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-n">x</span><span class="tok-w"> </span><span class="tok-p">}</span><span class="tok-w"> </span><span class="tok-k">else</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-n">y</span><span class="tok-w"> </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span>
+
+<span class="tok-k">fn</span> <span class="tok-nf">dtw</span><span class="tok-p">(</span><span class="tok-n">xs</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-p">[</span><span class="tok-kt">f64</span><span class="tok-p">],</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-p">[</span><span class="tok-kt">f64</span><span class="tok-p">])</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-kt">f64</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-c1">// ...</span>
+<span class="tok-w">            </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">min2</span><span class="tok-p">(</span><span class="tok-n">min2</span><span class="tok-p">(</span><span class="tok-n">d11</span><span class="tok-p">,</span><span class="tok-w"> </span><span class="tok-n">d10</span><span class="tok-p">),</span><span class="tok-w"> </span><span class="tok-n">d01</span><span class="tok-p">);</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-c1">// ...</span>
+<span class="tok-p">}</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><a href="http://play.rust-lang.org/?gist=caf7609db82341fb7ccf13033738232e&amp;version=stable">Code on Rust playground</a> (210 ms)</p>
+</div>
+<div class="paragraph">
+<p>This version takes only 210 milliseconds, presumably because the
+minimum of two elements in the previous row can be calculated without
+waiting for the preceding element in the current row to be computed.</p>
+</div>
+<div class="paragraph">
+<p>The assembly for the main loop looks like this (AT&amp;T syntax,
+destination register on the right)</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>   18.32    vmovsd -0x8(%rax,%rsi,8),%xmm1
+    0.00    vminsd (%rax,%rsi,8),%xmm1,%xmm1
+    6.72    vminsd %xmm0,%xmm1,%xmm0
+    4.64    vmovsd -0x8(%r12,%r10,8),%xmm1
+    0.00    vsubsd -0x8(%r13,%rsi,8),%xmm1,%xmm1
+    7.69    vmulsd %xmm1,%xmm1,%xmm1
+   36.14    vaddsd %xmm1,%xmm0,%xmm0
+   14.16    vmovsd %xmm0,(%rdi,%rsi,8)</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Check the <a href="/2017/03/12/min-of-three.html">previous post</a> for more details!</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="the-parallel-plan">The parallel plan</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Can we loosen dependencies between cells even more to benefit from instruction
+level parallelism? What if instead of filling the table row by row, we do it
+diagonals?</p>
+</div>
+<div class="imageblock text-center">
+<div class="content">
+<img src="/assets/min3_diag_color.png" alt="Diagonal update">
+</div>
+</div>
+<div class="paragraph">
+<p>We&#8217;d need to remember <strong>two</strong> previous diagonals instead of one previous
+row, but all the cells on the next diagonal would be independent! In
+theory, compiler should be able to use <a href="https://en.wikipedia.org/wiki/SIMD#Hardware">SIMD instructions</a> to make the
+computation truly parallel.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="implementation-plan">Implementation Plan</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Coding up this diagonal traversal is a bit tricky, because you need to
+map linear vector indices to diagonal indices.</p>
+</div>
+<div class="paragraph">
+<p>The original indexing worked like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>        iy
+       ----&gt;
+    | . . . .
+ ix | . . . .
+    | . . . .
+    V . . . .</pre>
+</div>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>ix</code> and <code>iy</code> are indices in the input vectors.</p>
+</li>
+<li>
+<p>The outer loop is over <code>ix</code>.</p>
+</li>
+<li>
+<p>On each iteration, we remember two rows (<code>curr</code> and <code>prev</code> in the
+code).</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>For our grand plan, we need to fit a rhombus peg in a square hole:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>   id
+  ----&gt;
+ . . . .        |
+   . . . .      | ix
+     . . . .    |
+       . . . .  V</pre>
+</div>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>id</code> is the index of the diagonal. There are twice as much diagonals
+as rows.</p>
+</li>
+<li>
+<p>The outer loop is over <code>id</code>.</p>
+</li>
+<li>
+<p>On each iteration we remember three columns (<code>d1</code>, <code>d2</code> <code>d3</code> in the
+code).</p>
+</li>
+<li>
+<p>There is a phase transition once we&#8217;ve crossed the main diagonal.</p>
+</li>
+<li>
+<p>We can derive <code>iy</code> from the fact that <code>ix + iy = id</code>.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="code">Code</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The actual code looks like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">fn</span> <span class="tok-nf">dtw</span><span class="tok-p">(</span><span class="tok-n">xs</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-p">[</span><span class="tok-kt">f64</span><span class="tok-p">],</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-p">[</span><span class="tok-kt">f64</span><span class="tok-p">])</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-kt">f64</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-n">assert_eq</span><span class="tok-o">!</span><span class="tok-p">(</span><span class="tok-n">xs</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">(),</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">());</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">xs</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">();</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">d1</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">vec</span><span class="tok-o">!</span><span class="tok-p">[</span><span class="tok-mi">0</span><span class="tok-k">f64</span><span class="tok-p">;</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">];</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">d2</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">vec</span><span class="tok-o">!</span><span class="tok-p">[</span><span class="tok-mi">0</span><span class="tok-k">f64</span><span class="tok-p">;</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">];</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">d3</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">vec</span><span class="tok-o">!</span><span class="tok-p">[</span><span class="tok-mi">0</span><span class="tok-k">f64</span><span class="tok-p">;</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">];</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-n">d2</span><span class="tok-p">[</span><span class="tok-mi">0</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">::</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-kt">f64</span><span class="tok-o">::</span><span class="tok-n">MAX</span><span class="tok-p">;</span><span class="tok-w"></span>
+
+<span class="tok-w">    </span><span class="tok-k">for</span><span class="tok-w"> </span><span class="tok-n">id</span><span class="tok-w"> </span><span class="tok-k">in</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">..(</span><span class="tok-mi">2</span><span class="tok-w"> </span><span class="tok-o">*</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-o">::</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-n">mem</span><span class="tok-o">::</span><span class="tok-n">swap</span><span class="tok-p">(</span><span class="tok-o">&amp;</span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">d1</span><span class="tok-p">,</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">d2</span><span class="tok-p">);</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-o">::</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-n">mem</span><span class="tok-o">::</span><span class="tok-n">swap</span><span class="tok-p">(</span><span class="tok-o">&amp;</span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">d2</span><span class="tok-p">,</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">d3</span><span class="tok-p">);</span><span class="tok-w"></span>
+
+<span class="tok-w">        </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">ix_range</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-k">if</span><span class="tok-w"> </span><span class="tok-n">id</span><span class="tok-w"> </span><span class="tok-o">&lt;=</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-n">d3</span><span class="tok-p">[</span><span class="tok-mi">0</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">::</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-kt">f64</span><span class="tok-o">::</span><span class="tok-n">MAX</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-n">d3</span><span class="tok-p">[</span><span class="tok-n">id</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">::</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-kt">f64</span><span class="tok-o">::</span><span class="tok-n">MAX</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-mi">1</span><span class="tok-p">..</span><span class="tok-n">id</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-p">}</span><span class="tok-w"> </span><span class="tok-k">else</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-p">(</span><span class="tok-n">id</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-p">..</span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">)</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-p">};</span><span class="tok-w"></span>
+
+<span class="tok-w">        </span><span class="tok-k">for</span><span class="tok-w"> </span><span class="tok-n">ix</span><span class="tok-w"> </span><span class="tok-k">in</span><span class="tok-w"> </span><span class="tok-n">ix_range</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">iy</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">id</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">ix</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">min2</span><span class="tok-p">(</span><span class="tok-n">min2</span><span class="tok-p">(</span><span class="tok-n">d2</span><span class="tok-p">[</span><span class="tok-n">ix</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">],</span><span class="tok-w"> </span><span class="tok-n">d2</span><span class="tok-p">[</span><span class="tok-n">ix</span><span class="tok-p">]),</span><span class="tok-w"> </span><span class="tok-n">d1</span><span class="tok-p">[</span><span class="tok-n">ix</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">]);</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">cost</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">                </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">t</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">xs</span><span class="tok-p">[</span><span class="tok-n">ix</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-p">[</span><span class="tok-n">iy</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">];</span><span class="tok-w"></span>
+<span class="tok-w">                </span><span class="tok-n">t</span><span class="tok-w"> </span><span class="tok-o">*</span><span class="tok-w"> </span><span class="tok-n">t</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-p">};</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-n">d3</span><span class="tok-p">[</span><span class="tok-n">ix</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">d</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-n">cost</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-p">};</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-p">}</span><span class="tok-w"></span>
+
+<span class="tok-w">    </span><span class="tok-n">d3</span><span class="tok-p">[</span><span class="tok-n">n</span><span class="tok-p">]</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><a href="http://play.rust-lang.org/?gist=4522cb9d4d0e95e9daa4b1f1d6a563b0&amp;version=stable">Code on Rust playground</a> (185 ms)</p>
+</div>
+<div class="paragraph">
+<p>It take 185 milliseconds to run. The assembly for the main loop is
+quite interesting:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>    1.67    cmp    %rax,%rdx
+    0.00    jbe    6d95
+    1.95    lea    0x1(%rax),%rbx
+    8.09    cmp    %rbx,%rdx
+    0.98    jbe    6da4
+    1.12    cmp    %rax,%r8
+    0.00    jbe    6db3
+    3.49    cmp    %r12,%rax
+    0.00    jae    6de9
+    9.07    cmp    %r12,%rcx
+    0.00    jae    6dc5
+    0.56    cmp    %rbx,%r9
+    0.00    jbe    6dd7
+    2.23    vmovsd (%r15,%rax,8),%xmm0
+   11.72    vminsd 0x8(%r15,%rax,8),%xmm0,%xmm0
+    2.09    vminsd (%r11,%rax,8),%xmm0,%xmm0
+    2.51    vmovsd (%r14,%rax,8),%xmm1
+    7.95    mov    -0x88(%rbp),%rdi
+    3.07    vsubsd (%rdi,%rcx,8),%xmm1,%xmm1
+    3.91    vmulsd %xmm1,%xmm1,%xmm1
+   15.90    vaddsd %xmm1,%xmm0,%xmm0
+    8.37    vmovsd %xmm0,0x8(%r13,%rax,8)</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>First of all, we don&#8217;t see any vectorized instructions, the code does
+roughly the same operations as the in previous version. Also, there is
+a whole bunch of extra branching instructions on the top. These are
+bounds checks which were not eliminated this time. And this is great:
+if I add all off-by one errors I&#8217;ve made implementing diagonal
+indexing, I would get an integer overflow! Nevertheless, we&#8217;ve got
+some speedup.</p>
+</div>
+<div class="paragraph">
+<p>Can we go further and add get SIMD instructions here? At the moment,
+Rust does not have a stable way to explicitly emit SIMD
+(<a href="https://internals.rust-lang.org/t/getting-explicit-simd-on-stable-rust/4380">it&#8217;s going to change some day</a>) (UPDATE: we have <a href="https://doc.rust-lang.org/core/arch/index.html">SIMD on stable</a> now!), so the only choice we
+have is to tweak the source code until LLVM sees an opportunity for
+vectorization.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="simd">SIMD</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Although bounds checks themselves don&#8217;t slow down the code that much,
+they can prevent LLVM from vectorizing. So let&#8217;s dip our toes into
+<code>unsafe</code>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">unsafe</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">min2</span><span class="tok-p">(</span><span class="tok-n">min2</span><span class="tok-p">(</span><span class="tok-o">*</span><span class="tok-n">d2</span><span class="tok-p">.</span><span class="tok-n">get_unchecked</span><span class="tok-p">(</span><span class="tok-n">ix</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">),</span><span class="tok-w"> </span><span class="tok-o">*</span><span class="tok-n">d2</span><span class="tok-p">.</span><span class="tok-n">get_unchecked</span><span class="tok-p">(</span><span class="tok-n">ix</span><span class="tok-p">)),</span><span class="tok-w"></span>
+<span class="tok-w">                 </span><span class="tok-o">*</span><span class="tok-n">d1</span><span class="tok-p">.</span><span class="tok-n">get_unchecked</span><span class="tok-p">(</span><span class="tok-n">ix</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">));</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">cost</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">t</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">xs</span><span class="tok-p">.</span><span class="tok-n">get_unchecked</span><span class="tok-p">(</span><span class="tok-n">ix</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-p">.</span><span class="tok-n">get_unchecked</span><span class="tok-p">(</span><span class="tok-n">iy</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">);</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-n">t</span><span class="tok-w"> </span><span class="tok-o">*</span><span class="tok-w"> </span><span class="tok-n">t</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-p">};</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-o">*</span><span class="tok-n">d3</span><span class="tok-p">.</span><span class="tok-n">get_unchecked_mut</span><span class="tok-p">(</span><span class="tok-n">ix</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">d</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-n">cost</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><a href="http://play.rust-lang.org/?gist=a7d7e447794eda6fef7b08a28c2c79da&amp;version=stable">Code on Rust playground</a> (52 ms)</p>
+</div>
+<div class="paragraph">
+<p>The  code is  as  fast as  it  is  ugly: it  finishes  in whooping  52
+milliseconds! And of course we see SIMD in the assembly:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>    5.74    vmovupd -0x8(%r8,%rcx,8),%ymm0
+    1.44    vminpd (%r8,%rcx,8),%ymm0,%ymm0
+    7.66    vminpd -0x8(%r11,%rcx,8),%ymm0,%ymm0
+    5.26    vmovupd -0x8(%rbx,%rcx,8),%ymm1
+    7.66    vpermpd $0x1b,0x20(%r12),%ymm2
+    5.26    vsubpd %ymm2,%ymm1,%ymm1
+    7.66    vmulpd %ymm1,%ymm1,%ymm1
+    8.61    vaddpd %ymm1,%ymm0,%ymm0
+    2.39    vmovupd %ymm0,(%rdx,%rcx,8)
+    2.39    vmovupd 0x18(%r8,%rcx,8),%ymm0
+    5.74    vminpd 0x20(%r8,%rcx,8),%ymm0,%ymm0
+    9.09    vminpd 0x18(%r11,%rcx,8),%ymm0,%ymm0
+    0.96    vmovupd 0x18(%rbx,%rcx,8),%ymm1
+    4.78    vpermpd $0x1b,(%r12),%ymm2
+    3.83    vsubpd %ymm2,%ymm1,%ymm1
+    3.83    vmulpd %ymm1,%ymm1,%ymm1
+   10.53    vaddpd %ymm1,%ymm0,%ymm0
+    4.78    vmovupd %ymm0,0x20(%rdx,%rcx,8)</pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="safe-simd">Safe SIMD</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>How can we get the same results with safe Rust? One possible way is to
+use iterators, but in this case the resulting code would be rather
+ugly, because you&#8217;ll need a lot of nested <code>.zip</code>'s. So let&#8217;s try a
+simple trick of hoisting the bounds checks of the loop. The idea is to
+transform this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>for i in 0..n {
+    assert i &lt; xs.len();
+    xs.get_unchecked(i);
+}</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>into this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>assert xs.len() &lt; n;
+for i in 0..n {
+    xs.get_unchecked(i);
+}</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>In Rust, this is possible by explicitly slicing the buffer before the loop:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">ix_range</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-k">if</span><span class="tok-w"> </span><span class="tok-n">id</span><span class="tok-w"> </span><span class="tok-o">&lt;=</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-n">d3</span><span class="tok-p">[</span><span class="tok-mi">0</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">::</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-kt">f64</span><span class="tok-o">::</span><span class="tok-n">MAX</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-n">d3</span><span class="tok-p">[</span><span class="tok-n">id</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">::</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-kt">f64</span><span class="tok-o">::</span><span class="tok-n">MAX</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-mi">1</span><span class="tok-p">..</span><span class="tok-n">id</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"> </span><span class="tok-k">else</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-p">(</span><span class="tok-n">id</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">n</span><span class="tok-p">..</span><span class="tok-n">n</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">)</span><span class="tok-w"></span>
+<span class="tok-p">};</span><span class="tok-w"></span>
+
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">ix_range_1</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">ix_range</span><span class="tok-p">.</span><span class="tok-n">start</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">..</span><span class="tok-n">ix_range</span><span class="tok-p">.</span><span class="tok-n">end</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">dn</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">ix_range</span><span class="tok-p">.</span><span class="tok-n">end</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">ix_range</span><span class="tok-p">.</span><span class="tok-n">start</span><span class="tok-p">;</span><span class="tok-w"></span>
+
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d1</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-n">d1</span><span class="tok-p">[</span><span class="tok-n">ix_range_1</span><span class="tok-p">.</span><span class="tok-n">clone</span><span class="tok-p">()];</span><span class="tok-w"></span>
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d2_0</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-n">d2</span><span class="tok-p">[</span><span class="tok-n">ix_range</span><span class="tok-p">.</span><span class="tok-n">clone</span><span class="tok-p">()];</span><span class="tok-w"></span>
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d2_1</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-n">d2</span><span class="tok-p">[</span><span class="tok-n">ix_range_1</span><span class="tok-p">.</span><span class="tok-n">clone</span><span class="tok-p">()];</span><span class="tok-w"></span>
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d3</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-k">mut</span><span class="tok-w"> </span><span class="tok-n">d3</span><span class="tok-p">[</span><span class="tok-n">ix_range</span><span class="tok-p">.</span><span class="tok-n">clone</span><span class="tok-p">()];</span><span class="tok-w"></span>
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">xs</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-n">xs</span><span class="tok-p">[</span><span class="tok-n">ix_range_1</span><span class="tok-p">.</span><span class="tok-n">clone</span><span class="tok-p">()];</span><span class="tok-w"></span>
+<span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-o">&amp;</span><span class="tok-n">ys</span><span class="tok-p">[</span><span class="tok-n">id</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">ix_range</span><span class="tok-p">.</span><span class="tok-n">end</span><span class="tok-p">..</span><span class="tok-n">id</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">ix_range</span><span class="tok-p">.</span><span class="tok-n">start</span><span class="tok-p">];</span><span class="tok-w"></span>
+
+<span class="tok-c1">// All the buffers we access inside the loop will have the same length</span>
+<span class="tok-n">assert</span><span class="tok-o">!</span><span class="tok-p">(</span><span class="tok-n">d1</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">()</span><span class="tok-w"> </span><span class="tok-o">==</span><span class="tok-w"> </span><span class="tok-n">dn</span><span class="tok-w"> </span><span class="tok-o">&amp;&amp;</span><span class="tok-w"> </span><span class="tok-n">d2_0</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">()</span><span class="tok-w"> </span><span class="tok-o">==</span><span class="tok-w"> </span><span class="tok-n">dn</span><span class="tok-w"> </span><span class="tok-o">&amp;&amp;</span><span class="tok-w"> </span><span class="tok-n">d2_1</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">()</span><span class="tok-w"> </span><span class="tok-o">==</span><span class="tok-w"> </span><span class="tok-n">dn</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-o">&amp;&amp;</span><span class="tok-w"> </span><span class="tok-n">d3</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">()</span><span class="tok-w"> </span><span class="tok-o">==</span><span class="tok-w"> </span><span class="tok-n">dn</span><span class="tok-w"> </span><span class="tok-o">&amp;&amp;</span><span class="tok-w"> </span><span class="tok-n">xs</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">()</span><span class="tok-w"> </span><span class="tok-o">==</span><span class="tok-w"> </span><span class="tok-n">dn</span><span class="tok-w"> </span><span class="tok-o">&amp;&amp;</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">()</span><span class="tok-w"> </span><span class="tok-o">==</span><span class="tok-w"> </span><span class="tok-n">dn</span><span class="tok-p">);</span><span class="tok-w"></span>
+
+<span class="tok-k">for</span><span class="tok-w"> </span><span class="tok-n">i</span><span class="tok-w"> </span><span class="tok-k">in</span><span class="tok-w"> </span><span class="tok-mi">0</span><span class="tok-p">..</span><span class="tok-n">dn</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-c1">// so hopefully LLVM can eliminate bounds checks.</span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">d</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">min2</span><span class="tok-p">(</span><span class="tok-n">min2</span><span class="tok-p">(</span><span class="tok-n">d2_0</span><span class="tok-p">[</span><span class="tok-n">i</span><span class="tok-p">],</span><span class="tok-w"> </span><span class="tok-n">d2_1</span><span class="tok-p">[</span><span class="tok-n">i</span><span class="tok-p">]),</span><span class="tok-w"> </span><span class="tok-n">d1</span><span class="tok-p">[</span><span class="tok-n">i</span><span class="tok-p">]);</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">cost</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">t</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">xs</span><span class="tok-p">[</span><span class="tok-n">i</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-p">[</span><span class="tok-n">ys</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">()</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">i</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">];</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-n">t</span><span class="tok-w"> </span><span class="tok-o">*</span><span class="tok-w"> </span><span class="tok-n">t</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-p">};</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-n">d3</span><span class="tok-p">[</span><span class="tok-n">i</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">d</span><span class="tok-w"> </span><span class="tok-o">+</span><span class="tok-w"> </span><span class="tok-n">cost</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-p">};</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><a href="http://play.rust-lang.org/?gist=65a707923aa0d49aa06e84c509c83bed&amp;version=stable">Code on Rust playground</a> (107 ms)</p>
+</div>
+<div class="paragraph">
+<p>This is definitely an improvement over the best safe version, but is
+still twice as slow as the unsafe variant. Looks like some bounds
+checks are still there! It is possible to find them by selectively
+using <code>unsafe</code> to replace some indexing operations.</p>
+</div>
+<div class="paragraph">
+<p>And it turns out that only <code>ys</code> is still checked!</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">t</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">xs</span><span class="tok-p">[</span><span class="tok-n">i</span><span class="tok-p">]</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-k">unsafe</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-p">.</span><span class="tok-n">get_unchecked</span><span class="tok-p">(</span><span class="tok-n">ys</span><span class="tok-p">.</span><span class="tok-n">len</span><span class="tok-p">()</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-n">i</span><span class="tok-w"> </span><span class="tok-o">-</span><span class="tok-w"> </span><span class="tok-mi">1</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-p">};</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><a href="http://play.rust-lang.org/?gist=d735daf2993acd1286d399c813546c71&amp;version=stable">Code on Rust playground</a> (52 ms)</p>
+</div>
+<div class="paragraph">
+<p>If we use <code>unsafe</code> only for <code>ys</code>, we regain all the performance.</p>
+</div>
+<div class="paragraph">
+<p>LLVM is having trouble iterating <code>ys</code> in reverse, but the fix is easy:
+just reverse it once at the beginning of the function:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-kd">let</span><span class="tok-w"> </span><span class="tok-n">ys_rev</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-nb">Vec</span><span class="tok-o">&lt;</span><span class="tok-kt">f64</span><span class="tok-o">&gt;</span><span class="tok-w"> </span><span class="tok-o">=</span><span class="tok-w"> </span><span class="tok-n">ys</span><span class="tok-p">.</span><span class="tok-n">iter</span><span class="tok-p">().</span><span class="tok-n">cloned</span><span class="tok-p">().</span><span class="tok-n">rev</span><span class="tok-p">().</span><span class="tok-n">collect</span><span class="tok-p">();</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><a href="http://play.rust-lang.org/?gist=6f6bcf941df819d10f8fa688f86765ad&amp;version=stable">Code on Rust playground</a> (50 ms)</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="conclusions">Conclusions</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>We&#8217;ve gone from almost 300 milliseconds to only 50 in safe Rust. That
+is quite impressive! However, the resulting code is rather brittle and
+even small changes can prevent vectorization from triggering.</p>
+</div>
+<div class="paragraph">
+<p>It&#8217;s also important to understand that to allow for SIMD, we had to
+change the underlying algorithm. This is not something even a very
+smart compiler could do!</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer>
+    <p class="about-text">Yet another programmer's blog</p>
+
+    <p>
+      <a href="/feed.xml" class="footer-link">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a class="footer-link" href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

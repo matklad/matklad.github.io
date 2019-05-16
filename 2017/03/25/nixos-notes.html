@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>NixOS Notes</title>
+  <meta name="description"
+    content="">
+
+  <link rel="stylesheet" href="/css/asciidoctor.css">
+  <link rel="stylesheet" href="/css/asciidoctor-pygments.css">
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+  <link rel="canonical" href="http://localhost:4000/2017/03/25/nixos-notes.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad"
+    href="http://localhost:4000/feed.xml">
+</head>
+
+<body lang="en-US">
+  <header>
+    <a class="nav-link site-title" href="/">matklad</a>
+
+    <nav class="site-nav">
+      
+      
+      <a class="nav-link" href="/about/">About</a>
+      
+      
+      
+      
+      
+      
+      
+      <a class="nav-link" href="/resume/">Resume</a>
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+<h1>NixOS Notes</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>I had bought a new laptop recently, which was a perfect opportunity to take a
+fresh look at my <a href="http://nixos.org/">NixOS</a> setup.</p>
+</div>
+<div class="paragraph">
+<p>As usual, there are some hacks and not obvious things which I would like to
+document just in case :)</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="if-it-does-not-work-update">If it does not work, update</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>I&#8217;ve tried installed a stable 16.09 version first, but live CD didn&#8217;t manage to
+start the X server properly. This was easy to fix by switching to the then beta
+17.03.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="uefi">UEFI</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>It is my first system which uses <a href="https://en.wikipedia.org/wiki/Unified_Extensible_Firmware_Interface">UEFI</a> instead of BIOS, and I was
+pleasantly surprised by how everything just worked. Documentation contains only
+a short paragraph about UEFI, but it&#8217;s everything you need. The only hiccup on
+my side happened when I enabled GRUB together with <code>systemd-boot</code>: you don&#8217;t
+need GRUB at all, <code>system-boot</code> is a bootloader which handles everything.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="if-it-does-not-work-fix-the-obvious-problem">If it does not work, fix the obvious problem</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>After I&#8217;ve installed everything, I was presented with a blank screen
+instead of my desktop environment (with the live CD everything
+worked). It took me ages to debug the issue, while the fix was super
+trivial: add <code>videoDrivers = [ "intel" ];</code> to <code>xserver</code> config and
+<code>"noveau"</code> to <code>blacklistedKernelModules</code>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="rust">Rust</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>While nix is the best way to manage Linux desktop I am aware of,
+<a href="https://github.com/rust-lang-nursery/rustup.rs">rustup</a> is the most convenient way of managing Rust toolchains.
+Unfortunately it&#8217;s not easy to make rustup play nicely with NixOS (UPDATE:
+rustup is now packaged in nixpkgs and just works). Rustup downloads binaries of
+the compiler and Cargo, but it is impossible to launch unmodified binaries on
+NixOS because it a lacks conventional loader.</p>
+</div>
+<div class="paragraph">
+<p>The fix I came up with is a horrible hack which goes against
+everything in NixOS. Here it is:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>environment.extraInit = let loader = "ld-linux-x86-64.so.2"; in ''
+  export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/run/current-system/sw/lib:${pkgs.stdenv.cc.cc.lib}/lib"
+  ln -fs ${pkgs.stdenv.cc.libc.out}/lib/${loader} /lib64/${loader}
+'';</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>It makes the loader and shared libraries (rustup needs <code>zlib</code>) visible
+to binaries compiled for x64 Linux.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="idea">Idea</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Another software which I wish to update somewhat more frequently than
+other packages is <a href="https://www.jetbrains.com/idea/">IntelliJ IDEA</a> (I write a fair amount of Kotlin and
+Rust). NixOS has a super convenient mechanism to do this:
+<a href="https://nixos.org/wiki/Nix_Modifying_Packages#Overriding_Existing_Packages"><code>packageOverrides</code></a>. Here is my <code>~/nixpkgs/config.nix</code>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="nix"><span></span><span class="tok-p">{</span>
+  <span class="tok-ss">packageOverrides =</span> pkgs<span class="tok-p">:</span> <span class="tok-k">rec</span> <span class="tok-p">{</span>
+    <span class="tok-ss">idea-community =</span> <span class="tok-k">let</span>
+      <span class="tok-ss">version =</span> <span class="tok-s2">&quot;2017.1&quot;</span><span class="tok-p">;</span>
+      <span class="tok-ss">sha256 =</span> <span class="tok-s2">&quot;750b517742157475bb690c1cc8f21ac151a754a38fec5c99a4bb473efd71da5d&quot;</span><span class="tok-p">;</span>
+    <span class="tok-k">in</span>
+      pkgs<span class="tok-o">.</span>idea<span class="tok-o">.</span>idea-community<span class="tok-o">.</span>overrideDerivation <span class="tok-p">(</span>attrs<span class="tok-p">:</span> <span class="tok-k">rec</span> <span class="tok-p">{</span>
+        <span class="tok-k">inherit</span> version<span class="tok-p">;</span>
+	<span class="tok-ss">name =</span> <span class="tok-s2">&quot;idea-community-</span><span class="tok-si">${</span>version<span class="tok-si">}</span><span class="tok-s2">&quot;</span><span class="tok-p">;</span>
+        <span class="tok-ss">src =</span> pkgs<span class="tok-o">.</span>fetchurl <span class="tok-p">{</span>
+	  <span class="tok-k">inherit</span> sha256<span class="tok-p">;</span>
+          <span class="tok-ss">url =</span> <span class="tok-s2">&quot;https://download.jetbrains.com/idea/ideaIC-</span><span class="tok-si">${</span>version<span class="tok-si">}</span><span class="tok-s2">.tar.gz&quot;</span><span class="tok-p">;</span>
+        <span class="tok-p">};</span>
+      <span class="tok-p">});</span>
+  <span class="tok-p">};</span>
+<span class="tok-p">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>It allows to use the most recent IDEA with the stable NixOS channel.</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer>
+    <p class="about-text">Yet another programmer's blog</p>
+
+    <p>
+      <a href="/feed.xml" class="footer-link">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a class="footer-link" href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
