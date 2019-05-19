@@ -6,9 +6,345 @@
 </description>
     <link>http://localhost:4000/</link>
     <atom:link href="http://localhost:4000/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Thu, 16 May 2019 14:05:31 +0300</pubDate>
-    <lastBuildDate>Thu, 16 May 2019 14:05:31 +0300</lastBuildDate>
+    <pubDate>Sun, 19 May 2019 21:36:59 +0300</pubDate>
+    <lastBuildDate>Sun, 19 May 2019 21:36:59 +0300</lastBuildDate>
     <generator>Jekyll v3.8.5</generator>
+    
+      <item>
+        <title>Consider Using Asciidoctor for Your Next Presentation</title>
+        <description>&lt;div id=&quot;preamble&quot;&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I&amp;#8217;ve spend years looking for a good tool to make slides.
+I&amp;#8217;ve tried LaTeX Beamer, Google Docs, Slides.com and several reveal.js offsprings, but neither was satisfactory for me.
+Last year, I stumbled upon &lt;a href=&quot;https://github.com/Mogztter/asciidoctor-pdf.js&quot;&gt;Asciidoctor.js PDF&lt;/a&gt; (which had like three GitHub starts at that moment), and it is &lt;strong&gt;perfect&lt;/strong&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;At least, it is perfect for my use case, your requirements might be different.
+I make presentations for teaching programming at &lt;a href=&quot;https://compscicenter.ru&quot;&gt;Computer Science Center&lt;/a&gt;, so my slides are full of code, bullet lists, and sometimes have moderately complex layout.
+To make reviewing course material easier, slides need to have high information density&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;If you want to cut down straight to the code, see the repository with slides for my Rust course:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;http://github.com/matklad/rust-course&quot; class=&quot;bare&quot;&gt;http://github.com/matklad/rust-course&lt;/a&gt;&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;requirements&quot;&gt;Requirements&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The specific things I want from the slides are:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;ulist&quot;&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;A source markup language: I like to keep my slides on GitHub&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Ease of styling and layout.
+A good test here is two-column layout with code snippet on the left and a bullet list on the right&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;The final output should be a PDF.
+I don&amp;#8217;t use animations, but I need exactly the same look of slides on different computers&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;All the tools I&amp;#8217;ve tried don&amp;#8217;t quite fit the bill.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;While TeX is good for formatting formulas, LaTeX is a relatively poor language for describing the structure of the document.
+Awesome Emacs mode fixes the issue partially, but still, &lt;code&gt;\begin{itemize}&lt;/code&gt; is way to complex for a bullet list.
+Additionally, quality of implementation is not perfect: unicode support needs opt-in, and the build process is fiddly.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;http://slides.google.com/&quot;&gt;Google Docs&lt;/a&gt; and &lt;a href=&quot;https://slides.com/&quot;&gt;Slides.com&lt;/a&gt; are pretty solid choices if you want WYSWIG.
+In fact, I primarily used these two tools before AsciiDoctor.
+However WYSWIG and limited flexibility which come with it are significant drawbacks&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I think I&amp;#8217;ve never made a serious presentation in any of the JavaScript presentation frameworks.
+I&amp;#8217;ve definitely tried &lt;a href=&quot;https://revealjs.com/&quot;&gt;reveal.js&lt;/a&gt;, &lt;a href=&quot;https://remarkjs.com/#1&quot;&gt;remark&lt;/a&gt; and &lt;a href=&quot;https://shwr.me&quot;&gt;shower&lt;/a&gt;, but turned back to Google Docs in the end.
+The two main reasons for this were:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;ulist&quot;&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;Less than ideal source language:&lt;/p&gt;
+&lt;div class=&quot;ulist&quot;&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;if it is Markdown, I struggled with creating complex layouts like the two column one;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;if it is HTML, simple things like bullet lists or emphasis are hard.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Cross browser CSS.
+These frameworks pack a lot of JS and CSS, which I don&amp;#8217;t really need, but which makes tweaking stuff difficult for me, as I am not a professional web developer.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;asciidoc-language&quot;&gt;AsciiDoc Language&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The killer feature behind Asciidoctor.js PDF is the AsciiDoc markup language.
+Like Markdown, it&amp;#8217;s a lightweight markup language.
+When I was translating this blog from &lt;code&gt;.md&lt;/code&gt; to &lt;code&gt;.adoc&lt;/code&gt; the only significant change in the syntax was for links, from&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code&gt;&lt;span&gt;&lt;/span&gt;[some link](http://example.com)&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;to&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code&gt;&lt;span&gt;&lt;/span&gt;http://example.com[some link]&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;However, unlike Markdown and LaTeX, AsciiDoc has native support for rich hierarchical document model.
+AsciiDoc source is parsed into a tree of nested elements with attributes (historically, AsciiDoc was created as an easier way to author &lt;a href=&quot;https://docbook.org/&quot;&gt;DocBook&lt;/a&gt; XML).
+This allows to express complex document structure without ad-hoc syntax extensions.
+Additionally, the concrete syntax feels very orthogonal and well rounded up.
+We&amp;#8217;ve seen the syntax for links before, and this is how one includes an image:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code&gt;&lt;span&gt;&lt;/span&gt;image::assets/logo.svg[alt text]&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Or a snippet from another file:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code&gt;&lt;span&gt;&lt;/span&gt;include::code_samples/worker.rs[]&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;A couple of more examples, just to whet your appetite (Asciidoctor has &lt;a href=&quot;https://asciidoctor.org/docs/user-manual/&quot;&gt;extensive documentation&lt;/a&gt;)&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;title&quot;&gt;Paragraphs&lt;/div&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;adoc&quot;&gt;&lt;span&gt;&lt;/span&gt;This is a paragraph
+
+[.lead]
+This is a paragraph with an attribute (which translates to CSS class)&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;openblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This is a paragraph&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph lead&quot;&gt;
+&lt;p&gt;This is a paragraph with an attribute (which translates to CSS class)&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;title&quot;&gt;List with nested elements&lt;/div&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;adoc&quot;&gt;&lt;span&gt;&lt;/span&gt;* This is a bullet list
+* Bullet with table (+ joins blocks)
++
+|===
+|Are tables in lists stupid?| Probably!
+|===&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;openblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;div class=&quot;ulist&quot;&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;This is a bullet list&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Bullet with table (+ joins blocks)&lt;/p&gt;
+&lt;table class=&quot;tableblock frame-all grid-all stretch&quot;&gt;
+&lt;colgroup&gt;
+&lt;col style=&quot;width: 50%;&quot;&gt;
+&lt;col style=&quot;width: 50%;&quot;&gt;
+&lt;/colgroup&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;Are tables in lists stupid?&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;Probably!&lt;/p&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;title&quot;&gt;Code with &lt;strong&gt;inline markup&lt;/strong&gt;&lt;/div&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;adoc&quot;&gt;&lt;span&gt;&lt;/span&gt;[source,rust,subs=&amp;quot;+quotes&amp;quot;]
+----
+let x = 1;
+let r: &amp;amp;i32;
+{
+    let y = 2;
+    r = [.hl-error]##&amp;amp;y##;  // borrowed value does not live long enough
+}
+println!(&amp;quot;{}&amp;quot;, *r);
+----&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;imageblock thumb&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;img src=&quot;/assets/adoc-hl-error.png&quot; alt=&quot;adoc hl error&quot;&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;That is, in addition to the usual syntax highlighting, the &lt;code&gt;&amp;amp;xs[0]&lt;/code&gt; bit is wrapped into a &lt;code&gt;&amp;lt;span class=&quot;hl-error&quot;&amp;gt;&lt;/code&gt;.
+This can be used to call out specific bits of code, or, like in this case, to show compiler errors:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Here&amp;#8217;s an example of a complex slide:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;adoc&quot;&gt;&lt;span&gt;&lt;/span&gt;[.two-col]  &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt; &lt;i class=&quot;conum&quot; data-value=&quot;4&quot;&gt;&lt;/i&gt;&lt;b&gt;(4)&lt;/b&gt;
+== Ссылки в C++ и Rust
+
+.C++
+- создаются неявно
+- не являются первоклассными объектами (`std::reference_wrapper`)
+- не всегда валидны
+
+.Rust
+- требуют явных `&amp;amp;`/[.language-rust]`&amp;amp;mut` и `*` &lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;(2)&lt;/b&gt;
+- обычные объекты &lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;(3)&lt;/b&gt;
++
+[source,rust]
+----
+let x = 1;
+let y = 2;
+let mut r: &amp;amp;i32 = &amp;amp;x;
+r = &amp;amp;y;
+----
+- всегда валидны&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;colist arabic&quot;&gt;
+&lt;table&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;.two-col&lt;/code&gt; sets the css class for two-column flex layout.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;2&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;[.language-rust]&lt;/code&gt; sets css class for inline &lt;code&gt;&amp;lt;code&amp;gt;&lt;/code&gt; element, so &lt;code&gt;mut&lt;/code&gt; gets highlighted.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;3&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;This bullet-point contains a longer snippet of code.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;4&quot;&gt;&lt;/i&gt;&lt;b&gt;4&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Have you noticed these circled numbered callouts? They are another useful feature of AsciiDoc!&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The result is the following slide&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;imageblock thumb&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;img src=&quot;/assets/adoc-slide.png&quot; alt=&quot;adoc slide&quot;&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;html-translation&quot;&gt;HTML Translation&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;AsciiDoc markup language is a powerful primitive, but how do we turn it into pixels on the screen?
+The hard part of making slides is laying out the contents: breaking paragraphs in lines, aligning images, arranging columns.
+As was &lt;a href=&quot;https://github.com/asciidoctor/asciidoctor/issues/2972#issuecomment-441475262&quot;&gt;pointed out by Asciidoctor maintainer&lt;/a&gt;, browsers are extremely powerful layout engines, and HTML + CSS is a decent way to describe the layout.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;And here&amp;#8217;s where Asciidoctor.js PDF comes in: it allows one to transform AsciiDoc DOM into HTML, by supplying a functional-style visitor.
+This HTML is then rendered to PDF by chromium (but you can totally use HTML slides directly if you like it more).&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Here&amp;#8217;s the visitor which produces the slides for my Rust course:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/matklad/rust-course/blob/0fe5fea215514f4aaff6ae61bca5ac033fcfe348/lectures/template.js#L1-L63&quot;&gt;https://github.com/matklad/rust-course/blob/master/lectures/template.js&lt;/a&gt;&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;In contrast to reveal.js, I have full control over the resulting HTML and CSS.
+As I don&amp;#8217;t need cross browser support or complex animations, I can write a relatively simple modern CSS, which I myself can understand.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;bits-and-pieces&quot;&gt;Bits and Pieces&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Note that Asciidoctor.js PDF is a relatively new piece of technology (although the underlying Asciidoctor project is &lt;strong&gt;very&lt;/strong&gt; mature).
+For this reason for my slides I just vendor a specific version of the tool.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Because the intermediate result is HTML, the development workflow is very smooth.
+It&amp;#8217;s easy to make a live preview with a couple of editor plugins, and you can use browser&amp;#8217;s dev-tools to debug CSS.
+I&amp;#8217;ve also written a tiny bit of JavaScript to enable keyboard navigation for slides during preview.
+Syntax highlighting is also a bespoke pile of regexes :-)&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;One thing I am worried about is the depth of the stack of technologies of Asciidoctor.js PDF.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;olist arabic&quot;&gt;
+&lt;ol class=&quot;arabic&quot;&gt;
+&lt;li&gt;
+&lt;p&gt;Original AsciiDoc tool was written in Python.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Asciidoctor is a modern enhanced re-implementation in Ruby.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Asciidoctor.js PDF runs on NodeJS via &lt;a href=&quot;https://opalrb.com/&quot;&gt;Opal&lt;/a&gt; Ruby &amp;#8594; JavaScript compiler&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;It is used to produce HTML which is then fed into chromium to produce PDF!&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Oh, and syntax highlighting on this blog is powered by &lt;a href=&quot;http://pygments.org/&quot;&gt;pygments&lt;/a&gt;, so Ruby calls into Python!&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This is quite a Zoo, but it works reliably for me!&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;</description>
+        <pubDate>Sun, 19 May 2019 00:00:00 +0300</pubDate>
+        <link>http://localhost:4000/2019/05/19/consider-using-asciidoctor-for-your-next-presentation.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2019/05/19/consider-using-asciidoctor-for-your-next-presentation.html</guid>
+        
+        
+      </item>
     
       <item>
         <title>Exceptions vs Structured Concurrency</title>
@@ -2421,7 +2757,7 @@ inner mechanics of Git.&lt;/p&gt;
       </item>
     
       <item>
-        <title>Stopping a Rust worker</title>
+        <title>Stopping a Rust Worker</title>
         <description>&lt;div id=&quot;preamble&quot;&gt;
 &lt;div class=&quot;sectionbody&quot;&gt;
 &lt;div class=&quot;paragraph&quot;&gt;
@@ -3056,81 +3392,6 @@ todo = &quot;run --package tools --bin todo&quot;&lt;/pre&gt;
         <pubDate>Wed, 03 Jan 2018 00:00:00 +0300</pubDate>
         <link>http://localhost:4000/2018/01/03/make-your-own-make.html</link>
         <guid isPermaLink="true">http://localhost:4000/2018/01/03/make-your-own-make.html</guid>
-        
-        
-      </item>
-    
-      <item>
-        <title>Dynamic types in LLDB</title>
-        <description>&lt;div id=&quot;preamble&quot;&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;If you are wondering how debuggers work, I suggest reading Eli Bendersky&amp;#8217;s
-&lt;a href=&quot;https://eli.thegreenplace.net/tag/debuggers&quot;&gt;eli-on-debuggers&lt;/a&gt;. However after having read these notes myself, I still
-had one question unanswered. Namely, how can debugger show fields of a class, if
-the type of the class is known only at runtime?&lt;/p&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;example&quot;&gt;Example&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Consider this situation: you have a pointer of type &lt;code&gt;A*&lt;/code&gt;, which at runtime holds
-a value of some subtype of &lt;code&gt;A&lt;/code&gt;. Could the debugger display the fields of the
-actual type? Turns out, it can handle cases like the one below just fine!&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;cpp&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;tok-n&quot;&gt;Base&lt;/span&gt; &lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;tok-p&quot;&gt;...&lt;/span&gt; &lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;tok-nl&quot;&gt;Derived&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;tok-n&quot;&gt;Baes&lt;/span&gt; &lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;tok-p&quot;&gt;...&lt;/span&gt; &lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;
-
-&lt;span class=&quot;tok-kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;foo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Base&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;tok-n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;
-    &lt;span class=&quot;tok-c1&quot;&gt;// `x` can be `Derived` or `Base` here.&lt;/span&gt;
-    &lt;span class=&quot;tok-c1&quot;&gt;// How can debugger show fields of `Derived` then?&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;dwarf&quot;&gt;DWARF&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Could it be possible that information about dynamic types is present in DWARF?
-If we look at the DWARF, we&amp;#8217;ll see that there&amp;#8217;s layout information for both
-&lt;code&gt;Base&lt;/code&gt; and &lt;code&gt;Derive&lt;/code&gt; types, as well as a entry for &lt;code&gt;x&lt;/code&gt; parameter, which says that
-it has type &lt;code&gt;Base&lt;/code&gt;. And this makes sense: we don&amp;#8217;t know that &lt;code&gt;x&lt;/code&gt; is  &lt;code&gt;Derived&lt;/code&gt;
-until runtime! So debugger must somehow figure the type of the variable
-dynamically.&lt;/p&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;no-magic&quot;&gt;No Magic&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;As usual, there&amp;#8217;s no magic. For example, LLDB has a hard-coded knowledge of C++
-programming language, which allows debugger to inspect types at runtime.
-Specifically, this is handled by &lt;code&gt;LanguageRuntime&lt;/code&gt; LLDB &lt;strong&gt;plugin&lt;/strong&gt;, which has a
-curious function &lt;a href=&quot;https://github.com/llvm-mirror/lldb/blob/bc19e289f759c26e4840aab450443d4a85071139/include/lldb/Target/LanguageRuntime.h#L82&quot;&gt;&lt;code&gt;GetDynamicTypeAndAddress&lt;/code&gt;&lt;/a&gt;, whose job is to poke the
-representation of value to get its real type and adjust pointer, if necessary
-(remember, with multiple inheritance, casts may change the value of the
-pointer).&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;The implementation of this function for C&amp;#43;&amp;#43; language lives in
-&lt;a href=&quot;https://github.com/llvm-mirror/lldb/blob/bc19e289f759c26e4840aab450443d4a85071139/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp#L185&quot;&gt;ItaniumABILanguageRuntime.cpp&lt;/a&gt; although, unlike C, C&amp;#43;&amp;#43; lacks a
-standardized ABI, almost all compilers on all non-windows platforms use a
-&lt;a href=&quot;http://refspecs.linuxbase.org/cxxabi-1.83.html&quot;&gt;specific ABI&lt;/a&gt;, confusingly called Itanium (after a now effectively dead
-64-bit CPU architecture).&lt;/p&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;</description>
-        <pubDate>Sat, 21 Oct 2017 00:00:00 +0300</pubDate>
-        <link>http://localhost:4000/2017/10/21/lldb-dynamic-type.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2017/10/21/lldb-dynamic-type.html</guid>
         
         
       </item>

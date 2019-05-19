@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Consider Using Asciidoctor for Your Next Presentation</title>
+  <meta name="description"
+    content="">
+
+  <link rel="stylesheet" href="/css/asciidoctor.css">
+  <link rel="stylesheet" href="/css/asciidoctor-pygments.css">
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+  <link rel="canonical" href="http://localhost:4000/2019/05/19/consider-using-asciidoctor-for-your-next-presentation.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad"
+    href="http://localhost:4000/feed.xml">
+</head>
+
+<body lang="en-US">
+  <header>
+    <a class="nav-link site-title" href="/">matklad</a>
+
+    <nav class="site-nav">
+      
+      
+      <a class="nav-link" href="/about/">About</a>
+      
+      
+      
+      
+      
+      
+      
+      <a class="nav-link" href="/resume/">Resume</a>
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+<h1>Consider Using Asciidoctor for Your Next Presentation</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>I&#8217;ve spend years looking for a good tool to make slides.
+I&#8217;ve tried LaTeX Beamer, Google Docs, Slides.com and several reveal.js offsprings, but neither was satisfactory for me.
+Last year, I stumbled upon <a href="https://github.com/Mogztter/asciidoctor-pdf.js">Asciidoctor.js PDF</a> (which had like three GitHub starts at that moment), and it is <strong>perfect</strong>.</p>
+</div>
+<div class="paragraph">
+<p>At least, it is perfect for my use case, your requirements might be different.
+I make presentations for teaching programming at <a href="https://compscicenter.ru">Computer Science Center</a>, so my slides are full of code, bullet lists, and sometimes have moderately complex layout.
+To make reviewing course material easier, slides need to have high information density</p>
+</div>
+<div class="paragraph">
+<p>If you want to cut down straight to the code, see the repository with slides for my Rust course:</p>
+</div>
+<div class="paragraph">
+<p><a href="http://github.com/matklad/rust-course" class="bare">http://github.com/matklad/rust-course</a></p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="requirements">Requirements</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The specific things I want from the slides are:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>A source markup language: I like to keep my slides on GitHub</p>
+</li>
+<li>
+<p>Ease of styling and layout.
+A good test here is two-column layout with code snippet on the left and a bullet list on the right</p>
+</li>
+<li>
+<p>The final output should be a PDF.
+I don&#8217;t use animations, but I need exactly the same look of slides on different computers</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>All the tools I&#8217;ve tried don&#8217;t quite fit the bill.</p>
+</div>
+<div class="paragraph">
+<p>While TeX is good for formatting formulas, LaTeX is a relatively poor language for describing the structure of the document.
+Awesome Emacs mode fixes the issue partially, but still, <code>\begin{itemize}</code> is way to complex for a bullet list.
+Additionally, quality of implementation is not perfect: unicode support needs opt-in, and the build process is fiddly.</p>
+</div>
+<div class="paragraph">
+<p><a href="http://slides.google.com/">Google Docs</a> and <a href="https://slides.com/">Slides.com</a> are pretty solid choices if you want WYSWIG.
+In fact, I primarily used these two tools before AsciiDoctor.
+However WYSWIG and limited flexibility which come with it are significant drawbacks</p>
+</div>
+<div class="paragraph">
+<p>I think I&#8217;ve never made a serious presentation in any of the JavaScript presentation frameworks.
+I&#8217;ve definitely tried <a href="https://revealjs.com/">reveal.js</a>, <a href="https://remarkjs.com/#1">remark</a> and <a href="https://shwr.me">shower</a>, but turned back to Google Docs in the end.
+The two main reasons for this were:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Less than ideal source language:</p>
+<div class="ulist">
+<ul>
+<li>
+<p>if it is Markdown, I struggled with creating complex layouts like the two column one;</p>
+</li>
+<li>
+<p>if it is HTML, simple things like bullet lists or emphasis are hard.</p>
+</li>
+</ul>
+</div>
+</li>
+<li>
+<p>Cross browser CSS.
+These frameworks pack a lot of JS and CSS, which I don&#8217;t really need, but which makes tweaking stuff difficult for me, as I am not a professional web developer.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="asciidoc-language">AsciiDoc Language</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The killer feature behind Asciidoctor.js PDF is the AsciiDoc markup language.
+Like Markdown, it&#8217;s a lightweight markup language.
+When I was translating this blog from <code>.md</code> to <code>.adoc</code> the only significant change in the syntax was for links, from</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code><span></span>[some link](http://example.com)</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>to</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code><span></span>http://example.com[some link]</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>However, unlike Markdown and LaTeX, AsciiDoc has native support for rich hierarchical document model.
+AsciiDoc source is parsed into a tree of nested elements with attributes (historically, AsciiDoc was created as an easier way to author <a href="https://docbook.org/">DocBook</a> XML).
+This allows to express complex document structure without ad-hoc syntax extensions.
+Additionally, the concrete syntax feels very orthogonal and well rounded up.
+We&#8217;ve seen the syntax for links before, and this is how one includes an image:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code><span></span>image::assets/logo.svg[alt text]</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Or a snippet from another file:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code><span></span>include::code_samples/worker.rs[]</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>A couple of more examples, just to whet your appetite (Asciidoctor has <a href="https://asciidoctor.org/docs/user-manual/">extensive documentation</a>)</p>
+</div>
+<div class="listingblock">
+<div class="title">Paragraphs</div>
+<div class="content">
+<pre class="pygments highlight"><code data-lang="adoc"><span></span>This is a paragraph
+
+[.lead]
+This is a paragraph with an attribute (which translates to CSS class)</code></pre>
+</div>
+</div>
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>This is a paragraph</p>
+</div>
+<div class="paragraph lead">
+<p>This is a paragraph with an attribute (which translates to CSS class)</p>
+</div>
+</div>
+</div>
+<div class="listingblock">
+<div class="title">List with nested elements</div>
+<div class="content">
+<pre class="pygments highlight"><code data-lang="adoc"><span></span>* This is a bullet list
+* Bullet with table (+ joins blocks)
++
+|===
+|Are tables in lists stupid?| Probably!
+|===</code></pre>
+</div>
+</div>
+<div class="openblock">
+<div class="content">
+<div class="ulist">
+<ul>
+<li>
+<p>This is a bullet list</p>
+</li>
+<li>
+<p>Bullet with table (+ joins blocks)</p>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Are tables in lists stupid?</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Probably!</p></td>
+</tr>
+</tbody>
+</table>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="listingblock">
+<div class="title">Code with <strong>inline markup</strong></div>
+<div class="content">
+<pre class="pygments highlight"><code data-lang="adoc"><span></span>[source,rust,subs=&quot;+quotes&quot;]
+----
+let x = 1;
+let r: &amp;i32;
+{
+    let y = 2;
+    r = [.hl-error]##&amp;y##;  // borrowed value does not live long enough
+}
+println!(&quot;{}&quot;, *r);
+----</code></pre>
+</div>
+</div>
+<div class="imageblock thumb">
+<div class="content">
+<img src="/assets/adoc-hl-error.png" alt="adoc hl error">
+</div>
+</div>
+<div class="paragraph">
+<p>That is, in addition to the usual syntax highlighting, the <code>&amp;xs[0]</code> bit is wrapped into a <code>&lt;span class="hl-error"&gt;</code>.
+This can be used to call out specific bits of code, or, like in this case, to show compiler errors:</p>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s an example of a complex slide:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="adoc"><span></span>[.two-col]  <i class="conum" data-value="1"></i><b>(1)</b> <i class="conum" data-value="4"></i><b>(4)</b>
+== Ссылки в C++ и Rust
+
+.C++
+- создаются неявно
+- не являются первоклассными объектами (`std::reference_wrapper`)
+- не всегда валидны
+
+.Rust
+- требуют явных `&amp;`/[.language-rust]`&amp;mut` и `*` <i class="conum" data-value="2"></i><b>(2)</b>
+- обычные объекты <i class="conum" data-value="3"></i><b>(3)</b>
++
+[source,rust]
+----
+let x = 1;
+let y = 2;
+let mut r: &amp;i32 = &amp;x;
+r = &amp;y;
+----
+- всегда валидны</code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td><code>.two-col</code> sets the css class for two-column flex layout.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="2"></i><b>2</b></td>
+<td><code>[.language-rust]</code> sets css class for inline <code>&lt;code&gt;</code> element, so <code>mut</code> gets highlighted.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="3"></i><b>3</b></td>
+<td>This bullet-point contains a longer snippet of code.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="4"></i><b>4</b></td>
+<td>Have you noticed these circled numbered callouts? They are another useful feature of AsciiDoc!</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>The result is the following slide</p>
+</div>
+<div class="imageblock thumb">
+<div class="content">
+<img src="/assets/adoc-slide.png" alt="adoc slide">
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="html-translation">HTML Translation</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>AsciiDoc markup language is a powerful primitive, but how do we turn it into pixels on the screen?
+The hard part of making slides is laying out the contents: breaking paragraphs in lines, aligning images, arranging columns.
+As was <a href="https://github.com/asciidoctor/asciidoctor/issues/2972#issuecomment-441475262">pointed out by Asciidoctor maintainer</a>, browsers are extremely powerful layout engines, and HTML + CSS is a decent way to describe the layout.</p>
+</div>
+<div class="paragraph">
+<p>And here&#8217;s where Asciidoctor.js PDF comes in: it allows one to transform AsciiDoc DOM into HTML, by supplying a functional-style visitor.
+This HTML is then rendered to PDF by chromium (but you can totally use HTML slides directly if you like it more).</p>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s the visitor which produces the slides for my Rust course:</p>
+</div>
+<div class="paragraph">
+<p><a href="https://github.com/matklad/rust-course/blob/0fe5fea215514f4aaff6ae61bca5ac033fcfe348/lectures/template.js#L1-L63">https://github.com/matklad/rust-course/blob/master/lectures/template.js</a></p>
+</div>
+<div class="paragraph">
+<p>In contrast to reveal.js, I have full control over the resulting HTML and CSS.
+As I don&#8217;t need cross browser support or complex animations, I can write a relatively simple modern CSS, which I myself can understand.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="bits-and-pieces">Bits and Pieces</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Note that Asciidoctor.js PDF is a relatively new piece of technology (although the underlying Asciidoctor project is <strong>very</strong> mature).
+For this reason for my slides I just vendor a specific version of the tool.</p>
+</div>
+<div class="paragraph">
+<p>Because the intermediate result is HTML, the development workflow is very smooth.
+It&#8217;s easy to make a live preview with a couple of editor plugins, and you can use browser&#8217;s dev-tools to debug CSS.
+I&#8217;ve also written a tiny bit of JavaScript to enable keyboard navigation for slides during preview.
+Syntax highlighting is also a bespoke pile of regexes :-)</p>
+</div>
+<div class="paragraph">
+<p>One thing I am worried about is the depth of the stack of technologies of Asciidoctor.js PDF.</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Original AsciiDoc tool was written in Python.</p>
+</li>
+<li>
+<p>Asciidoctor is a modern enhanced re-implementation in Ruby.</p>
+</li>
+<li>
+<p>Asciidoctor.js PDF runs on NodeJS via <a href="https://opalrb.com/">Opal</a> Ruby &#8594; JavaScript compiler</p>
+</li>
+<li>
+<p>It is used to produce HTML which is then fed into chromium to produce PDF!</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>Oh, and syntax highlighting on this blog is powered by <a href="http://pygments.org/">pygments</a>, so Ruby calls into Python!</p>
+</div>
+<div class="paragraph">
+<p>This is quite a Zoo, but it works reliably for me!</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer>
+    <p class="about-text">Yet another programmer's blog</p>
+
+    <p>
+      <a href="/feed.xml" class="footer-link">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a class="footer-link" href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
