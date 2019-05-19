@@ -6,9 +6,132 @@
 </description>
     <link>http://localhost:4000/</link>
     <atom:link href="http://localhost:4000/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Sun, 19 May 2019 21:36:59 +0300</pubDate>
-    <lastBuildDate>Sun, 19 May 2019 21:36:59 +0300</lastBuildDate>
+    <pubDate>Sun, 19 May 2019 22:44:07 +0300</pubDate>
+    <lastBuildDate>Sun, 19 May 2019 22:44:07 +0300</lastBuildDate>
     <generator>Jekyll v3.8.5</generator>
+    
+      <item>
+        <title>Rust Course Retrospective</title>
+        <description>&lt;div id=&quot;preamble&quot;&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;It was the last week of the Rust course at &lt;a href=&quot;https://compscicenter.ru&quot;&gt;Computer
+Science Center&lt;/a&gt;. This post is my experience report from teaching this course.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;materials&quot;&gt;Materials&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Note that the course is in Russian :-)&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Course slides are available under CC-BY at &lt;a href=&quot;https://github.com/matklad/rust-course&quot; class=&quot;bare&quot;&gt;https://github.com/matklad/rust-course&lt;/a&gt;.
+See &lt;a href=&quot;/2019/05/19/consider-using-asciidoctor-for-your-next-presentation.html&quot;&gt;the sibling post&lt;/a&gt; if you want to learn more about how the slides were made (TL;DR: Asciidoctor is better than beamer, Google Docs, slides.com, reveal.js, remark).&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;High-quality recordings of lectures ara available on YouTube:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.youtube.com/playlist?list=PLlb7e2G7aSpTfhiECYNI2EZ1uAluUqE_e&quot; class=&quot;bare&quot;&gt;https://www.youtube.com/playlist?list=PLlb7e2G7aSpTfhiECYNI2EZ1uAluUqE_e&lt;/a&gt;&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The homework is not available, but it was based on the &lt;a href=&quot;http://www.realtimerendering.com/raytracing/Ray%20Tracing%20in%20a%20Weekend.pdf&quot;&gt;Ray Tracing in One Weekend&lt;/a&gt; book.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;good-parts&quot;&gt;Good Parts&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Teaching is hard, but very rewarding.
+Teaching Rust feels especially good because the language is very well designed and the quality of the implementation is great.
+Overall, I don&amp;#8217;t feel like this was a particularly hard course for the students.
+In the end most of the folks successfully completed all assignments, which were fairly representative of the typical Rust code.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;hard-parts&quot;&gt;Hard Parts&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;There were one extremely hard topic and one poorly explained topic.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The hard one was the module system.
+Many students were completely stumped by it.
+It&amp;#8217;s difficult to point out the specific hard aspect of the current (Rust 2018) module system: each student struggled in their own way.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Here&amp;#8217;s a selection of points of confusion:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;ulist&quot;&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;you don&amp;#8217;t need to wrap contents of &lt;code&gt;foo.rs&lt;/code&gt; in &lt;code&gt;mod foo { &amp;#8230;&amp;#8203; }&lt;/code&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;you don&amp;#8217;t need to add &lt;code&gt;mod lib;&lt;/code&gt; to &lt;code&gt;main.rs&lt;/code&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;child module lives in the &lt;code&gt;parent/child.rs&lt;/code&gt; file, &lt;strong&gt;unless&lt;/strong&gt; the parent is &lt;code&gt;lib.rs&lt;/code&gt; or &lt;code&gt;main.rs&lt;/code&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I feel like my explanation of modules was an OK one, it contained all the relevant details and talked about how things work under the hood.
+However, it seems like just explaining the modules is not enough: one really needs to arrange a series of exercises about modules, and make sure that all students successfully pass them.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I don&amp;#8217;t think that modules are the hardest feature of the language: advanced lifetimes and &lt;code&gt;unsafe&lt;/code&gt; subtleties are more difficult.
+However, you don&amp;#8217;t really write &lt;code&gt;mem::transmute&lt;/code&gt; or HRTB every day, while you face modules pretty early.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The poorly explained topic was &lt;code&gt;Send/Sync&lt;/code&gt;.
+I was like &quot;compiler infers &lt;code&gt;Send/Sync&lt;/code&gt; automatically, and after that your code just fails to compile if it would had a data race, isn&amp;#8217;t Rust wonderful?&quot;.
+But this misses the crucial point: in generic code (both for &lt;code&gt;impl T&lt;/code&gt; and &lt;code&gt;dyn T&lt;/code&gt;), you&amp;#8217;ll need to write &lt;code&gt;: Sync&lt;/code&gt; bounds yourself.
+Of course the homework was about generic code, and there were a number of solutions with (unsound) &lt;code&gt;unsafe impl&amp;lt;T&amp;gt; Sync for MyThing&amp;lt;T&amp;gt;&lt;/code&gt; :-)&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;annoying-parts&quot;&gt;Annoying Parts&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;It&amp;#8217;s very hard to google Rust documentation at the moment, because google links
+you to redirect stubs of the old book, which creates that wierd feeling that you
+are inside of a &lt;a href=&quot;https://en.wikipedia.org/wiki/Sepulka&quot;&gt;science-fiction novel&lt;/a&gt;.
+I know that the problem is already fixed, and we just need to wait until the new version of the old book is deployed, but I wish we could have fixed it earlier.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Editions are a minor annoyance as well. I&amp;#8217;ve completely avoided talking about Rust 2015, hoping that I&amp;#8217;ll just teach the shiny new thing.
+But of course students google for help and get outdated info.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;ulist&quot;&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;many used &lt;code&gt;extern crate&lt;/code&gt; syntax&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;code&gt;dyn&lt;/code&gt; in &lt;code&gt;dyn T&lt;/code&gt; was sometimes omitted&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;there was a couple of &lt;code&gt;mod.rs&lt;/code&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Additionally, several students somehow ended up without &lt;code&gt;edition = &quot;2018&quot;&lt;/code&gt; in &lt;code&gt;Cargo.toml&lt;/code&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;</description>
+        <pubDate>Sun, 19 May 2019 00:00:00 +0300</pubDate>
+        <link>http://localhost:4000/2019/05/19/rust-course-retrospective.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2019/05/19/rust-course-retrospective.html</guid>
+        
+        
+      </item>
     
       <item>
         <title>Consider Using Asciidoctor for Your Next Presentation</title>
@@ -29,6 +152,9 @@ To make reviewing course material easier, slides need to have high information d
 &lt;/div&gt;
 &lt;div class=&quot;paragraph&quot;&gt;
 &lt;p&gt;&lt;a href=&quot;http://github.com/matklad/rust-course&quot; class=&quot;bare&quot;&gt;http://github.com/matklad/rust-course&lt;/a&gt;&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;By the way, &lt;a href=&quot;/2019/05/19/rust-course-retrospective.html&quot;&gt;the sibling post&lt;/a&gt; talks about the course in more detail.&lt;/p&gt;
 &lt;/div&gt;
 &lt;/div&gt;
 &lt;/div&gt;
@@ -3217,181 +3343,6 @@ Bye!&lt;/pre&gt;
         <pubDate>Sat, 03 Mar 2018 00:00:00 +0300</pubDate>
         <link>http://localhost:4000/2018/03/03/stopping-a-rust-worker.html</link>
         <guid isPermaLink="true">http://localhost:4000/2018/03/03/stopping-a-rust-worker.html</guid>
-        
-        
-      </item>
-    
-      <item>
-        <title>Make your own make</title>
-        <description>&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;One of my favorite features of &lt;a href=&quot;https://doc.rust-lang.org/cargo/&quot;&gt;Cargo&lt;/a&gt; is that it is &lt;strong&gt;not&lt;/strong&gt; a general
-purpose build tool. This allows Cargo to really excel at the task of building
-Rust code, without usual Turing tarpit of build configuration files. I have yet
-to see a complicated Cargo.toml file!&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;However, once a software project grows, it&amp;#8217;s almost inevitable that it will
-require some tasks &lt;strong&gt;besides&lt;/strong&gt; building Rust code. For example, you might need to
-integrate several languages together, or to setup some elaborate testing for
-non-code aspects of your project, like checking the licenses, or to establish an
-elaborate release procedure.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;For such use-cases, a general purpose task automation solution is needed. In
-this blog post I want to describe one possible approach, which leans heavily on
-Cargo&amp;#8217;s built-in functionality.&lt;/p&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;existing-solutions&quot;&gt;Existing Solutions&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;The simplest way to automate something is to write a shell script. However there
-are few experts in the arcane art of shell scripting, and shell scripts are
-inherently platform dependent.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;The same goes for make, with its many annoyingly similar flavors.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Two tools which significantly improve on the ease of use and ergonomics are
-&lt;a href=&quot;https://github.com/casey/just&quot;&gt;just&lt;/a&gt; and &lt;a href=&quot;https://github.com/sagiegurari/cargo-make&quot;&gt;cargo make&lt;/a&gt;. Alas, they still mostly rely on the
-shell to actually execute the tasks.&lt;/p&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;reinventing-the-wheel&quot;&gt;Reinventing the Wheel&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Obligatory &lt;a href=&quot;https://xkcd.com/927/&quot;&gt;XKCD 927&lt;/a&gt;:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;imageblock text-center&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;img src=&quot;https://imgs.xkcd.com/comics/standards.png&quot; alt=&quot;xkcd 927&quot;&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;An obvious idea is to use Rust for task automation. Originally, I have proposed
-creating a special Cargo subcommand to execute build tasks, implemented as Rust
-programs, in
-&lt;a href=&quot;https://users.rust-lang.org/t/idea-for-a-crate-tool-cargo-task/15300/&quot;&gt;this
-thread&lt;/a&gt;. However, since then I realized that there are built-in tools in Cargo
-which allow one to get a pretty ergonomic solution. Namely, the combination of
-workspaces, aliases and ability to define binaries seems to do the trick.&lt;/p&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;elements-of-the-solution&quot;&gt;Elements of the Solution&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;If you just want a working example, see
-&lt;a href=&quot;https://github.com/matklad/libsyntax2/commit/bb381a7ff7a21cad98d80005a81f2586684f80a0&quot;&gt;this
-commit&lt;/a&gt;.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;A typical Rust project looks like this&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre&gt;frobnicator/
-  Cargo.toml
-  src/
-    lib.rs&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Suppose that we want to add a couple of tasks, like generating some code from
-some specification in the &lt;a href=&quot;https://github.com/ron-rs/ron&quot;&gt;RON&lt;/a&gt; format, or
-grepping the source code for &lt;code&gt;TODO&lt;/code&gt; marks.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;First, create a special &lt;code&gt;tools&lt;/code&gt; package:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre&gt;frobnicator/
-  Cargo.toml
-  src/
-    lib.rs
-  tools/
-    Cargo.toml
-    src/bin/
-      gen.rs
-      todo.rs&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;The &lt;code&gt;tools/Cargo.toml&lt;/code&gt; might look like this:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;toml&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;tok-c1&quot;&gt;# file: frobnicator/tools/Cargo.toml&lt;/span&gt;
-
-&lt;span class=&quot;tok-p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;package&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;]&lt;/span&gt;
-&lt;span class=&quot;tok-n&quot;&gt;name&lt;/span&gt; &lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;tok-s&quot;&gt;&amp;quot;tools&amp;quot;&lt;/span&gt;
-&lt;span class=&quot;tok-n&quot;&gt;version&lt;/span&gt; &lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;tok-s&quot;&gt;&amp;quot;0.1.0&amp;quot;&lt;/span&gt;
-&lt;span class=&quot;tok-n&quot;&gt;authors&lt;/span&gt; &lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;tok-p&quot;&gt;[]&lt;/span&gt;
-&lt;span class=&quot;tok-c1&quot;&gt;# We never publish our tasks&lt;/span&gt;
-&lt;span class=&quot;tok-n&quot;&gt;publish&lt;/span&gt; &lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;tok-kc&quot;&gt;false&lt;/span&gt;
-
-&lt;span class=&quot;tok-p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;dependencies&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;]&lt;/span&gt;
-&lt;span class=&quot;tok-c1&quot;&gt;# These dependencies are isolated from the main crate.&lt;/span&gt;
-&lt;span class=&quot;tok-n&quot;&gt;serde&lt;/span&gt; &lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;tok-s&quot;&gt;&amp;quot;1.0.26&amp;quot;&lt;/span&gt;
-&lt;span class=&quot;tok-n&quot;&gt;serde_derive&lt;/span&gt; &lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;tok-s&quot;&gt;&amp;quot;1.0.26&amp;quot;&lt;/span&gt;
-&lt;span class=&quot;tok-n&quot;&gt;file&lt;/span&gt; &lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;tok-s&quot;&gt;&amp;quot;1.1.1&amp;quot;&lt;/span&gt;
-&lt;span class=&quot;tok-n&quot;&gt;ron&lt;/span&gt; &lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;tok-s&quot;&gt;&amp;quot;0.1.5&amp;quot;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Then, we add a
-&lt;a href=&quot;https://doc.rust-lang.org/cargo/reference/manifest.html#the-workspace-section&quot;&gt;&lt;code&gt;[workspace&lt;/a&gt;&lt;/code&gt;]
-to the parent package:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;toml&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;tok-c1&quot;&gt;# file: frobnicator/Cargo.toml&lt;/span&gt;
-
-&lt;span class=&quot;tok-p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;workspace&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;]&lt;/span&gt;
-&lt;span class=&quot;tok-n&quot;&gt;members&lt;/span&gt; &lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;tok-p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;tools&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;]&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;We need this section because &lt;code&gt;tools&lt;/code&gt; is not a dependency of &lt;code&gt;frobnicator&lt;/code&gt;, so it
-won&amp;#8217;t be picked up automatically.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Then, we write code to accomplish the tasks in &lt;code&gt;tools/src/bin/gen.rs&lt;/code&gt; and
-&lt;code&gt;tools/src/bin/todo.rs&lt;/code&gt;.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Finally, we add &lt;code&gt;frobnicator/.cargo/config&lt;/code&gt; with the following contents:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre&gt;# file: frobnicator/.cargo/config
-
-[alias]
-gen  = &quot;run --package tools --bin gen&quot;
-todo = &quot;run --package tools --bin todo&quot;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Voilà! Now, running &lt;code&gt;cargo gen&lt;/code&gt; or &lt;code&gt;cargo todo&lt;/code&gt; will execute the tasks!&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Discussion on &lt;a href=&quot;https://www.reddit.com/r/rust/comments/7v0q3h/blog_post_i_accidentally_a_build_system_almost/&quot;&gt;/r/rust&lt;/a&gt;.&lt;/p&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;</description>
-        <pubDate>Wed, 03 Jan 2018 00:00:00 +0300</pubDate>
-        <link>http://localhost:4000/2018/01/03/make-your-own-make.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2018/01/03/make-your-own-make.html</guid>
         
         
       </item>
