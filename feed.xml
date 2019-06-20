@@ -6,9 +6,332 @@
 </description>
     <link>https://matklad.github.io//</link>
     <atom:link href="https://matklad.github.io//feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Wed, 05 Jun 2019 10:18:26 +0300</pubDate>
-    <lastBuildDate>Wed, 05 Jun 2019 10:18:26 +0300</lastBuildDate>
+    <pubDate>Thu, 20 Jun 2019 03:34:25 +0300</pubDate>
+    <lastBuildDate>Thu, 20 Jun 2019 03:34:25 +0300</lastBuildDate>
     <generator>Jekyll v3.8.5</generator>
+    
+      <item>
+        <title>Linux Desktop Tips</title>
+        <description>&lt;div id=&quot;preamble&quot;&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Over time I have accumulated a number of tricks and hacks that make &amp;#8220;linux desktop&amp;#8221; more natural for me.
+Today I&amp;#8217;ve discovered another one: a way to minimize Firefox on close.
+This seems like a good occasion to write about things I&amp;#8217;ve been doing!&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;window-switching&quot;&gt;Window Switching&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I&amp;#8217;ve never understood the appeal of multiple desktops, tiling window managers,
+or Mac style &amp;#8220;full screen window is outside of your desktop&amp;#8221;.
+They for sure let you to neatly organize several applications at once, but I never need an overview of all applications.
+What I need most of the time is switching to a specific application, like a browser.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Windows has a feature for this, that fits this workflow perfectly.
+If you pin an application to start menu, then &lt;span class=&quot;keyseq&quot;&gt;&lt;kbd&gt;win&lt;/kbd&gt;+&lt;kbd&gt;number&lt;/kbd&gt;&lt;/span&gt; will launch or focus that app.
+That is, if the app is already running, its window will be raised and focused.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;For some reason, this is not available out of the box in any of the Linux window
+managers I&amp;#8217;ve tried. What is easy is binding launching an application to a
+shortcut, but I rarely use more than once instance of Firefox!&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Luckily, &lt;a href=&quot;https://github.com/mkropat/jumpapp&quot;&gt;jumpapp&lt;/a&gt; is exactly what is needed
+to implement this properly.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I use &lt;a href=&quot;https://wiki.archlinux.org/index.php/Xbindkeys&quot;&gt;Xbindkeys&lt;/a&gt; for global
+shortcuts, with the following config:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;title&quot;&gt;~/.xbindkeysrc&lt;/div&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code&gt;&lt;span&gt;&lt;/span&gt;&amp;quot;jumpapp -m kitty&amp;quot;
+  F1
+
+&amp;quot;jumpapp -m firefox&amp;quot;
+  F2
+
+&amp;quot;jumpapp -m code&amp;quot;
+  F3&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Note that I bind &lt;kbd&gt;F?&lt;/kbd&gt; keys without any modifiers: these keys are rarely used
+by applications and are very convenient for personal use.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;drop-down-terminal&quot;&gt;Drop Down Terminal&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I&amp;#8217;ve always liked Quake-style terminals, which you can bring to front with a
+single keypress.
+For this reason, I was stuck with
+&lt;a href=&quot;https://kde.org/applications/system/org.kde.yakuake&quot;&gt;yakuake&lt;/a&gt; for a really long time.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&lt;code&gt;jumpapp&lt;/code&gt; allows me to use any terminal in
+this fashion, so now I use full screen &lt;a href=&quot;https://sw.kovidgoyal.net/kitty/&quot;&gt;kitty&lt;/a&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;window-tiling&quot;&gt;Window Tiling&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Because switching windows/applications is easy for me, I typically look at a single maximized window.
+However, sometimes I like to have two windows side-by-side, for example an editor and a browser with preview.
+A full blown tiling window manager will be an overkill for this use-case, but another Windows feature comes in handy.
+In Windows, &lt;span class=&quot;keyseq&quot;&gt;&lt;kbd&gt;Win&lt;/kbd&gt;+&lt;kbd&gt;←&lt;/kbd&gt;&lt;/span&gt; and &lt;span class=&quot;keyseq&quot;&gt;&lt;kbd&gt;Win&lt;/kbd&gt;+&lt;kbd&gt;→&lt;/kbd&gt;&lt;/span&gt; tiles active window to the left and right side of the screen.
+Luckily, this &lt;em&gt;is&lt;/em&gt; a built in feature in most window managers, including KWin and Openbox (the two I use the most).&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;screen-real-estate&quot;&gt;Screen Real Estate&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This one is tricky!
+On one hand, because I use one maximized window at a time, I feel comfortable with smaller displays.
+I was even disappointed with a purchase of external display for my laptop: turns out, bigger screen doesn&amp;#8217;t really help me!
+On the other hand, I really like when all pixels I have are utilized fully.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I&amp;#8217;ve tried to work in full screen windows, but that wasn&amp;#8217;t very convenient for two reasons:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;ulist&quot;&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;Tray area is useful for current time, other status information, and notifications.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Full screen doesn&amp;#8217;t play well with &lt;code&gt;jumpapp&lt;/code&gt; window switching.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;After some experiments, I&amp;#8217;ve settled with the following setup:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;ulist&quot;&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;Use of maximized, but not full screen windows.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;When window is maximized, its borders and title bar are hidden. To do this in &lt;code&gt;kwin&lt;/code&gt; add the following to &lt;code&gt;~/.config/kwinrc&lt;/code&gt;:&lt;/p&gt;
+&lt;div class=&quot;literalblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre&gt;----
+[Windows]
+BorderlessMaximizedWindows=true
+----&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;To still have an ability to close/minimize the window with the mouse, I use &lt;a href=&quot;https://store.kde.org/p/998910/&quot;&gt;Active Window Menu&lt;/a&gt; Plasmoid.
+What it does is that it packs window title and close/maximize/minimize buttons into the desktop panel, without spending extra pixels:&lt;/p&gt;
+&lt;div class=&quot;imageblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;img src=&quot;/assets/active-window.png&quot; alt=&quot;active window&quot;&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Another thing I&amp;#8217;ve noticed is that I look to the bottom side of the screen much more often.
+For this reason, I move desktop panel to the top.
+You can imagine how inconvenient Mac&amp;#8217;s dock is for me: it wastes so many pixels in the most important area of the display :-)&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;keybindings&quot;&gt;Keybindings&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;After several years of using Emacs and a number of short detours into Vim-land, I grew a profound dislike for the arrow keys.
+It&amp;#8217;s not that they make me slower: they distract me because I need to think about moving my hands.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;For the long time I&amp;#8217;ve tried to banish arrow keys from my life by making every
+applicaiton understand &lt;span class=&quot;keyseq&quot;&gt;&lt;kbd&gt;ctrl&lt;/kbd&gt;+&lt;kbd&gt;b&lt;/kbd&gt;&lt;/span&gt;, &lt;span class=&quot;keyseq&quot;&gt;&lt;kbd&gt;ctrl&lt;/kbd&gt;+&lt;kbd&gt;f&lt;/kbd&gt;&lt;/span&gt; and the like.
+But that was always a whack-a-mole game without a chance to win.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;A much better approach is &lt;a href=&quot;https://manybutfinite.com/post/home-row-computing/&quot;&gt;Home Row Computing&lt;/a&gt;.
+I rebind, on the low level, &lt;span class=&quot;keyseq&quot;&gt;&lt;kbd&gt;CapsLock&lt;/kbd&gt;+&lt;kbd&gt;i/j/k/l&lt;/kbd&gt;&lt;/span&gt; to arrow keys.
+This works in every app.
+It also works with &lt;kbd&gt;alt&lt;/kbd&gt; and &lt;kbd&gt;shift&lt;/kbd&gt; modifiers.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I use &lt;a href=&quot;https://jlk.fjfi.cvut.cz/arch/manpages/man/xkbcomp.1&quot;&gt;xkbcomp&lt;/a&gt; with &lt;a href=&quot;https://github.com/matklad/config/blob/ed588057545276e05ea4979ea7086addc3724a4e/home-row.xkb&quot;&gt;this config&lt;/a&gt; to set this up.
+I have no idea how this actually works :-)&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;file-organization&quot;&gt;File Organization&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I used to pile up &lt;strong&gt;everything&lt;/strong&gt; on the desktop.
+But now my desktop is completely empty, and I enjoy uncluttered view of
+&lt;a href=&quot;https://upload.wikimedia.org/wikipedia/commons/d/d8/Pieter_Bruegel_the_Elder_-_Hunters_in_the_Snow_%28Winter%29_-_Google_Art_Project.jpg&quot;&gt;The Hunters in the Snow&lt;/a&gt;
+every time I boot my laptop.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The trick is to realize that accreting &amp;#8220;junk&amp;#8221; files is totally normal, and
+&amp;#8220;just don&amp;#8217;t put garbage on desktop&amp;#8221; is not a solution.
+Instead, one can create a dedicated place for hoarding.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I have two of those:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;ulist&quot;&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;code&gt;~/downloads&lt;/code&gt; which I remove automatically on every reboot&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;code&gt;~/tmp&lt;/code&gt; which I &lt;code&gt;rm -fr ~/tmp&lt;/code&gt; manually once in a while&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;shell&quot;&gt;Shell&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I used to use &lt;code&gt;Zsh&lt;/code&gt; with a bunch of plugins, hoping that I&amp;#8217;ll learn &lt;code&gt;bash&lt;/code&gt; this way.
+I still google &amp;#8220;How to &lt;code&gt;if&lt;/code&gt; in bash?&amp;#8221; every single time though.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;For this reason, I&amp;#8217;ve switched to &lt;a href=&quot;http://fishshell.com/&quot;&gt;fish&lt;/a&gt; with mostly default config.
+The killer feature for me is autosuggestions: completion of the commands based on the history.
+&lt;code&gt;Zsh&lt;/code&gt; has something similar, via a plugin, but this crucial feature works in &lt;code&gt;fish&lt;/code&gt; out of the box.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;One slightly non-standard thing I do is a two-line prompt that looks like this:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code&gt;&lt;span&gt;&lt;/span&gt;02:43:39|~/.config
+λ&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Two line prompts are great! You can always see a full working directory, and commands are always visually in the same place.
+Having current time in the prompt is also useful in case you run a long command and forget to &lt;code&gt;time&lt;/code&gt; it.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;minimizing-firefox&quot;&gt;Minimizing Firefox&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Finally, the direct cause of this post!&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I don&amp;#8217;t use a lot of desktop apps, but I keep a browser with at least five tabs for different messaging apps.
+By the way, &lt;a href=&quot;https://addons.mozilla.org/en-US/firefox/addon/tree-style-tab/&quot;&gt;Tree Style Tab&lt;/a&gt; is the best tool for taming modern &amp;#8220;apps&amp;#8221;!&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The problem with this is that I automatically &lt;span class=&quot;keyseq&quot;&gt;&lt;kbd&gt;Alt&lt;/kbd&gt;+&lt;kbd&gt;F4&lt;/kbd&gt;&lt;/span&gt; Firefox once I am done with it, but launching it every time is slow.
+Ideally, I want to minimize it on close, just how I do with qBittorrent and Telegram.
+Unfortunately, there&amp;#8217;s no built-in feature for this in Firefox.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I once tried to build it with &lt;code&gt;Xbindkeys&lt;/code&gt; and &lt;code&gt;Xdotool&lt;/code&gt;.
+The idea was to intercept &lt;span class=&quot;keyseq&quot;&gt;&lt;kbd&gt;Alt&lt;/kbd&gt;+&lt;kbd&gt;F4&lt;/kbd&gt;&lt;/span&gt; and minize active window if it is Firefox.
+That didn&amp;#8217;t work too well: to close all other applications, I tried to forward &lt;span class=&quot;keyseq&quot;&gt;&lt;kbd&gt;Alt&lt;/kbd&gt;+&lt;kbd&gt;F4&lt;/kbd&gt;&lt;/span&gt;, but that recursed badly :-)&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Luckily, today I&amp;#8217;ve realized that I can write a KWin script for this!
+This turned out to be much harder than anticipated, because the docs are thin and setup is fiddly.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;https://zren.github.io/2019/03/14/quick-tile-an-app-when-it-opens-using-a-kwin-script&quot;&gt;This
+post&lt;/a&gt; was instrumental for me to figure this stuff out. Thanks Chris!&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;I&amp;#8217;ve created two files:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;title&quot;&gt;~/.local/share/kwin/scripts/SmartCloseWindow/metadata.desktop&lt;/div&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code&gt;&lt;span&gt;&lt;/span&gt;[Desktop Entry]
+Name=Smart Close Window
+Comment=
+Icon=preferences-system-windows-script-test
+
+Type=Service
+
+X-Plasma-API=javascript
+X-Plasma-MainScript=code/main.js
+X-KDE-ServiceTypes=KWin/Script
+
+X-KDE-PluginInfo-Name=SmartCloseWindow # Note, the same name as the dir
+X-KDE-PluginInfo-Author=matklad
+X-KDE-PluginInfo-Email=...
+X-KDE-PluginInfo-License=GPL
+X-KDE-PluginInfo-Version=3&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;title&quot;&gt;~/.local/share/kwin/scripts/SmartCloseWindow/contents/code/main.js&lt;/div&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code&gt;&lt;span&gt;&lt;/span&gt;registerShortcut(&amp;quot;Smart Close Window.&amp;quot;,
+    &amp;quot;Smart Close Window.&amp;quot;,
+    &amp;quot;alt+f4&amp;quot;,
+    function () {
+        var c = workspace.activeClient;
+        if (c.caption.indexOf(&amp;quot;Firefox&amp;quot;) == -1) {
+            c.closeWindow();
+        } else {
+            c.minimized = true;
+        }
+    });&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;After than, I&amp;#8217;ve ticked a box in front of &lt;code&gt;Smart Close Window&lt;/code&gt; in &lt;span class=&quot;menuseq&quot;&gt;&lt;b class=&quot;menu&quot;&gt;System Settings&lt;/b&gt;&amp;#160;&lt;i class=&quot;fa fa-angle-right caret&quot;&gt;&lt;/i&gt; &lt;b class=&quot;submenu&quot;&gt;Window Management&lt;/b&gt;&amp;#160;&lt;i class=&quot;fa fa-angle-right caret&quot;&gt;&lt;/i&gt; &lt;b class=&quot;menuitem&quot;&gt;KWin Scripts&lt;/b&gt;&lt;/span&gt; and
+added a shortcut in &lt;span class=&quot;menuseq&quot;&gt;&lt;b class=&quot;menu&quot;&gt;System Settings&lt;/b&gt;&amp;#160;&lt;i class=&quot;fa fa-angle-right caret&quot;&gt;&lt;/i&gt; &lt;b class=&quot;submenu&quot;&gt;Shortcuts&lt;/b&gt;&amp;#160;&lt;i class=&quot;fa fa-angle-right caret&quot;&gt;&lt;/i&gt; &lt;b class=&quot;submenu&quot;&gt;Global Shortcuts&lt;/b&gt;&amp;#160;&lt;i class=&quot;fa fa-angle-right caret&quot;&gt;&lt;/i&gt; &lt;b class=&quot;menuitem&quot;&gt;System Settings&lt;/b&gt;&lt;/span&gt;.
+The last step took a while fo figure out: although it looks like we set shortcut in the script itself, this doesn&amp;#8217;t actually work for some reason.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;linux-distribution&quot;&gt;Linux Distribution&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Finally, my life has become significancy easier since I&amp;#8217;ve settled on &lt;a href=&quot;https://nixos.org/&quot;&gt;NixOS&lt;/a&gt;.
+I had mainly used &lt;a href=&quot;https://www.archlinux.org/&quot;&gt;Arch&lt;/a&gt; and a bit of &lt;a href=&quot;https://ubuntu.com/&quot;&gt;Ubuntu&lt;/a&gt; before, but NixOS is so much easier to control.
+I highly recommend to check it out!&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;my-dotfiles&quot;&gt;My Dotfiles&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Most of the stuff in this post is codified in my config repo: &lt;a href=&quot;https://github.com/matklad/config&quot; class=&quot;bare&quot;&gt;https://github.com/matklad/config&lt;/a&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;</description>
+        <pubDate>Thu, 20 Jun 2019 00:00:00 +0300</pubDate>
+        <link>https://matklad.github.io//2019/06/20/linux-desktop-tips.html</link>
+        <guid isPermaLink="true">https://matklad.github.io//2019/06/20/linux-desktop-tips.html</guid>
+        
+        
+      </item>
     
       <item>
         <title>Rust Course Retrospective</title>
@@ -2881,471 +3204,6 @@ inner mechanics of Git.&lt;/p&gt;
         <pubDate>Thu, 03 May 2018 00:00:00 +0300</pubDate>
         <link>https://matklad.github.io//2018/05/03/effective-pull-requests.html</link>
         <guid isPermaLink="true">https://matklad.github.io//2018/05/03/effective-pull-requests.html</guid>
-        
-        
-      </item>
-    
-      <item>
-        <title>Stopping a Rust Worker</title>
-        <description>&lt;div id=&quot;preamble&quot;&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;This is a small post about a specific pattern for cancellation in the Rust
-programming language. The pattern is simple and elegant, but it&amp;#8217;s rather
-difficult to come up with it by yourself.&lt;/p&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;introducing-a-worker&quot;&gt;Introducing a worker&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;To be able to stop a worker, we need to have one in the first place! So, let&amp;#8217;s
-implement a model program.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;The task is to read the output line-by-line, sending these lines to another thread
-for processing (echoing the line back, with ❤️).
-My solution looks like this:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;BufRead&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;sync&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;mpsc&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;in&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lock&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lines&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;send&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;))&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;Bye!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;enum&lt;/span&gt; &lt;span class=&quot;tok-nc&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;String&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;move&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;||&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;loop&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;recv&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;match&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;{} ❤️&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;});&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;The program seems to work:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre&gt;λ cargo r
-    Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs
-     Running `target/debug/worker`
-hello
-hello ❤️
-world
-world ❤️
-Bye!&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;stopping-the-worker-the-obvious-way&quot;&gt;Stopping the worker, the obvious way&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Now that we have a worker, let&amp;#8217;s add a new requirement.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;When the user types &lt;code&gt;stop&lt;/code&gt;, the worker (but not the program itself) should be halted.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;How can we do this? The most obvious way is to add a new variant, &lt;code&gt;Stop&lt;/code&gt;, to the &lt;code&gt;Msg&lt;/code&gt;
-enum, and break out of the worker&amp;#8217;s loop:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;BufRead&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;sync&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;mpsc&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;in&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lock&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lines&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;stop&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Stop&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;send&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;Bye!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;enum&lt;/span&gt; &lt;span class=&quot;tok-nc&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;String&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Stop&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;move&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;||&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;loop&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;recv&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;match&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;{} ❤️&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Stop&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;break&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;The worker has stopped!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;});&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;This works, but only partially:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre&gt;λ cargo r
-    Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs
-     Running `target/debug/worker`
-hello
-hello ❤️
-stop
-The worker has stopped!
-world
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: &quot;SendError(..)&quot;', /checkout/src/libcore/result.rs:916:5
-note: Run with `RUST_BACKTRACE=1` for a backtrace.&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;We can add more code to fix the panic, but let&amp;#8217;s stop for a moment and try
-to invent a more elegant way to stop the worker. The answer will be below this
-beautiful Ukiyo-e print :-)&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;imageblock text-center&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;img src=&quot;https://upload.wikimedia.org/wikipedia/commons/d/d0/100_views_edo_008.jpg&quot; alt=&quot;100 views edo 008&quot;&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;dropping-the-microphone&quot;&gt;Dropping the microphone&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;The answer is: the cleanest way to cancel something in Rust is to drop it.
-For our task, we can stop the worker by dropping the &lt;code&gt;Sender&lt;/code&gt;:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;BufRead&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;sync&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;mpsc&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;Some&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;());&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;in&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lock&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lines&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;stop&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;drop&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;take&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;());&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;continue&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;Some&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;ref&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;send&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)).&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;The worker has been stopped!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;Bye!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;enum&lt;/span&gt; &lt;span class=&quot;tok-nc&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;String&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;move&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;||&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;while&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;Ok&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;recv&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;match&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;{} ❤️&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;The worker has stopped!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;});&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Note the interesting parts of the solution:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;ulist&quot;&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;p&gt;no need to invent an additional message type,&lt;/p&gt;
-&lt;/li&gt;
-&lt;li&gt;
-&lt;p&gt;the &lt;code&gt;Sender&lt;/code&gt; is stored inside an &lt;code&gt;Option&lt;/code&gt;, so that we can
-drop it with the &lt;code&gt;.take&lt;/code&gt; method,&lt;/p&gt;
-&lt;/li&gt;
-&lt;li&gt;
-&lt;p&gt;the &lt;code&gt;Option&lt;/code&gt; forces us to check if the worker is alive
-before sending a message.&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ul&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;More generally, previously the worker had two paths for termination: a normal
-termination via the &lt;code&gt;Stop&lt;/code&gt; message and an abnormal termination after a panic
-in &lt;code&gt;recv&lt;/code&gt; (which might happen if the parent thread panics and drops the &lt;code&gt;Sender&lt;/code&gt;).
-Now there is a single code path for both cases. That means we can be surer that if
-something somewhere dies with a panic then the shutdown will proceed in an
-orderly fashion, it is not a special case anymore.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;The only thing left to make this ultimately neat is to replace a hand-written &lt;code&gt;while let&lt;/code&gt;
-with a &lt;code&gt;for&lt;/code&gt; loop:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;in&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;match&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;{} ❤️&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;am-i-awaited&quot;&gt;Am I awaited?&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;It&amp;#8217;s interesting to see that the same pattern applies to the async version of the
-solution as well.&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Async baseline:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;extern&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;crate&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;futures&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-c1&quot;&gt;// [dependencies] futures = &amp;quot;0.1&amp;quot;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;BufRead&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;futures&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;sync&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;mpsc&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;futures&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Future&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Stream&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sink&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;in&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lock&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lines&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;send&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)).&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;wait&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;Bye!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;enum&lt;/span&gt; &lt;span class=&quot;tok-nc&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;String&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;move&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;||&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;for_each&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;match&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;{} ❤️&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;Ok&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(())&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}).&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;wait&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;});&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Async with a termination message:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;extern&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;crate&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;futures&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-c1&quot;&gt;// [dependencies] futures = &amp;quot;0.1&amp;quot;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;BufRead&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;futures&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;sync&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;mpsc&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;futures&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Future&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Stream&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sink&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;in&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lock&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lines&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;stop&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Stop&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;send&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;wait&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;Bye!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;enum&lt;/span&gt; &lt;span class=&quot;tok-nc&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;String&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Stop&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;move&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;||&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;_&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;for_each&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;match&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;{} ❤️&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                    &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;Ok&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(())&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;},&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Stop&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;Err&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(()),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}).&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;then&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;The worker has stopped!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}).&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;wait&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;});&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre&gt;λ cargo r
-    Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs
-     Running `target/debug/worker`
-hello
-hello ❤️
-stop
-The worker has stopped!
-world
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: SendError(&quot;...&quot;)', /checkout/src/libcore/result.rs:916:5
-note: Run with `RUST_BACKTRACE=1` for a backtrace.&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Async with drop:&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre class=&quot;pygments highlight&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;extern&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;crate&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;futures&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-c1&quot;&gt;// [dependencies] futures = &amp;quot;0.1&amp;quot;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;BufRead&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;futures&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;sync&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;mpsc&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-k&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;futures&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Future&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Stream&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sink&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;Some&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;());&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;in&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;stdin&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lock&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;lines&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;stop&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;drop&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;take&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;());&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;continue&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;};&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;Some&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;w&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;worker&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;Some&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;w&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;send&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)).&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;wait&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;())&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;The worker has been stopped!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;Bye!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;enum&lt;/span&gt; &lt;span class=&quot;tok-nc&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;String&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-
-&lt;span class=&quot;tok-k&quot;&gt;fn&lt;/span&gt; &lt;span class=&quot;tok-nf&quot;&gt;spawn_worker&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Sender&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-kd&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;spawn&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;move&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;||&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;rx&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;for_each&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-k&quot;&gt;match&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;                &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Msg&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;Echo&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;=&amp;gt;&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;{} ❤️&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;msg&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-nb&quot;&gt;Ok&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(())&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}).&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;tok-o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;tok-s&quot;&gt;&amp;quot;The worker has stopped!&amp;quot;&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;);&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;}).&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;wait&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;unwrap&lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;();&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-p&quot;&gt;});&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-w&quot;&gt;    &lt;/span&gt;&lt;span class=&quot;tok-n&quot;&gt;tx&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;
-&lt;span class=&quot;tok-p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;tok-w&quot;&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;listingblock&quot;&gt;
-&lt;div class=&quot;content&quot;&gt;
-&lt;pre&gt;λ cargo r
-    Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs
-     Running `target/debug/worker`
-hello
-hello ❤️
-stop
-The worker has stopped!
-world
-The worker has been stopped!
-Bye!&lt;/pre&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;sect1&quot;&gt;
-&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
-&lt;div class=&quot;sectionbody&quot;&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;So, yeah, this all was written just to say &quot;in Rust, cancellation is `drop`&quot; :-)&lt;/p&gt;
-&lt;/div&gt;
-&lt;div class=&quot;paragraph&quot;&gt;
-&lt;p&gt;Discussion on &lt;a href=&quot;https://www.reddit.com/r/rust/comments/81j1gd/blog_stropping_a_rust_worker/&quot;&gt;/r/rust&lt;/a&gt;.&lt;/p&gt;
-&lt;/div&gt;
-&lt;/div&gt;
-&lt;/div&gt;</description>
-        <pubDate>Sat, 03 Mar 2018 00:00:00 +0300</pubDate>
-        <link>https://matklad.github.io//2018/03/03/stopping-a-rust-worker.html</link>
-        <guid isPermaLink="true">https://matklad.github.io//2018/03/03/stopping-a-rust-worker.html</guid>
         
         
       </item>
