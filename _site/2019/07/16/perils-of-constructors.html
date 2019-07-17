@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Perils of Constructors</title>
+  <meta name="description"
+    content="">
+
+  <link rel="stylesheet" href="/css/asciidoctor.css">
+  <link rel="stylesheet" href="/css/asciidoctor-pygments.css">
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+  <link rel="canonical" href="https://matklad.github.io//2019/07/16/perils-of-constructors.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad"
+    href="https://matklad.github.io//feed.xml">
+</head>
+
+<body>
+  <header>
+    <a class="nav-link site-title" href="/">matklad</a>
+
+    <nav class="site-nav">
+      
+      
+      <a class="nav-link" href="/about/">About</a>
+      
+      
+      
+      
+      
+      
+      
+      <a class="nav-link" href="/resume/">Resume</a>
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+<h1>Perils of Constructors</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>One of my favorite blog posts about Rust is <a href="https://graydon2.dreamwidth.org/218040.html">Things Rust Shipped Without</a> by Graydon Hoar.
+To me, footguns that don&#8217;t exist in a language are usually more important than expressiveness.
+In this slightly philosophical essay, I want to tell about a missing Rust feature I especially like: constructors.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="what-is-constructor">What Is Constructor</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Constructors are typically found in Object Oriented languages.
+The job of a constructor is to fully initialize an object before the rest of the world sees it.
+At the first blush, this seems like a really good idea:</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>You <strong>establish invariants</strong> in the constructor.</p>
+</li>
+<li>
+<p>Each method takes care to <strong>maintain</strong> invariants.</p>
+</li>
+<li>
+<p>Together, these two properties mean that it is possible to reason about the object in terms of coarse-grained invariants, instead of fine-grained internal state.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>The constructor plays a role of induction base here, as it is the only way to create a new object.</p>
+</div>
+<div class="paragraph">
+<p>Unfortunately, there&#8217;s a hole in this reasoning: constructor itself observes an object in an inconsistent state, and that creates a number of problems.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="value-of-this">Value of <code>this</code></h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>When the constructor initializes the object, it starts with some dummy state.
+But how do you define a dummy state for an arbitrary object?</p>
+</div>
+<div class="paragraph">
+<p>The easiest answer is to set all fields to default values: booleans to false, numbers to 0, and reference types to null.
+But this requires that every type has a default value, and forces the infamous null into the language.
+This is exactly the path that Java took: at the start of construction, all fields are zero or null.</p>
+</div>
+<div class="paragraph">
+<p>It&#8217;s really hard to paper over this if you want to get rid of null afterwards.
+A good case study here is Kotlin.
+Kotlin uses non-nullable types by default, but has to work with pre-exiting JVM semantics.
+The language-design heroics to hide this fact are really impressive and work well in practice, but are <strong>unsound</strong>.
+That is, with constructors it is possible to circumvent Kotlin null-checking.</p>
+</div>
+<div class="paragraph">
+<p>Kotlin&#8217;s main trick is to encourage usage of so-called "primary constructors", which <strong>simultaneously</strong> declare a field and set it before any user code runs:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="kotlin"><span></span><span class="tok-k">class</span> <span class="tok-nc">Person</span><span class="tok-p">(</span>
+  <span class="tok-k">val</span> <span class="tok-py">firstName</span><span class="tok-p">:</span> <span class="tok-n">String</span><span class="tok-p">,</span>
+  <span class="tok-k">val</span> <span class="tok-py">lastName</span><span class="tok-p">:</span> <span class="tok-n">String</span>
+<span class="tok-p">)</span> <span class="tok-p">{</span> <span class="tok-p">...</span> <span class="tok-p">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Alternatively, if the field is not declared in the constructor, the programmer is encouraged to immediately initialize it:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="kotlin"><span></span><span class="tok-k">class</span> <span class="tok-nc">Person</span><span class="tok-p">(</span><span class="tok-k">val</span> <span class="tok-py">firstName</span><span class="tok-p">:</span> <span class="tok-n">String</span><span class="tok-p">,</span> <span class="tok-k">val</span> <span class="tok-py">lastName</span><span class="tok-p">:</span> <span class="tok-n">String</span><span class="tok-p">)</span> <span class="tok-p">{</span>
+    <span class="tok-k">val</span> <span class="tok-py">fullName</span><span class="tok-p">:</span> <span class="tok-n">String</span> <span class="tok-p">=</span> <span class="tok-s">&quot;$firstName $lastName&quot;</span>
+<span class="tok-p">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Trying to use a field before initialization is forbidden statically on the best effort basis:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="kotlin"><span></span><span class="tok-k">class</span> <span class="tok-nc">Person</span><span class="tok-p">(</span><span class="tok-k">val</span> <span class="tok-py">firstName</span><span class="tok-p">:</span> <span class="tok-n">String</span><span class="tok-p">,</span> <span class="tok-k">val</span> <span class="tok-py">lastName</span><span class="tok-p">:</span> <span class="tok-n">String</span><span class="tok-p">)</span> <span class="tok-p">{</span>
+    <span class="tok-k">val</span> <span class="tok-py">fullName</span><span class="tok-p">:</span> <span class="tok-n">String</span>
+    <span class="tok-n">init</span> <span class="tok-p">{</span>
+        <span class="tok-n">println</span><span class="tok-p">(</span><span class="tok-n">fullName</span><span class="tok-p">)</span> <span class="tok-c1">// error: variable must be initialized</span>
+        <span class="tok-n">fullName</span> <span class="tok-p">=</span> <span class="tok-s">&quot;$firstName $lastName&quot;</span>
+    <span class="tok-p">}</span>
+<span class="tok-p">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>But, with some creativity, one can get around these checks.
+For example, a method call would do:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="kotlin"><span></span><span class="tok-k">class</span> <span class="tok-nc">A</span> <span class="tok-p">{</span>
+    <span class="tok-k">val</span> <span class="tok-py">x</span><span class="tok-p">:</span> <span class="tok-n">Any</span>
+    <span class="tok-n">init</span> <span class="tok-p">{</span>
+        <span class="tok-n">observeNull</span><span class="tok-p">()</span>
+        <span class="tok-n">x</span> <span class="tok-p">=</span> <span class="tok-m">92</span>
+    <span class="tok-p">}</span>
+    <span class="tok-k">fun</span> <span class="tok-nf">observeNull</span><span class="tok-p">()</span> <span class="tok-p">=</span> <span class="tok-n">println</span><span class="tok-p">(</span><span class="tok-n">x</span><span class="tok-p">)</span> <span class="tok-c1">// prints null</span>
+<span class="tok-p">}</span>
+
+<span class="tok-k">fun</span> <span class="tok-nf">main</span><span class="tok-p">()</span> <span class="tok-p">{</span>
+    <span class="tok-n">A</span><span class="tok-p">()</span>
+<span class="tok-p">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>As well as capturing <code>this</code> by a lambda (spelled <code>{ args &#8594; body }</code> in Kotlin):</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="kotlin"><span></span><span class="tok-k">class</span> <span class="tok-nc">B</span> <span class="tok-p">{</span>
+    <span class="tok-k">val</span> <span class="tok-py">x</span><span class="tok-p">:</span> <span class="tok-n">Any</span> <span class="tok-p">=</span> <span class="tok-p">{</span> <span class="tok-n">y</span> <span class="tok-p">}()</span>
+    <span class="tok-k">val</span> <span class="tok-py">y</span><span class="tok-p">:</span> <span class="tok-n">Any</span> <span class="tok-p">=</span> <span class="tok-n">x</span>
+<span class="tok-p">}</span>
+
+<span class="tok-k">fun</span> <span class="tok-nf">main</span><span class="tok-p">()</span> <span class="tok-p">{</span>
+    <span class="tok-n">println</span><span class="tok-p">(</span><span class="tok-n">B</span><span class="tok-p">().</span><span class="tok-n">x</span><span class="tok-p">)</span> <span class="tok-c1">// prints null</span>
+<span class="tok-p">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Examples like these seem contorted (and they are), but I did hit similar issues
+in real code
+(Kolmogorov&#8217;s zero–one law of software engineering: in a sufficiently large code base, every code pattern exists almost for sure, unless it is statically rejected by the compiler, in which case it almost surely doesn&#8217;t exist).</p>
+</div>
+<div class="paragraph">
+<p>The reason why Kotlin can get away with this unsoundness is the same as with Java&#8217;s covariant arrays: runtime does null checks anyway.
+All in all, I wouldn&#8217;t want to complicate Kotlin&#8217;s type system to make the above cases rejected at compile time:
+given existing constraints (JMV semantics), cost/benefit ratio of a runtime check is much better than that of a static check.</p>
+</div>
+<div class="paragraph">
+<p>What if the language doesn&#8217;t have a reasonable default for every type?
+For example, in C&#43;&#43;, where user defined types are not necessary references, one can not just assign nulls to every field and call it a day!
+Instead, C&#43;&#43; invents special kind of syntactic machinery for specifying initial values of the fields: initializer lists:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="cpp"><span></span><span class="tok-cp">#include</span> <span class="tok-cpf">&lt;string&gt;</span><span class="tok-cp"></span>
+<span class="tok-cp">#include</span> <span class="tok-cpf">&lt;utility&gt;</span><span class="tok-cp"></span>
+
+<span class="tok-k">class</span> <span class="tok-nc">person</span> <span class="tok-p">{</span>
+  <span class="tok-n">person</span><span class="tok-p">(</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-n">string</span> <span class="tok-n">first_name</span><span class="tok-p">,</span> <span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-n">string</span> <span class="tok-n">last_name</span><span class="tok-p">)</span>
+    <span class="tok-o">:</span> <span class="tok-n">first_name</span><span class="tok-p">(</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-n">move</span><span class="tok-p">(</span><span class="tok-n">first_name</span><span class="tok-p">))</span>
+    <span class="tok-p">,</span> <span class="tok-n">last_name</span><span class="tok-p">(</span><span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-n">move</span><span class="tok-p">(</span><span class="tok-n">last_name</span><span class="tok-p">))</span>
+  <span class="tok-p">{}</span>
+
+  <span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-n">string</span> <span class="tok-n">first_name</span><span class="tok-p">;</span>
+  <span class="tok-n">std</span><span class="tok-o">::</span><span class="tok-n">string</span> <span class="tok-n">last_name</span><span class="tok-p">;</span>
+<span class="tok-p">};</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Being a special syntax, the rest of the language doesn&#8217;t work completely flawlessly with it.
+For example, it&#8217;s hard to fit arbitrary statements in initializer list, because C++ is not expression-oriented language (which by itself is OK!).
+Working with exceptions from initializer lists needs <a href="https://en.cppreference.com/w/cpp/language/function-try-block">yet another obscure language feature</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="calling-methods-from-constructor">Calling Methods From Constructor</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>As Kotlin examples alluded, all hell breaks loose if one calls a method from a constructor.
+Generally, methods expect that <code>this</code> object is fully constructed and valid (adheres to invariants).
+But, in Java or Kotlin, nothing prevents you from calling a method in constructor, and that way a semi-alive object can "escape".
+Constructor promises to establish invariants, but is actually the easiest place to break them!</p>
+</div>
+<div class="paragraph">
+<p>A particularly bizarre thing happens when the base class calls a method overridden in the subclass:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="kotlin"><span></span><span class="tok-k">abstract</span> <span class="tok-k">class</span> <span class="tok-nc">Base</span> <span class="tok-p">{</span>
+    <span class="tok-n">init</span> <span class="tok-p">{</span>
+        <span class="tok-n">initialize</span><span class="tok-p">()</span>
+    <span class="tok-p">}</span>
+    <span class="tok-k">abstract</span> <span class="tok-k">fun</span> <span class="tok-nf">initialize</span><span class="tok-p">()</span>
+<span class="tok-p">}</span>
+
+<span class="tok-k">class</span> <span class="tok-nc">Derived</span><span class="tok-p">:</span> <span class="tok-n">Base</span><span class="tok-p">()</span> <span class="tok-p">{</span>
+    <span class="tok-k">val</span> <span class="tok-py">x</span><span class="tok-p">:</span> <span class="tok-n">Any</span> <span class="tok-p">=</span> <span class="tok-m">92</span>
+    <span class="tok-k">override</span> <span class="tok-k">fun</span> <span class="tok-nf">initialize</span><span class="tok-p">()</span> <span class="tok-p">=</span> <span class="tok-n">println</span><span class="tok-p">(</span><span class="tok-n">x</span><span class="tok-p">)</span> <span class="tok-c1">// prints null!</span>
+<span class="tok-p">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Just think about it: code for Derived runes <strong>before</strong> the its constructor!
+Doing a similar thing in C++ leads to even curiouser results.
+Instead of calling the function from Derived, a function from Base will be called.
+This makes <em>some</em> sense, because Derived is not at all initialized (remember, we can&#8217;t just say that all fields are null).
+However, if the function in Base happens to be pure virtual, undefined behavior occurs.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="constructors-signature">Constructor&#8217;s Signature</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Breaking invariants isn&#8217;t the only problem with constructors.
+They also have signature with fixed name (empty) and return type (the class itself).
+That makes constructor overloads confusing for humans.</p>
+</div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>Quick, what is <code>std::vector&lt;int&gt; xs(92, 2)</code>?</p>
+</div>
+<div class="olist loweralpha">
+<ol class="loweralpha" type="a">
+<li>
+<p>A vector of length 92 of twos</p>
+</li>
+<li>
+<p><code>[92, 92]</code></p>
+</li>
+<li>
+<p><code>[92, 2]</code></p>
+</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>The problem with return type usually comes up if construction can fail.
+You can&#8217;t return <code>Result&lt;MyClass, io::Error&gt;</code> or null from a constructor!</p>
+</div>
+<div class="paragraph">
+<p>This is often used as an argument that C&#43;&#43; with exceptions disabled is not viable, and that using constructors force one to use exceptions as well.
+I don&#8217;t think that&#8217;s a valid argument though: factory functions solve both problems, because they can have arbitrary names and can return arbitrary types.
+I actually this to be an occasionally useful pattern in OO-languages:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Make a single <strong>private</strong> constructor that accepts all the fields as arguments and just sets them.
+That is, this constructor acts almost like a record literal in Rust.
+It can also validate any invariants, but it shouldn&#8217;t do anything else with arguments or fields.</p>
+</li>
+<li>
+<p>For public API, provide the necessary public factory functions, with
+appropriate naming and adjusted return types.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>A similar problem with constructors is that, because they are a special kind of thing, it&#8217;s hard to be generic over them.
+In C&#43;&#43;, "default constructable" or "copy constructable" can&#8217;t be expressed more directly than "certain <em>syntax</em> works".
+Contrast this with Rust, where these concepts have appropriate signatures:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">trait</span><span class="tok-w"> </span><span class="tok-nb">Default</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-k">fn</span> <span class="tok-nf">default</span><span class="tok-p">()</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-n">Self</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span>
+
+<span class="tok-k">trait</span><span class="tok-w"> </span><span class="tok-nb">Clone</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-k">fn</span> <span class="tok-nf">clone</span><span class="tok-p">(</span><span class="tok-o">&amp;</span><span class="tok-bp">self</span><span class="tok-p">)</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-n">Self</span><span class="tok-p">;</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="life-without-constructors">Life Without Constructors</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>In Rust, there&#8217;s only one way to create a struct: providing values for all the fields.
+Factory functions, like the conventional <code>new</code>, play the role of constructors, but, crucially, don&#8217;t allow calling any methods until you have at least a basically valid struct instance on hand.</p>
+</div>
+<div class="paragraph">
+<p>A perceived downside of this approach is that any code can create a struct, so there&#8217;s no the single place, like the constructor, to enforce invariants.
+In practice, this is easily solved by privacy: if sturct&#8217;s fields are private it can only be created inside its declaring module.
+Withing a <em>single</em> module, it&#8217;s not at all hard to maintain a convention like "all construction must go via the <code>new</code> method".
+One can even imagine a language extension that allows one to mark certain functions with a <code>#[constructor]</code> attribute, with the effect that the record literal syntax is available only in the marked functions.
+But, again, additional language machinery seems unnecessary: maintaining <strong>local</strong> conventions needs little effort.</p>
+</div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>I personally think that this tradeoff looks the same for first-class contract programming in general.
+Contracts like "not null" or "positive" are best encoded in types.
+For complex invariants, just writing <code>assert!(self.validate())</code> in each method manually is not that hard.
+Between these two patterns there&#8217;s little room for language-level or macro-based <code>#[pre]</code> and <code>#[post]</code> conditions.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="a-case-of-swift">A Case of Swift</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>An interesting language to look at the constructor machinery is Swift.
+Like Kotlin, Swift is a null-safe language.
+Unlike Kotlin, Swift&#8217;s null-checking needs to be sound, so it employs interesting tricks to mitigate constructor-induced damage.</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, Swift embraces named arguments, and that helps quite a bit with "all constructors have the same name".
+In particular, having two constructors with the same types of parameters is not a problem:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="swift"><span></span><span class="tok-n">Celsius</span><span class="tok-p">(</span><span class="tok-n">fromFahrenheit</span><span class="tok-p">:</span> <span class="tok-mf">212.0</span><span class="tok-p">)</span>
+<span class="tok-n">Celsius</span><span class="tok-p">(</span><span class="tok-n">fromKelvin</span><span class="tok-p">:</span> <span class="tok-mf">273.15</span><span class="tok-p">)</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, to solve "constructor calls virtual function from an object&#8217;s class that didn&#8217;t came into existence yet" problem, Swift uses elaborate two-phase initialization protocol.
+Although there&#8217;s no special syntax for initializer lists, compiler statically checks that constructor&#8217;s body has just the right, safe and sound, form.
+For example, calling methods is only allowed after all fields of the class and its ancestors are set.</p>
+</div>
+<div class="paragraph">
+<p><em>Third</em>, there&#8217;s special language-level support for failable constructors.
+A constructor can be declared nullable, which makes the result of a call to a constructor an option.
+A constructor can also have <code>throws</code> modifier, which works somewhat nicer with Swifts&#8217;s semantic two-phase initialization than with C&#43;&#43; syntactic initializer lists.</p>
+</div>
+<div class="paragraph">
+<p>Swift manages to plug all of the holes in constructors I am ranting about.
+This comes at a price, however: <a href="https://docs.swift.org/swift-book/LanguageGuide/Initialization.html">the initialization chapter</a> is one of the longest in Swift book!</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="when-constructors-are-necessary">When Constructors Are Necessary</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>However, I can think of at least two reasons why constructors can&#8217;t be easily substituted with Rust-style record literals.</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, inheritance more or less forces the language to have constructors.
+One can imagine extending the record syntax with support for base classes:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="pygments highlight"><code data-lang="rust"><span></span><span class="tok-k">struct</span> <span class="tok-nc">Base</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-p">...</span><span class="tok-w"> </span><span class="tok-p">}</span><span class="tok-w"></span>
+
+<span class="tok-k">struct</span> <span class="tok-nc">Derived</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-n">Base</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"> </span><span class="tok-n">foo</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-kt">i32</span><span class="tok-w"> </span><span class="tok-p">}</span><span class="tok-w"></span>
+
+<span class="tok-k">impl</span><span class="tok-w"> </span><span class="tok-n">Derived</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-k">fn</span> <span class="tok-nf">new</span><span class="tok-p">()</span><span class="tok-w"> </span><span class="tok-o">-&gt;</span><span class="tok-w"> </span><span class="tok-n">Derived</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-n">Derived</span><span class="tok-w"> </span><span class="tok-p">{</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-n">Base</span><span class="tok-o">::</span><span class="tok-n">new</span><span class="tok-p">()..,</span><span class="tok-w"></span>
+<span class="tok-w">            </span><span class="tok-n">foo</span><span class="tok-o">:</span><span class="tok-w"> </span><span class="tok-mi">92</span><span class="tok-p">,</span><span class="tok-w"></span>
+<span class="tok-w">        </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-w">    </span><span class="tok-p">}</span><span class="tok-w"></span>
+<span class="tok-p">}</span><span class="tok-w"></span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>But this won&#8217;t work in a typical single-inheritance OO language  object layout!
+Usually, an object starts with a header and continues with fields of classes, from the base one to the most derived one.
+This way, a prefix of an object of a derived class forms a valid object of a base class.
+For this layout to work though, constructor needs to allocate memory for the whole object at once.
+It can&#8217;t allocate just enough space for base, and than append derived fields afterwards.
+But such piece-wise allocation is required if we want a record syntax were we can just specify a value for a base class.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, unlike records, constructors have a placement-friendly ABI.
+Constructor acts on the <code>this</code> pointer, which points to a chunk of memory which a newborn object should occupy.
+Crucially, a constructor can easily pass pointer to subobject&#8217;s constructors, allowing to create a complex tree of values in-place.
+In contrast, in Rust constructing records semantically involves quite a few copies of memory, and we are at the mercy of the optimizer here.
+It&#8217;s not a coincidence that there&#8217;s still no accepted RFC for placement in Rust!</p>
+</div>
+<div class="paragraph">
+<p>Discussion on <a href="https://www.reddit.com/r/rust/">/r/rust</a>.</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer>
+    <p class="about-text">Yet another programmer's blog</p>
+
+    <p>
+      <a href="/feed.xml" class="footer-link">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a class="footer-link" href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
