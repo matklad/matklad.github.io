@@ -178,7 +178,7 @@ in real code
 <div class="paragraph">
 <p>The reason why Kotlin can get away with this unsoundness is the same as with Java&#8217;s covariant arrays: runtime does null checks anyway.
 All in all, I wouldn&#8217;t want to complicate Kotlin&#8217;s type system to make the above cases rejected at compile time:
-given existing constraints (JMV semantics), cost/benefit ratio of a runtime check is much better than that of a static check.</p>
+given existing constraints (JVM semantics), cost/benefit ratio of a runtime check is much better than that of a static check.</p>
 </div>
 <div class="paragraph">
 <p>What if the language doesn&#8217;t have a reasonable default for every type?
@@ -203,7 +203,7 @@ Instead, C&#43;&#43; invents special kind of syntactic machinery for specifying 
 </div>
 <div class="paragraph">
 <p>Being a special syntax, the rest of the language doesn&#8217;t work completely flawlessly with it.
-For example, it&#8217;s hard to fit arbitrary statements in initializer list, because C++ is not expression-oriented language (which by itself is OK!).
+For example, it&#8217;s hard to fit arbitrary statements in initializer lists, because C++ is not expression-oriented language (which by itself is OK!).
 Working with exceptions from initializer lists needs <a href="https://en.cppreference.com/w/cpp/language/function-try-block">yet another obscure language feature</a>.</p>
 </div>
 </div>
@@ -236,7 +236,7 @@ Constructor promises to establish invariants, but is actually the easiest place 
 </div>
 </div>
 <div class="paragraph">
-<p>Just think about it: code for Derived runes <strong>before</strong> the its constructor!
+<p>Just think about it: code for Derived runs <strong>before</strong> the its constructor!
 Doing a similar thing in C++ leads to even curiouser results.
 Instead of calling the function from Derived, a function from Base will be called.
 This makes <em>some</em> sense, because Derived is not at all initialized (remember, we can&#8217;t just say that all fields are null).
