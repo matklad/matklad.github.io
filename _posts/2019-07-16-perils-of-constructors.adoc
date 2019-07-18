@@ -213,8 +213,8 @@ In Rust, there's only one way to create a struct: providing values for all the f
 Factory functions, like the conventional `new`, play the role of constructors, but, crucially, don't allow calling any methods until you have at least a basically valid struct instance on hand.
 
 A perceived downside of this approach is that any code can create a struct, so there's no the single place, like the constructor, to enforce invariants.
-In practice, this is easily solved by privacy: if sturct's fields are private it can only be created inside its declaring module.
-Withing a _single_ module, it's not at all hard to maintain a convention like "all construction must go via the `new` method".
+In practice, this is easily solved by privacy: if struct's fields are private it can only be created inside its declaring module.
+Within a _single_ module, it's not at all hard to maintain a convention like "all construction must go via the `new` method".
 One can even imagine a language extension that allows one to mark certain functions with a `#[constructor]` attribute, with the effect that the record literal syntax is available only in the marked functions.
 But, again, additional language machinery seems unnecessary: maintaining *local* conventions needs little effort.
 
