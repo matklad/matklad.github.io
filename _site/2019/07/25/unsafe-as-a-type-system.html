@@ -83,7 +83,7 @@ It looked roughly like this:</p>
 </div>
 <div class="paragraph">
 <p>In <code>map_in_place</code> we don&#8217;t have a <code>T: Default</code> bound, so the trick is not applicable.
-Instead, the function uses (<code>unsafe</code>) <code>ptr::read</code> to get an owned value out of a unique reference, and than uses <code>ptr::write</code> to store the new value back, without calling the destructor.</p>
+Instead, the function uses (<code>unsafe</code>) <code>ptr::read</code> to get an owned value out of a unique reference, and then uses <code>ptr::write</code> to store the new value back, without calling the destructor.</p>
 </div>
 <div class="paragraph">
 <p>However, the code has a particular <code>unsafe</code> code smell: it calls user-supplied code (<code>f</code>) from within an <code>unsafe</code> block.
@@ -93,7 +93,7 @@ This is usually undesirable, because it makes reasoning about invariants harder:
 <div class="content">
 <div class="paragraph">
 <p>In this particular case, "user code" is clearly visible: it is literally a user-supplied closure.
-The problem is not always that obvious: for example, arbitrary code might hide behind an innocent looking <code>&lt;</code> operator that is invoked on a generic <code>T: Ord</code>.</p>
+The problem is not always that obvious: for example, arbitrary code might hide behind an innocent-looking <code>&lt;</code> operator that is invoked on a generic <code>T: Ord</code>.</p>
 </div>
 </div>
 </div>
@@ -103,8 +103,8 @@ The solution here (which I know from the <code>take_mut</code> crate) is to just
 Stern, but effective!</p>
 </div>
 <div class="paragraph">
-<p>I felt really torn about brining this issue up: clearly, inside the compiler we know what we are doing, and the error case seems extremely marginal.
-Nevertheless, I did left the comment, and the abort trick was implemented.</p>
+<p>I felt really torn about bringing this issue up: clearly, inside the compiler we know what we are doing, and the error case seems extremely marginal.
+Nevertheless, I did leave the comment, and the abort trick was implemented.</p>
 </div>
 <div class="paragraph">
 <p>And guess what?
@@ -133,11 +133,11 @@ This was possible for two reasons:</p>
 <ol class="arabic">
 <li>
 <p>Checking types is a local (per-expression, per-function, per-module, depending on the language) procedure.
-Every step is almost trivial: verify that sub expressions have the right type and work out the result type.</p>
+Every step is almost trivial: verify that sub-expressions have the right type and work out the result type.</p>
 </li>
 <li>
 <p>Together, these local static checks guarantee a highly non-trivial global property:
-during runtime, actual types of all the values mach inferred static types of variables.</p>
+during runtime, actual types of all the values match inferred static types of variables.</p>
 </li>
 </ol>
 </div>
@@ -153,9 +153,9 @@ The problem with humans, however, is that they make mistakes all the time.</p>
 </div>
 <div class="paragraph">
 <p><em>Second</em>, checking <code>unsafe</code> can involve a rather large chunk of code.
-For example, if you implement <code>Vec</code>, you can (safely) write to its <code>length</code> field from anywhere in defining module.
+For example, if you implement <code>Vec</code>, you can (safely) write to its <code>length</code> field from anywhere in the defining module.
 That means that correctness of <code>Deref</code> impl for <code>Vec</code> depends on the whole module.
-Common wisdom says that the boundary for <code>unsafe</code> code is module, but I would love to see a more precise characteristic.
+Common wisdom says that the boundary for <code>unsafe</code> code is a module, but I would love to see a more precise characteristic.
 For example, in <code>map_in_place</code> case it&#8217;s pretty clear that only a single function should be examined.
 On the other hand, if <code>Vec</code>'s field are <code>pub(super)</code>, parent module should be scrutinized as well.</p>
 </div>
@@ -166,13 +166,13 @@ Similarly, if <code>unsafe</code> is used willy-nilly across the ecosystem, its 
 </div>
 <div class="paragraph">
 <p><em>Fourth</em>, and probably most disturbing, correctness of two <code>unsafe</code> blocks in isolation <a href="http://smallcultfollowing.com/babysteps/blog/2016/10/02/observational-equivalence-and-unsafe-code/">does not guarantee</a> that they together are correct!
-We shouldn&#8217;t panic though: in practice realistic usages of <code>unsafe</code> do compose.</p>
+We shouldn&#8217;t panic though: in practice, realistic usages of <code>unsafe</code> do compose.</p>
 </div>
 <div class="paragraph">
-<p>Discussion on <a href="https://www.reddit.com/r/rust/">r/rust</a>.</p>
+<p>Discussion on <a href="https://www.reddit.com/r/rust/comments/chvl50/blog_post_unsafe_as_a_humanassisted_type_system/">r/rust</a>.</p>
 </div>
 <div class="paragraph">
-<p>[1] <code>unsafe</code> is actually an effect system, but the difference is not important here.</p>
+<p>[1] <code>unsafe</code> is really an effect system, but the difference is not important here.</p>
 </div>
 </article>
 
