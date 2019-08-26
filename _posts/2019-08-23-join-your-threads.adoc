@@ -10,7 +10,7 @@ It's not really specific to Rust, but I get to advertise my new https://crates.i
 
 Let's say you've created a fresh new thread with `std::thread::spawn`, but haven't call `JoinHandle::join` anywhere in your program.
 What can go wrong in this situation?
-As a remainder, `join` blocks until the thread represented by handle completes successfully or with a panic.
+As a reminder, `join` blocks until the thread represented by handle completes successfully or with a panic.
 
 _First_, if the `main` function finishes earlier, some destructors on that other thread's stack might not run.
 It's not a big deal if all that destructors do is just freeing memory: the OS cleanups after the process exit anyway.
