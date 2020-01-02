@@ -9,4 +9,5 @@ gem 'pygments.rb', '~> 1.1.2'
 
 group :jekyll_plugins do
   gem 'jekyll-asciidoc'
+  gem 'jekyll-redirect-from'
 end
