@@ -328,4 +328,4 @@ There's also a nuclear option: parametrize the library by blocking behavior, and
 _Third_, sometimes you just **know** that there's only a single thread in the program, and you might want to use a spinlock just to silence those annoying compiler errors about `static mut`.
 The primary use case here I think is WASM. A solution for this case is to assume that blocking just doesn't happen, and panic otherwise. This is what https://github.com/rust-lang/rust/blob/0ec370670220b712b042ee09aab067ec7e5878d5/src/libstd/sys/wasm/mutex.rs[std does] for `Mutex` on WASM, and what is implemented for `once_cell` in this PR: https://github.com/matklad/once_cell/pull/82[#82].
 
-Discussion on https://www.reddit.com/r/rust[/r/rust].
+Discussion on https://www.reddit.com/r/rust/comments/eis1tr/blog_post_spinlocks_considered_harmful/[/r/rust].
