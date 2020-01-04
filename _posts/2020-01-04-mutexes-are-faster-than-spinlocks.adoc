@@ -277,7 +277,7 @@ The other more important reason is that, at any given moment in time, there are 
 With spinlocks, all cores can be occupied by threads who compete for the same lock.
 With mutexes, there is a queue of sleeping threads for each lock, and the kernel generally tries to make sure that only one thread from the group is awake.
 
-This is a funny example of mechanical (https://en.wikipedia.org/wiki/Race_to_the_bottom)[race to the bottom]. Due to the short length of critical section, each individual thread would spend less CPU cycles in total if it were spinning, but it increases the overall cost.
+This is a funny example of mechanical https://en.wikipedia.org/wiki/Race_to_the_bottom[race to the bottom]. Due to the short length of critical section, each individual thread would spend less CPU cycles in total if it were spinning, but it increases the overall cost.
 
 _Fourth_, even under heavy contention spin locks can luck out and finish almost as fast as mutexes:
 
