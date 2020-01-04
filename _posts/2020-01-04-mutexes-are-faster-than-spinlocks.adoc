@@ -19,12 +19,12 @@ In the comments, I was pointed to {dance}[this interesting article], which made 
 For short critical sections, spinlocks perform better
 
 Until today, I haven't benchmarked any mutexes, so I don't know for sure.
-However, what I know in theory about mutexes and spinlocks makes me doubt this clain, so let's find out.
+However, what I know in theory about mutexes and spinlocks makes me doubt this claim, so let's find out.
 
 ## Where The Misconception Comes From?
 
 I do understand why people might think that way though.
-A simplest mutex just makes `lock` / `unlock` syscalls when entering and existing a critical section, offloading all synchronization to the kernel.
+A simplest mutex just makes `lock` / `unlock` syscalls when entering and exiting a critical section, offloading all synchronization to the kernel.
 However, syscalls are slow and so, if the length of critical section is smaller than the length of two syscalls, spinning would be faster.
 
 It's easy to eliminate the syscall on entry in an uncontended state.
@@ -279,6 +279,8 @@ With mutexes, there is a queue of sleeping threads for each lock, and the kernel
 
 This is a funny example of mechanical https://en.wikipedia.org/wiki/Race_to_the_bottom[race to the bottom]. Due to the short length of critical section, each individual thread would spend less CPU cycles in total if it were spinning, but it increases the overall cost.
 
+EDIT: simpler and more plausible https://www.reddit.com/r/rust/comments/ejx7y8/blog_post_mutexes_are_faster_than_spinlocks/fd3u7rw[explanation] from the author of Rust's parking lot is that it does exponential backoff when spinning, unlike the two spinlock implementations.
+
 _Fourth_, even under heavy contention spin locks can luck out and finish almost as fast as mutexes:
 
 ```
@@ -294,6 +296,12 @@ _Fifth_, the amount of contention required to disrupt spinlocks seems to be smal
 parking_lot::Mutex   avg  6ms  min 3ms   max   8ms
 spin::Mutex          avg 37ms  min 4ms   max 115ms
 ```
+
+EDIT: someone on Reddit https://www.reddit.com/r/rust/comments/ejx7y8/blog_post_mutexes_are_faster_than_spinlocks/fd3u8vq[noticed] that the number of threads is significantly higher than the number of cores, which is an unfortunate situation for spinlocks.
+And, although the number of threads in the benchmark is configurable, it never occurred to me to actually vary it 😅!
+Lowering the number of threads to four gives a picture similar to the "no contention" situation above: spinlocks a slightly, but not massively, faster.
+Which makes total sense! as there are more cores than CPUs, there's no harm in spinning.
+And, if you can carefully architecture you application such that it runs a small fixed number of threads, ideally pinned to specific CPUs (like in the http://seastar.io/shared-nothing/[seastart] architecture), using spinlocks might make sense!
 
 ## Disclaimer
 
