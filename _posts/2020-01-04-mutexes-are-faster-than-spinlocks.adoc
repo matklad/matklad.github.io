@@ -118,7 +118,7 @@ fn random_numbers(seed: u32) -> impl Iterator<Item = u32> { <4>
 ----
 
 Our hypothesis is that mutexes are faster, so we need to pick a workload which favors spinlocks.
-That is, we need to pick a very short critical section, and so we will just be incrementing a countner (**1**).
+That is, we need to pick a very short critical section, and so we will just be incrementing a counter (**1**).
 
 This is better than doing a dummy lock/unlock.
 At the end of the benchmark, we will assert that the counter is indeed incremented the correct number of times (**2**).
@@ -279,7 +279,7 @@ With mutexes, there is a queue of sleeping threads for each lock, and the kernel
 
 This is a funny example of mechanical (https://en.wikipedia.org/wiki/Race_to_the_bottom)[race to the bottom]. Due to the short length of critical section, each individual thread would spend less CPU cycles in total if it were spinning, but it increases the overall cost.
 
-_Forth_, even under heavy contention spin locks can luck out and finish almost as fast as mutexes:
+_Fourth_, even under heavy contention spin locks can luck out and finish almost as fast as mutexes:
 
 ```
 parking_lot::Mutex   avg 10ms  min 6ms
