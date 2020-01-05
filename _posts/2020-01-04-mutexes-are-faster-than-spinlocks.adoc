@@ -11,7 +11,7 @@
 (at least on commodity desktop Linux with stock settings)
 
 This is a followup to the {prev}[previous post] about spinlocks.
-The gist of the previous post was that spinlocks has some pretty bad worst-case behaviors, and, for that reason, one shouldn't blindly use a spinlock if using a real mutex or avoiding blocking altogether is cumbersome.
+The gist of the previous post was that spinlocks has some pretty bad worst-case behaviors, and, for that reason, one shouldn't blindly use a spinlock if using a sleeping mutex or avoiding blocking altogether is cumbersome.
 
 In the comments, I was pointed to {dance}[this interesting article], which made me realize that there's another misconception:
 
@@ -21,7 +21,14 @@ For short critical sections, spinlocks perform better
 Until today, I haven't benchmarked any mutexes, so I don't know for sure.
 However, what I know in theory about mutexes and spinlocks makes me doubt this claim, so let's find out.
 
-## Where The Misconception Comes From?
+[NOTE]
+====
+In the following, I used the term **mutex** as a short-hand for a synchronization
+primitive which is guaranteed to eventually call into the kernel under
+contention. A more appropriate term is **sleeping mutex**.
+====
+
+== Where Does The Misconception Come From?
 
 I do understand why people might think that way though.
 A simplest mutex just makes `lock` / `unlock` syscalls when entering and exiting a critical section, offloading all synchronization to the kernel.
@@ -43,7 +50,7 @@ Note how this also reduces the (worst case) total number of queues from `number 
 
 So a modern mutex, like the one in https://webkit.org/blog/6161/locking-in-webkit/[WTF::ParkingLot], is a single boolean, which behaves more or less like a spinlock in an uncontended case but doesn't have pathological behaviors of the spinlock.
 
-## Benchmark
+== Benchmark
 
 So, let's check if the theory works in practice!
 The source code for the benchmark is here:
@@ -137,7 +144,7 @@ By varying the size of the array, we will be able to control the level of conten
 To avoid false sharing between neighboring elements of the array we will use crossbeam's https://docs.rs/crossbeam-utils/0.7.0/crossbeam_utils/struct.CachePadded.html[`CachePadded`].
 To make the benchmark more reproducible, we will vendor a simple PRNG (**4**), which we seed manually.
 
-## Results
+== Results
 
 We are testing `std::sync::Mutex`, `parking_lot::Mutex`, `spin::Mutex` and a bespoke implementation of spinlock from {dance}[probablydance article].
 We  use 32 threads (on 4 core/8 hyperthreads CPU), and each thread increments some counter 10 000 times.
@@ -240,7 +247,7 @@ spin::Mutex          avg  5ms  min 4ms   max  7ms
 AmdSpinlock          avg  6ms  min 5ms   max  7ms
 ```
 
-## Analysis
+== Analysis
 
 There are several interesting observations here!
 
@@ -303,7 +310,7 @@ Lowering the number of threads to four gives a picture similar to the "no conten
 Which makes total sense! as there are more cores than CPUs, there's no harm in spinning.
 And, if you can carefully architecture you application such that it runs a small fixed number of threads, ideally pinned to specific CPUs (like in the http://seastar.io/shared-nothing/[seastart] architecture), using spinlocks might make sense!
 
-## Disclaimer
+== Disclaimer
 
 As usual, each benchmark exercises only a narrow slice from the space of possible configurations, so it would be wrong to draw a sweeping conclusion that mutexes are **always** faster.
 For example, if you are in a situation where preemption is impossible (interrupts are disabled, cooperative multitasking, realtime scheduling, etc), spinlocks might be better (or even the only!) choice.
@@ -311,5 +318,18 @@ And there's also a chance the benchmark doesn't measure what I think it measures
 
 But I find this particular benchmark convincing enough to disprove that "spinlocks are faster then mutexes for short critical sections".
 In particular I find the qualitative observation that, under contention mutexes allow for better scheduling even if critical sections are short and not preempted in the middle, enlightening.
+
+== Reading List
+
+* {:futexes-are-tricky:}[Futexes Are Tricky] -- a paper describing the `futex` syscall used to implement efficient sleeping on Linux.
+* https://webkit.org/blog/6161/locking-in-webkit/[Locking in WebKit] -- a long post, describing a modern mutex implementation.
+* https://www.kernel.org/doc/Documentation/locking/mutex-design.txt[Generic Mutex Subsystem] -- Linux kernel docs about sleeping mutexes.
+* https://www.kernel.org/doc/Documentation/locking/spinlocks.txt[Spinlock] -- Linux kernel docs about spinlocks.
+* https://www.realworldtech.com/forum/?threadid=189711&curpostid=189723[Do not use spinlocks in user space] -- Linus explains why user space spinlocks are usually bad.
+* https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755[Almost all serious locking libraries try to do something exactly like that] -- Linus explains how good mutex might be implemented instead.
+* https://linuxplumbersconf.org/event/4/contributions/286/attachments/225/398/LPC-2019-OptSpin-Locks.pdf[Effcient Userspace Optimistic Spinning Locks] -- a presentation about making fast-path spinlocking in futex-based locks even more efficient.
+  The main problem with optimistic spinning is how much of it do you want (that is, tweaking the number of iterations parameter).
+  The proposal solves this in an ingenious self-tweeking way (with the help of the kernel): we spin until the holder of the locks goes to sleep.
+
 
 Discussion on https://www.reddit.com/r/rust/comments/ejx7y8/blog_post_mutexes_are_faster_than_spinlocks/[/r/rust].
