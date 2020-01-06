@@ -53,7 +53,7 @@ while LOCKED.compare_and_swap(false, true, Ordering::Acquire) { <1>
 
 LOCKED.store(false, Ordering::Release); <3>
 ----
-<1> To grab a lock, we repeatedly executing compare_and_swap until it succeeds. The CPU "spins" in this very short loop.
+<1> To grab a lock, we repeatedly execute compare_and_swap until it succeeds. The CPU "spins" in this very short loop.
 <2> Only one thread at a time can be here.
 <3> To release the lock, we do a single atomic store.
 <4> Spinning is wasteful, so we use an https://en.wikipedia.org/wiki/Intrinsic_function[intrinsic] to instruct the CPU to enter a low-power mode.
@@ -250,7 +250,7 @@ pub extern "C" fn syscall(_syscall: u64, _buf: *const u8, _len: usize, _flags: u
 }
 ----
 
-It makes `getrandom` believe that there's no `getradom` syscall, which causes it to fallback to `/dev/random` implementation.
+It makes `getrandom` believe that there's no `getrandom` syscall, which causes it to fallback to `/dev/random` implementation.
 
 To set thread priorities, we use https://docs.rs/thread-priority/0.1.1/thread_priority/[thread_priority] create, which is a thin wrapper around around `pthread` APIs.
 We well be using real time priorities, which require `sudo`.
