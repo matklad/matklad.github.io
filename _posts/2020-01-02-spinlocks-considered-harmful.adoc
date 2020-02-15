@@ -85,7 +85,7 @@ The `park` call enqueues current thread onto this queue, while `unpark` dequeues
 In the meantime, the thread waits off the CPU.
 
 If there are several different mutexes, the kernel needs to maintain several queues.
-An address of a lock can be used as a token to identify a specif queue (this is a http://man7.org/linux/man-pages/man2/futex.2.html[futex] API).
+An address of a lock can be used as a token to identify a specific queue (this is a http://man7.org/linux/man-pages/man2/futex.2.html[futex] API).
 
 System calls are expensive, so production implementations of `Mutex` usually spin for several iterations before calling into OS, optimistically hoping that the `Mutex` will be released soon.
 However, the waiting always bottoms out in a syscall.
@@ -192,7 +192,7 @@ We also make creating the file descriptor slow, so that the first thread gets pr
 This is actually a typical scenario for `getrandom`!
 Getting the first chunk of random bytes might block for a long time while the system gathers entropy after a reboot.
 I even had a fun bug last year, where my desktop environment won't start until I press some key.
-It was waiting for entropy for some reason, an the keypress provided it.
+It was waiting for entropy for some reason, and the keypress provided it.
 ====
 
 Here is the implementation of this plan: https://github.com/matklad/spin-of-death.
