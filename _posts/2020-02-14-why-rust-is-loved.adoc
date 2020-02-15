@@ -26,7 +26,7 @@ If you'd like to hear more about the above, this post will disappoint you :-)
 The reason why I irrationally like Rust is that it, subjectively, gets a lot of small details just right (or at least better than other languages I know).
 The rest of the post would be a laundry list of those things, but first I'd love to mention why I think Rust is the way it is.
 
-_First_, it is a relatively yong language, so it can have many "`obviously good`" things.
+_First_, it is a relatively young language, so it can have many "`obviously good`" things.
 For example, I feel like there's a general consensus now that, by default, local variables should not be reassignable.
 This probably was much less obvious in the 90s, when today's mainstream languages were designed.
 
@@ -201,7 +201,7 @@ One of your dependencies can depend on `libfoo v1`, and another one on `libfoo v
 Usually this means that you either can't use the two libraries together, or need to implement some pretty horrific workarounds.
 
 In Rust the name you use for a library is a property of the dependency edge between upstream and downstream crate.
-That is, the single crate can be known under different names in different dependant crates or, vice verse, two different crates might be known under equal names in different parts of the crate graph!
+That is, the single crate can be known under different names in different dependant crates or, vice versa, two different crates might be known under equal names in different parts of the crate graph!
 This (and semver discipline, which is a social thing) is the reason why Cargo doesn't suffer from dependency hell as much as some other ecosystems.
 
 == Crate Visibility
@@ -227,7 +227,7 @@ Equality operator (`==`) is not polymorphic, comparing things of different types
 
 == Ord
 
-The canonical comparison function returns an `enum Ord { Less, Equal, Greater }`, you don't need to override all six comparison operators.
+The canonical comparison function returns an `enum Ordering { Less, Equal, Greater }`, you don't need to override all six comparison operators.
 Rust also manages this without introducing a separate `+<=>+` spaceship operator just for this purpose.
 And you still can implement fast path for `==` / `!=` checks.
 
