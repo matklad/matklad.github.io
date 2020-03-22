@@ -1,0 +1,288 @@
+= Fast and Simple Rust Interner
+:sectanchors:
+:experimental:
+:page-layout: post
+
+This post describes a simple technique for writing interners in Rust which I haven't seen documented before.
+
+String interning is a classical optimization when you have to deal with many equal strings.
+The canonical example would be a compiler: most identifiers in a program are repeated several times.
+
+Interning works by ensuring that there's only one canonical copy of each distinct string in memory.
+It can give the following benefits:
+
+* Less memory allocated to hold strings.
+* If all strings are canonicalized, comparison can be done in `O(1)` (instead of `O(n)`) by using pointer equality.
+* Interned strings themselves can be represented with an index (buddy `u32`) instead of a `(ptr, len)` pair.
+  This makes data structures which embed strings more compact.
+
+The simplest possible interner in Rust could look like this:
+
+[source,rust]
+----
+use std::collections::HashMap;
+
+#[derive(Default)]
+pub struct Interner {
+    map: HashMap<String, u32>,
+    vec: Vec<String>,
+}
+
+impl Interner {
+    pub fn intern(&mut self, name: &str) -> u32 {
+        if let Some(&idx) = self.map.get(name) {
+            return idx;
+        }
+        let idx = self.map.len() as u32;
+        self.map.insert(name.to_owned(), idx);
+        self.vec.push(name.to_owned());
+
+        debug_assert!(self.lookup(idx) == name);
+        debug_assert!(self.intern(name) == idx);
+
+        idx
+    }
+
+    pub fn lookup(&self, idx: u32) -> &str {
+        self.vec[idx as usize].as_str()
+    }
+}
+----
+
+To remove duplicates, we store strings in a `HashMap`.
+To map from an index back to the string, we also store strings in a `Vec`.
+
+I didn't quite like this solution yesterday, for two reasons:
+
+* It allocates a lot -- each interned string is *two* separate allocations.
+* Using a `HashMap` feels like cheating, surely there should be a better, more classical data structure!
+
+So I've spent a part of the evening cobbling together a non-allocating https://en.wikipedia.org/wiki/Trie[trie]-based interner.
+The result: trie does indeed asymptotically reduce the number of allocations from `O(n)` to `O(log(n))`.
+Unfortunately, it is slower, larger and way more complex than the above snippet.
+Minimizing allocations *is* important, but allocators are pretty fast, and that shouldn't be done at the expense of everything else.
+Also, Rust `HashMap` (implemented by https://github.com/Amanieu/[@Amanieu] based on https://abseil.io/blog/20180927-swisstables[Swiss Table]) is __**fast**__.
+
+.For the curious, the Trie design I've used
+[%collapsible]
+=====
+[Note]
+====
+The trie is build on per-byte basis (each node has at most 256 children).
+Each internal node is marked with a single byte.
+Leaf nodes are marked with substrings, so that only the common prefix requires node per byte.
+
+To avoid allocating individual interned strings, we store them in a *single* long `String`.
+An interned string is represented by a `Span` (pair of indexes) inside the big buffer.
+
+Trie itself is a tree structure, and we can use a standard trick of packing its nodes into array and using indexes to avoid allocating every node separately.
+However, nodes themselves can be of varying size, as each node can have different number of children.
+We can still array-allocate them, by rolling our own mini-allocator (using a segregated free list)!
+
+Node's children are represented as a sorted array of links.
+We use binary search for indexing and simple linear shift insertion.
+With at most 256 children per node, it shouldn't be _that_ bad.
+Additionally, we pre-allocate 256 nodes and use array indexing for the first transition.
+
+Links are organized in layers.
+The layer `n` stores a number of `[Link]` chunks of length `2^n^` (in a single contiguous array).
+Each chunk represents the links for a single node (with possibly some extra capacity).
+Node can find its chunk because it knows the number of links (which gives the number of layers) and the first link in the layer.
+A new link for the node is added to the current chunk if there's space.
+If the chunk is full, it is copied to a chunk twice as big first.
+The old chunk is then added to the list of free chunks for reuse.
+
+Here's the whole definition of the data structure:
+
+[source,rust]
+----
+pub struct Interner {
+    trie: Vec<Node>,
+    links: Vec<Layer>,
+    strs: Vec<Span>,
+    buf: String,
+}
+
+struct Span { start: u32, end: u32 }
+
+struct Node {
+    str: Option<u32>,
+    n_links: u8,
+    first_link: u32,
+//  layer: u32 = first_link.next_power_of_two(),
+}
+
+struct Link { byte: u8, node: u32, }
+
+struct Layer {
+    links: Vec<Link>,
+    free: Vec<u32>,
+}
+----
+
+Isn't it incredibly cool that you can look only at the fields and understand how the thing works,
+without even seeing the rest 150 lines of relatively tricky implementation?
+====
+=====
+
+However, implementing a trie made me realize that there's a simple optimization we can apply to our naive interner to get rid of extra allocations.
+In the trie, I concatenate all interned strings into one giant `String` and use `(u32, u32)` index pairs as an internal representation of string slice.
+
+If we translate this idea to our naive interner, we get:
+
+[source,rust]
+----
+struct Span { start: u32, end: u32 }
+
+struct Interner {
+    map: HashMap<Span, u32>,
+    vec: Vec<Span>,
+    buf: String,
+}
+
+impl Interner {
+    pub fn intern(&mut self, name: &str) -> u32 { ... }
+
+    pub fn lookup(&self, idx: u32) -> &str {
+        let Span { start, end } = self.vec[idx as usize]
+        &self.buf[start as usize..end as usize]
+    }
+}
+----
+
+The problem here is that we can't actually write implementations of `Eq` and `Hash` for `Span` to make this work.
+In theory, this is possible: to compare two ``Span``s, you resolve them to ``&str``s via `buf`, and then compare the strings.
+However, Rust API does not allow to express this idea.
+Moreover, even if `HashMap` allowed supplying a key closure at _construction_ time, it wouldn't help!
+
+[source,rust]
+----
+impl HashMap<K, V, KeyFn, Key>
+where
+    KeyFn: Fn(&K) -> Key,
+    Key: Hash + Eq,
+{
+    fn new_with_key_fn(key_fn: F) -> Self { ... }
+}
+----
+
+Such API would run afoul of the borrow checker.
+The `key_fn` would have to borrow from the same `struct`.
+What would work is supplying a `key_fn` at call-site for every `HashMap` operation, but that would hurt ergonomics and ease of use a lot.
+This exact problem requires
+https://github.com/matklad/rfcs/blob/std-lazy/text/0000-standard-lazy-types.md#why-not-lazy-as-a-primitive[slightly unusual]
+design of lazy values in Rust.
+
+[Note]
+====
+If you find yourself in need of such "call-site closure" container, you can use a sorted `Vec`,
+https://doc.rust-lang.org/std/primitive.slice.html#method.binary_search_by_key[`binary_search_by_key`]
+is exactly this pattern.
+====
+
+However, with a bit of `unsafe`, we can make something similar work.
+The trick is to add strings to `buf` in such a way that they are never moved, even if more strings are added on top.
+That way, we can just store `&str` in the `HashMap`.
+To achieve address stability, we use another trick from the https://crates.io/crates/typed_arena[`typed_arena`] crate.
+If the `buf` is full (so that adding a new string would invalidate old pointers), we allocate a new buffer, twice as large,
+*without* coping the contents of the old one.
+
+Here's the full implementation:
+
+[source,rust,linenumbers,highlight=42..48]
+----
+use std::{mem, collections::HashMap};
+
+pub struct Interner {
+    map: HashMap<&'static str, u32>,
+    vec: Vec<&'static str>,
+    buf: String,
+    full: Vec<String>,
+}
+
+impl Interner {
+    pub fn with_capacity(cap: usize) -> Interner {
+        let cap = cap.next_power_of_two();
+        Interner {
+            map: HashMap::default(),
+            vec: Vec::new(),
+            buf: String::with_capacity(cap),
+            full: Vec::new(),
+        }
+    }
+
+    pub fn intern(&mut self, name: &str) -> u32 {
+        if let Some(&id) = self.map.get(name) {
+            return id;
+        }
+        let name = unsafe { self.alloc(name) };
+        let id = self.map.len() as u32;
+        self.map.insert(name, id);
+        self.vec.push(name);
+
+        debug_assert!(self.lookup(id) == name);
+        debug_assert!(self.intern(name) == id);
+
+        id
+    }
+
+    pub fn lookup(&self, id: u32) -> &str {
+        self.vec[id as usize]
+    }
+
+    unsafe fn alloc(&mut self, name: &str) -> &'static str {
+        let cap = self.buf.capacity();
+        if cap < self.buf.len() + name.len() {
+            let new_cap = (cap.max(name.len()) + 1)
+                .next_power_of_two();
+            let new_buf = String::with_capacity(new_cap);
+            let old_buf = mem::replace(&mut self.buf, new_buf);
+            self.full.push(old_buf);
+        }
+
+        let interned = {
+            let start = self.buf.len();
+            self.buf.push_str(name);
+            &self.buf[start..]
+        };
+
+        &*(interned as *const str)
+    }
+}
+----
+
+The precise rule for increasing capacity is slightly more complicated:
+
+[source,rust]
+----
+let new_cap = (cap.max(name.len()) + 1).next_power_of_two();
+----
+
+Just doubling won't be enough, we also need to make sure that the new string actually fits.
+
+We could have used a single `bufs: Vec<String>` in place of both `buf` and `full`.
+The benefit of splitting the last buffer into a dedicated field is that we statically guarantee that there's at last one buffer.
+That way, we void a bounds check and/or `.unwrap` when accessing the active buffer.
+
+We also use `&'static str` to fake interior references.
+https://github.com/rust-lang/miri[Miri] (rust in-progress UB checker) is not entirely happy about this.
+I haven't dug into this yet, it seems like it might be another instance of
+https://github.com/rust-lang/rust/pull/61114[rust-lang/rust#61114] on the first sight.
+To be on the safe side, we can use `*const str` instead, with a bit of boilerplate to delegate `PartialEq` and `Hash`.
+Some kind of (hypothetical) `+'unsafe+` lifetime could also be useful here!
+
+For the real implementation, I would change two things:
+
+* Use `rustc_hash::FxHashMap`.
+  It's a standard Rust `HashMap` with a faster (but not DOS-resistant) hash function -- `FxHash`.
+  I thin `Fx` stands for **F**irefo**x**, this is a modification of FNV hash originally used in the browser.
+* Add a newtype wrapper for string indexes:
++
+[source,rust]
+----
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+struct StrId(u32);
+----
+
+That's all I have to say about fast and simple string interning in Rust!
+Discussion on https://www.reddit.com/r/rust/[/r/rust].
