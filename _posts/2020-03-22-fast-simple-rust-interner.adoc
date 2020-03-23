@@ -178,6 +178,9 @@ design of lazy values in Rust.
 If you find yourself in need of such "call-site closure" container, you can use a sorted `Vec`,
 https://doc.rust-lang.org/std/primitive.slice.html#method.binary_search_by_key[`binary_search_by_key`]
 is exactly this pattern.
+
+Another alternative is the `hashbrown` crate, which has
+https://docs.rs/hashbrown/0.7.1/hashbrown/hash_map/struct.RawVacantEntryMut.html#method.insert_with_hasher[raw entry API].
 ====
 
 However, with a bit of `unsafe`, we can make something similar work.
