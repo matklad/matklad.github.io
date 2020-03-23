@@ -273,6 +273,8 @@ I haven't dug into this yet, it seems like it might be another instance of
 https://github.com/rust-lang/rust/pull/61114[rust-lang/rust#61114] on the first sight.
 To be on the safe side, we can use `*const str` instead, with a bit of boilerplate to delegate `PartialEq` and `Hash`.
 Some kind of (hypothetical) `+'unsafe+` lifetime could also be useful here!
+The critical detail that makes our use of fake `'static` here is that `alloc` function is private.
+The public `lookup` function shortens the lifetime to that of `&self` (via lifetime elision).
 
 For the real implementation, I would change two things:
 
