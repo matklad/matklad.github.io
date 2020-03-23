@@ -269,11 +269,11 @@ That way, we void a bounds check and/or `.unwrap` when accessing the active buff
 
 We also use `&'static str` to fake interior references.
 https://github.com/rust-lang/miri[Miri] (rust in-progress UB checker) is not entirely happy about this.
-I haven't dug into this yet, it seems like it might be another instance of
-https://github.com/rust-lang/rust/pull/61114[rust-lang/rust#61114] on the first sight.
+I haven't dug into this yet, it might be another instance of
+https://github.com/rust-lang/rust/pull/61114[rust-lang/rust#61114].
 To be on the safe side, we can use `*const str` instead, with a bit of boilerplate to delegate `PartialEq` and `Hash`.
 Some kind of (hypothetical) `+'unsafe+` lifetime could also be useful here!
-The critical detail that makes our use of fake `'static` here is that `alloc` function is private.
+The critical detail that makes our use of fake `'static` sound here is that the `alloc` function is private.
 The public `lookup` function shortens the lifetime to that of `&self` (via lifetime elision).
 
 For the real implementation, I would change two things:
