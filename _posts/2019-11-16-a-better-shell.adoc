@@ -46,11 +46,6 @@ The last step is crazy!
 
 Like, `cargo test` is being run by my shell (fish), the split is handled by the terminal emulator (kitty), which launches a fresh instance of fish and arranges the working directory to be saved.
 
-[NOTE]
-====
-Hm, aren't cats supposed to eat fishes?
-====
-
 As a user, I don't care about this terminal/terminal emulator/shell split.
 I want to launch a program, and just type commands.
 Why `cargo test` blocks my input?
@@ -116,3 +111,13 @@ This talk echoes similar sentiments:
 https://www.destroyallsoftware.com/talks/a-whole-new-world
 
 If you build some like this, please sign me up!
+
+== Addendum (2020-03-27)
+
+A "terminals are a mess" story from today.
+Implementing it was easy, as kitty has a nice plugin API.
+After that I've realized that I need to remap `kill_line` from kbd:[ctrl+k] to kbd:[ctrl+shift+k].
+It took me a while to realize that searching for `kill_line` in kitty is futile -- editing is handled by the shell.
+Ok, so it looks like I can just remap the key in fish, by `bind \cK kill_line`, except that, no, kbd:[ctrl] shortcuts do not work with kbd:[Shift] because of some obscure terminal limitation.
+So, let's go back to kitty and add a kbd:[ctrl+shift+k] shortcut that sends `^k` to the fish!
+https://github.com/matklad/config/commit/fa1bbcb1813242a571f3aba44f7d986db45ef7cc[An hour wasted]. 
