@@ -262,10 +262,13 @@ they can prevent LLVM from vectorizing. So let's dip our toes into
 [source,rust]
 ----
 unsafe {
-    let d = min2(min2(*d2.get_unchecked(ix - 1), *d2.get_unchecked(ix)),
-                 *d1.get_unchecked(ix - 1));
+    let d = min2(
+        min2(*d2.get_unchecked(ix - 1), *d2.get_unchecked(ix)),
+        *d1.get_unchecked(ix - 1),
+    );
     let cost = {
-        let t = xs.get_unchecked(ix - 1) - ys.get_unchecked(iy - 1);
+        let t =
+            xs.get_unchecked(ix - 1) - ys.get_unchecked(iy - 1);
         t * t
     };
     *d3.get_unchecked_mut(ix) = d + cost;
@@ -346,9 +349,12 @@ let d3 = &mut d3[ix_range.clone()];
 let xs = &xs[ix_range_1.clone()];
 let ys = &ys[id - ix_range.end..id - ix_range.start];
 
-// All the buffers we access inside the loop will have the same length
-assert!(d1.len() == dn && d2_0.len() == dn && d2_1.len() == dn
-        && d3.len() == dn && xs.len() == dn && ys.len() == dn);
+// All the buffers we access inside the loop
+// will have the same length
+assert!(
+    d1.len() == dn && d2_0.len() == dn && d2_1.len() == dn
+    && d3.len() == dn && xs.len() == dn && ys.len() == dn
+);
 
 for i in 0..dn { // so hopefully LLVM can eliminate bounds checks.
     let d = min2(min2(d2_0[i], d2_1[i]), d1[i]);
