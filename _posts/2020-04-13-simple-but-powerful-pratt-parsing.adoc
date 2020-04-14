@@ -318,7 +318,7 @@ fn tests() {
 }
 ----
 
-So, the general approach is roghtly the one we used to deal with left recursion -- start with parsing a first number, and then loop, consuming operators and doing ... something?
+So, the general approach is roughly the one we used to deal with left recursion -- start with parsing a first number, and then loop, consuming operators and doing ... something?
 
 [source,rust]
 ----
@@ -407,7 +407,6 @@ Our current right priority is `2`, and, to be able to fold the expression, we ne
 So let's recursively call `expr_bp` starting at `b`, but also tell it to stop as soon as `bp` drops bellow `2`.
 This necessitates the addition of `min_bp` argument to the main function.
 
-And lo, we have a fully functioning minimal Prat parser:
 And lo, we have a fully functioning minimal Prat parser:
 
 [source,rust]
