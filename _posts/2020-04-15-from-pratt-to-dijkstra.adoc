@@ -11,7 +11,16 @@ Here, we'll study the relationship between top-down operator precedence (Pratt p
 Spoiler: they are the same algorithm, the difference is implementation style with recursion (Pratt) or a manual stack (Dijkstra).
 
 Unlike the previous educational post, this one is going to be an excruciatingly boring pile of technicalities -- we'll just slowly and mechanically refactor our way to victory.
-Really, the most exciting bit about this post is the conclusion, and you already know it
+Specifically,
+
+. We start with refactoring Pratt parser to minimize control flow variations.
+. Then, having arrived at the code with only one `return` and only one recursive call, we replace recursion with an explicit stack.
+. Finally, we streamline control in the iterative version.
+. At this point, we have a bona fide shunting yard algorithm.
+
+To further reveal the connection, we further verify that the original recursive and the iterative formulation produce syntax nodes in the same order.
+
+Really, the most exciting bit about this post is the conclusion, and you already know it :)
 
 == Starting Point
 
