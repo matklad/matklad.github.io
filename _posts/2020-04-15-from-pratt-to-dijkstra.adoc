@@ -961,7 +961,7 @@ fn expr_bp(lexer: &mut Lexer) -> Option<S> {
         let token = lexer.next();
         let (token, r_bp) = loop {
             match binding_power(token, top.lhs.is_none()) {
-                Some((t, (l_bp, r_bp))) if top.min_bp <= l_bp => {
+                Some((t, (l_bp, r_bp))) if top.min_bp <= l_bp =>{
                     break (t, r_bp)
                 }
                 _ => {
