@@ -404,7 +404,7 @@ Can we add a lookahead?
 Looks like no -- we'd have to look past all of `b`, `c` and `d` to find the next operator with lower binding power, which sounds pretty unbounded.
 But we are onto something!
 Our current right priority is `2`, and, to be able to fold the expression, we need to find the next operator with lower priority.
-So let's recursively call `expr_bp` starting at `b`, but also tell it to stop as soon as `bp` drops bellow `2`.
+So let's recursively call `expr_bp` starting at `b`, but also tell it to stop as soon as `bp` drops below `2`.
 This necessitates the addition of `min_bp` argument to the main function.
 
 And lo, we have a fully functioning minimal Prat parser:
