@@ -46,7 +46,7 @@ A `Spinlock` is the simplest possible implementation of a mutex, its general for
 static LOCKED: AtomicBool = AtomicBool::new(false);
 
 while LOCKED.compare_and_swap(false, true, Ordering::Acquire) { <1>
-    std::sync::atomic::spin_loop_hint(); <4>
+  std::sync::atomic::spin_loop_hint(); <4>
 }
 
 /* Critical section */  <2>
@@ -69,7 +69,7 @@ An OS-based mutex, like https://doc.rust-lang.org/std/sync/struct.Mutex.html[`st
 static LOCKED: AtomicBool = AtomicBool::new(false);
 
 while LOCKED.compare_and_swap(false, true, Ordering::Acquire)
-    park_this_thread(&LOCKED);
+  park_this_thread(&LOCKED);
 }
 
 /* Critical section */
@@ -135,48 +135,47 @@ The crate uses spinning in the https://github.com/rust-random/getrandom/blob/v0.
 pub struct LazyUsize(AtomicUsize);
 
 impl LazyUsize {
-    // Synchronously runs the init() function. Only one caller
-    // will have their init() function running at a time, and
-    // exactly one successful call will be run. init() returning
-    // UNINIT or ACTIVE will be considered a failure, and future
-    // calls to sync_init will rerun their init() function.
+  // Synchronously runs the init() function. Only one caller
+  // will have their init() function running at a time, and
+  // exactly one successful call will be run. init() returning
+  // UNINIT or ACTIVE will be considered a failure, and future
+  // calls to sync_init will rerun their init() function.
 
-    pub fn sync_init(
-        &self,
-        init: impl FnOnce() -> usize,
-        mut wait: impl FnMut(),
-    ) -> usize {
-        // Common and fast path with no contention.
-        // Don't wast time on CAS.
-        match self.0.load(Relaxed) {
-            Self::UNINIT | Self::ACTIVE => {}
-            val => return val,
-        }
-        // Relaxed ordering is fine,
-        // as we only have a single atomic variable.
-        loop {
-            match self.0.compare_and_swap(
-                Self::UNINIT,
-                Self::ACTIVE,
-                Relaxed,
-            ) {
-                Self::UNINIT => {
-                    let val = init();
-                    self.0.store(
-                        match val {
-                            | Self::UNINIT,
-                            | Self::ACTIVE => Self::UNINIT,
-                            val => val,
-                        },
-                        Relaxed,
-                    );
-                    return val;
-                }
-                Self::ACTIVE => wait(),
-                val => return val,
-            }
-        }
+  pub fn sync_init(
+    &self,
+    init: impl FnOnce() -> usize,
+    mut wait: impl FnMut(),
+  ) -> usize {
+    // Common and fast path with no contention.
+    // Don't wast time on CAS.
+    match self.0.load(Relaxed) {
+      Self::UNINIT | Self::ACTIVE => {}
+      val => return val,
     }
+    // Relaxed ordering is fine,
+    // as we only have a single atomic variable.
+    loop {
+      match self.0.compare_and_swap(
+        Self::UNINIT,
+        Self::ACTIVE,
+        Relaxed,
+      ) {
+        Self::UNINIT => {
+          let val = init();
+          self.0.store(
+            match val {
+              Self::UNINIT | Self::ACTIVE => Self::UNINIT,
+              val => val,
+            },
+            Relaxed,
+          );
+          return val;
+        }
+        Self::ACTIVE => wait(),
+        val => return val,
+      }
+    }
+  }
 }
 ----
 
@@ -209,11 +208,13 @@ We can trick the static linker into using a function which we define ourselves:
 [source,rust]
 ----
 #[no_mangle]
-pub extern "C" fn poll(_fds: *const u8, _nfds: usize, _timeout: i32)
-    -> u32
-{
-    sleep_ms(500);
-    1
+pub extern "C" fn poll(
+  _fds: *const u8,
+  _nfds: usize,
+  _timeout: i32,
+) -> u32 {
+  sleep_ms(500);
+  1
 }
 ----
 
@@ -239,14 +240,19 @@ So, here's a strong contender for the most cursed function I've written so far:
 [source,rust]
 ----
 #[no_mangle]
-pub extern "C" fn syscall(_syscall: u64, _buf: *const u8, _len: usize, _flags: u32) -> isize {
-    extern "C" {
-        fn __errno_location() -> *mut i32;
-    }
-    unsafe {
-        *__errno_location() = 38; // ENOSYS
-    }
-    -1
+pub extern "C" fn syscall(
+  _syscall: u64,
+  _buf: *const u8,
+  _len: usize,
+  _flags: u32,
+) -> isize {
+  extern "C" {
+    fn __errno_location() -> *mut i32;
+  }
+  unsafe {
+    *__errno_location() = 38; // ENOSYS
+  }
+  -1
 }
 ----
 
@@ -260,8 +266,9 @@ And here are the results:
 [source]
 ----
 22:37:24|~/projects/spin-of-death|HEAD⚡?
-λ cargo build --release && time sudo ./target/release/spin-of-death
+λ cargo build --release
     Finished release [optimized] target(s) in 0.01s
+λ time sudo ./target/release/spin-of-death
 ^CCommand terminated by signal 2
 real 136.54s
 user 96.02s
@@ -279,8 +286,9 @@ If we https://github.com/matklad/getrandom/commit/a7dc21fed9b789832702b98807a62d
 [source]
 ----
 22:32:30|~/projects/spin-of-death|HEAD⚡?
-λ cargo build --release --features os-blocking-getrandom && time sudo ./target/release/spin-of-death
+λ cargo build --release --features os-blocking-getrandom
     Finished release [optimized] target(s) in 0.01s
+λ time sudo ./target/release/spin-of-death
 real 0.51s <1>
 user 0.01s
 sys  0.04s
@@ -312,13 +320,13 @@ Another option, if the state fits into `usize` and the initializing function is 
 [source,rust]
 ----
 pub fn get_state() -> usize {
-    static CACHE: AtomicUsize = AtomicUsize::new(0);
-    let mut res = CACHE.load(Ordering::Relaxed);
-    if res == 0 {
-        res = init();
-        CACHE.store(res, Ordering::Relaxed);
-    }
-    res
+  static CACHE: AtomicUsize = AtomicUsize::new(0);
+  let mut res = CACHE.load(Ordering::Relaxed);
+  if res == 0 {
+    res = init();
+    CACHE.store(res, Ordering::Relaxed);
+  }
+  res
 }
 
 fn init() -> usize { ... }

@@ -62,65 +62,62 @@ The interesting bit is reproduced below:
 [source,rust]
 ----
 fn run_bench<M: Mutex>(options: &Options) -> time::Duration {
-    let locks = &(0..options.n_locks) <3>
-        .map(|_| CachePadded::new(M::default()))
-        .collect::<Vec<_>>();
+  let locks = &(0..options.n_locks) <3>
+      .map(|_| CachePadded::new(M::default()))
+      .collect::<Vec<_>>();
 
-    let start_barrier = &Barrier::new(
-        options.n_threads as usize + 1,
-    );
-    let end_barrier = &Barrier::new(
-        options.n_threads as usize + 1,
-    );
+  let start_barrier =
+    &Barrier::new(options.n_threads as usize + 1);
+  let end_barrier =
+    &Barrier::new(options.n_threads as usize + 1);
 
-    scope(|scope| {
-        let thread_seeds = random_numbers(0x6F4A955E).scan(
-            0x9BA2BF27,
-            |state, n| {
-                *state ^= n;
-                Some(*state)
-            },
-        ).take(options.n_threads as usize);
+  scope(|scope| {
+    let thread_seeds = random_numbers(0x6F4A955E)
+      .scan(0x9BA2BF27, |state, n| {
+        *state ^= n;
+        Some(*state)
+      })
+      .take(options.n_threads as usize);
 
-        for thread_seed in thread_seeds {
-            scope.spawn(move |_| {
-                start_barrier.wait();
-                let indexes = random_numbers(thread_seed)
-                    .map(|it| it % options.n_locks)
-                    .map(|it| it as usize)
-                    .take(options.n_ops as usize);
-                for idx in indexes {
-                    locks[idx].with_lock(|cnt| *cnt += 1); <1>
-                }
-                end_barrier.wait();
-            });
-        }
-
-        std::thread::sleep(time::Duration::from_millis(100));
+    for thread_seed in thread_seeds {
+      scope.spawn(move |_| {
         start_barrier.wait();
-        let start = time::Instant::now();
-        end_barrier.wait();
-        let elapsed = start.elapsed();
-
-        let mut total = 0;
-        for lock in locks.iter() {
-            lock.with_lock(|cnt| total += *cnt);
+        let indexes = random_numbers(thread_seed)
+          .map(|it| it % options.n_locks)
+          .map(|it| it as usize)
+          .take(options.n_ops as usize);
+        for idx in indexes {
+          locks[idx].with_lock(|cnt| *cnt += 1); <1>
         }
-        assert_eq!(total, options.n_threads * options.n_ops); <2>
+        end_barrier.wait();
+      });
+    }
 
-        elapsed
-    })
-    .unwrap()
+    std::thread::sleep(time::Duration::from_millis(100));
+    start_barrier.wait();
+    let start = time::Instant::now();
+    end_barrier.wait();
+    let elapsed = start.elapsed();
+
+    let mut total = 0;
+    for lock in locks.iter() {
+      lock.with_lock(|cnt| total += *cnt);
+    }
+    assert_eq!(total, options.n_threads * options.n_ops); <2>
+
+    elapsed
+  })
+  .unwrap()
 }
 
 fn random_numbers(seed: u32) -> impl Iterator<Item = u32> { <4>
-    let mut random = seed;
-    iter::repeat_with(move || {
-        random ^= random << 13;
-        random ^= random >> 17;
-        random ^= random << 5;
-        random
-    })
+  let mut random = seed;
+  iter::repeat_with(move || {
+    random ^= random << 13;
+    random ^= random >> 17;
+    random ^= random << 5;
+    random
+  })
 }
 ----
 
