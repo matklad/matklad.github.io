@@ -33,7 +33,7 @@ However, there are serious gaps in the UX:
 
 * kbd:[ctrl+c] doesn't work as it works in every other application.
 * I launch GUI version of Emacs: the terminal one changes some keybindings, which is confusing to me.
-  For example, I have splits inside emacs, and inside my terminal as well, and I just get confused as two which shortcut I should use.
+  For example, I have splits inside emacs, and inside my terminal as well, and I just get confused as to which shortcut I should use.
 * The output of programs is colored with escaped codes, which are horrible, and not flexible enough.
   When my Rust program panics and prints that it failed in `my_crate::foo::bar` function, I want this to be a hyperlink to the source code of the function.
   I want to `cat` images and PDFs in my terminal (and html, obviously).
@@ -79,7 +79,7 @@ It could look like this:
 * A UI framework for text-based UIs, using magit as a model. kbd:[ctrl+c], kbd:[ctrl+v] and friends should work as expected.
 * A tilling frame management, again, like the one in Emacs (and golden-ratio should be default).
 * Some concept of process-let, which can occupy a frame
-* A prompt, which is **alway** available, and smartly (without blocking, splitting screen if necessary) spawns new processlets.
+* A prompt, which is **always** available, and smartly (without blocking, splitting screen if necessary) spawns new processlets.
 * An API to let processlets interact with text UI.
 * A plugin system for in-process processlets (obviously, plugins should be implemented in WASM).
 * A plugin marketplace (versions, dependencies, lockfile, backwards compatibility).
@@ -115,9 +115,10 @@ If you build some like this, please sign me up!
 == Addendum (2020-03-27)
 
 A "terminals are a mess" story from today.
+I wanted "kill other split" shortcut shortcut for my terminal, bound to kbd:[ctrl+k, 1].
 Implementing it was easy, as kitty has a nice plugin API.
-After that I've realized that I need to remap `kill_line` from kbd:[ctrl+k] to kbd:[ctrl+shift+k].
+After that I've realized that I need to remap `kill_line` from kbd:[ctrl+k] to kbd:[ctrl+shift+k], so that it doesn't conflict with the kbd:[ctrl+k, 1] chord.
 It took me a while to realize that searching for `kill_line` in kitty is futile -- editing is handled by the shell.
 Ok, so it looks like I can just remap the key in fish, by `bind \cK kill_line`, except that, no, kbd:[ctrl] shortcuts do not work with kbd:[Shift] because of some obscure terminal limitation.
 So, let's go back to kitty and add a kbd:[ctrl+shift+k] shortcut that sends `^k` to the fish!
-https://github.com/matklad/config/commit/fa1bbcb1813242a571f3aba44f7d986db45ef7cc[An hour wasted]. 
+https://github.com/matklad/config/commit/fa1bbcb1813242a571f3aba44f7d986db45ef7cc[An hour wasted].
