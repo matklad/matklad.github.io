@@ -1,0 +1,43 @@
+= Who builds the builder?
+:page-liquid:
+:page-layout: post
+
+This is a short note on the builder pattern, or, rather, on the builder _method_ pattern.
+
+TL;DR: if you have `Foo` and `FooBuilder`, consider adding a `builder` method to `Foo`:
+
+[source,rust]
+----
+struct Foo { ... }
+
+#[derive(Default)]
+struct FooBuilder { ... }
+
+impl Foo {
+    fn builder() -> FooBuilder {
+        FooBuilder::default()
+    }
+}
+
+impl FooBuilder {
+    fn build(self) -> Foo { ... }
+}
+----
+
+A more minimal solution is to rely just on `FooBuilder::default` or `FooBuilder::new`.
+There are two problems with that:
+
+_First_, it is hard to discover.
+Nothing in the docs/signature of `Foo` mentions `FooBuilder`, you need to look elsewhere to learn how to create a `Foo`.
+I remember being puzzled at how to create a https://docs.rs/globset/0.4.5/globset/struct.GlobSet.html[`GlobSet`] for exactly this reason.
+In contrast, the `builder` method is right there on `Foo`, probably the first one.
+
+_Second_, it is more annoying to use, as you need to import _both_ `Foo` and `FooBuilder`.
+With `Foo::build` method often only one import suffices, as you don't need to name the builder type.
+
+Case studies:
+
+* https://github.com/rust-analyzer/rust-analyzer/commit/7510048ec0a5d5e7136e3ea258954eb244d15baf[`TextEdit::build`] from rust-analyzer.
+* https://doc.rust-lang.org/std/fs/struct.File.html#method.with_options[`File::with_options`] from std.
+
+Discussion on https://www.reddit.com/r/rust[r/rust].
