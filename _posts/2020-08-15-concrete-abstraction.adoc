@@ -35,7 +35,7 @@ Given that abstractions have costs "`don't need`" can be strengthen to "`probabl
 
 .What Is The Cost of Abstraction?
 ****
-_First_ is the cognitive cost -- generics (and abstractions in general) are often harder to understand that concretions.
+_First_ is the cognitive cost -- generics (and abstractions in general) are often harder to understand than concretions.
 I think this is true regardless of the abstraction _skill_.
 I am skilled with  math which is incomparably more complicated than the typical code; still, I find concrete code easier to understand.
 There are exceptions here (you can do less things with `T: Default` than with `Blorb`), but they seem to be exceptions rather than a common case.
@@ -134,7 +134,7 @@ impl ConvWith<&LineIndex> for TextRange {
 There were a couple of genuinely generic impls for converting iterators of convertible things.
 
 The code was hard to understand.
-It also was hard to use: if calling `.conv` didn't work immediately, it took a loot of time to find which specific impl didn't apply.
+It also was hard to use: if calling `.conv` didn't work immediately, it took a lot of time to find which specific impl didn't apply.
 Finally, there were many accidental (as in "`accidental complexity`") changes to the shape of code: `CTX` being passed by value or by reference, switching between generic parameters and associated types, etc.
 
 I was really annoyed by how this conceptually simple pure boilerplate operation got expressed as clever and fancy abstraction.
@@ -166,7 +166,7 @@ Now instead of typing `x.conv()` and trying to figure out why an impl I think sh
 I've lost fancy iterator impls, but the
 https://github.com/rust-analyzer/rust-analyzer/pull/4418/commits/1586bab0b97bef411e6187dfc389557edbc5a16e[total diff]
 for the commit was `+999,-1123`.
-The was some genuine code re-use in those impls, but it was not justified by the overall compression, even disregarding additional complexity tax.
+There was some genuine code re-use in those impls, but it was not justified by the overall compression, even disregarding additional complexity tax.
 
 To sum up, "`is this abstraction used exclusively concretely?`" is a meaningful question about the overall shape of code.
 If the answer is "`Yes!`", then the abstraction can be replaced by a number of equivalent non-abstract implementations.
