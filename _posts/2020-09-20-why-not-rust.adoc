@@ -1,0 +1,184 @@
+= Why Not Rust?
+:page-liquid:
+:page-layout: post
+
+I've recently read an article criticizing Rust, and, while it made a bunch of good points, I didn't enjoy it -- it was an easy to argue with piece.
+In general, I feel that I can't recommend an article criticizing Rust.
+This is a shame -- confronting drawbacks is important, and debunking low effort/miss informed attempts at critique sadly inoculates against actually good arguments.
+
+So, here's my attempt to argue _against_ Rust:
+
+Not All Programming is Systems Programming::
++
+--
+Rust is a systems programming language.
+It offers precise control over data layout and runtime behavior of the code, granting  you maximal performance and flexibility.
+Unlike other systems programming languages, it also provides memory safety -- buggy programs terminate in a well-defined manner, instead of unleashing (potentially security-sensitive) undefined behavior.
+
+However, in many (most) cases, one doesn't need ultimate performance or control over hardware resources.
+For these situations, modern managed languages like Kotlin or Go offer decent speed, enviable
+https://qconlondon.com/london-2017/system/files/presentation-slides/highperformancemanagedlanguages.pdf[time to performance], and are memory safe by virtue of using a garbage collector for dynamic memory management.
+--
+
+Complexity::
++
+--
+Programmer's time is valuable, and, if you pick Rust, expect to spend some of it on learning the ropes.
+Rust community poured a lot of time into creating high-quality teaching materials, but the Rust language _is_ big.
+Even if a Rust implementation would provide value for you, you might not have resources to invest into growing the language expertise.
+
+Rust's price for improved control is the curse of choice:
+
+[source,rust]
+----
+struct Foo     { bar: Bar         }
+struct Foo<'a> { bar: &'a Bar     }
+struct Foo<'a> { bar: &'a mut Bar }
+struct Foo     { bar: Box<Bar>    }
+struct Foo     { bar: Rc<Bar>     }
+struct Foo     { bar: Arc<Bar>    }
+----
+
+In Kotlin, you write `class Foo(val bar: Bar)`, and proceed with solving your bushiness problem.
+In Rust, there are choices to be made, some important enough to have dedicated syntax.
+
+All this complexity is there for a reason -- we don't know how to create a simpler memory safe low-level language.
+But not every task requires a low-level language to solve it.
+
+See also https://www.youtube.com/watch?v=ltCgzYcpFUI[Why {cpp} Sails When the Vasa Sank].
+--
+
+Compile Times::
++
+--
+Compile times are a multiplier for everything.
+A program written in a slower to run but faster to compile programming language can be _faster_ to run because the programmer will have more time to optimize!
+
+Rust intentionally picked slow compilers in the https://research.swtch.com/generic[generics dilemma].
+This is not necessary the end of the world (the resulting runtime performance improvements are real), but it does mean that you'll have to fight tooth and nail for reasonable build times in larger projects.
+
+`rustc` implements what is probably the most advanced https://rustc-dev-guide.rust-lang.org/queries/incremental-compilation.html[incremental compilation] algorithm in production compilers, but this feels a bit like fighting with language compilation model.
+
+Unlike {cpp}, Rust build is not embarrassingly parallel; the amount of parallelism is limited by length of the critical path in the dependency graph.
+If you have 40+ cores to compile, this shows.
+
+Rust also lacks an analog for the https://en.cppreference.com/w/cpp/language/pimpl[pimpl] idiom, which means that changing a crate requires recompiling (and not just relinking) all of its reverse dependencies.
+
+--
+
+Maturity::
++
+--
+Five years old, Rust is definitely a young language.
+Even though its future looks bright, I will bet more money on "`C will be around in ten years`" than on "`Rust will be around in ten years`"
+(See https://en.wikipedia.org/wiki/Lindy_effect[Lindy Effect]).
+If you are writing software to last decades, you should seriously consider risks associated with picking new technologies.
+(But keep in mind that picking Java over Cobol for banking software in 90s retrospectively turned out to be the right choice).
+
+There's only one complete implementation of Rust -- the https://github.com/rust-lang/rust/[`rustc`] compiler.
+The most advanced alternative implementation, https://github.com/thepowersgang/mrustc[`mrustc`], purposefully omits many static safety checks.
+`rustc` at the moment supports only a single production-ready backend -- LLVM.
+Hence, its support for CPU architectures is narrower than that of C, which has GCC implementation as well as a number of vendor specific proprietary compilers.
+
+Finally, Rust lacks an official specification.
+https://doc.rust-lang.org/reference/[The reference] is a work in progress, and does not yet document all the fine implementation details.
+--
+
+Alternatives::
++
+--
+There are other languages besides Rust in systems programming space, notably, C, {cpp}, and Ada.
+
+Modern {cpp} provides https://www.viva64.com/en/pvs-studio/[tools] and https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines[guidelines] for improving safety.
+There's even a proposal for a Rust-like https://github.com/isocpp/CppCoreGuidelines/blob/master/docs/Lifetime.pdf[lifetimes] mechanism!
+Unlike Rust, using these tools does not _guarantee_ the absence of memory safety issues.
+However, if you already maintain a large body of {cpp} code, it makes sense to check if following best practices and using https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html[sanitizers] helps with security issues.
+This is hard, but clearly is easier than rewriting in another language!
+
+If you use C, you can use formal methods to https://sel4.systems/Info/FAQ/proof.pml[prove] the absence of undefined behaviors, or just https://sqlite.org/testing.html[exhaustively test] everything.
+
+Ada is memory safe if you don't use dynamic memory (never call `free`).
+
+Rust is an interesting point on the cost/safety curve, but is far from the only one!
+--
+
+Tooling::
++
+--
+Rust tooling is a bit of a hit and miss.
+The baseline tooling, the compiler and the build system
+(https://doc.rust-lang.org/cargo/index.html[cargo]), are often cited as best in class.
+
+But, for example, some runtime-related tools (most notably, heap profiling) are just absent -- it's hard to reflect on the runtime of the program if there's no runtime!
+Additionally, while IDE support is decent, it is nowhere near the Java-level of reliability.
+Automated complex refactors of multi-million line programs are not possible in Rust today.
+--
+
+Integration::
++
+--
+Whatever the Rust promise is, it's a fact of life that today's systems programming world speaks C, and is inhabited by C and {cpp}.
+Rust intentionally doesn't try to mimic these languages -- it doesn't use C++-style classes or C ABI.
+
+That means that integration between the worlds needs explicit bridges.
+These are not seamless.
+They are `unsafe`, not always completely zero-cost and need to be synchronized between the languages.
+White the general promise of http://adventures.michaelfbryan.com/posts/how-to-riir/[piece-wise integration] holds up and the https://github.com/dtolnay/cxx[tooling] catches up, there is accidental complexity along the way.
+
+One specific gotcha is that Cargo's opinionated world view (which _is_ a blessing for pure Rust projects) might make it harder to integrate with a bigger build system.
+--
+
+Performance::
++
+--
+"`Using LLVM`" is not a universal solution to all performance problems.
+While I am not aware of benchmarks comparing performance of {cpp} and Rust at scale, it's not to hard to come up with a list of cases where Rust leaves some performance on the table relative to {cpp}.
+
+The biggest one is probably the fact that Rust's move semantics is based on values (`memcpy` at the machine code level).
+In contrast, {cpp} semantics uses special references you can steal data from (pointers at the machine code level).
+In theory, compiler should be able to see through chain of copies; in practice it often doesn't: https://github.com/rust-lang/rust/issues/57077[#57077].
+A related problem is the absence of placement new -- Rust sometimes need to copy bytes to/from the stack, while {cpp} can construct the thing in place.
+
+Somewhat amusingly, Rust's default ABI (which is not stable, to make it as efficient as possible) is sometimes worse than that of C: https://github.com/rust-lang/rust/issues/26494#issuecomment-619506345[#26494].
+
+Finally, while in theory Rust code should be more efficient due to the significantly richer aliasing information, enabling aliasing-related optimizations triggers LLVM bugs and miscompilations: https://github.com/rust-lang/rust/issues/54878[#54878].
+
+But, to reiterate, these are cherry-picked examples, sometimes the field is tilted the other way.
+For example, `std::unique_ptr` https://www.youtube.com/watch?v=rHIkrotSwcc&feature=youtu.be&t=1261[has a performance problem] which Rust's `Box` lacks.
+
+A potentially bigger issue is that Rust, with its definition time checked generics, is less expressive than {cpp}.
+So, some {cpp} http://eigen.tuxfamily.org/index.php?title=Expression_templates[template tricks] for high performance are not expressible in Rust using a nice syntax.
+--
+
+Meaning of Unsafe::
++
+--
+An idea which is even more core to Rust than ownership & borrowing is perhaps that of `unsafe` boundary.
+That, by delineating all dangerous operations behind `unsafe` blocks and functions and insisting on providing a safe higher-level interface to them, it is possible to create a system which is both
+
+. sound (non-`unsafe` code can't cause undefined behavior),
+. and modular (different `unsafe` blocks can be checked separately).
+
+It's pretty clear that the promise works out in practice: https://github.com/rust-fuzz/trophy-case[fuzzing Rust code] unearths panics, not buffer overruns.
+
+But the theoretical outlook is not as rosy.
+
+_First_, there's no definition of Rust memory model, so it is impossible to formally check if a given unsafe block is valid or not.
+There's informal definition of "`things rustc does or might rely on`" and in in-progress https://github.com/rust-lang/miri[runtime verifier], but the actual model is in flux.
+So there might be some `unsafe` code somewhere which works OK in practice today, might be declared invalid tomorrow, and broken by a new compiler optimization next year.
+
+_Second_, there's also an observation that `unsafe` blocks are not, in fact, modular.
+Sufficiently powerful `unsafe` blocks can, in effect, extend the language.
+Two such extensions might be fine in isolation, but lead to undefined behavior if used simultaneously:
+https://smallcultfollowing.com/babysteps/blog/2016/10/02/observational-equivalence-and-unsafe-code/[Observational equivalence and unsafe code].
+
+Finally, there are outright link:++https://github.com/rust-lang/rust/issues?q=is%3Aopen+is%3Aissue+label%3A%22I-unsound+%F0%9F%92%A5%22++[bugs in the compiler].
+--
+
+Here are some thing I've deliberately omitted from the list:
+
+* Economics ("`it's harder to hire Rust programmers`") -- I feel that the "`maturity`" section captures the essence of it which is not reducible to chicken and egg problem.
+* Dependencies ("`stdlib is too small / everything has too many deps`") -- given how good Cargo and the relevant parts of the language are, I personally don't see this as a problem.
+* Dynamic linking ("`Rust should have stable ABI`") -- I don't think this is a strong argument. Monomorphization is pretty fundamentally incompatible with dynamic linking and there's C ABI if you really need to. I do think that the situation here can be improved, https://internals.rust-lang.org/t/a-stable-modular-abi-for-rust/12347/10?u=matklad[but I don't think that improvement needs to be Rust-specific].
+
+Discussion on https://www.reddit.com/r/rust/comments/iwij5i/blog_post_why_not_rust/[/r/rust].
