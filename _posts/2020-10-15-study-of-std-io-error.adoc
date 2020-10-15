@@ -1,0 +1,411 @@
+= Study of std::io::Error
+:page-liquid:
+:page-layout: post
+
+In this article we'll dissect the implementation of `std::io::Error` type from the Rust's standard library.
+The code in question is here:
+https://github.com/rust-lang/rust/blob/5565241f65cf402c3dbcb55dd492f172c473d4ce/library/std/src/io/error.rs[library/std/src/io/error.rs].
+
+You can read this post as either of:
+
+1. A study of a specific bit of standard library.
+2. An advanced error management guide.
+3. A case of a beautiful API design.
+
+The article requires basic familiarity with Rust error handing.
+
+'''
+
+When designing an `Error` type for use with `Result<T, E>`, the main question to ask is "`how the error will be used?`".
+Usually, one of the following is true.
+
+* The error is handled programmatically.
+  The consumer inspects the error, so its internal structure needs to be exposed to a reasonable degree.
+
+* The error is propagated and displayed to the user.
+  The consumer doesn't inspect the error beyond the `fmt::Display`; so its internal structure can be encapsulated.
+
+Note that there's a tension between exposing exposing implementation details and encapsulating them. A common anti-pattern for implementing the first case is to define a kitchen-sink enum:
+
+[source,rust]
+----
+pub enum Error {
+  Tokio(tokio::io::Error),
+  ConnectionDiscovery {
+    path: PathBuf,
+    reason: String,
+    stderr: String,
+  },
+  Deserialize {
+    source: serde_json::Error,
+    data: String,
+  },
+  ...,
+  Generic(String),
+}
+----
+
+There is a number of problems with this approach.
+
+_First_, exposing errors from underlying libraries makes them a part of your public API.
+Major semver bump in your dependency would require you to make a new major version as well.
+
+_Second_, it sets all the implementation details in stone.
+For example, if you notice that the size of `ConnectionDiscovery` is huge, boxing this variant would be a breaking change.
+
+_Third_, it is usually indicative of a larger design issue.
+Kitchen sink errors pack dissimilar failure modes into one type.
+But, if failure modes vary widely, it probably isn't reasonable to handle them!
+This is an indication that the situation looks more like the case two.
+
+****
+An often-working cure for error kitchensinkosis is the pattern of pushing errors to the caller.
+
+Consider this example
+
+[source,rust]
+----
+fn my_function() -> Result<i32, MyError> {
+  let thing = dep_function()?;
+  ...
+  Ok(92)
+}
+----
+
+`my_function` calls `dep_function`, so `MyError` should be convertible from `DepError`.
+A better way to write the same might be this:
+
+[source,rust]
+----
+fn my_function(thing: DepThing) -> Result<i32, MyError> {
+  ...
+  Ok(92)
+}
+----
+
+In this version, the caller is forced to invoke `dep_function` and handle its error.
+This exchanges more typing for more type-safety.
+`MyError` and `DepError` are now different types, and the caller can handle them separately.
+If `DepError` were a variant of `MyError` a runtime `match`-ing would be required.
+
+An extreme version of this idea is https://sans-io.readthedocs.io/[sans-io] programming.
+Most errors come from IO; if you push all IO to the caller, you can skip most of the error handing!
+****
+
+However bad the `enum` approach might be, it does achieve maximum inspectability of the first case.
+
+The propagation-centered second case of error management is typically handled by using a boxed trait object.
+A type like `Box<dyn std::error::Error>` can be constructed from any specific concrete error, can be printed via `Display`, and can still optionally expose the underlying error via dynamic downcasting.
+The https://lib.rs/crates/anyhow[`anyhow`] crate is a great example of this style.
+
+The case of `std::io::Error` is interesting because it wants to be both of the above and more.
+
+* This is `std`, so encapsulation and future-proofing are paramount.
+* IO errors coming from the operating system often can be handled (for example, `EWOULDBLOCK`).
+* For a systems programming language, it's important to expose the underlying OS error exactly.
+* The set of potential future OS error is unbounded.
+* `io::Error` is also a vocabulary type, and should be able to represent some not-quite-os errors.
+  For example, Rust ``Path``s can contain internal `0` bytes and ``open``ing such path should return an `io::Error` _before_ making a syscall.
+
+Here's what `std::io::Error` looks like:
+
+[source,rust]
+----
+pub struct Error {
+  repr: Repr,
+}
+
+enum Repr {
+  Os(i32),
+  Simple(ErrorKind),
+  Custom(Box<Custom>),
+}
+
+struct Custom {
+  kind: ErrorKind,
+  error: Box<dyn error::Error + Send + Sync>,
+}
+----
+
+First thing to notice is that it's an enum internally, but this is a well-hidden implementation detail.
+To allow inspecting and handing of various error conditions there's a separate public fieldless kind enum:
+
+[source,rust]
+----
+#[derive(Clone, Copy)]
+#[non_exhaustive]
+pub enum ErrorKind {
+  NotFound,
+  PermissionDenied,
+  Interrupted,
+  ...
+  Other,
+}
+
+impl Error {
+  pub fn kind(&self) -> ErrorKind {
+    match &self.repr {
+      Repr::Os(code) => sys::decode_error_kind(*code),
+      Repr::Custom(c) => c.kind,
+      Repr::Simple(kind) => *kind,
+    }
+  }
+}
+----
+
+Although both `ErrorKind` and `Repr` are enums, publicly exposing `ErrorKind` is much less scary.
+A `#[non_exhaustive]` `Copy` fieldless enum's design space is a point -- there are no plausible alternatives or compatibility hazards.
+
+_Some_ `io::Errors` are just raw OS error codes:
+
+[source,rust]
+----
+impl Error {
+  pub fn from_raw_os_error(code: i32) -> Error {
+    Error { repr: Repr::Os(code) }
+  }
+  pub fn raw_os_error(&self) -> Option<i32> {
+    match self.repr {
+      Repr::Os(i) => Some(i),
+      Repr::Custom(..) => None,
+      Repr::Simple(..) => None,
+    }
+  }
+}
+----
+
+Platform-specific `sys::decode_error_kind` function takes care of mapping error codes to `ErrorKind` enum.
+All this together means that code can handle error categories in a cross-platform way by inspecting the `.kind()`.
+However, if the need arises to handle a very specific error code in an OS-dependent way, that is also possible.
+The API carefully provides a convenient abstraction without abstracting away important low-level details.
+
+An `std::io::Error` can also be constructed from an `ErrorKind`:
+
+[source,rust]
+----
+impl From<ErrorKind> for Error {
+  fn from(kind: ErrorKind) -> Error {
+    Error { repr: Repr::Simple(kind) }
+  }
+}
+----
+
+This provides cross-platform access to error-code style error handling.
+This is handy if you need the fastest possible errors.
+
+Finally, there's a third, fully custom variant of the representation:
+
+[source,rust]
+----
+impl Error {
+  pub fn new<E>(kind: ErrorKind, error: E) -> Error
+  where
+    E: Into<Box<dyn error::Error + Send + Sync>>,
+  {
+    Self::_new(kind, error.into())
+  }
+
+  fn _new(
+    kind: ErrorKind,
+    error: Box<dyn error::Error + Send + Sync>,
+  ) -> Error {
+    Error {
+      repr: Repr::Custom(Box::new(Custom { kind, error })),
+    }
+  }
+
+  pub fn get_ref(
+    &self,
+  ) -> Option<&(dyn error::Error + Send + Sync + 'static)> {
+    match &self.repr {
+      Repr::Os(..) => None,
+      Repr::Simple(..) => None,
+      Repr::Custom(c) => Some(&*c.error),
+    }
+  }
+
+  pub fn into_inner(
+    self,
+  ) -> Option<Box<dyn error::Error + Send + Sync>> {
+    match self.repr {
+      Repr::Os(..) => None,
+      Repr::Simple(..) => None,
+      Repr::Custom(c) => Some(c.error),
+    }
+  }
+}
+----
+
+Things to note:
+
+* Generic `new` function delegates to monomorphic `_new` function.
+  This improves compile time, as less code needs to be duplicated during monomorphization.
+  I think it also improves the runtime a bit: the `_new` function is not marked as inline, so a function call would be generated at the call-site.
+  This is good, because error construction is the cold-path and saving instruction cache is welcome.
+* The `Custom` variant is boxed -- this is to keep overall `size_of` smaller.
+  On-the-stack size of errors is important: you pay for it even if there are no errors!
+* Both these types refer to a `'static` error:
++
+[source,rust]
+----
+type A =   &(dyn error::Error + Send + Sync + 'static);
+type B = Box<dyn error::Error + Send + Sync>
+----
++
+In a ``++dyn Trait + '_++``, the ``'_`` is elided to `'static`, unless the trait object is behind a reference, in which case it is elided as ``&'a dyn Trait + 'a``.
+* `get_ref`, `get_mut` and `into_inner` provide full access to the underlying error.
+  Similarly to `os_error` case, abstraction blurs details, but also provides hooks to get the underlying data as-is.
+
+Similarly, `Display` implementation reveals the most important details about internal representation.
+
+[source,rust]
+----
+impl fmt::Display for Error {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match &self.repr {
+      Repr::Os(code) => {
+        let detail = sys::os::error_string(*code);
+        write!(fmt, "{} (os error {})", detail, code)
+      }
+      Repr::Simple(kind) => write!(fmt, "{}", kind.as_str()),
+      Repr::Custom(c) => c.error.fmt(fmt),
+    }
+  }
+}
+----
+
+To sum up, `std::io::Error`:
+
+* encapsulates its internal representation and optimizes it by boxing large enum variant,
+* provides a convenient way to handle error based on category via `ErrorKind` pattern,
+* fully exposes underlying OS error, if any.
+* can transparently wrap any other error type.
+
+The last point means that `io::Error` can be used for ad-hoc errors, as `&str` and `String` are convertible to `Box<dyn std::error::Error>`:
+
+[source,rust]
+----
+io::Error::new(io::ErrorKind::Other, "something went wrong")
+----
+
+It also can be used as a simple replacement for `anyhow`.
+I *think* some libraries might simplify their error handing with this:
+
+[source,rust]
+----
+io::Error::new(io::ErrorKind::InvalidData, my_specific_error)
+----
+
+For example, https://docs.rs/serde_json/1.0.59/serde_json/fn.from_reader.html[`serde_json`] provides the following method:
+
+[source,rust]
+----
+fn from_reader<R, T>(rdr: R) -> Result<T, serde_json::Error>
+where
+  R: Read,
+  T: DeserializeOwned,
+----
+
+`Read` can fail with `io::Error`, so `serde_json::Error` needs to be able ot represent `io::Error` internally.
+I think this is backwards (but I don't know the whole context, I'd be delighted to be proven wrong!), and the signature should have been this instead:
+
+[source,rust]
+----
+fn from_reader<R, T>(rdr: R) -> Result<T, io::Error>
+where
+  R: Read,
+  T: DeserializeOwned,
+----
+
+Then, `serde_json::Error` wouldn't have `Io` variant and would be stashed into `io::Error` with `InvalidData` kind.
+
+I think `std::io::Error` is a truly marvelous type, which manages to serve many different use-cases without much compromise.
+But can we perhaps do better?
+
+The number one problem with `std::io::Error` is that, when a file-system operation fails, you don't know which path it has failed for!
+This is understandable -- Rust is a systems language, so it shouldn't add much fat over what OS provides natively.
+OS returns an integer return code, and coupling that with a heap-allocated `PathBuf` could be an unacceptable overhead!
+
+****
+I was surprised to learn that std in fact
+https://github.com/rust-lang/rust/blob/e160e5cb80652bc2afe74cb3affbe35b74243ea9/library/std/src/sys/unix/fs.rs#L867-L869[does]
+an allocation for every path-related syscall.
+
+It needs to be there in some form: OS API require that unfortunate zero byte at the end of strings.
+But I wonder if using a stack-allocated buffer for short paths would've made sense.
+Probably not -- paths are not that short usually, and modern allocators handle transient allocations efficiently.
+****
+
+I don't know an obviously good solution here.
+One option would be to add compile time (once we get std-aware cargo) or runtime (a-la `RUST_BACKTRACE`) switch to heap-allocate all path-related IO errors.
+A similarly-shaped problem is that `io::Error` doesn't carry a backtrace.
+
+The other problem is that `std::io::Error` is not as efficient as it could be:
+
+* It's size is pretty big:
++
+[source,rust]
+----
+assert_eq!(size_of::<io::Error>(), 2 * size_of::<usize>());
+----
+
+* For custom case, it incurs double indirection and allocation:
++
+[source,rust]
+----
+enum Repr {
+  Os(i32),
+  Simple(ErrorKind),
+  // First Box :|
+  Custom(Box<Custom>),
+}
+
+struct Custom {
+  kind: ErrorKind,
+  // Second Box :(
+  error: Box<dyn error::Error + Send + Sync>,
+}
+----
+
+I think we can fix this now!
+
+_First_, we can get rid of double indirection by using a thin trait object, a-la
+https://github.com/rust-lang-nursery/failure/blob/135e2a3b9af422d9a9dc37ce7c69354c9b36e94b/src/error/error_impl_small.rs#L9-L18[`failure`] or
+https://github.com/dtolnay/anyhow/blob/840afd84e9dd91ac5340c05afadeecbe45d0b810/src/error.rs#L671-L679[`anyhow`].
+Now that https://doc.rust-lang.org/stable/std/alloc/trait.GlobalAlloc.html[`GlobalAlloc`] exist, it's a relatively straight-forward implementation.
+
+_Second_, we can make use of the fact that pointers are aligned, and stash both `Os` and `Simple` variants into `usize` with the least significant bit set.
+I think we can even get creative and use the _second_ least significant bit, leaving the first one as a niche.
+That way, even something like `io::Result<i32>` can be pointer-sized!
+
+And this concludes the post.
+Next time you'll be designing an error type for your library, take a moment to peer through
+https://github.com/rust-lang/rust/blob/5565241f65cf402c3dbcb55dd492f172c473d4ce/library/std/src/io/error.rs[sources]
+of `std::io::Error`, you might find something to steal!
+
+Discussion on https://www.reddit.com/r/rust/comments/[/r/rust].
+
+.Bonus puzzler
+****
+Take a look at
+https://github.com/rust-lang/rust/blob/e160e5cb80652bc2afe74cb3affbe35b74243ea9/library/std/src/io/error.rs#L542[this line] from the implementation:
+
+[source,rust,highlight=9]
+----
+impl fmt::Display for Error {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match &self.repr {
+      Repr::Os(code) => {
+        let detail = sys::os::error_string(*code);
+        write!(fmt, "{} (os error {})", detail, code)
+      }
+      Repr::Simple(kind) => write!(fmt, "{}", kind.as_str()),
+      Repr::Custom(c) => c.error.fmt(fmt),
+    }
+  }
+}
+----
+
+1. Why is it surprising that this line works?
+2. Why does it work?
+****
