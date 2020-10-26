@@ -9,13 +9,6 @@
   <title>{% if page.title %}{{ page.title }}{% else %}{{ site.title }}{% endif %}</title>
   <meta name="description"
     content="{% if page.excerpt %}{{ page.excerpt | strip_html | strip_newlines | truncate: 160 }}{% else %}{{ site.description }}{% endif %}">
-
-  <link rel="stylesheet" href="{{ "/css/asciidoctor.css" | prepend: site.baseurl }}">
-  <link rel="stylesheet" href="{{ "/css/rouge-github.css" | prepend: site.baseurl }}">
-  <link rel="stylesheet" href="{{ "/css/main.css" | prepend: site.baseurl }}">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Noto+Serif:400,400italic,700,700italic%7COpen+Sans:300">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
-
   <link rel="canonical" href="{{ page.url | replace:'index.html','' | prepend: site.baseurl | prepend: site.url }}">
   <link rel="alternate" type="application/rss+xml" title="{{ site.title }}"
     href="{{ "/feed.xml" | prepend: site.baseurl | prepend: site.url }}">
@@ -51,7 +44,7 @@ main {
     padding-right: 2ch;
 }
 
-header {
+.site-header {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
@@ -61,7 +54,7 @@ header {
     border-bottom: 1px solid rgba(0, 0, 0, .8);
 }
 
-footer {
+.site-footer {
     display: flex;
     justify-content: center;
     align-items: baseline;
@@ -71,19 +64,24 @@ footer {
     border-top: 1px solid rgba(0, 0, 0, .8);
 }
   </style>
+  <link rel="stylesheet" href="{{ "/css/asciidoctor.css" | prepend: site.baseurl }}">
+  <link rel="stylesheet" href="{{ "/css/rouge-github.css" | prepend: site.baseurl }}">
+  <link rel="stylesheet" href="{{ "/css/main.css" | prepend: site.baseurl }}">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Noto+Serif:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
 </head>
 
 <body>
-  <header>
-    <a class="nav-link site-title" href="{{ site.baseurl }}/">{{ site.title }}</a>
+  <header class="site-header">
+    <a class="-title" href="{{ site.baseurl }}/">{{ site.title }}</a>
 
-    <nav class="site-nav">
+    <nav>
       {% for my_page in site.pages %}
       {% if my_page.title %}
-      <a class="nav-link" href="{{ my_page.url | prepend: site.baseurl }}">{{ my_page.title }}</a>
+      <a href="{{ my_page.url | prepend: site.baseurl }}">{{ my_page.title }}</a>
       {% endif %}
       {% endfor %}
-      <a class="nav-link" href="https://ferrous-systems.com/">Consulting</a>
+      <a href="https://ferrous-systems.com/">Consulting</a>
     </nav>
   </header>
 
@@ -91,21 +89,21 @@ footer {
     {{ content }}
   </main>
 
-  <footer>
+  <footer class="site-footer">
     <p>
-      <a class="footer-link" href="https://github.com/matklad/matklad.github.io/edit/master/{{ page.path}}">
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/{{ page.path}}">
         <i class="fa fa-edit"></i> fix typo
       </a>
 
-      <a href="{{ "/feed.xml" | prepend: site.baseurl }}" class="footer-link">
+      <a href="{{ "/feed.xml" | prepend: site.baseurl }}">
         <i class="fa fa-rss"></i> rss
       </a>
 
-      <a class="footer-link" href="https://github.com/matklad">
+      <a href="https://github.com/matklad">
         <i class="fa fa-github"></i> matklad
       </a>
 
-      <a class="footer-link" href="https://ferrous-systems.com/">
+      <a href="https://ferrous-systems.com/">
         <i class="fa fa-briefcase"></i> Ferrous Systems
       </a>
     </p>
