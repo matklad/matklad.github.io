@@ -602,7 +602,7 @@ The same argument applies; after we've consumed a prefix operator, the operand c
 
 Ok, this is getting stupid.
 If using ``++((), u8)++`` "`just worked`" for prefix operators, can ``++(u8, ())++`` deal with postfix ones?
-Well, let's add `!` for factorials. It should bind tighter than `-`, because `-92!` is obviously more useful than `-92!`. So, the familar drill -- new priority function, shifting priority of `.` (this bit _is_ annoying in Pratt parsers), copy-pasting the code...
+Well, let's add `!` for factorials. It should bind tighter than `-`, because `-(92!)` is obviously more useful than `(-92)!`. So, the familar drill -- new priority function, shifting priority of `.` (this bit _is_ annoying in Pratt parsers), copy-pasting the code...
 
 [source,rust]
 ----
