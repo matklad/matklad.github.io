@@ -1,0 +1,240 @@
+= Call Site Dependency Injection
+
+This post documents call site dependency injection pattern.
+It is a rather low level specimen and has little to do with enterprise DI.
+The pattern is somewhat Rust-specific.
+
+Usually, when you implement a type which needs some user-provided functionality, the first thought is to supply it in constructor:
+
+[source,rust]
+----
+struct Engine {
+    config: Config,
+    ...
+}
+
+impl Engine {
+    fn new(config: Config) -> Engine { ... }
+    fn go(&mut self) { ... }
+}
+----
+
+In this example, we implement `Engine` and the caller supplies `Config`.
+
+An alternative is to pass the dependency to every method call:
+
+[source,rust]
+----
+struct Engine {
+    ...
+}
+
+impl Engine {
+    fn new() -> Engine { ... }
+    fn go(&mut self, config: &Config) { ... }
+}
+----
+
+In Rust, the latter (call-site injection) sometimes works with lifetimes better.
+Let's see the examples!
+
+== Lazy Field
+
+In the first example, we want to lazily compute a field's value based on other fields.
+Something like this:
+
+[source,rust]
+----
+struct Widget {
+    name: String,
+    name_hash: Lazy<u64>,
+}
+
+impl Widget {
+    fn new(name: String) -> Widget {
+        Widget {
+            name,
+            name_hash: Lazy::new(|| {
+                compute_hash(&self.name)
+            }),
+        }
+    }
+}
+----
+
+The problem with this design is that it doesn't work in Rust.
+The closure in `Lazy` needs access to `self`, and that would create a self-referential data structure!
+
+The solution is to supply the closure at the point where the `Lazy` is used:
+
+[source,rust]
+----
+struct Widget {
+    name: String,
+    name_hash: OnceCell<u64>,
+}
+
+impl Widget {
+    fn new(name: String) -> Widget {
+        Widget {
+            name,
+            name_hash: OnceCell::new(),
+        }
+    }
+    fn name_hash(&self) -> u64 {
+        *self.name_hash.get_or_init(|| {
+            compute_hash(&self.name)
+        })
+    }
+}
+----
+
+== Indirect Hash Table
+
+The next example is about plugging a custom hash function into a hash table.
+In Rust's standard library, this is only possible on the type level, by implementing the `Hash` trait for a type.
+A more general design would be to parameterize the table with a hash function at run-time.
+This is what {cpp} does.
+However in Rust this won't be general enough.
+
+Consider a string interner, which stores strings in a vector and additionally maintains a hash-based index:
+
+[source,rust]
+----
+struct Interner {
+    vec: Vec<String>,
+    set: HashSet<usize>,
+}
+
+impl Interner {
+    fn intern(&mut self, s: &str) -> usize { ... }
+    fn lookup(&self, i: usize) -> &str { ... }
+}
+----
+
+The `set` field stores the strings in a hash table, but it represents them using indices into neighboring `vec`.
+
+Constructing the `set` with a closure wont work for the same reason `Lazy` didn't work -- this creates a self-referential structure.
+In {cpp} there exists a work-around -- it is possible to box the `vec` and share a stable pointer between `Interner` and the closure.
+In Rust, that would create aliasing, preventing the use of `&mut Vec`.
+
+Curiously, using a sorted vec instead of a hash works with std APIs:
+
+[source,rust]
+----
+struct Interner {
+    vec: Vec<String>,
+    // Invariant: sorted
+    set: Vec<usize>,
+}
+
+impl Interner {
+    fn intern(&mut self, s: &str) -> usize {
+        let idx = self.set.binary_search_by(|&idx| {
+            self.vec[idx].cmp(s)
+        });
+        match idx {
+            Ok(idx) => self.set[idx],
+            Err(idx) => {
+                let res = self.vec.len();
+                self.vec.push(s.to_string());
+                self.set.insert(idx, res);
+                res
+            }
+        }
+    }
+    fn lookup(&self, i: usize) -> &str { ... }
+}
+----
+
+This is because the closure is supplied at the call site rather than at the construction site.
+
+The hashbrown crate provides this style of API for hashes via https://docs.rs/hashbrown/0.9.1/hashbrown/hash_map/struct.HashMap.html#method.raw_entry_mut[RawEntry].
+
+== Per Container Allocators
+
+The third example is from the Zig programming language.
+Unlike Rust, Zig doesn't have a blessed global allocator.
+Instead, containers in Zig come in two flavors.
+The "`Managed`" flavor accepts an allocator as a constructor parameter and stores it as a field
+(https://github.com/ziglang/zig/blob/1590ed9d6aea95e5a21e3455e8edba4cdb374f2c/lib/std/array_list.zig#L36-L43[Source]).
+The "`Unmanaged`" flavor adds an `allocator` parameter to every method
+(https://github.com/ziglang/zig/blob/1590ed9d6aea95e5a21e3455e8edba4cdb374f2c/lib/std/array_list.zig#L436-L440[Source]).
+
+The second approach is more frugal -- it is possible to use a single allocator reference with many containers.
+
+== Fat Pointers
+
+The final example comes from the Rust language itself.
+To implement dynamic dispatch, Rust uses fat pointers, which are two words wide.
+The first word points to the object, the second one to the vtable.
+These pointers are manufactured at the point where a concrete type is used generically.
+
+This is different from {cpp}, where vtable pointer is embedded into the object itself during construction.
+
+***
+
+Having seen all these examples, I am warming up to Scala-style implicit parameters.
+Consider this hypothetical bit of Rust code with Zig-style vectors:
+
+[source,rust]
+----
+{
+    let mut a = get_allocator();
+    let mut xs = Vec::new();
+    let mut ys = Vec::new();
+    xs.push(&mut a, 1);
+    ys.push(&mut a, 2);
+}
+----
+
+The problem here is `Drop` -- freeing the vectors requires access to the allocator, and it's unclear how to provide one.
+Zig dodges the problem by using defer statement rather than destructors.
+In Rust with implicit parameters, I imagine the following would work:
+
+[source,rust]
+----
+impl<implicit a: &mut Allocator, T> Drop for Vec<T>
+----
+
+***
+
+To conclude, I want to share one last example where CSDI thinking helped me to discover a better application-level architecture.
+
+A lot of rust-analyzer's behavior is configurable.
+There are toggles for inlay hints, completion can be tweaked, and some features work differently depending on the editor.
+The first implementation was to store a global `Config` struct together with the rest of analysis state.
+Various subsystems then read bits of this `Config`.
+To avoid coupling distinct features together via this shared struct, config keys were dynamic:
+
+[source,rust]
+----
+type Config = HashMap<String, String>;
+----
+
+This system worked, but felt rather awkward.
+
+The current implementation is much simpler.
+Rather than storing a single `Config` as a part of the state, each method now accepts a specific config parameter:
+
+[source,rust]
+----
+fn get_completions(
+    analysis: &Analysis,
+    config: &CompletionConfig,
+    file: FileId,
+    offset: usize,
+)
+
+fn get_inlay_hints(
+    analysis: &Analysis,
+    config: &HintsConfig,
+    file: FileId,
+)
+----
+
+Not only the code is simpler, it is more flexible.
+Because configuration is no longer a part of the state, it is possible to use different configs for the same functionality depending on the context.
+For example, explicitly invoked completion might be different from the asynchronous one.
+
+Discussion on https://old.reddit.com/r/rust/[/r/rust].
