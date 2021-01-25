@@ -317,6 +317,24 @@ where
 
 Then, `serde_json::Error` wouldn't have `Io` variant and would be stashed into `io::Error` with `InvalidData` kind.
 
+.Addendum, 2021-01-25
+****
+Re-reading https://sled.rs/errors.html[this article], I now think that the right return type would be:
+
+[source,rust]
+----
+fn from_reader<R, T>(
+  rdr: R,
+) -> Result<Result<T, serde_json::Error>, io::Error>
+where
+  R: Read,
+  T: DeserializeOwned,
+----
+
+This forces separate handling of IO and deserialization errors, which makes sense in this case.
+IO error is probably a hardware/environment problem outside of the domain of the program, while serialization error most likely indicates a bug somewhere in the system.
+****
+
 I think `std::io::Error` is a truly marvelous type, which manages to serve many different use-cases without much compromise.
 But can we perhaps do better?
 
