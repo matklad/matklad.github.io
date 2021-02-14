@@ -1,0 +1,180 @@
+= For the Love of Macros
+
+I've been re-reading Ted Kaminski blog about software design.
+I highly recommend all the posts, especially the earlier ones
+(here's https://www.tedinski.com/2018/01/16/how-humans-write-programs.html[the first]).
+He manages to offer design advice which is both non-trivial and sound (a subjective judgment of course), a rare specimen!
+
+Anyway, one of the insights of the series is that, when designing an abstraction, we always face the inherent tradeoff between power and properties.
+The more we can express using a particular abstraction, the less we can say about the code using it.
+Our human bias for more expressive power is not inherent however.
+This is evident in programming language communities, where users unceasingly ask for new features and language designers say no.
+
+Macros are a language feature which is very far in the "`more power`" side of the chart.
+Macros give you an ability to abstract over the source code.
+In exchange, you give up the ability to (automatically) reason about the surface syntax.
+As a specific https://rust-analyzer.github.io/blog/2020/03/30/macros-vs-rename.html[example], rename refactoring doesn't work 100% reliably in languages with powerful macro systems.
+
+I do think that, in the ideal world, this is a wrong trade for a language which wants to scale to gigantic projects.
+The ability to automatically reason about and transform source code gains in importance when you add more programmers, more years, and more millions of lines of code.
+But take this with a huuuge grain of salt -- I am obviously biased, having spent several years developing Rust IDEs.
+
+That said, macros have a tremendous appeal -- they are a language designer's duct tape.
+Macros are rarely the best tool for the job, but they can do almost any job.
+The language design is incremental.
+A macro system relives the design pressure by providing a ready poor man's substitute for many features.
+
+In this post, I want to explore what macros are used for in Rust.
+The intention is to find solutions which do not give up the "`reasoning about source code`" property.
+
+== String Interpolation
+
+By far, the most common use-case is the `format!` family of macros.
+The macro-less solution here is straightforward -- a string interpolation syntax:
+
+[source,rust]
+----
+let key = "number";
+let value = || 92;
+let f = f"$key: ${values()}";
+assert_eq!(t.to_string(), "number: 92");
+----
+
+In Rust, interpolation probably shouldn't construct a string directly.
+Instead, it can produce a value implementing `Display` (just like `format_args!`), which can avoid allocations.
+An interesting extension would be to allow iterating over format string pieces.
+That way, the interpolation syntax could be used for things like SQL statements or command line arguments, without the fear of introducing injection vulnerabilities:
+
+[source,rust]
+----
+let arg = "my dir";
+let cmd = f"ls $arg".to_cmd();
+assert_eq!(cmd.to_string(), "ls 'my dir'");
+----
+
+https://julialang.org/blog/2012/03/shelling-out-sucks/[This post] about Julia programming language explains the issue.
+https://github.com/matklad/xshell[`xshell`] crate implements this idea for Rust.
+
+== Derives
+
+I think the second most common, and probably the most important use of macros in Rust are derives.
+Rust is one of the few languages which gets equality right (and forbids comparing apples and oranges), but this crucially depends on the ability to `derive(Eq)`.
+Common solutions in this space are special casing in the compiler (Haskell's `deriving`) or runtime reflection.
+
+But the solution I am most excited about are C# https://devblogs.microsoft.com/dotnet/introducing-c-source-generators/[source generators].
+Which are nothing new -- this is just the old (source) code generation, just with a nice quality of implementation.
+You can supply custom code which gets run during the build and which can read existing sources and generate additional files, which are then added back to the compilation.
+
+The beauty of this solution is that it moves all the complexity out of the language and into the build system.
+This means that you get baseline tooling support for free.
+Goto definition definition for generated code? Just works.
+Want to step into some serialization code while debugging? There's actual source code on disk, so feel free to!
+You are more of a `printf` person? Well, you'd need to convince the build system to not stomp over your changes, but, otherwise, why not?
+
+Additionally, source generators turn out to be significantly _more_ expressive.
+They can call into the Roslyn compiler to analyzer the source code, so they are capable of type-directed code generation.
+
+To be useful, source generators require some language level support for splitting a single entity across several files.
+In C#, partial classes play this role.
+
+
+
+== Domain Specific Languages
+
+The raison d'être of macros is implementation of embedded DSLs.
+We want to introduce custom syntax within the language for succinctly modeling the program's domain.
+For example, a macro can be used to embed HTML fragments in Rust code.
+
+To me personally, eDSL is not problem to be solved, but just a problem.
+Introducing a new sublanguage (even if small) spends a lot of cognitive complexity budget.
+If you need it once in a while, better stick to just chaining together somewhat verbose function calls.
+If you need it a lot, it makes sense to introduce external DSL, with a compiler, a language server, and all the tooling that makes programming productive.
+To me, macro-based DSLs just don't fell like an interesting point on the cost-benefit curve.
+
+That being said, the Kotlin programming language solves the problem of strongly-typed, tooling-friendly DSL nicely (https://kotlinlang.org/docs/type-safe-builders.html#how-it-works[example]).
+Infuriatingly, it's hard to point what _specifically_ is the solution.
+It's ... just the concrete syntax mostly.
+Here are some ingredients:
+
+* The syntax for closures is `++{ arg -> body }++`, or just `{ body }`, so closures syntactically resemble blocks.
+* Extension methods (which are just sugar for static methods).
+* Java style implicit `this`, which introduces names into scope without an explicit declaration.
+* https://boats.gitlab.io/blog/post/the-problem-of-effects/[TCP-preserving] inline closures (this the single non-syntactical feature)
+
+Nonetheless, this was not enough to implement Jetpack Compose UI DSL, it also needs a compiler plugin.
+
+== sqlx
+
+An interesting case of a DSL I want to call out is https://docs.rs/sqlx/0.5.1/sqlx/macro.query.html[`sqlx::query`].
+It allows one to write code like this:
+
+[source,rust]
+----
+let account =
+  sqlx::query!("select (1) as id, 'Herp Derpinson' as name")
+    .fetch_one(&mut conn)
+    .await?;
+
+// anonymous struct has `#[derive(Debug)]` for convenience
+println!("{:?}", account);
+println!("{}: {}", account.id, account.name);
+----
+
+This I think is one of the few cases where eDSL does really pull its weight.
+I don't know how to do this without macros.
+Using string interpolation (the advanced version to protect from injection), it is possible to specify the query.
+Using a source generator, it is possible to check the syntax of the query and verity the types, to, eg, raise a type error in this case:
+
+[source,rust]
+----
+let (id, name): (i32, f32) =
+  query("select (1) as id, 'Herp Derpinson' as name")
+    .fetch_one(&mut conn)
+    .await?;
+----
+
+But this won't be enough to generate an anonymous struct, or to get rid of dynamic casts.
+
+== Conditional Compilation
+
+Rust also uses macros for conditional compilation.
+This use case convincingly demonstrates "`lack of properties`" aspect of power.
+Dealing with feature combinations is a perpetual headache for Cargo.
+Users have to repeatedly recompile large chunks of the crate graph when feature flags change.
+Catching a type error on CI with `cargo test --no-default-features` is pretty annoying, especially if you did run `cargo test` before submitting a PR.
+"`Additive Features`" is an uncheckable wishful thinking.
+
+In this case, I don't know a good macro-less alternative.
+But, in principle, this seems doable, if conditional compilation is pushed further down the compiler pipeline, to the code generation and linking stage.
+Rather than discarding some code early during parsing, the compiler can select the platform-specific version just before producing machine code for a function.
+Before that, it checks that all conditionally-compiled versions of the function have the same interface.
+That way, platform-specific type errors are impossible.
+
+== Placeholder Syntax
+
+The final use-case I want to cover is that of a placeholder syntax.
+Rust's `macro_call!(...)` syntax carves a well-isolated region where anything goes, syntax wise, as long as the parenthesis are balanced.
+In theory, this allow language designers to experiment with provisional syntax before setting something in stone.
+In practice, it looks like this is not at all that beneficial?
+There was some opposition to stabilizing postfix `.await` without going via intermediate period with `await!` macro.
+And, after stabilization, all _syntax_ discussions were immediately forgotten?
+On the other hand, we did have `++try! -> ?++` transition, and I don't think it helped to uncover any design pitfalls?
+At least, we managed to stabilize the https://internals.rust-lang.org/t/can-try-and-use-the-into-trait-instead-of-from/6714[unnecessary restrictive] desugaring on that one.
+
+---
+
+For conclusion, I want to circle back to source generators.
+What _exactly_ makes them easier for tooling than macros?
+I think the following three properties do.
+_First_, both input and output is, fundamentally, text.
+There's no intermediate representation (like token trees), which is used by this meta-programming facility.
+This means that it doesn't need to be integrated deeply with the compiler.
+Of course, internally the tool is free to parse, typecheck and transform the code however it likes.
+_Second_, there is a phase distinction.
+Source generators are executed once, in unordered fashion.
+There's no back and forth between meta programming and name resolution, which, again, allows to keep "`meta`" part outside.
+_Third_, source generators can only add code, they can not change the meaning of the existing code.
+This means that semantically sound source code transformations remains so in the presence of a code generator.
+
+That's all!
+Discussion on https://old.reddit.com/r/rust/comments/ljnkwg/blog_post_for_the_love_of_macros/[/r/rust].
