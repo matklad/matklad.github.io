@@ -1,0 +1,114 @@
+= Goroutines Are Not Significantly Lighter Than Threads
+
+The most commonly cited drawback of OS-level threads is that they use a lot of RAM.
+This is not true on Linux.
+
+Let's compare memory footprint of 10_000 Linux threads with 10_000 goroutines.
+We spawn 10k workers, which sleep for about 10 seconds, waking up every 10 milliseconds.
+Each worker is staggered by a pseudorandom delay up to 200 milliseconds to avoid the thundering herd problem.
+
+.main.rs
+[source,rust]
+----
+use std::{thread, time::Duration};
+
+fn main() {
+    let mut threads = Vec::new();
+    for i in 0u32..10_000 {
+        let t = thread::spawn(move || {
+            let bad_hash = i.wrapping_mul(2654435761) % 200_000;
+            thread::sleep(Duration::from_micros(bad_hash as u64));
+            for _ in 0..1000 {
+                thread::sleep(Duration::from_millis(10));
+            }
+        });
+        threads.push(t);
+    }
+
+    for t in threads {
+        t.join().unwrap()
+    }
+}
+----
+
+.main.go
+[source,go]
+----
+package main
+
+import (
+    "sync"
+    "time"
+)
+
+func main() {
+    var wg sync.WaitGroup
+    for i := uint32(0); i < 10_000; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            bad_hash := (i * 2654435761) % 200_000
+            time.Sleep(time.Duration(bad_hash) * time.Microsecond)
+            for j := 0; j < 1000; j++ {
+                time.Sleep(10 * time.Millisecond)
+            }
+        }()
+    }
+    wg.Wait()
+}
+----
+
+We use `time` utility to measure memory usage:
+
+.t
+[source,sh]
+----
+#!/bin/sh
+command time --format 'real %es\nuser %Us\nsys  %Ss\nrss  %Mk' "$@"
+----
+
+The results:
+
+[source]
+----
+λ rustc main.rs -C opt-level=3 && ./t ./main
+real 10.35s
+user 4.96s
+sys  16.06s
+rss  94472k
+
+λ go build main.go && ./t ./main
+real 10.92s
+user 13.30s
+sys  0.55s
+rss  34924k
+----
+
+A thread is only **3** times as large as a goroutine.
+Absolute numbers are also significant: 10k threads require only 100 megabytes of overhead.
+If the application does 10k concurrent things, 100mb might be negligible.
+
+---
+
+Note that it is wrong to use this benchmark to compare performance of threads and goroutines.
+The workload is representative for measuring absolute memory overhead, but is not representative for time overhead.
+
+That being said, it is possible to explain why threads need 21 seconds of CPU time while goroutines need only 14.
+Go runtime spawns a thread per CPU-core, and tries hard to keep each goroutine tied to specific thread (and, by extension, CPU).
+Threads by default migrate between CPUs, which incurs synchronization overhead.
+Pining threads to cores in a round-robin fashion removes this overhead:
+
+[source]
+----
+λ cargo build --release && t ./target/release/main --pin-to-core
+    Finished release [optimized] target(s) in 0.00s
+real 10.36s
+user 3.01s
+sys  9.08s
+rss  94856k
+----
+
+The total CPU time now is approximately the same, but the distribution is different.
+On this workload, goroutine scheduler spends roughly the same amount of cycles in the userspace that the thread scheduler spends in the kernel.
+
+Code for the benchmarks is available here: https://github.com/matklad/10k_linux_threads[matklad/10k_linux_threads].
