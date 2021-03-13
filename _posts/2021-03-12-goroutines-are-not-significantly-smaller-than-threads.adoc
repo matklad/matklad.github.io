@@ -1,4 +1,5 @@
-= Goroutines Are Not Significantly Lighter Than Threads
+= Goroutines Are Not Significantly Smaller Than Threads
+:page-redirect_from: /2021/03/12/goroutines-are-not-significantly-lighter-than-threads.html
 
 The most commonly cited drawback of OS-level threads is that they use a lot of RAM.
 This is not true on Linux.
@@ -96,7 +97,7 @@ The workload is representative for measuring absolute memory overhead, but is no
 That being said, it is possible to explain why threads need 21 seconds of CPU time while goroutines need only 14.
 Go runtime spawns a thread per CPU-core, and tries hard to keep each goroutine tied to specific thread (and, by extension, CPU).
 Threads by default migrate between CPUs, which incurs synchronization overhead.
-Pining threads to cores in a round-robin fashion removes this overhead:
+Pinning threads to cores in a round-robin fashion removes this overhead:
 
 [source]
 ----
