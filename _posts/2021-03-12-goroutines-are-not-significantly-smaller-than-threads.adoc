@@ -89,6 +89,15 @@ A thread is only **3** times as large as a goroutine.
 Absolute numbers are also significant: 10k threads require only 100 megabytes of overhead.
 If the application does 10k concurrent things, 100mb might be negligible.
 
+.Correction
+****
+As pointed out in comments, using solely RSS to compare memory usage of goroutines and threads is wrong.
+Thread bookkeeping is managed by the kernel, using kernel's own data structures, so not all overhead is accounted for by RSS.
+In contrast, goroutines are managed by the userspace, and RSS does account for this.
+
+In particular, 10k threads with default stack sizes need about 40mb of page tables to map virtual memory.
+****
+
 ---
 
 Note that it is wrong to use this benchmark to compare performance of threads and goroutines.
