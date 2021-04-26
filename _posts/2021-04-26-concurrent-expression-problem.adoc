@@ -1,0 +1,110 @@
+= Concurrent Expression Problem
+
+I am struggling with designing concurrent code.
+In this post, I want to share a model problem which exemplifies some of the issues.
+It is reminiscent of the famous expression problem in that there's a two dimensional design grid, and a win along one dimension translates to a loss along the other.
+If you want a refresher on the expression problem (not required to understand this article), take a look at https://www.tedinski.com/2018/02/27/the-expression-problem.html[this post].
+It's not canonical, but I like it.
+
+Without further ado, concurrent expression problem:
+
+****
+Define a set of concurrent activities which interact with shared mutable state with invariants, such that it is easy to introduce new activities and additional invariants.
+****
+
+I am not sure that's exactly the right formulation, I feel like I am straining it a bit to fit the expression problem shape.
+The explanation that follows matters more.
+
+I think there are two ways to code the system described.
+The first approach is to us a separate thread / goroutine / async task for each concurrent activity, with some synchronization around the access to the shared state.
+The alternative approach is to write an explicit state machine / actor loop to receive the next event and process it.
+
+In the first scheme, adding new activities is easy, as you just write strait-line code with maybe some ``.await``s here and there.
+In the second scheme, it's easy to check and act on invariants, as there is only a single place where the state is modified.
+
+Let's take a look at a concrete example.
+We'll be using a pseudo code for a language with cooperative concurrency and explicit yield points (think Python with async/await).
+
+The state consists of two counters.
+One activity decrements the first counter every second.
+The other activity does the same to the other counter.
+When _both_ counters reach zero, we want to print something.
+
+The first approach would look roughly like this:
+
+[source,rust]
+----
+struct State { c1: u32, c2: u32 }
+
+async fn act1(state: State) {
+  while state.c1 > 0 {
+    sleep(1).await;
+    state.c1 -= 1;
+    if state.c1 == 0 && state.c2 == 0 {
+      print("both are zero")
+    }
+  }
+}
+
+async fn act2(state: State) {
+  while state.c2 > 0 {
+    sleep(1).await;
+    state.c2 -= 1;
+    if state.c1 == 0 && state.c2 == 0 {
+      print("both are zero")
+    }
+  }
+}
+----
+
+And the second one like this:
+
+[source,rust]
+----
+async fn run(state: State) {
+  loop {
+    let event = next_event().await;
+    match event {
+      Event::Dec1 => {
+        state.c1 -= 1;
+        if state.c1 > 0 {
+          send_event_with_delay(Event::Dec1, 1)
+        }
+      }
+      Event::Dec2 => {
+        state.c2 -= 1;
+        if state.c2 > 0 {
+          send_event_with_delay(Event::Dec2, 1)
+        }
+      }
+    }
+    if state.c1 == 0 && state.c2 == 0 {
+      print("both are zero")
+    }
+  }
+}
+----
+
+It's much easier to see what the concurrent activities are in the first case.
+It's more clear how the overall state evolves in the second case.
+
+
+The second approach also gives you more control -- if several events are ready, you can process them in the order of priority (usually it makes sense to prioritize writes over reads).
+You can trivially add some logging at the start and end of the loop to collect data about slow events and overall latency.
+But the hit to the programming model is big.
+If you are new to the code and don't know which conceptual activities are there, it's hard to figure out that just from the code.
+The core issue is that causal links between asynchronous events are not reified in the code:
+
+```rust
+match {
+  Event::X => { do_x() },
+  Event::Y => { do_y() },
+}
+
+// vs
+
+async fn do_xy() {
+  do_x().await;
+  do_y().await;
+}
+```
