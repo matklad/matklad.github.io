@@ -261,7 +261,7 @@ let new_cap = (cap.max(name.len()) + 1).next_power_of_two();
 Just doubling won't be enough, we also need to make sure that the new string actually fits.
 
 We could have used a single `bufs: Vec<String>` in place of both `buf` and `full`.
-The benefit of splitting the last buffer into a dedicated field is that we statically guarantee that there's at last one buffer.
+The benefit of splitting the last buffer into a dedicated field is that we statically guarantee that there's at least one buffer.
 That way, we void a bounds check and/or `.unwrap` when accessing the active buffer.
 
 We also use `&'static str` to fake interior references.
