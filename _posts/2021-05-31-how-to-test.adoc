@@ -80,8 +80,13 @@ For binary search example, it will look like this:
 [source,rust]
 ----
 #[track_caller]
-fn check(input_haystack: &[i32], input_needle: i32, expected_result: bool) {
-  let actual_result = binary_search(input_haystack, &input_needle);
+fn check(
+  input_haystack: &[i32],
+  input_needle: i32,
+  expected_result: bool,
+) {
+  let actual_result =
+    binary_search(input_haystack, &input_needle);
   assert_eq!(expected_result, actual_result);
 }
 
@@ -382,8 +387,12 @@ Rather, there is a _single_ test that looks like this:
 #[test]
 fn test_all() {
   for file in read_dir("./test_data/in") {
-    let input = read_to_string(format!("./test_data/in/{}", file));
-    let output = read_to_string(format!("./test_data/out/{}", file));
+    let input = read_to_string(
+      &format!("./test_data/in/{}", file),
+    );
+    let output = read_to_string(
+      &format!("./test_data/out/{}", file),
+    );
     check(input, output)
   }
 }
