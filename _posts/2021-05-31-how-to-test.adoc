@@ -103,8 +103,13 @@ Now, when the API of the `binary_search` function changes, we only need to adjus
 [source,rust,highlight=3]
 ----
 #[track_caller]
-fn check(input_haystack: &[i32], input_needle: i32, expected_result: bool) {
-  let actual_result = binary_search(input_haystack, &input_needle).is_ok();
+fn check(
+  input_haystack: &[i32],
+  input_needle: i32,
+  expected_result: bool,
+) {
+  let actual_result =
+    binary_search(input_haystack, &input_needle).is_ok();
   assert_eq!(expected_result, actual_result);
 }
 ----
