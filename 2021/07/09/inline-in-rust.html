@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Inline In Rust</title>
+  <meta name="description"
+    content="There&#8217;s a lot of tribal knowledge surrounding #[inline] attribute in Rust.I often find myself teaching how it works, so I finally decided to write this...">
+  <link rel="canonical" href="https://matklad.github.io//2021/07/09/inline-in-rust.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Inline In Rust</h1>
+  <div class="post-meta sect1">Jul 9, 2021</div>
+  <div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>There&#8217;s a lot of tribal knowledge surrounding <a href="https://doc.rust-lang.org/reference/attributes/codegen.html#the-inline-attribute"><code>#[inline]</code></a> attribute in Rust.
+I often find myself teaching how it works, so I finally decided to write this down.</p>
+</div>
+<div class="paragraph">
+<p>Caveat Emptor: this is what I know, not necessary what is true.
+Additionally, exact semantics of <code>#[inline]</code> is not set in stone and may change in future Rust versions.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="why-inlining-matters"><a class="anchor" href="#why-inlining-matters"></a>Why Inlining Matters?</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Inlining is an optimizing transformation which replaces a call to a function with its body.</p>
+</div>
+<div class="paragraph">
+<p>To give a trivial example, during compilation the compiler can transform this code:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">f</span><span class="p">(</span><span class="n">w</span><span class="p">:</span> <span class="nb">u32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">u32</span> <span class="p">{</span>
+    <span class="nf">inline_me</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">inline_me</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">u32</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">u32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">u32</span> <span class="p">{</span>
+    <span class="n">x</span> <span class="o">*</span> <span class="n">y</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Into this code:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">f</span><span class="p">(</span><span class="n">w</span><span class="p">:</span> <span class="nb">u32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">u32</span> <span class="p">{</span>
+    <span class="n">w</span> <span class="o">*</span> <span class="mi">2</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>To paraphrase <a href="https://www.clear.rice.edu/comp512/Lectures/Papers/1971-allen-catalog.pdf">A Catalogue of Optimizing Transformations</a> by <a href="https://en.wikipedia.org/wiki/Frances_Allen">Frances Allen</a> and <a href="https://en.wikipedia.org/wiki/John_Cocke">John Cocke</a>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>There are many obvious advantages to inlining; two are:
+
+a. There is no function call overhead whatsoever.
+b. Caller and callee are optimized together. Advantage can be taken
+   of particular argument values and relationships: constant arguments
+   can be folded into the code, invariant instructions in the callee
+   can be moved to infrequently executed areas of the caller, etc.</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>In other words, for an ahead of time compiled language inlining is the mother of all other optimizations.
+It gives the compiler the necessary context to apply further transformations.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="inlining-and-separate-compilation"><a class="anchor" href="#inlining-and-separate-compilation"></a>Inlining and Separate Compilation</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Inlining is at odds with another important idea in compilers&#8201;&#8212;&#8201;that of separate compilation.
+When compiling big programs, it is desirable to separate them into modules which can be compiled independently to:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Process everything in parallel.</p>
+</li>
+<li>
+<p>Scope incremental recompilations to individual changed modules.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>To achieve separate compilation, compilers expose signatures of functions, but keep function bodies invisible to other modules, preventing inlining.
+This fundamental tension is what makes <code>#[inline]</code> in Rust trickier than just a hint for the compiler to inline the function.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="inlining-in-rust"><a class="anchor" href="#inlining-in-rust"></a>Inlining in Rust</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>In Rust, a unit of (separate) compilation is a crate.
+If a function <code>f</code> is defined in a crate <code>A</code>, then all calls to <code>f</code> from within <code>A</code> can be inlined, as the compiler has full access to <code>f</code>.
+If, however, <code>f</code> is called from some downstream crate <code>B</code>, such calls can&#8217;t be inlined.
+<code>B</code> has access only to the signature of <code>f</code>, not its body.</p>
+</div>
+<div class="paragraph">
+<p>That&#8217;s where the main usage of <code>#[inline]</code> comes from&#8201;&#8212;&#8201;it enables cross-crate inlining.
+Without <code>#[inline]</code>, even the most trivial of functions can&#8217;t be inlined across the crate boundary.
+The benefit is not without a cost&#8201;&#8212;&#8201;the compiler implements this by compiling a separate copy of the <code>#[inline]</code> function with every crate it is used in, significantly increasing compile times.</p>
+</div>
+<div class="paragraph">
+<p>Besides <code>#[inline]</code>, there are two more exceptions to this.
+Generic functions are implicitly inlinable.
+Indeed, the compiler can only compile a generic function when it knows the specific type arguments it is instantiated with.
+As that is known only in the calling crate, bodies of generic functions have to be always available.</p>
+</div>
+<div class="paragraph">
+<p>The other exception is link-time optimization.
+LTO opts out of separate compilation&#8201;&#8212;&#8201;it makes bodies of all functions available, at the cost of making compilation much slower.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="inlining-in-practice"><a class="anchor" href="#inlining-in-practice"></a>Inlining in Practice</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Now that the underlying semantics is explained, it&#8217;s possible to infer some rule-of-thumbs for using <code>#[inline]</code>.</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, it&#8217;s not a good idea to apply <code>#[inline]</code> indiscriminately, as that makes compile time worse.
+If you don&#8217;t care about compile times, a much better solution is to set <code>lto = true</code> in Cargo profile (<a href="https://doc.rust-lang.org/cargo/reference/profiles.html#lto">docs</a>).</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, it usually isn&#8217;t necessary to apply <code>#[inline]</code> to private functions&#8201;&#8212;&#8201;within a crate, the compiler generally makes good inline decisions.
+There&#8217;s <a href="https://twitter.com/ManishEarth/status/936084757212946432">a joke</a> that LLVM&#8217;s heuristic for when the function should be inlined is &#8220;yes&#8221;.</p>
+</div>
+<div class="paragraph">
+<p><em>Third</em>, when building an application, apply <code>#[inline]</code> reactively when profiling shows that a particular small function is a bottleneck.
+Consider using lto for releases.
+It might make sense to proactively <code>#[inline]</code> trivial public functions.</p>
+</div>
+<div class="paragraph">
+<p><em>Fourth</em>, when building libraries, proactively add <code>#[inline]</code> to small non-generic functions.
+Pay special attention to impls: <code>Deref</code>, <code>AsRef</code> and the like often benefit from inlining.
+A library can&#8217;t anticipate all usages upfront, it makes sense to not prematurely pessimize future users.
+Note that <code>#[inline]</code> is not transitive: if a trivial public function calls a trivial private function, you need to <code>#[inline]</code> both.
+See <a href="https://github.com/matklad/benchmarks/tree/91171269f0a6e260a27111d07661021a89d20085/rust-inline">this benchmark</a> for details.</p>
+</div>
+<div class="paragraph">
+<p><em>Fifth</em>, mind generic functions.
+It&#8217;s not too wrong to say that generic functions are implicitly inline.
+As a result, they often are a cause for code bloat.
+Generic functions, especially in libraries, should be written to minimize unwanted inlining.
+To give an example from <a href="https://github.com/bytecodealliance/wasm-tools/blob/0486fb4de505b8116a0034bdde4918cd783325b9/crates/wat/src/lib.rs#L214-L222">wat</a>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+</pre></td><td class="code"><pre><span class="c">// Public, generic function.</span>
+<span class="c">// Will cause code bloat if not handled carefully!</span>
+<span class="k">pub</span> <span class="k">fn</span> <span class="nf">parse_str</span><span class="p">(</span><span class="n">wat</span><span class="p">:</span> <span class="k">impl</span> <span class="n">AsRef</span><span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Result</span><span class="o">&lt;</span><span class="nb">Vec</span><span class="o">&lt;</span><span class="nb">u8</span><span class="o">&gt;&gt;</span> <span class="p">{</span>
+  <span class="c">// Immediately delegate to a non-generic function.</span>
+  <span class="mi">_</span><span class="nf">parse_str</span><span class="p">(</span><span class="n">wat</span><span class="nf">.as_ref</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="c">// Separate-compilation friendly private implementation.</span>
+<span class="k">fn</span> <span class="mi">_</span><span class="nf">parse_str</span><span class="p">(</span><span class="n">wat</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">str</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Result</span><span class="o">&lt;</span><span class="nb">Vec</span><span class="o">&lt;</span><span class="nb">u8</span><span class="o">&gt;&gt;</span> <span class="p">{</span>
+    <span class="o">...</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="references"><a class="anchor" href="#references"></a>References</h2>
+<div class="sectionbody">
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p><a href="https://doc.rust-lang.org/reference/attributes/codegen.html#the-inline-attribute">Language reference</a>.</p>
+</li>
+<li>
+<p><a href="https://nnethercote.github.io/perf-book/inlining.html">Rust performance book</a>.</p>
+</li>
+<li>
+<p>@alexcrichton <a href="https://github.com/rust-lang/hashbrown/pull/119#issuecomment-537539046">explains inline</a>.
+Note that, in reality, the compile time costs are worse than what I described&#8201;&#8212;&#8201;inline functions are compiled per codegen-unit, not per crate.</p>
+</li>
+<li>
+<p><a href="https://users.rust-lang.org/t/enable-cross-crate-inlining-without-suggesting-inlining/55004/9?u=matklad">More @alexcrichton</a>.</p>
+</li>
+<li>
+<p><a href="https://internals.rust-lang.org/t/inlining-policy-for-functions-in-std/14189/10?u=matklad">Even more @alexcrichton</a>.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>Discussion on <a href="https://old.reddit.com/r/rust/comments/oh4s2j/blog_post_inline_in_rust/">/r/rust</a>.</p>
+</div>
+<div class="paragraph">
+<p>There is now a follow up post: <a href="https://matklad.github.io/2021/07/10/its-not-always-icache.html">It&#8217;s Not Always iCache</a>.</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2021-07-09-inline-in-rust.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

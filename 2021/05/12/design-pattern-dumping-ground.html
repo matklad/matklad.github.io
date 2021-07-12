@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Design Pattern: Kitchen Sink</title>
+  <meta name="description"
+    content="These are the notes on a design pattern I noticed in several contexts.">
+  <link rel="canonical" href="https://matklad.github.io//2021/05/12/design-pattern-dumping-ground.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Design Pattern: Kitchen Sink</h1>
+  <div class="post-meta sect1">May 12, 2021</div>
+  <div class="paragraph">
+<p>These are the notes on a design pattern I noticed in several contexts.</p>
+</div>
+<div class="paragraph">
+<p>Suppose, metaphorically, you have a neatly organized bookcase which categorizes the books by their topics.
+And now, suppose you&#8217;ve got a new book, which doesn&#8217;t fit clearly into any existing category.
+What would you do?</p>
+</div>
+<div class="paragraph">
+<p>Here are some common solutions I&#8217;ve seen:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Put the book somewhere in the bookcase.</p>
+</li>
+<li>
+<p>Start rearranging the shelves until you have a proper topic for this new book.
+Maybe introduce a dedicated topic just for this single book.</p>
+</li>
+<li>
+<p>Don&#8217;t store the book in the bookcase, keep it on the bedside table.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s the &#8220;kitchen sink pattern&#8221; solution for this problem: have the &#8220;Uncategorized&#8221; shelf for books which don&#8217;t clearly fit into the existing hierarchy.</p>
+</div>
+<div class="paragraph">
+<p>The idea here is that the overall organization becomes better, if you explicitly designate some place as &#8220;stuff that doesn&#8217;t fit goes here by default&#8221;.
+Let&#8217;s see the examples.</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, the Django web framework has a <code>shortcuts</code> module with contains conveniences functions, not fitting model/view separation.
+The <code>get_object_or_404</code> function lookups an object in the database and returns HTTP404 if it is not found.
+Models (SQL) and views (HTTP) don&#8217;t know about each other, so the function doesn&#8217;t belong to either of these modules.
+Placing it in <code>shortcuts</code> allows this separation to be more crisp.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, I have two tricks to keep my home folder organized.
+I have a script that clears <code>~/downloads</code> on every reboot, and I have a <code>~/tmp</code> as my dumping ground.
+Before <code>~/tmp</code>, various semi-transient things polluted my otherwise perfectly organized workspace.</p>
+</div>
+<div class="paragraph">
+<p><em>Third</em>, I asked my colleague recently about some testing infrastructure.
+They replied that they have a extensive document for it in their fork, because it&#8217;s unclear what&#8217;s the proper place for it in the main repo.
+In this case the absence of a &#8220;dumping ground&#8221; prevented useful work for no good reason.</p>
+</div>
+<div class="paragraph">
+<p><em>Fourth</em>, in <code>rust-analyzer</code> we have a <code>ast::make</code> module which is intended to contain the minimal orthogonal set of constructors for AST nodes.
+Historically, people kept adding non-minimal, non-orthogonal constructors there as well.
+Useful work was done, but it muddied the design.
+This was fixed by adding a dedicated <code>ast::make::ext</code> submodule for convenient shortcuts.</p>
+</div>
+<div class="paragraph">
+<p><em>Fifth</em>, for big projects I like having <code>stdext</code> modules, which fill-in missing batteries for the standard library.
+Without it, various modules tend to accumulate unrelated, and often slightly duplicated, functionality.</p>
+</div>
+<div class="paragraph">
+<p>To sum up, many classifications work best if there is an explicit &#8220;can&#8217;t classify this&#8221; category.
+If there&#8217;s no obvious place to put things which don&#8217;t fit, a solid design might erode with time.
+Note that for this pattern to be useful, an existence of a good solid design is per-requisite, lest all the code ends up in an <code>utils</code> module.</p>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2021-05-12-design-pattern-dumping-ground.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

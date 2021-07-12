@@ -1,0 +1,2338 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Simple but Powerful Pratt Parsing</title>
+  <meta name="description"
+    content="Welcome to my article about Pratt parsing&#8201;&#8212;&#8201;the monad tutorial of syntactic analysis.The number of Pratt parsing articles is so large that ...">
+  <link rel="canonical" href="https://matklad.github.io//2020/04/13/simple-but-powerful-pratt-parsing.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Simple but Powerful Pratt Parsing</h1>
+  <div class="post-meta sect1">Apr 13, 2020</div>
+  <div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>Welcome to my article about Pratt parsing&#8201;&#8212;&#8201;the monad tutorial of syntactic analysis.
+The number of Pratt parsing articles is so large that there exists a <a href="https://www.oilshell.org/blog/2017/03/31.html">survey post</a> :)</p>
+</div>
+<div class="paragraph">
+<p>The goals of this particular article are:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Raising an issue that the so-called left-recursion problem is overstated.</p>
+</li>
+<li>
+<p>Complaining about inadequacy of BNF for represeting infix expressions.</p>
+</li>
+<li>
+<p>Providing a description and implementation of Pratt parsing algorithm which sticks to the core and doesn&#8217;t introduce a DSL-y abstraction.</p>
+</li>
+<li>
+<p>Understanding the algorithm myself for hopefully the last time. I&#8217;ve
+<a href="https://github.com/rust-analyzer/rust-analyzer/blob/c388130f5ffbcbe7d3131213a24d12d02f769b87/crates/ra_parser/src/grammar/expressions.rs#L280-L281">implemented</a>
+a production-grade Pratt parser once, but I no longer immediately understand that code :-)</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>This post assumes a fair bit of familiarity with parsing techniques, and, for example, does not explain what a context free grammar is.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="introduction"><a class="anchor" href="#introduction"></a>Introduction</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Parsing is the process by which a compiler turns a <em>sequence</em> of tokens into a <em>tree</em> representation:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="code"><pre>                            Add
+                 Parser     / \
+ "1 + 2 * 3"    -------&gt;   1  Mul
+                              / \
+                             2   3
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>There are many approaches to this task, which roughly fall into one of the broad two categories:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Using a DSL to specify an abstract grammar of the language</p>
+</li>
+<li>
+<p>Hand-writing the parser</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Pratt parsing is one of the most frequently used techniques for hand-written parsing.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="bnf"><a class="anchor" href="#bnf"></a>BNF</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The pinnacle of syntactic analysis theory is discovering the context free grammar
+notation (often using BNF concrete syntax) for decoding linear structures into trees:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="code"><pre>Item ::=
+    StructItem
+  | EnumItem
+  | ...
+
+StructItem ::=
+    'struct' Name '{' FieldList '}'
+
+...
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>I remember being fascinated by this idea, especially by parallels with natural language sentence structure.
+However, my optimism quickly waned once we got to describing expressions.
+The natural expression grammar indeed allows one to see what is an expression.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="code"><pre>Expr ::=
+    Expr '+' Expr
+  | Expr '*' Expr
+  | '(' Expr ')'
+  | 'number'
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Although this grammar looks great, it is in fact ambiguous and imprecise, and needs to be rewritten to be amendable to automated parser generation.
+Specifically, we need to specify precedence and associativity of operators.
+The fixed grammar looks like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+</pre></td><td class="code"><pre>Expr ::=
+    Factor
+  | Expr '+' Factor
+
+Factor ::=
+    Atom
+  | Factor '*' Atom
+
+Atom ::=
+    'number'
+  | '(' Expr ')'
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>To me, the &#8220;shape&#8221; of expressions feels completely lost in this new formulation.
+Moreover, it took me three or four <em>courses</em> in formal languages before I was able to reliably create this grammar myself.</p>
+</div>
+<div class="paragraph">
+<p>And that&#8217;s why I love Pratt parsing&#8201;&#8212;&#8201;it is an enhancement of recursive descent parsing algorithm, which uses the natural terminology of precedence and associativity for parsing expressions, instead of grammar obfuscation techniques.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="recursive-descent-and-left-recursion"><a class="anchor" href="#recursive-descent-and-left-recursion"></a>Recursive descent and left-recursion</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The simplest technique for hand-writing a parser is recursive descent, which
+models the grammar as a set of mutually recursive functions. For example, the
+above item grammar fragment can look like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">item</span><span class="p">(</span><span class="n">p</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Parser</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="n">p</span><span class="nf">.peek</span><span class="p">()</span> <span class="p">{</span>
+        <span class="n">STRUCT_KEYWORD</span> <span class="k">=&gt;</span> <span class="nf">struct_item</span><span class="p">(</span><span class="n">p</span><span class="p">),</span>
+        <span class="n">ENUM_KEYWORD</span>   <span class="k">=&gt;</span> <span class="nf">enum_item</span><span class="p">(</span><span class="n">p</span><span class="p">),</span>
+        <span class="o">...</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">struct_item</span><span class="p">(</span><span class="n">p</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Parser</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">p</span><span class="nf">.expect</span><span class="p">(</span><span class="n">STRUCT_KEYWORD</span><span class="p">);</span>
+    <span class="nf">name</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+    <span class="n">p</span><span class="nf">.expect</span><span class="p">(</span><span class="n">L_CURLY</span><span class="p">);</span>
+    <span class="nf">field_list</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+    <span class="n">p</span><span class="nf">.expect</span><span class="p">(</span><span class="n">R_CURLY</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="o">...</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Traditionally, text-books point out left-recursive grammars as the Achilles heel
+of this approach, and use this drawback to motivate more advanced LR parsing
+techniques. An example of problematic grammar can look like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="code"><pre>Sum ::=
+    Sum '+' Int
+  | Int
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Indeed, if we naively code the <code>sum</code> function, it wouldn&#8217;t be too useful:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">sum</span><span class="p">(</span><span class="n">p</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Parser</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c">// Try first alternative</span>
+    <span class="nf">sum</span><span class="p">(</span><span class="n">p</span><span class="p">);</span> <i class="conum" data-value="1"></i><b>(1)</b>
+    <span class="n">p</span><span class="nf">.expect</span><span class="p">(</span><span class="n">PLUS</span><span class="p">);</span>
+    <span class="nf">int</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+
+    <span class="c">// If that fails, try the second one</span>
+    <span class="o">...</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td>At this point we immediately loop and overflow the stack</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>A theoretical fix to the problem involves rewriting the grammar to eliminate the left recursion.
+However in practice, for a hand-written parser, a solution is much simpler&#8201;&#8212;&#8201;breaking away with a pure <em>recursive</em> paradigm and using a loop:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">sum</span><span class="p">(</span><span class="n">p</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Parser</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nf">int</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+    <span class="k">while</span> <span class="n">p</span><span class="nf">.eat</span><span class="p">(</span><span class="n">PLUS</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nf">int</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="pratt-parsing-the-general-shape"><a class="anchor" href="#pratt-parsing-the-general-shape"></a>Pratt parsing, the general shape</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Using just loops won&#8217;t be enough for parsing infix expressions.
+Instead, Pratt parsing uses <em>both</em> loops <em>and</em> recursion:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">parse_expr</span><span class="p">()</span> <span class="p">{</span>
+    <span class="o">...</span>
+    <span class="k">loop</span> <span class="p">{</span>
+        <span class="o">...</span>
+        <span class="nf">parse_expr</span><span class="p">()</span>
+        <span class="o">...</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Not only does it send your mind into Möbeus-shaped hamster wheel, it also handles associativity and precedence!</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="from-precedence-to-binding-power"><a class="anchor" href="#from-precedence-to-binding-power"></a>From Precedence to Binding Power</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>I have a confession to make: I am always confused by &#8220;high precedence&#8221; and &#8220;low precedence&#8221;. In <code>a + b * c</code>, addition has a lower precedence, but it is at the top of the parse tree&#8230;&#8203;</p>
+</div>
+<div class="paragraph">
+<p>So instead, I find thinking in terms of binding power more intuitive.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+</pre></td><td class="code"><pre>expr:   A       +       B       *       C
+power:      3       3       <strong>5</strong>       <strong>5</strong>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The <code>*</code> is stronger, it has more power to hold together <code>B</code> and <code>C</code>, and so the expression is parsed as
+<code>A + (B * C)</code>.</p>
+</div>
+<div class="paragraph">
+<p>What about associativity though? In <code>A + B + C</code> all operators seem to have the same power, and it is unclear which <code>+</code> to fold first.
+But this can also be modelled with power, if we make it slightly asymmetric:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+</pre></td><td class="code"><pre>expr:      A       +       B       +       C
+power:  0      <strong>3</strong>      <strong>3.1</strong>      3      3.1     0
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Here, we pumped the right power of <code>+</code> just a little bit, so that it holds the right operand tighter.
+We also added zeros at both ends, as there are no operators to bind from the sides.
+Here, the first (and only the first) <code>+</code> holds both of its arguments tighter than the neighbors, so we can reduce it:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+</pre></td><td class="code"><pre>expr:     (A + B)     +     C
+power:  0          3    3.1    0
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Now we can fold the second plus and get <code>(A + B) + C</code>.
+Or, in terms of the syntax tree, the second <code>+</code> really likes its right operand more than the left one, so it rushes to get hold of <code>C</code>. While he does that, the first <code>+</code> captures both <code>A</code> and <code>B</code>, as they are uncontested.</p>
+</div>
+<div class="paragraph">
+<p>What Pratt parsing does is that it finds these badass, stronger than neighbors operators, by processing the string left to right. We are almost at a point where we finally start writing some code, but let&#8217;s first look at the other running example. We will use function composition operator, <code>.</code> (dot) as a <em>right</em> associative operator with a high binding power. That is, <code><em>f</em> . <em>g</em> . <em>h</em></code> is parsed as <code><em>f</em> . (<em>g</em> . <em>h</em>)</code>, or, in terms of power</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+</pre></td><td class="code"><pre>  <em>f</em>     .    <em>g</em>     .    <em>h</em>
+0   8.5    8   <strong>8.5</strong>    <strong>8</strong>   0
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="minimal-pratt-parser"><a class="anchor" href="#minimal-pratt-parser"></a>Minimal Pratt Parser</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>We will be parsing expressions where basic atoms are <em>single character</em> numbers and variables, and which uses punctuation for operators.
+Let&#8217;s define a simple tokenizer:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+</pre></td><td class="code"><pre><span class="nd">#[derive(Debug,</span> <span class="nd">Clone,</span> <span class="nd">Copy,</span> <span class="nd">PartialEq,</span> <span class="nd">Eq)]</span>
+<span class="k">enum</span> <span class="n">Token</span> <span class="p">{</span>
+    <span class="nf">Atom</span><span class="p">(</span><span class="nb">char</span><span class="p">),</span>
+    <span class="nf">Op</span><span class="p">(</span><span class="nb">char</span><span class="p">),</span>
+    <span class="n">Eof</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">Lexer</span> <span class="p">{</span>
+    <span class="n">tokens</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="n">Token</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">impl</span> <span class="n">Lexer</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">new</span><span class="p">(</span><span class="n">input</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">str</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Lexer</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="k">mut</span> <span class="n">tokens</span> <span class="o">=</span> <span class="n">input</span>
+            <span class="nf">.chars</span><span class="p">()</span>
+            <span class="nf">.filter</span><span class="p">(|</span><span class="n">it</span><span class="p">|</span> <span class="o">!</span><span class="n">it</span><span class="nf">.is_ascii_whitespace</span><span class="p">())</span>
+            <span class="nf">.map</span><span class="p">(|</span><span class="n">c</span><span class="p">|</span> <span class="k">match</span> <span class="n">c</span> <span class="p">{</span>
+                <span class="sc">'0'</span><span class="o">..=</span><span class="sc">'9'</span> <span class="p">|</span>
+                <span class="sc">'a'</span><span class="o">..=</span><span class="sc">'z'</span> <span class="p">|</span> <span class="sc">'A'</span><span class="o">..=</span><span class="sc">'Z'</span> <span class="k">=&gt;</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">c</span><span class="p">),</span>
+                <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">c</span><span class="p">),</span>
+            <span class="p">})</span>
+            <span class="py">.collect</span><span class="p">::</span><span class="o">&lt;</span><span class="nb">Vec</span><span class="o">&lt;</span><span class="mi">_</span><span class="o">&gt;&gt;</span><span class="p">();</span>
+        <span class="n">tokens</span><span class="nf">.reverse</span><span class="p">();</span>
+        <span class="n">Lexer</span> <span class="p">{</span> <span class="n">tokens</span> <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">fn</span> <span class="nf">next</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="k">self</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Token</span> <span class="p">{</span>
+        <span class="k">self</span><span class="py">.tokens</span><span class="nf">.pop</span><span class="p">()</span><span class="nf">.unwrap_or</span><span class="p">(</span><span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="k">fn</span> <span class="nf">peek</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="k">self</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Token</span> <span class="p">{</span>
+        <span class="k">self</span><span class="py">.tokens</span><span class="nf">.last</span><span class="p">()</span><span class="nf">.copied</span><span class="p">()</span><span class="nf">.unwrap_or</span><span class="p">(</span><span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>To make sure that we got the <span class="line-through">precedence</span> binding power correctly, we will be transforming infix expressions into a gold-standard (not so popular in Poland, for whatever reason) unambiguous notation&#8201;&#8212;&#8201;S-expressions:<br>
+<code>1 + 2 * 3 == (+ 1 (* 2 3))</code>.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+</pre></td><td class="code"><pre><span class="k">use</span> <span class="nn">std</span><span class="p">::</span><span class="n">fmt</span><span class="p">;</span>
+
+<span class="k">enum</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="nf">Atom</span><span class="p">(</span><span class="nb">char</span><span class="p">),</span>
+    <span class="nf">Cons</span><span class="p">(</span><span class="nb">char</span><span class="p">,</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="n">S</span><span class="o">&gt;</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="k">impl</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Display</span> <span class="k">for</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">fmt</span><span class="p">(</span><span class="o">&amp;</span><span class="k">self</span><span class="p">,</span> <span class="n">f</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Formatter</span><span class="o">&lt;</span><span class="nv">'_</span><span class="o">&gt;</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Result</span> <span class="p">{</span>
+        <span class="k">match</span> <span class="k">self</span> <span class="p">{</span>
+            <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nd">write!</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="s">"{}"</span><span class="p">,</span> <span class="n">i</span><span class="p">),</span>
+            <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">head</span><span class="p">,</span> <span class="n">rest</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+                <span class="nd">write!</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="s">"({}"</span><span class="p">,</span> <span class="n">head</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+                <span class="k">for</span> <span class="n">s</span> <span class="n">in</span> <span class="n">rest</span> <span class="p">{</span>
+                    <span class="nd">write!</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="s">" {}"</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span><span class="o">?</span>
+                <span class="p">}</span>
+                <span class="nd">write!</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="s">")"</span><span class="p">)</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>And let&#8217;s start with just this: expressions with atoms and two infix binary operators, <code>+</code> and <code>*</code>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">expr</span><span class="p">(</span><span class="n">input</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">str</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">lexer</span> <span class="o">=</span> <span class="nn">Lexer</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="n">input</span><span class="p">);</span>
+    <span class="nf">expr_bp</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="n">lexer</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Lexer</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="nd">todo!</span><span class="p">()</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">tests</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"1 + 2 * 3"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(+ 1 (* 2 3))"</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>So, the general approach is roughly the one we used to deal with left recursion&#8201;&#8212;&#8201;start with parsing a first number, and then loop, consuming operators and doing &#8230;&#8203; something?</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Lexer</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">lhs</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">),</span>
+        <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+    <span class="p">};</span>
+
+    <span class="k">loop</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">op</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span> <span class="k">=&gt;</span> <span class="k">break</span><span class="p">,</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">op</span><span class="p">,</span>
+            <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+        <span class="p">};</span>
+
+        <span class="nd">todo!</span><span class="p">()</span>
+    <span class="p">}</span>
+
+    <span class="n">lhs</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">tests</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"1"</span><span class="p">);</span> <i class="conum" data-value="1"></i><b>(1)</b>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"1"</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td>Note that we already can parse this simple test!</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>We want to use this power idea, so let&#8217;s compute both left and right powers of the operator.
+We&#8217;ll use <code>u8</code> to represent power, so, for associativity, we&#8217;ll add <code>1</code>.
+And we&#8217;ll reserve the <code>0</code> power for the end of input, so the lowest power operator can have is <code>1</code>.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Lexer</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">lhs</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">),</span>
+        <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+    <span class="p">};</span>
+
+    <span class="k">loop</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">op</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.peek</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span> <span class="k">=&gt;</span> <span class="k">break</span><span class="p">,</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">op</span><span class="p">,</span>
+            <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+        <span class="p">};</span>
+        <span class="k">let</span> <span class="p">(</span><span class="n">l_bp</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+
+        <span class="nd">todo!</span><span class="p">()</span>
+    <span class="p">}</span>
+
+    <span class="n">lhs</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="nb">u8</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="sc">'*'</span> <span class="p">|</span> <span class="sc">'/'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad op: {:?}"</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>And now comes the tricky bit, where we introduce recursion into the picture.
+Let&#8217;s think about this example (with powers below):</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+</pre></td><td class="code"><pre>a   +   b   *   c   *   d   +   e
+  1   2   3   4   3   4   1   2
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The cursor is at the first <code>+</code>, we know that the left <code>bp</code> is <code>1</code> and the right one is <code>2</code>.
+The <code>lhs</code> stores <code>a</code>.
+The next operator after <code>+</code> is <code>*</code>, so we shouldn&#8217;t add <code>b</code> to <code>a</code>.
+The problem is that we haven&#8217;t yet seen the next operator, we are just past <code>+</code>.
+Can we add a lookahead?
+Looks like no&#8201;&#8212;&#8201;we&#8217;d have to look past all of <code>b</code>, <code>c</code> and <code>d</code> to find the next operator with lower binding power, which sounds pretty unbounded.
+But we are onto something!
+Our current right priority is <code>2</code>, and, to be able to fold the expression, we need to find the next operator with lower priority.
+So let&#8217;s recursively call <code>expr_bp</code> starting at <code>b</code>, but also tell it to stop as soon as <code>bp</code> drops below <code>2</code>.
+This necessitates the addition of <code>min_bp</code> argument to the main function.</p>
+</div>
+<div class="paragraph">
+<p>And lo, we have a fully functioning minimal Prat parser:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">expr</span><span class="p">(</span><span class="n">input</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">str</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">lexer</span> <span class="o">=</span> <span class="nn">Lexer</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="n">input</span><span class="p">);</span>
+    <span class="nf">expr_bp</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="n">lexer</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <i class="conum" data-value="5"></i><b>(5)</b>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Lexer</span><span class="p">,</span> <span class="n">min_bp</span><span class="p">:</span> <span class="nb">u8</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span> <i class="conum" data-value="1"></i><b>(1)</b>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">lhs</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">),</span>
+        <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+    <span class="p">};</span>
+
+    <span class="k">loop</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">op</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.peek</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span> <span class="k">=&gt;</span> <span class="k">break</span><span class="p">,</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">op</span><span class="p">,</span>
+            <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+        <span class="p">};</span>
+
+        <span class="k">let</span> <span class="p">(</span><span class="n">l_bp</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+        <span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span> <i class="conum" data-value="2"></i><b>(2)</b>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="n">lexer</span><span class="nf">.next</span><span class="p">();</span> <i class="conum" data-value="3"></i><b>(3)</b>
+        <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+
+        <span class="n">lhs</span> <span class="o">=</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">,</span> <span class="n">rhs</span><span class="p">]);</span> <i class="conum" data-value="4"></i><b>(4)</b>
+    <span class="p">}</span>
+
+    <span class="n">lhs</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="nb">u8</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="sc">'*'</span> <span class="p">|</span> <span class="sc">'/'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad op: {:?}"</span><span class="p">),</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">tests</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"1"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"1"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"1 + 2 * 3"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(+ 1 (* 2 3))"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"a + b * c * d + e"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(+ (+ a (* (* b c) d)) e)"</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td><code>min_bp</code> argument is the crucial addition. <code>expr_bp</code> now parses expressions with relatively high binding power. As soon as it sees something weaker than <code>min_bp</code>, it stops.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="2"></i><b>2</b></td>
+<td>This is the "it stops" point.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="3"></i><b>3</b></td>
+<td>And here we bump past the operator itself and make the recursive call.
+Note how we use <code>l_bp</code> to check against <code>min_bp</code>, and <code>r_bp</code> as the new <code>min_bp</code> of the recursive call.
+So, you can think about <code>min_bp</code> as the binding power of the operator to the left of the current expressions.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="4"></i><b>4</b></td>
+<td>Finally, after parsing the correct right hand side, we assemble the new current expression.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="5"></i><b>5</b></td>
+<td>To start the recursion, we use binding power of zero.
+Remember, at the begining the binding power of the operator to the left is the lowest possible, zero, as there&#8217;s no actual operator there.</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>So, yup, these 40 lines <em>are</em> the Pratt parsing algorithm.
+They are tricky, but, if you understand them, everything else is straightforward additions.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="bells-and-whistles"><a class="anchor" href="#bells-and-whistles"></a>Bells and Whistles</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Now let&#8217;s add all kinds of weird expressions to show the power and flexibility of the algorithm.
+First, let&#8217;s add a high-priority, right associative function composition operator: <code>.</code>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="nb">u8</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="sc">'*'</span> <span class="p">|</span> <span class="sc">'/'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="hll">        <span class="sc">'.'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+</span>        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad op: {:?}"</span><span class="p">),</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Yup, it&#8217;s a single line!
+Note how the left side of the operator binds tighter, which gives us desired right associativity:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"f . g . h"</span><span class="p">);</span>
+<span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(. f (. g h))"</span><span class="p">);</span>
+
+<span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">" 1 + 2 + f . g . h * 3 * 4"</span><span class="p">);</span>
+<span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(+ (+ 1 2) (* (* (. f (. g h)) 3) 4))"</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Now, let&#8217;s add unary <code>-</code>, which binds tighter than binary arithmetic operators, but less tight than composition.
+This requires changes to how we start our loop, as we no longer can assume that the first token is an atom, and need to handle minus as well.
+But let the types drive us.
+First, we start with binding powers.
+As this is an unary operator, it really only have right binding power, so, ahem, let&#8217;s just code this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="p">((),</span> <span class="nb">u8</span><span class="p">)</span> <span class="p">{</span> <i class="conum" data-value="1"></i><b>(1)</b>
+    <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">((),</span> <span class="mi">5</span><span class="p">),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad op: {:?}"</span><span class="p">,</span> <span class="n">op</span><span class="p">),</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="nb">u8</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="sc">'*'</span> <span class="p">|</span> <span class="sc">'/'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+        <span class="sc">'.'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span> <i class="conum" data-value="2"></i><b>(2)</b>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad op: {:?}"</span><span class="p">),</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td>Here, we return a dummy <code>()</code> to make it clear that this is a prefix, and not a postfix operator, and thus can only bind things to the right.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="2"></i><b>2</b></td>
+<td>Note, as we want to add unary <code>-</code> between <code>.</code> and <code>*</code>, we need to shift priorities of <code>.</code> by two.
+The general rule is that we use an odd priority as base, and bump it by one for associativity, if the operator is binary. For unary minus it doesn&#8217;t matter and we could have used either <code>5</code> or <code>6</code>, but sticking to odd is more consistent.</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>Plugging this into <code>expr_bp</code>, we get:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Lexer</span><span class="p">,</span> <span class="n">min_bp</span><span class="p">:</span> <span class="nb">u8</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">lhs</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">),</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+            <span class="k">let</span> <span class="p">((),</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+            <span class="nd">todo!</span><span class="p">()</span>
+        <span class="p">}</span>
+        <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+    <span class="p">};</span>
+    <span class="o">...</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Now, we only have <code>r_bp</code> and not <code>l_bp</code>, so let&#8217;s just copy-paste half of the code from the main loop?
+Remember, we use <code>r_bp</code> for recursive calls.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Lexer</span><span class="p">,</span> <span class="n">min_bp</span><span class="p">:</span> <span class="nb">u8</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">lhs</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">),</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+            <span class="k">let</span> <span class="p">((),</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+            <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+            <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">rhs</span><span class="p">])</span>
+        <span class="p">}</span>
+        <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+    <span class="p">};</span>
+
+    <span class="k">loop</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">op</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.peek</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span> <span class="k">=&gt;</span> <span class="k">break</span><span class="p">,</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">op</span><span class="p">,</span>
+            <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+        <span class="p">};</span>
+
+        <span class="k">let</span> <span class="p">(</span><span class="n">l_bp</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+        <span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="n">lexer</span><span class="nf">.next</span><span class="p">();</span>
+        <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+
+        <span class="n">lhs</span> <span class="o">=</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">,</span> <span class="n">rhs</span><span class="p">]);</span>
+    <span class="p">}</span>
+
+    <span class="n">lhs</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">tests</span><span class="p">()</span> <span class="p">{</span>
+    <span class="o">...</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"--1 * 2"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(* (- (- 1)) 2)"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"--f . g"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(- (- (. f g)))"</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Amusingly, this purely mechanical, type-driven transformation works.
+You can also reason why it works, of course.
+The same argument applies; after we&#8217;ve consumed a prefix operator, the operand consists of operators that bind tighter, and we just so conveniently happen to have a function which can parse expressions tighter than the specified power.</p>
+</div>
+<div class="paragraph">
+<p>Ok, this is getting stupid.
+If using <code>((), u8)</code> &#8220;just worked&#8221; for prefix operators, can <code>(u8, ())</code> deal with postfix ones?
+Well, let&#8217;s add <code>!</code> for factorials. It should bind tighter than <code>-</code>, because <code>-(92!)</code> is obviously more useful than <code>(-92)!</code>. So, the familar drill&#8201;&#8212;&#8201;new priority function, shifting priority of <code>.</code> (this bit <em>is</em> annoying in Pratt parsers), copy-pasting the code&#8230;&#8203;</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="p">(</span><span class="n">l_bp</span><span class="p">,</span> <span class="p">())</span> <span class="o">=</span> <span class="nf">postfix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+<span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+    <span class="k">break</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">let</span> <span class="p">(</span><span class="n">l_bp</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+<span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+    <span class="k">break</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Wait, something&#8217;s wrong here.
+After we&#8217;ve parsed the prefix expression, we can see either a postfix or an infix operator.
+But we bail on unrecognized operators, which is not going to work&#8230;&#8203;
+So, let&#8217;s make <code>postfix_binding_power</code> to return an option, for the case where the operator is not postfix:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Lexer</span><span class="p">,</span> <span class="n">min_bp</span><span class="p">:</span> <span class="nb">u8</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">lhs</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">),</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+            <span class="k">let</span> <span class="p">((),</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+            <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+            <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">rhs</span><span class="p">])</span>
+        <span class="p">}</span>
+        <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+    <span class="p">};</span>
+
+    <span class="k">loop</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">op</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.peek</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span> <span class="k">=&gt;</span> <span class="k">break</span><span class="p">,</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">op</span><span class="p">,</span>
+            <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+        <span class="p">};</span>
+
+<span class="hll">        <span class="k">if</span> <span class="k">let</span> <span class="nf">Some</span><span class="p">((</span><span class="n">l_bp</span><span class="p">,</span> <span class="p">()))</span> <span class="o">=</span> <span class="nf">postfix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="hll">            <span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+</span><span class="hll">                <span class="k">break</span><span class="p">;</span>
+</span><span class="hll">            <span class="p">}</span>
+</span><span class="hll">            <span class="n">lexer</span><span class="nf">.next</span><span class="p">();</span>
+</span><span class="hll">
+</span><span class="hll">            <span class="n">lhs</span> <span class="o">=</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">]);</span>
+</span><span class="hll">            <span class="k">continue</span><span class="p">;</span>
+</span><span class="hll">        <span class="p">}</span>
+</span>
+        <span class="k">let</span> <span class="p">(</span><span class="n">l_bp</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+        <span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="n">lexer</span><span class="nf">.next</span><span class="p">();</span>
+        <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+
+        <span class="n">lhs</span> <span class="o">=</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">,</span> <span class="n">rhs</span><span class="p">]);</span>
+    <span class="p">}</span>
+
+    <span class="n">lhs</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="p">((),</span> <span class="nb">u8</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">((),</span> <span class="mi">5</span><span class="p">),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad op: {:?}"</span><span class="p">,</span> <span class="n">op</span><span class="p">),</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="hll"><span class="k">fn</span> <span class="nf">postfix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="p">())</span><span class="o">&gt;</span> <span class="p">{</span>
+</span><span class="hll">    <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+</span><span class="hll">        <span class="sc">'!'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="p">()),</span>
+</span><span class="hll">        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="k">return</span> <span class="nb">None</span><span class="p">,</span>
+</span><span class="hll">    <span class="p">};</span>
+</span><span class="hll">    <span class="nf">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+</span><span class="hll"><span class="p">}</span>
+</span>
+<span class="k">fn</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="nb">u8</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="sc">'*'</span> <span class="p">|</span> <span class="sc">'/'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+        <span class="sc">'.'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad op: {:?}"</span><span class="p">),</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">tests</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"-9!"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(- (! 9))"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"f . g !"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(! (. f g))"</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Amusingly, both the old and the new tests pass.</p>
+</div>
+<div class="paragraph">
+<p>Now, we are ready to add a new kind of expression: parenthesised expression.
+It is actually not that hard, and we could have done it from the start, but it makes sense to handle this here, you&#8217;ll see in a moment why.
+Parens are just a primary expressions, and are handled similar to atoms:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="k">mut</span> <span class="n">lhs</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">),</span>
+    <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">'('</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">lhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+        <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">lexer</span><span class="nf">.next</span><span class="p">(),</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">')'</span><span class="p">));</span>
+        <span class="n">lhs</span>
+    <span class="p">}</span>
+    <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="p">((),</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+        <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+        <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">rhs</span><span class="p">])</span>
+    <span class="p">}</span>
+    <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+<span class="p">};</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Unfortunately, the following test fails:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"(((0)))"</span><span class="p">);</span>
+<span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"0"</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The panic comes from the loop below&#8201;&#8212;&#8201;the only termination condition we have is reaching eof, and <code>)</code> is definitely not eof.
+The easiest way to fix that is to change <code>infix_binding_power</code> to return <code>None</code> on unrecognized operands.
+That way, it&#8217;ll become similar to <code>postfix_binding_power</code> again!</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Lexer</span><span class="p">,</span> <span class="n">min_bp</span><span class="p">:</span> <span class="nb">u8</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">lhs</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">),</span>
+<span class="hll">        <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">'('</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+</span><span class="hll">            <span class="k">let</span> <span class="n">lhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class="hll">            <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">lexer</span><span class="nf">.next</span><span class="p">(),</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">')'</span><span class="p">));</span>
+</span><span class="hll">            <span class="n">lhs</span>
+</span><span class="hll">        <span class="p">}</span>
+</span>        <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+            <span class="k">let</span> <span class="p">((),</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+            <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+            <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">rhs</span><span class="p">])</span>
+        <span class="p">}</span>
+        <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+    <span class="p">};</span>
+
+    <span class="k">loop</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">op</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.peek</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span> <span class="k">=&gt;</span> <span class="k">break</span><span class="p">,</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">op</span><span class="p">,</span>
+            <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+        <span class="p">};</span>
+
+        <span class="k">if</span> <span class="k">let</span> <span class="nf">Some</span><span class="p">((</span><span class="n">l_bp</span><span class="p">,</span> <span class="p">()))</span> <span class="o">=</span> <span class="nf">postfix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+            <span class="n">lexer</span><span class="nf">.next</span><span class="p">();</span>
+
+            <span class="n">lhs</span> <span class="o">=</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">]);</span>
+            <span class="k">continue</span><span class="p">;</span>
+        <span class="p">}</span>
+
+<span class="hll">        <span class="k">if</span> <span class="k">let</span> <span class="nf">Some</span><span class="p">((</span><span class="n">l_bp</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">))</span> <span class="o">=</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="hll">            <span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+</span><span class="hll">                <span class="k">break</span><span class="p">;</span>
+</span><span class="hll">            <span class="p">}</span>
+</span><span class="hll">
+</span><span class="hll">            <span class="n">lexer</span><span class="nf">.next</span><span class="p">();</span>
+</span><span class="hll">            <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+</span><span class="hll">
+</span><span class="hll">            <span class="n">lhs</span> <span class="o">=</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">,</span> <span class="n">rhs</span><span class="p">]);</span>
+</span><span class="hll">            <span class="k">continue</span><span class="p">;</span>
+</span><span class="hll">        <span class="p">}</span>
+</span>
+        <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">lhs</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="p">((),</span> <span class="nb">u8</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">((),</span> <span class="mi">5</span><span class="p">),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad op: {:?}"</span><span class="p">,</span> <span class="n">op</span><span class="p">),</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">postfix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="p">())</span><span class="o">&gt;</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'!'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="p">()),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="k">return</span> <span class="nb">None</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="nf">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="hll"><span class="k">fn</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="nb">u8</span><span class="p">)</span><span class="o">&gt;</span> <span class="p">{</span>
+</span><span class="hll">    <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+</span><span class="hll">        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+</span><span class="hll">        <span class="sc">'*'</span> <span class="p">|</span> <span class="sc">'/'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+</span><span class="hll">        <span class="sc">'.'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span>
+</span><span class="hll">        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="k">return</span> <span class="nb">None</span><span class="p">,</span>
+</span><span class="hll">    <span class="p">};</span>
+</span><span class="hll">    <span class="nf">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+</span><span class="hll"><span class="p">}</span>
+</span></pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>And now let&#8217;s add array indexing operator: <code>a[i]</code>.
+What kind of -fix is it?
+Around-fix?
+If it were just <code>a[]</code>, it would clearly be postfix.
+if it were just <code>[i]</code>, it would work exactly like parens.
+And it is the key: the <code>i</code> part doesn&#8217;t really participate in the whole power game, as it is unambiguously delimited. So, let&#8217;s do this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Lexer</span><span class="p">,</span> <span class="n">min_bp</span><span class="p">:</span> <span class="nb">u8</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">lhs</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">),</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">'('</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+            <span class="k">let</span> <span class="n">lhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+            <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">lexer</span><span class="nf">.next</span><span class="p">(),</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">')'</span><span class="p">));</span>
+            <span class="n">lhs</span>
+        <span class="p">}</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+            <span class="k">let</span> <span class="p">((),</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+            <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+            <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">rhs</span><span class="p">])</span>
+        <span class="p">}</span>
+        <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+    <span class="p">};</span>
+
+    <span class="k">loop</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">op</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.peek</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span> <span class="k">=&gt;</span> <span class="k">break</span><span class="p">,</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">op</span><span class="p">,</span>
+            <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+        <span class="p">};</span>
+
+        <span class="k">if</span> <span class="k">let</span> <span class="nf">Some</span><span class="p">((</span><span class="n">l_bp</span><span class="p">,</span> <span class="p">()))</span> <span class="o">=</span> <span class="nf">postfix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+            <span class="n">lexer</span><span class="nf">.next</span><span class="p">();</span>
+
+<span class="hll">            <span class="n">lhs</span> <span class="o">=</span> <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="sc">'['</span> <span class="p">{</span>
+</span><span class="hll">                <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class="hll">                <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">lexer</span><span class="nf">.next</span><span class="p">(),</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">']'</span><span class="p">));</span>
+</span><span class="hll">                <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">,</span> <span class="n">rhs</span><span class="p">])</span>
+</span><span class="hll">            <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class="hll">                <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">])</span>
+</span><span class="hll">            <span class="p">};</span>
+</span>            <span class="k">continue</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="k">let</span> <span class="nf">Some</span><span class="p">((</span><span class="n">l_bp</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">))</span> <span class="o">=</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+
+            <span class="n">lexer</span><span class="nf">.next</span><span class="p">();</span>
+            <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+
+            <span class="n">lhs</span> <span class="o">=</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">,</span> <span class="n">rhs</span><span class="p">]);</span>
+            <span class="k">continue</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">lhs</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="p">((),</span> <span class="nb">u8</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">((),</span> <span class="mi">5</span><span class="p">),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad op: {:?}"</span><span class="p">,</span> <span class="n">op</span><span class="p">),</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">postfix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="p">())</span><span class="o">&gt;</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'!'</span> <span class="p">|</span> <span class="sc">'['</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="p">()),</span> <i class="conum" data-value="1"></i><b>(1)</b>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="k">return</span> <span class="nb">None</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="nf">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="nb">u8</span><span class="p">)</span><span class="o">&gt;</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="sc">'*'</span> <span class="p">|</span> <span class="sc">'/'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+        <span class="sc">'.'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="k">return</span> <span class="nb">None</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="nf">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">tests</span><span class="p">()</span> <span class="p">{</span>
+    <span class="o">...</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"x[0][1]"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"([ ([ x 0) 1)"</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td>Note that we use the same priority for <code>!</code> as for <code>[</code>.
+In general, for the correctness of our algorithm it&#8217;s pretty important that, when we make decisions, priorities are never equal.
+Otherwise, we might end up in a situation like the one before tiny adjustment for associativity, where there were two equally-good candidates for reduction.
+However, we only compare right <code>bp</code> with left <code>bp</code>!
+So for two postfix operators it&#8217;s OK to have priorities the same, as they are both right.</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>Finally, the ultimate boss of all operators, the dreaded ternary:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre>c ? e1 : e2
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Is this &#8230;&#8203; all-other-the-place-fix operator?
+Well, let&#8217;s change the syntax of ternary slightly:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre>c [ e1 ] e2
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>And let&#8217;s recall that <code>a[i]</code> turned out to be a postfix operator + parenthesis&#8230;&#8203;
+So, yeah, <code>?</code> and <code>:</code> are actually a weird pair of parens!
+And let&#8217;s handle it as such!
+Now, what about priority and associativity?
+What associativity even is in this case?</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre>a ? b : c ? d : e
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>To figure it out, we just squash the parens part:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre>a ?: c ?: e
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This can be parsed as</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre>(a ?: c) ?: e
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>or  as</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre><span class="n">a</span> <span class="o">?</span><span class="p">:</span> <span class="p">(</span><span class="n">c</span> <span class="o">?</span><span class="p">:</span> <span class="n">e</span><span class="p">)</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>What is more useful?
+For <code>?</code>-chains like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="code"><pre>a ? b :
+c ? d :
+e
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>the right-associative reading is more useful.
+Priority-wise, the ternary is low priority.
+In C, only <code>=</code> and <code>,</code> have lower priority.
+While we are at it, let&#8217;s add C-style right associative <code>=</code> as well.</p>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s our the most complete and perfect version of a simple Pratt parser:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">  1
+  2
+  3
+  4
+  5
+  6
+  7
+  8
+  9
+ 10
+ 11
+ 12
+ 13
+ 14
+ 15
+ 16
+ 17
+ 18
+ 19
+ 20
+ 21
+ 22
+ 23
+ 24
+ 25
+ 26
+ 27
+ 28
+ 29
+ 30
+ 31
+ 32
+ 33
+ 34
+ 35
+ 36
+ 37
+ 38
+ 39
+ 40
+ 41
+ 42
+ 43
+ 44
+ 45
+ 46
+ 47
+ 48
+ 49
+ 50
+ 51
+ 52
+ 53
+ 54
+ 55
+ 56
+ 57
+ 58
+ 59
+ 60
+ 61
+ 62
+ 63
+ 64
+ 65
+ 66
+ 67
+ 68
+ 69
+ 70
+ 71
+ 72
+ 73
+ 74
+ 75
+ 76
+ 77
+ 78
+ 79
+ 80
+ 81
+ 82
+ 83
+ 84
+ 85
+ 86
+ 87
+ 88
+ 89
+ 90
+ 91
+ 92
+ 93
+ 94
+ 95
+ 96
+ 97
+ 98
+ 99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+</pre></td><td class="code"><pre><span class="k">use</span> <span class="nn">std</span><span class="p">::{</span><span class="n">fmt</span><span class="p">,</span> <span class="nn">io</span><span class="p">::</span><span class="n">BufRead</span><span class="p">};</span>
+
+<span class="k">enum</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="nf">Atom</span><span class="p">(</span><span class="nb">char</span><span class="p">),</span>
+    <span class="nf">Cons</span><span class="p">(</span><span class="nb">char</span><span class="p">,</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="n">S</span><span class="o">&gt;</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="k">impl</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Display</span> <span class="k">for</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">fmt</span><span class="p">(</span><span class="o">&amp;</span><span class="k">self</span><span class="p">,</span> <span class="n">f</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Formatter</span><span class="o">&lt;</span><span class="nv">'_</span><span class="o">&gt;</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Result</span> <span class="p">{</span>
+        <span class="k">match</span> <span class="k">self</span> <span class="p">{</span>
+            <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nd">write!</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="s">"{}"</span><span class="p">,</span> <span class="n">i</span><span class="p">),</span>
+            <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">head</span><span class="p">,</span> <span class="n">rest</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+                <span class="nd">write!</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="s">"({}"</span><span class="p">,</span> <span class="n">head</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+                <span class="k">for</span> <span class="n">s</span> <span class="n">in</span> <span class="n">rest</span> <span class="p">{</span>
+                    <span class="nd">write!</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="s">" {}"</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span><span class="o">?</span>
+                <span class="p">}</span>
+                <span class="nd">write!</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="s">")"</span><span class="p">)</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="nd">#[derive(Debug,</span> <span class="nd">Clone,</span> <span class="nd">Copy,</span> <span class="nd">PartialEq,</span> <span class="nd">Eq)]</span>
+<span class="k">enum</span> <span class="n">Token</span> <span class="p">{</span>
+    <span class="nf">Atom</span><span class="p">(</span><span class="nb">char</span><span class="p">),</span>
+    <span class="nf">Op</span><span class="p">(</span><span class="nb">char</span><span class="p">),</span>
+    <span class="n">Eof</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">Lexer</span> <span class="p">{</span>
+    <span class="n">tokens</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="n">Token</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">impl</span> <span class="n">Lexer</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">new</span><span class="p">(</span><span class="n">input</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">str</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Lexer</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="k">mut</span> <span class="n">tokens</span> <span class="o">=</span> <span class="n">input</span>
+            <span class="nf">.chars</span><span class="p">()</span>
+            <span class="nf">.filter</span><span class="p">(|</span><span class="n">it</span><span class="p">|</span> <span class="o">!</span><span class="n">it</span><span class="nf">.is_ascii_whitespace</span><span class="p">())</span>
+            <span class="nf">.map</span><span class="p">(|</span><span class="n">c</span><span class="p">|</span> <span class="k">match</span> <span class="n">c</span> <span class="p">{</span>
+                <span class="sc">'0'</span><span class="o">..=</span><span class="sc">'9'</span>
+                <span class="p">|</span> <span class="sc">'a'</span><span class="o">..=</span><span class="sc">'z'</span> <span class="p">|</span> <span class="sc">'A'</span><span class="o">..=</span><span class="sc">'Z'</span> <span class="k">=&gt;</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">c</span><span class="p">),</span>
+                <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">c</span><span class="p">),</span>
+            <span class="p">})</span>
+            <span class="py">.collect</span><span class="p">::</span><span class="o">&lt;</span><span class="nb">Vec</span><span class="o">&lt;</span><span class="mi">_</span><span class="o">&gt;&gt;</span><span class="p">();</span>
+        <span class="n">tokens</span><span class="nf">.reverse</span><span class="p">();</span>
+        <span class="n">Lexer</span> <span class="p">{</span> <span class="n">tokens</span> <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">fn</span> <span class="nf">next</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="k">self</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Token</span> <span class="p">{</span>
+        <span class="k">self</span><span class="py">.tokens</span><span class="nf">.pop</span><span class="p">()</span><span class="nf">.unwrap_or</span><span class="p">(</span><span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="k">fn</span> <span class="nf">peek</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="k">self</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Token</span> <span class="p">{</span>
+        <span class="k">self</span><span class="py">.tokens</span><span class="nf">.last</span><span class="p">()</span><span class="nf">.copied</span><span class="p">()</span><span class="nf">.unwrap_or</span><span class="p">(</span><span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">expr</span><span class="p">(</span><span class="n">input</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">str</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">lexer</span> <span class="o">=</span> <span class="nn">Lexer</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="n">input</span><span class="p">);</span>
+    <span class="nf">expr_bp</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="n">lexer</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="n">Lexer</span><span class="p">,</span> <span class="n">min_bp</span><span class="p">:</span> <span class="nb">u8</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">S</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">lhs</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.next</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">S</span><span class="p">::</span><span class="nf">Atom</span><span class="p">(</span><span class="n">it</span><span class="p">),</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">'('</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+            <span class="k">let</span> <span class="n">lhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+            <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">lexer</span><span class="nf">.next</span><span class="p">(),</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">')'</span><span class="p">));</span>
+            <span class="n">lhs</span>
+        <span class="p">}</span>
+        <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+            <span class="k">let</span> <span class="p">((),</span> <span class="n">r_bp</span><span class="p">)</span> <span class="o">=</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+            <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+            <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">rhs</span><span class="p">])</span>
+        <span class="p">}</span>
+        <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+    <span class="p">};</span>
+
+    <span class="k">loop</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">op</span> <span class="o">=</span> <span class="k">match</span> <span class="n">lexer</span><span class="nf">.peek</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="n">Eof</span> <span class="k">=&gt;</span> <span class="k">break</span><span class="p">,</span>
+            <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">op</span><span class="p">,</span>
+            <span class="n">t</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad token: {:?}"</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span>
+        <span class="p">};</span>
+
+        <span class="k">if</span> <span class="k">let</span> <span class="nf">Some</span><span class="p">((</span><span class="n">l_bp</span><span class="p">,</span> <span class="p">()))</span> <span class="o">=</span> <span class="nf">postfix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+            <span class="n">lexer</span><span class="nf">.next</span><span class="p">();</span>
+
+            <span class="n">lhs</span> <span class="o">=</span> <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="sc">'['</span> <span class="p">{</span>
+                <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+                <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">lexer</span><span class="nf">.next</span><span class="p">(),</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">']'</span><span class="p">));</span>
+                <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">,</span> <span class="n">rhs</span><span class="p">])</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+                <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">])</span>
+            <span class="p">};</span>
+            <span class="k">continue</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="k">let</span> <span class="nf">Some</span><span class="p">((</span><span class="n">l_bp</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">))</span> <span class="o">=</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="n">l_bp</span> <span class="o">&lt;</span> <span class="n">min_bp</span> <span class="p">{</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+            <span class="n">lexer</span><span class="nf">.next</span><span class="p">();</span>
+
+            <span class="n">lhs</span> <span class="o">=</span> <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="sc">'?'</span> <span class="p">{</span>
+                <span class="k">let</span> <span class="n">mhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+                <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">lexer</span><span class="nf">.next</span><span class="p">(),</span> <span class="nn">Token</span><span class="p">::</span><span class="nf">Op</span><span class="p">(</span><span class="sc">':'</span><span class="p">));</span>
+                <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+                <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">,</span> <span class="n">mhs</span><span class="p">,</span> <span class="n">rhs</span><span class="p">])</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+                <span class="k">let</span> <span class="n">rhs</span> <span class="o">=</span> <span class="nf">expr_bp</span><span class="p">(</span><span class="n">lexer</span><span class="p">,</span> <span class="n">r_bp</span><span class="p">);</span>
+                <span class="nn">S</span><span class="p">::</span><span class="nf">Cons</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nd">vec!</span><span class="p">[</span><span class="n">lhs</span><span class="p">,</span> <span class="n">rhs</span><span class="p">])</span>
+            <span class="p">};</span>
+            <span class="k">continue</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">lhs</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">prefix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="p">((),</span> <span class="nb">u8</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">((),</span> <span class="mi">9</span><span class="p">),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"bad op: {:?}"</span><span class="p">,</span> <span class="n">op</span><span class="p">),</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">postfix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="p">())</span><span class="o">&gt;</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'!'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="p">()),</span>
+        <span class="sc">'['</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="p">()),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="k">return</span> <span class="nb">None</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="nf">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">infix_binding_power</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">char</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="p">(</span><span class="nb">u8</span><span class="p">,</span> <span class="nb">u8</span><span class="p">)</span><span class="o">&gt;</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="k">match</span> <span class="n">op</span> <span class="p">{</span>
+        <span class="sc">'='</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="sc">'?'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="sc">'+'</span> <span class="p">|</span> <span class="sc">'-'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+        <span class="sc">'*'</span> <span class="p">|</span> <span class="sc">'/'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
+        <span class="sc">'.'</span> <span class="k">=&gt;</span> <span class="p">(</span><span class="mi">14</span><span class="p">,</span> <span class="mi">13</span><span class="p">),</span>
+        <span class="mi">_</span> <span class="k">=&gt;</span> <span class="k">return</span> <span class="nb">None</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="nf">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">tests</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"1"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"1"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"1 + 2 * 3"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(+ 1 (* 2 3))"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"a + b * c * d + e"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(+ (+ a (* (* b c) d)) e)"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"f . g . h"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(. f (. g h))"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">" 1 + 2 + f . g . h * 3 * 4"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span>
+        <span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span>
+        <span class="s">"(+ (+ 1 2) (* (* (. f (. g h)) 3) 4))"</span><span class="p">,</span>
+    <span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"--1 * 2"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(* (- (- 1)) 2)"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"--f . g"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(- (- (. f g)))"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"-9!"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(- (! 9))"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"f . g !"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(! (. f g))"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"(((0)))"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"0"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"x[0][1]"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"([ ([ x 0) 1)"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span>
+        <span class="s">"a ? b :
+         c ? d
+         : e"</span><span class="p">,</span>
+    <span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(? a b (? c d e))"</span><span class="p">);</span>
+
+    <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="s">"a = 0 ? b : c = d"</span><span class="p">);</span>
+    <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">s</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"(= a (= (? 0 b c) d))"</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="n">in</span> <span class="nn">std</span><span class="p">::</span><span class="nn">io</span><span class="p">::</span><span class="nf">stdin</span><span class="p">()</span><span class="nf">.lock</span><span class="p">()</span><span class="nf">.lines</span><span class="p">()</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="nf">.unwrap</span><span class="p">();</span>
+        <span class="k">let</span> <span class="n">s</span> <span class="o">=</span> <span class="nf">expr</span><span class="p">(</span><span class="o">&amp;</span><span class="n">line</span><span class="p">);</span>
+        <span class="nd">println!</span><span class="p">(</span><span class="s">"{}"</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The code is also available in
+<a href="https://github.com/matklad/minipratt">this repository</a>, Eof :-)</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2020-04-13-simple-but-powerful-pratt-parsing.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

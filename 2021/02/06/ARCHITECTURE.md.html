@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>ARCHITECTURE.md</title>
+  <meta name="description"
+    content="If you maintain an open-source project in the range of 10k-200k lines of code, I strongly encourage you to add an ARCHITECTURE document next to README and CO...">
+  <link rel="canonical" href="https://matklad.github.io//2021/02/06/ARCHITECTURE.md.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>ARCHITECTURE.md</h1>
+  <div class="post-meta sect1">Feb 6, 2021</div>
+  <div class="paragraph">
+<p>If you maintain an open-source project in the range of 10k-200k lines of code, I strongly encourage you to add an <code>ARCHITECTURE</code> document next to <code>README</code> and <code>CONTRIBUTING</code>.
+Before going into the details of why and how, I want to emphasize that this is not another &#8220;docs are good, write more docs&#8221; advice.
+I am pretty sloppy about documentation, and, e.g., I often use just &#8220;simplify&#8221; as a commit message.
+Nonetheless, I feel strongly about the issue, even to the point of pestering you :-)</p>
+</div>
+<div class="paragraph">
+<p>I have experience with both contributing to and maintaining open-source projects.
+One of the lessons I&#8217;ve learned is that the biggest difference between an occasional contributor and a core developer lies in the knowledge about the physical architecture of the project.
+Roughly, it takes 2x more time to write a patch if you are unfamiliar with the project, but it takes 10x more time to figure out <em>where</em> you should change the code.
+This difference might be hard to perceive if you&#8217;ve been working with the project for a while.
+If I am new to a code base, I read each file as a sequence of logical chunks specified in some pseudo-random order.
+If I&#8217;ve made significant contributions before, the perception is quite different.
+I have a mental map of the code in my head, so I no longer read sequentially.
+Instead, I just jump to where the thing should be, and, if it is not there, I move it.
+Mental map is the source of truth.</p>
+</div>
+<div class="paragraph">
+<p>I find <code>ARCHITECTURE</code> file to be a low-effort high-leverage way to bridge this gap.
+As the name suggest, this file should describe the high-level architecture of the project.
+Keep it short: every recurring contributor will have to read it.
+Additionally, the shorter it is, the less likely it will be invalidated by some future change.
+This is the main rule of thumb for <code>ARCHITECTURE</code>&#8201;&#8212;&#8201;specify only things which are unlikely to frequently change.
+Don&#8217;t try to keep it synchronized with code.
+Instead, revisit it a couple of times a year.</p>
+</div>
+<div class="paragraph">
+<p>Start with a bird&#8217;s eye overview of the problem being solved.
+Then, specify a more-or-less detailed codemap.
+Describe coarse-grained modules and how they relate to each other.
+Codemap should answer &#8220;where&#8217;s the thing that does X?&#8221;.
+It should also answer &#8220;what does the thing that I am looking at do?&#8221;.
+Avoid going into details of <em>how</em> each module works, pull this into separate documents or (better) inline documentation.
+Codemap is a map of a country, and not an atlas of maps of its states.
+Use this as a chance to reflect on the project structure.
+Are the things you want to put near each other in the codemap adjacent in <code>exa -TD</code>?</p>
+</div>
+<div class="paragraph">
+<p>Do name important files, modules, and types.
+Do not directly link them (links go stale).
+Instead, encourage the reader to use symbol search to find the mentioned entities by name.
+This doesn&#8217;t require maintenance, and will help to discover related, similarly named things.</p>
+</div>
+<div class="paragraph">
+<p>Explicitly call-out architectural invariants.
+Often, important invariants are expressed as an <em>absence</em> of something, and it&#8217;s pretty hard to divine that from reading the code.
+Nothing in the model layer specifically doesn&#8217;t depend on the views.</p>
+</div>
+<div class="paragraph">
+<p>Point out boundaries between layers and systems as well.
+A boundary implicitly contains information about the implementation of the system behind it.
+It even constraints all <em>possible</em> implementations.
+But finding a boundary by just randomly looking at the code is hard&#8201;&#8212;&#8201;good boundaries have measure zero.</p>
+</div>
+<div class="paragraph">
+<p>After finishing the codemap, add a separate section on cross-cutting concerns.</p>
+</div>
+<div class="paragraph">
+<p>A good example of <code>ARCHITECTURE</code> document is the one from rust-analyzer:
+<a href="https://github.com/rust-analyzer/rust-analyzer/blob/d7c99931d05e3723d878bea5dc26766791fa4e69/docs/dev/architecture.md">architecture.md</a>.</p>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2021-02-06-ARCHITECTURE.md.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

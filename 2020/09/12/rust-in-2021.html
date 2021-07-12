@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Rust in 2021</title>
+  <meta name="description"
+    content="This is my response for this year&#8217;s call for blog posts.I am writing this as a language implementor, not as a language user.I also don&#8217;t try to p...">
+  <link rel="canonical" href="https://matklad.github.io//2020/09/12/rust-in-2021.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Rust in 2021</h1>
+  <div class="post-meta sect1">Sep 12, 2020</div>
+  <div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>This is my response for this year&#8217;s <a href="https://blog.rust-lang.org/2020/09/03/Planning-2021-Roadmap.html">call for blog posts</a>.
+I am writing this as a language implementor, not as a language user.
+I also don&#8217;t try to prioritize the problems.
+The two things I&#8217;ll mention are the things that worry me most without reflecting on the overall state of the project.
+They are not necessary the most important things.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="funding-teams-to-work-on-rust"><a class="anchor" href="#funding-teams-to-work-on-rust"></a>Funding Teams to Work on Rust</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>For the past several years, I&#8217;ve been a maintainer of &#8220;Sponsored Open Source&#8221; projects (rust-analyzer &amp; IntelliJ Rust).
+These projects:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>have a small number of core developers who work full-time at company X, and whose job is to maintain the project,</p>
+</li>
+<li>
+<p>are explicitly engineered for <em>active</em> open source:</p>
+<div class="ulist">
+<ul>
+<li>
+<p>significant fraction of maintainer&#8217;s time goes to contribution documentation, issue mentoring, etc,</p>
+</li>
+<li>
+<p>non-trivial amount of features end up being implemented by the community.</p>
+</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>This experience taught me that there&#8217;s a great deal of a difference between the work done by the community, and the work done during payed hours.
+To put it bluntly, a small team of 2-3 people working full-time on a specific project with a long time horizon can do <em>a lot</em>.
+Not because <code>payed hours == higher quality work</code>, but because of the cumulative effect of:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>being able to focus on a single thing,</p>
+</li>
+<li>
+<p>keeping the project in a mental cache and accumulating knowledge,</p>
+</li>
+<li>
+<p>being able to &#8220;invest&#8221; into the code and do long-term planing effectively.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>In other words, community gives breadth of contributions, while payed hours give depth.
+Both are important, but I feel that Rust could use a lot of the latter at the moment, in two senses.</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, marginal utility of adding a full-time developer to the Rust project will be high for quite a few full-time developers.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, perhaps more worrying, I have a nagging feeling that the imbalance between community and payed hours can affect the quality of the technical artifact, and not just the speed of development.
+The two styles of work lend themselves to different kinds of work actually getting done.
+Most of pull requests I merge are about new features, and some are about bug-fixes.
+Most of pull requests I submit are about refactoring existing code.
+Community naturally picks the work of <em>incrementally adding</em> new code, maintainers can <em>refactor and rewrite</em> existing code.
+It&#8217;s easy to see that, in the limit, this could end with an effectively immutable/append only code base.
+I think we are pretty far from the limit today, but I don&#8217;t exactly like the current dynamics.
+I keep coming back to this <a href="https://graydon2.dreamwidth.org/263429.html">Rust 2019</a> post when I think about this issue.</p>
+</div>
+<div class="paragraph">
+<p>The conclusion from this section is that we should find ways to fund teams of people to focus on improving the Rust programming language.
+Through luck, hard work of my colleagues at JetBrains and Ferrous Systems, and my own efforts it became possible to move in this direction for both IntelliJ Rust and rust-analyzer.
+This was pretty stressful, and, well, I feel that the marginal utility of one more compiler engineer is still huge in the IDE domain at least.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="compiling-the-compiler"><a class="anchor" href="#compiling-the-compiler"></a>Compiling the Compiler</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>And now to something completely different!
+I want this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+</pre></td><td class="code"><pre>$ git clone git@github.com:rust-lang/rust.git &amp;&amp; cd rust
+$ cargo t
+info: syncing channel updates for 'beta-x86_64-unknown-linux-gnu'
+info: latest update on 2020-09-10, rust version 1.47.0-beta
+info: downloading component 'cargo'
+info: downloading component 'rustc'
+info: installing component 'cargo'
+info: installing component 'rustc'
+Compiling unicode-xid v0.2.1
+Compiling proc-macro2 v1.0.20
+
+...
+
+Finished test [unoptimized] target(s) in 5m 45s
+  Running target/debug/deps/rustc-bf0145d0690d0fbc
+
+running 9001 tests
+
+...
+
+test result: ok. 9001 passed;  in 1m 3s
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>That is, I want to simplify working on the compiler itself to it being just a crate.
+This section of the article expands on the comment I&#8217;ve made on the
+<a href="https://internals.rust-lang.org/t/experience-report-contributing-to-rust-lang-rust/12012/17?u=matklad">irlo</a>
+a while ago.</p>
+</div>
+<div class="paragraph">
+<p>Since a couple of months ago, I am slowly pivoting from doing mostly green field dev in the rust-analyzer&#8217;s code base to refactoring <code>rustc</code> internals towards merging the two.
+The process has been underwhelming, and slow and complicated build process plays a significant part in this: I feel like my own productivity is at least five times greater when I work on <code>rust-analyzer</code> in comparison to <code>rustc</code>.</p>
+</div>
+<div class="paragraph">
+<p>Before I go into details about my vision here, I want to give shout-outs to
+<a href="https://github.com/Mark-Simulacrum/">@Mark-Simulacrum</a>, <a href="https://github.com/mark-i-m">@mark-i-m</a>, and <a href="https://github.com/jyn514">@jyn514</a>
+who already did a lot of work on simplifying the build process in the recent several months.</p>
+</div>
+<div class="paragraph">
+<p>Note that I am going to make a slightly deeper than &#8220;Rust in 20XX&#8221; dive into the topic, feel free to skip the rest of the post if technical details about bootstrapping process are not your cup of tea.</p>
+</div>
+<div class="paragraph">
+<p>Finally, I also should warn that I have an intern advantage here&#8201;&#8212;&#8201;I have absolutely no idea about how Rust&#8217;s current build process works, so I tell how it should work from the position of ignorance. Without further ado,</p>
+</div>
+<div class="sect2">
+<h3 id="how-simple-could-the-build-process-be"><a class="anchor" href="#how-simple-could-the-build-process-be"></a>How Simple Could the Build Process Be?</h3>
+<div class="paragraph">
+<p><code>rustc</code> is a bootstrapping compiler.
+This means that, to compile <code>rustc</code> itself, one needs to have a previous version of <code>rustc</code> available.
+This <em>could</em> make compiler&#8217;s build process peculiar.
+My thesis is that this doesn&#8217;t need to be the case, and that the compiler could be just a crate.</p>
+</div>
+<div class="paragraph">
+<p>Bootstrapping does make this harder to see though, so, as a thought experiment, let&#8217;s imagine what would <code>rustc</code>'s build process look like were it not written in Rust.
+Let&#8217;s imagine the world where <code>rustc</code> is implemented in Go.
+How would one build and test this rust compiler?</p>
+</div>
+<div class="paragraph">
+<p>First, we clone the <code>rust-lang/rust</code> repository.
+Then we download the latest version of the Go compiler&#8201;&#8212;&#8201;as we are shipping <code>rustc</code> binaries to the end user, it&#8217;s OK to require a cutting-edge compiler.
+But there&#8217;s probably some script or gvm config file to make getting the latest Go compiler easier.
+After that, <code>go test</code> builds the compiler and runs the unit tests.
+Unit tests take a snippet of Rust code as an input and check that the compiler correctly analyses the snippet: that the parse tree is correct, that diagnostics are emitted, that borrow checker correctly accepts or rejects certain problems.</p>
+</div>
+<div class="paragraph">
+<p>What we can not check in this way is that the compiler is capable of producing a real binary which we can run (that is, <code>run-pass</code> tests).
+The reason for that is slightly subtle&#8201;&#8212;&#8201;to produce a binary, compiler needs to link the tested code with the standard library.
+But we&#8217;ve only compiled the compiler, we don&#8217;t have a standard library yet!</p>
+</div>
+<div class="paragraph">
+<p>So, in addition to unit-tests, we also need somewhat ad-hoc integration tests, which assume that the compiler has been build already, use it to compile the standard library, and then compile, link, and run the corpus of the test programs.
+Running std&#8217;s own <code>#[test]</code> tests is also a part of this integration testing.</p>
+</div>
+<div class="paragraph">
+<p>Now, let&#8217;s see if the above setup has any bottlenecks:</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Getting the Go compiler is fast and straightforward.
+In fact, it&#8217;s reasonable to assume that the user already have a recent Go compiler installed, and that they are familiar with standard Go workflows.</p>
+</li>
+<li>
+<p>Compiling <code>rustc</code> would take a little while.
+On the one hand, Rust is a big language, and you need to spend quite a few lines of code to implement it.
+On the other hand, compilers are very straightforward programs, which don&#8217;t do a lot of IO, don&#8217;t have to deal with changing business requirements and don&#8217;t have a lot of dependencies.
+Besides, Go is a language known for fast compile times.
+So, spending something like five minutes on a quad-core machine for compiling the compiler seems reasonable.</p>
+</li>
+<li>
+<p>After that, running unit-tests is a breeze: unit-tests do not depend on any state external to the test itself; we are testing pure functions.</p>
+</li>
+<li>
+<p>The first integration tests is compiling and <code>#[test]</code>ing <code>std</code>.
+As <code>std</code> is relatively small, compiling it with our compiler should be relatively fast.</p>
+</li>
+<li>
+<p>Running tens of thousands of full integration tests will be slow.
+Each such test would need to do IO to read the source code, write the executable, and run the process.
+It is reasonable to assume that <em>most</em> of potential failures are covered with compiler&#8217;s and <code>std</code>'s unit tests.
+But it would be foolish to rely solely on those tests&#8201;&#8212;&#8201;fully integrated test suite is important to make sure that compiler indeed does what it is supposed to, and it is vital to compare several independent implementations&#8201;&#8212;&#8201;who knows, maybe one day we&#8217;ll rewrite <code>rustc</code> from Go to Rust, and re-using compiler&#8217;s unit-tests would be much harder in that context.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>So, it seems like except for the final integration test suite, there&#8217;s no complexity/performance bottlenecks in our setup for a from-scratch build.
+The problem with integrated suite can be handled by running a subset of smoke tests by default, and only running the full set of integrated tests on CI.
+Testing is embarrassingly parallel, so a beefy CI fleet should handle that just fine.</p>
+</div>
+<div class="paragraph">
+<p>What about incremental builds?
+Let&#8217;s say we want to contribute a change to <code>std</code>.
+First time around, this requires building the compiler, which is unfortunate.
+This is a one-time cost though, and it shouldn&#8217;t be prohibitive (or we will have troubles with changes to the compiler itself anyway).
+We can also cheat here, and just download some version of <code>rustc</code> from the internet to check <code>std</code>.
+This will mostly work, except for the bits where <code>std</code> and rustc need to know about each other (lang items and intrinsics).
+For those, we can use <code>#[cfg(not(bootstrap))]</code> in the <code>std</code> to compile different code for older versions of the compiler.
+This makes <code>std</code> implementation mind-bending though, so a better alternative might be to just make CI publish the artifacts for the compiler built off the master branch.
+That is, if you only contribute to <code>std</code>, you download the latest compiler instead of building it yourself.
+We have a trade off between implementation complexity and compile times.</p>
+</div>
+<div class="paragraph">
+<p>If we want to contribute a change to the compiler, then we are golden as long as it can be checked by the unit-tests (which, again, in theory is everything except for <code>run-pass</code> tests).
+If we need to run integrated tests with <code>std</code>, then we need to recompile <code>std</code> with the new compiler, after every change to the compiler.
+This is pretty unfortunate, but:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>if you fundamentally need to recompile <code>std</code> (for example, you change lang-items), there&#8217;s no way around this,</p>
+</li>
+<li>
+<p>if you don&#8217;t need to recompile <code>std</code>, than you probably can write an <code>std</code>-less unit-test,</p>
+</li>
+<li>
+<p>as an escape hatch, there might be some kind of <code>KEEP_STDLIB</code> env var, which causes integrated tests to re-use existing <code>std</code>, even if the compiler is newer.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>To sum up, compiler is just a program which does some text processing.
+In the modern world full of distributed highly-available long-running systems, compiler is actually a pretty simple program.
+It also is fairly easy to test.
+The hard bit is not the compiler itself, but the standard library: to even start building the standard library, we need to compile the compiler.
+However, most of the compiler can be tested without <code>std</code>, and <code>std</code> itself can be tested using compiler binary built from the master branch by CI.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="why-todays-build-process-is-not-simple"><a class="anchor" href="#why-todays-build-process-is-not-simple"></a>Why Today&#8217;s Build Process is not Simple?</h3>
+<div class="paragraph">
+<p>In theory, it should be possible to replace Go from the last section with Rust, and get a similarly simple bootstrapping compiler.
+That is, we would use latest stable/beta Rust to compile <code>rustc</code>, then we&#8217;ll use this <code>rustc</code> to compile <code><code>std</code></code>, and we are done.
+We might add a sanity check&#8201;&#8212;&#8201;using the freshly built compiler &amp; <code>std</code>, recompile the compiler again and check that everything works.
+This is optional, and in a sense just a subset of a crater run, where we check one specific crate&#8201;&#8212;&#8201;compiler itself.</p>
+</div>
+<div class="paragraph">
+<p>However, today&#8217;s build is <em>more</em> complicated than that.</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, instead of using a "standard distribution" of the compiler for bootstrapping, <code>x.py</code> downloads custom beta toolchain.
+This could and should be replaced with using <code>rustup</code> by default.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, master <code>rustc</code> requires master <code>std</code> to build.
+This is the bit which makes <code>rustc</code> not a simple crate.
+Remember how before the build started with just compiling the compiler as a usual program?
+Today, <code>rustc</code> build starts with compiling master <code>std</code> using the beta compiler, than with compiling master <code>rustc</code> using master <code>std</code> and beta compiler.
+So, there&#8217;s a requirement that <code>std</code> builds with both master and beta compilers, and we also has this weird state where versions of compiler and <code>std</code> we are using to compile the code do not match. In other words, while <code>#[cfg(not(bootstrap))]</code> was an optimization in the previous section (which could be replaced with downloading binary <code>rustc</code> from CI), today it is required.</p>
+</div>
+<div class="paragraph">
+<p><em>Third</em>, there&#8217;s not much in a way of the unit tests in the compiler.
+Almost all tests require <code>std</code>, which means that, to test anything, one needs to rebuild everything.</p>
+</div>
+<div class="paragraph">
+<p><em>Fourth</em>, LLVM &amp; linkers.
+A big part of "compilers are easy to test" is the fact that they are, in theory, closed systems interacting with the outside world in a limited well-defined way.
+In the real world, however, rustc relies on a bunch of external components to work, the biggest one of which is LLVM.
+Luckily, these external components are required only for making the final binary.
+The bulk of the compiler, analysis phases which reject invalid programs and lower valid ones, does not need them.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="specific-improvements"><a class="anchor" href="#specific-improvements"></a>Specific Improvements</h3>
+<div class="paragraph">
+<p>With all this in mind, here are specific steps which I believe would make the build process easier:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Gear the overall build process and defaults to the "hacking on the compiler" use case.</p>
+</li>
+<li>
+<p>By default, rely on <code>rust-toolchain</code> file and rustup to get the beta compiler.</p>
+</li>
+<li>
+<p>Switch from <code>x.py</code> to something like <a href="https://github.com/matklad/cargo-xtask"><code>cargo-xtask</code></a>, to remove dependency on Python.</p>
+</li>
+<li>
+<p>Downgrade rustc&#8217;s libstd requirements to beta.
+Note that this refers solely to the <code>std</code> used to build <code>rustc</code> itself.
+<code>rustc</code> will use master <code>std</code> for building user&#8217;s code.</p>
+</li>
+<li>
+<p>Split compiler and <code>std</code> into separate Cargo workspaces.</p>
+</li>
+<li>
+<p>Make sure that, by default, <code>rustc</code> is using system llvm, or llvm downloaded from a CI server.
+Building llvm from source should require explicit op-in.</p>
+</li>
+<li>
+<p>Make sure that <code>cd compiler &amp;&amp; cargo test</code> just works.</p>
+</li>
+<li>
+<p>Add ability to to make a build of the compiler which can run <code>check</code>, but doesn&#8217;t do llvm-dependent codegen.</p>
+</li>
+<li>
+<p>Split the test suite into cross-platform codegen-less <code>check</code> part, and the fully-integrated part.</p>
+</li>
+<li>
+<p>Split the compiler itself into frontend and codegen parts, such that changes in frontend can be tested without linking backend, and changes in backend can be tested without recompiling the frontend.</p>
+</li>
+<li>
+<p>Stop building <code>std</code> with beta compiler and remove all <code>#[cfg(bootstrap)]</code>.</p>
+</li>
+<li>
+<p><em>Somehow</em> make <code>cargo test</code> just work in <code>std</code>.
+This will require some hackery to plug the logic for &#8220;build compiler from source or download from CI&#8221; somewhere.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>At this stage, we have a compiler which is 100% bog standard crate, and <code>std</code>, which is <em>almost</em> a typical crate (it only requires a very recent compiler to build).</p>
+</div>
+<div class="paragraph">
+<p>After this, we can start the standard procedure to optimize compile and test times, just how you would do for any other Rust project (I am planning to write a couple of posts on these topics).
+I have a suspicion that there&#8217;s a lot of low-hanging fruit there&#8201;&#8212;&#8201;one of the reasons why I writing this post is that I&#8217;ve noticed that doctests in <code>std</code> are insanely slow, and that nobody complains about that just because everything else is even slower!</p>
+</div>
+<div class="paragraph">
+<p>This post ended up being too technical for the genre, but, to recap, there seems to be two force multipliers we could leverage to develop Rust itself:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Creating a space for small teams of people to work full-time on Rust.</p>
+</li>
+<li>
+<p>Simplifying hacking on the compiler to just <code>cargo test</code>.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Discussion on <a href="https://www.reddit.com/r/rust/comments/irhj4o/blog_post_rust_in_2021/">/r/rust</a>.</p>
+</div>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2020-09-12-rust-in-2021.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

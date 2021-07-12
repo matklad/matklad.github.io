@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Study of std::io::Error</title>
+  <meta name="description"
+    content="In this article we&#8217;ll dissect the implementation of std::io::Error type from the Rust&#8217;s standard library.The code in question is here:library/std...">
+  <link rel="canonical" href="https://matklad.github.io//2020/10/15/study-of-std-io-error.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Study of std::io::Error</h1>
+  <div class="post-meta sect1">Oct 15, 2020</div>
+  <div class="paragraph">
+<p>In this article we&#8217;ll dissect the implementation of <code>std::io::Error</code> type from the Rust&#8217;s standard library.
+The code in question is here:
+<a href="https://github.com/rust-lang/rust/blob/5565241f65cf402c3dbcb55dd492f172c473d4ce/library/std/src/io/error.rs">library/std/src/io/error.rs</a>.</p>
+</div>
+<div class="paragraph">
+<p>You can read this post as either of:</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>A study of a specific bit of standard library.</p>
+</li>
+<li>
+<p>An advanced error management guide.</p>
+</li>
+<li>
+<p>A case of a beautiful API design.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>The article requires basic familiarity with Rust error handing.</p>
+</div>
+<hr>
+<div class="paragraph">
+<p>When designing an <code>Error</code> type for use with <code>Result&lt;T, E&gt;</code>, the main question to ask is &#8220;how the error will be used?&#8221;.
+Usually, one of the following is true.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>The error is handled programmatically.
+The consumer inspects the error, so its internal structure needs to be exposed to a reasonable degree.</p>
+</li>
+<li>
+<p>The error is propagated and displayed to the user.
+The consumer doesn&#8217;t inspect the error beyond the <code>fmt::Display</code>; so its internal structure can be encapsulated.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Note that there&#8217;s a tension between exposing implementation details and encapsulating them. A common anti-pattern for implementing the first case is to define a kitchen-sink enum:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+</pre></td><td class="code"><pre><span class="k">pub</span> <span class="k">enum</span> <span class="n">Error</span> <span class="p">{</span>
+  <span class="nf">Tokio</span><span class="p">(</span><span class="nn">tokio</span><span class="p">::</span><span class="nn">io</span><span class="p">::</span><span class="n">Error</span><span class="p">),</span>
+  <span class="n">ConnectionDiscovery</span> <span class="p">{</span>
+    <span class="n">path</span><span class="p">:</span> <span class="n">PathBuf</span><span class="p">,</span>
+    <span class="n">reason</span><span class="p">:</span> <span class="nb">String</span><span class="p">,</span>
+    <span class="n">stderr</span><span class="p">:</span> <span class="nb">String</span><span class="p">,</span>
+  <span class="p">},</span>
+  <span class="n">Deserialize</span> <span class="p">{</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nn">serde_json</span><span class="p">::</span><span class="n">Error</span><span class="p">,</span>
+    <span class="n">data</span><span class="p">:</span> <span class="nb">String</span><span class="p">,</span>
+  <span class="p">},</span>
+  <span class="o">...</span><span class="p">,</span>
+  <span class="nf">Generic</span><span class="p">(</span><span class="nb">String</span><span class="p">),</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>There is a number of problems with this approach.</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, exposing errors from underlying libraries makes them a part of your public API.
+Major semver bump in your dependency would require you to make a new major version as well.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, it sets all the implementation details in stone.
+For example, if you notice that the size of <code>ConnectionDiscovery</code> is huge, boxing this variant would be a breaking change.</p>
+</div>
+<div class="paragraph">
+<p><em>Third</em>, it is usually indicative of a larger design issue.
+Kitchen sink errors pack dissimilar failure modes into one type.
+But, if failure modes vary widely, it probably isn&#8217;t reasonable to handle them!
+This is an indication that the situation looks more like the case two.</p>
+</div>
+<div class="sidebarblock">
+<div class="content">
+<div class="paragraph">
+<p>An often-working cure for error kitchensinkosis is the pattern of pushing errors to the caller.</p>
+</div>
+<div class="paragraph">
+<p>Consider this example</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">my_function</span><span class="p">()</span> <span class="k">-&gt;</span> <span class="n">Result</span><span class="o">&lt;</span><span class="nb">i32</span><span class="p">,</span> <span class="n">MyError</span><span class="o">&gt;</span> <span class="p">{</span>
+  <span class="k">let</span> <span class="n">thing</span> <span class="o">=</span> <span class="nf">dep_function</span><span class="p">()</span><span class="o">?</span><span class="p">;</span>
+  <span class="o">...</span>
+  <span class="nf">Ok</span><span class="p">(</span><span class="mi">92</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><code>my_function</code> calls <code>dep_function</code>, so <code>MyError</code> should be convertible from <code>DepError</code>.
+A better way to write the same might be this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">my_function</span><span class="p">(</span><span class="n">thing</span><span class="p">:</span> <span class="n">DepThing</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Result</span><span class="o">&lt;</span><span class="nb">i32</span><span class="p">,</span> <span class="n">MyError</span><span class="o">&gt;</span> <span class="p">{</span>
+  <span class="o">...</span>
+  <span class="nf">Ok</span><span class="p">(</span><span class="mi">92</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>In this version, the caller is forced to invoke <code>dep_function</code> and handle its error.
+This exchanges more typing for more type-safety.
+<code>MyError</code> and <code>DepError</code> are now different types, and the caller can handle them separately.
+If <code>DepError</code> were a variant of <code>MyError</code> a runtime <code>match</code>-ing would be required.</p>
+</div>
+<div class="paragraph">
+<p>An extreme version of this idea is <a href="https://sans-io.readthedocs.io/">sans-io</a> programming.
+Most errors come from IO; if you push all IO to the caller, you can skip most of the error handing!</p>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>However bad the <code>enum</code> approach might be, it does achieve maximum inspectability of the first case.</p>
+</div>
+<div class="paragraph">
+<p>The propagation-centered second case of error management is typically handled by using a boxed trait object.
+A type like <code>Box&lt;dyn std::error::Error&gt;</code> can be constructed from any specific concrete error, can be printed via <code>Display</code>, and can still optionally expose the underlying error via dynamic downcasting.
+The <a href="https://lib.rs/crates/anyhow"><code>anyhow</code></a> crate is a great example of this style.</p>
+</div>
+<div class="paragraph">
+<p>The case of <code>std::io::Error</code> is interesting because it wants to be both of the above and more.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>This is <code>std</code>, so encapsulation and future-proofing are paramount.</p>
+</li>
+<li>
+<p>IO errors coming from the operating system often can be handled (for example, <code>EWOULDBLOCK</code>).</p>
+</li>
+<li>
+<p>For a systems programming language, it&#8217;s important to expose the underlying OS error exactly.</p>
+</li>
+<li>
+<p>The set of potential future OS error is unbounded.</p>
+</li>
+<li>
+<p><code>io::Error</code> is also a vocabulary type, and should be able to represent some not-quite-os errors.
+For example, Rust <code>Path</code>s can contain internal <code>0</code> bytes and <code>open</code>ing such path should return an <code>io::Error</code> <em>before</em> making a syscall.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s what <code>std::io::Error</code> looks like:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+</pre></td><td class="code"><pre><span class="k">pub</span> <span class="k">struct</span> <span class="n">Error</span> <span class="p">{</span>
+  <span class="n">repr</span><span class="p">:</span> <span class="n">Repr</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">enum</span> <span class="n">Repr</span> <span class="p">{</span>
+  <span class="nf">Os</span><span class="p">(</span><span class="nb">i32</span><span class="p">),</span>
+  <span class="nf">Simple</span><span class="p">(</span><span class="n">ErrorKind</span><span class="p">),</span>
+  <span class="nf">Custom</span><span class="p">(</span><span class="nb">Box</span><span class="o">&lt;</span><span class="n">Custom</span><span class="o">&gt;</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">Custom</span> <span class="p">{</span>
+  <span class="n">kind</span><span class="p">:</span> <span class="n">ErrorKind</span><span class="p">,</span>
+  <span class="n">error</span><span class="p">:</span> <span class="nb">Box</span><span class="o">&lt;</span><span class="n">dyn</span> <span class="nn">error</span><span class="p">::</span><span class="n">Error</span> <span class="o">+</span> <span class="nb">Send</span> <span class="o">+</span> <span class="n">Sync</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>First thing to notice is that it&#8217;s an enum internally, but this is a well-hidden implementation detail.
+To allow inspecting and handing of various error conditions there&#8217;s a separate public fieldless kind enum:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+</pre></td><td class="code"><pre><span class="nd">#[derive(Clone,</span> <span class="nd">Copy)]</span>
+<span class="nd">#[non_exhaustive]</span>
+<span class="k">pub</span> <span class="k">enum</span> <span class="n">ErrorKind</span> <span class="p">{</span>
+  <span class="n">NotFound</span><span class="p">,</span>
+  <span class="n">PermissionDenied</span><span class="p">,</span>
+  <span class="n">Interrupted</span><span class="p">,</span>
+  <span class="o">...</span>
+  <span class="n">Other</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">impl</span> <span class="n">Error</span> <span class="p">{</span>
+  <span class="k">pub</span> <span class="k">fn</span> <span class="nf">kind</span><span class="p">(</span><span class="o">&amp;</span><span class="k">self</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">ErrorKind</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="o">&amp;</span><span class="k">self</span><span class="py">.repr</span> <span class="p">{</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Os</span><span class="p">(</span><span class="n">code</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nn">sys</span><span class="p">::</span><span class="nf">decode_error_kind</span><span class="p">(</span><span class="o">*</span><span class="n">code</span><span class="p">),</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Custom</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">c</span><span class="py">.kind</span><span class="p">,</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Simple</span><span class="p">(</span><span class="n">kind</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="o">*</span><span class="n">kind</span><span class="p">,</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Although both <code>ErrorKind</code> and <code>Repr</code> are enums, publicly exposing <code>ErrorKind</code> is much less scary.
+A <code>#[non_exhaustive]</code> <code>Copy</code> fieldless enum&#8217;s design space is a point&#8201;&#8212;&#8201;there are no plausible alternatives or compatibility hazards.</p>
+</div>
+<div class="paragraph">
+<p><em>Some</em> <code>io::Errors</code> are just raw OS error codes:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+</pre></td><td class="code"><pre><span class="k">impl</span> <span class="n">Error</span> <span class="p">{</span>
+  <span class="k">pub</span> <span class="k">fn</span> <span class="nf">from_raw_os_error</span><span class="p">(</span><span class="n">code</span><span class="p">:</span> <span class="nb">i32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Error</span> <span class="p">{</span>
+    <span class="n">Error</span> <span class="p">{</span> <span class="n">repr</span><span class="p">:</span> <span class="nn">Repr</span><span class="p">::</span><span class="nf">Os</span><span class="p">(</span><span class="n">code</span><span class="p">)</span> <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="k">pub</span> <span class="k">fn</span> <span class="nf">raw_os_error</span><span class="p">(</span><span class="o">&amp;</span><span class="k">self</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="nb">i32</span><span class="o">&gt;</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="k">self</span><span class="py">.repr</span> <span class="p">{</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Os</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nf">Some</span><span class="p">(</span><span class="n">i</span><span class="p">),</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Custom</span><span class="p">(</span><span class="o">..</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nb">None</span><span class="p">,</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Simple</span><span class="p">(</span><span class="o">..</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nb">None</span><span class="p">,</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Platform-specific <code>sys::decode_error_kind</code> function takes care of mapping error codes to <code>ErrorKind</code> enum.
+All this together means that code can handle error categories in a cross-platform way by inspecting the <code>.kind()</code>.
+However, if the need arises to handle a very specific error code in an OS-dependent way, that is also possible.
+The API carefully provides a convenient abstraction without abstracting away important low-level details.</p>
+</div>
+<div class="paragraph">
+<p>An <code>std::io::Error</code> can also be constructed from an <code>ErrorKind</code>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="code"><pre><span class="k">impl</span> <span class="n">From</span><span class="o">&lt;</span><span class="n">ErrorKind</span><span class="o">&gt;</span> <span class="k">for</span> <span class="n">Error</span> <span class="p">{</span>
+  <span class="k">fn</span> <span class="nf">from</span><span class="p">(</span><span class="n">kind</span><span class="p">:</span> <span class="n">ErrorKind</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Error</span> <span class="p">{</span>
+    <span class="n">Error</span> <span class="p">{</span> <span class="n">repr</span><span class="p">:</span> <span class="nn">Repr</span><span class="p">::</span><span class="nf">Simple</span><span class="p">(</span><span class="n">kind</span><span class="p">)</span> <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This provides cross-platform access to error-code style error handling.
+This is handy if you need the fastest possible errors.</p>
+</div>
+<div class="paragraph">
+<p>Finally, there&#8217;s a third, fully custom variant of the representation:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+</pre></td><td class="code"><pre><span class="k">impl</span> <span class="n">Error</span> <span class="p">{</span>
+  <span class="k">pub</span> <span class="k">fn</span> <span class="n">new</span><span class="o">&lt;</span><span class="n">E</span><span class="o">&gt;</span><span class="p">(</span><span class="n">kind</span><span class="p">:</span> <span class="n">ErrorKind</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="n">E</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Error</span>
+  <span class="k">where</span>
+    <span class="n">E</span><span class="p">:</span> <span class="n">Into</span><span class="o">&lt;</span><span class="nb">Box</span><span class="o">&lt;</span><span class="n">dyn</span> <span class="nn">error</span><span class="p">::</span><span class="n">Error</span> <span class="o">+</span> <span class="nb">Send</span> <span class="o">+</span> <span class="n">Sync</span><span class="o">&gt;&gt;</span><span class="p">,</span>
+  <span class="p">{</span>
+    <span class="nn">Self</span><span class="p">::</span><span class="mi">_</span><span class="nf">new</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">error</span><span class="nf">.into</span><span class="p">())</span>
+  <span class="p">}</span>
+
+  <span class="k">fn</span> <span class="mi">_</span><span class="nf">new</span><span class="p">(</span>
+    <span class="n">kind</span><span class="p">:</span> <span class="n">ErrorKind</span><span class="p">,</span>
+    <span class="n">error</span><span class="p">:</span> <span class="nb">Box</span><span class="o">&lt;</span><span class="n">dyn</span> <span class="nn">error</span><span class="p">::</span><span class="n">Error</span> <span class="o">+</span> <span class="nb">Send</span> <span class="o">+</span> <span class="n">Sync</span><span class="o">&gt;</span><span class="p">,</span>
+  <span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Error</span> <span class="p">{</span>
+    <span class="n">Error</span> <span class="p">{</span>
+      <span class="n">repr</span><span class="p">:</span> <span class="nn">Repr</span><span class="p">::</span><span class="nf">Custom</span><span class="p">(</span><span class="nn">Box</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="n">Custom</span> <span class="p">{</span> <span class="n">kind</span><span class="p">,</span> <span class="n">error</span> <span class="p">})),</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">pub</span> <span class="k">fn</span> <span class="nf">get_ref</span><span class="p">(</span>
+    <span class="o">&amp;</span><span class="k">self</span><span class="p">,</span>
+  <span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">Option</span><span class="o">&lt;&amp;</span><span class="p">(</span><span class="n">dyn</span> <span class="nn">error</span><span class="p">::</span><span class="n">Error</span> <span class="o">+</span> <span class="nb">Send</span> <span class="o">+</span> <span class="n">Sync</span> <span class="o">+</span> <span class="nv">'static</span><span class="p">)</span><span class="o">&gt;</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="o">&amp;</span><span class="k">self</span><span class="py">.repr</span> <span class="p">{</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Os</span><span class="p">(</span><span class="o">..</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nb">None</span><span class="p">,</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Simple</span><span class="p">(</span><span class="o">..</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nb">None</span><span class="p">,</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Custom</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nf">Some</span><span class="p">(</span><span class="o">&amp;*</span><span class="n">c</span><span class="py">.error</span><span class="p">),</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">pub</span> <span class="k">fn</span> <span class="nf">into_inner</span><span class="p">(</span>
+    <span class="k">self</span><span class="p">,</span>
+  <span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="nb">Box</span><span class="o">&lt;</span><span class="n">dyn</span> <span class="nn">error</span><span class="p">::</span><span class="n">Error</span> <span class="o">+</span> <span class="nb">Send</span> <span class="o">+</span> <span class="n">Sync</span><span class="o">&gt;&gt;</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="k">self</span><span class="py">.repr</span> <span class="p">{</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Os</span><span class="p">(</span><span class="o">..</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nb">None</span><span class="p">,</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Simple</span><span class="p">(</span><span class="o">..</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nb">None</span><span class="p">,</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Custom</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nf">Some</span><span class="p">(</span><span class="n">c</span><span class="py">.error</span><span class="p">),</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Things to note:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Generic <code>new</code> function delegates to monomorphic <code>_new</code> function.
+This improves compile time, as less code needs to be duplicated during monomorphization.
+I think it also improves the runtime a bit: the <code>_new</code> function is not marked as inline, so a function call would be generated at the call-site.
+This is good, because error construction is the cold-path and saving instruction cache is welcome.</p>
+</li>
+<li>
+<p>The <code>Custom</code> variant is boxed&#8201;&#8212;&#8201;this is to keep overall <code>size_of</code> smaller.
+On-the-stack size of errors is important: you pay for it even if there are no errors!</p>
+</li>
+<li>
+<p>Both these types refer to a <code>'static</code> error:</p>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+</pre></td><td class="code"><pre><span class="k">type</span> <span class="n">A</span> <span class="o">=</span>   <span class="o">&amp;</span><span class="p">(</span><span class="n">dyn</span> <span class="nn">error</span><span class="p">::</span><span class="n">Error</span> <span class="o">+</span> <span class="nb">Send</span> <span class="o">+</span> <span class="n">Sync</span> <span class="o">+</span> <span class="nv">'static</span><span class="p">);</span>
+<span class="k">type</span> <span class="n">B</span> <span class="o">=</span> <span class="nb">Box</span><span class="o">&lt;</span><span class="n">dyn</span> <span class="nn">error</span><span class="p">::</span><span class="n">Error</span> <span class="o">+</span> <span class="nb">Send</span> <span class="o">+</span> <span class="n">Sync</span><span class="o">&gt;</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>In a <code>dyn Trait + '_</code>, the <code>'_</code> is elided to <code>'static</code>, unless the trait object is behind a reference, in which case it is elided as <code>&amp;'a dyn Trait + 'a</code>.</p>
+</div>
+</li>
+<li>
+<p><code>get_ref</code>, <code>get_mut</code> and <code>into_inner</code> provide full access to the underlying error.
+Similarly to <code>os_error</code> case, abstraction blurs details, but also provides hooks to get the underlying data as-is.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Similarly, <code>Display</code> implementation reveals the most important details about internal representation.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+</pre></td><td class="code"><pre><span class="k">impl</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Display</span> <span class="k">for</span> <span class="n">Error</span> <span class="p">{</span>
+  <span class="k">fn</span> <span class="nf">fmt</span><span class="p">(</span><span class="o">&amp;</span><span class="k">self</span><span class="p">,</span> <span class="n">fmt</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Formatter</span><span class="o">&lt;</span><span class="nv">'_</span><span class="o">&gt;</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Result</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="o">&amp;</span><span class="k">self</span><span class="py">.repr</span> <span class="p">{</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Os</span><span class="p">(</span><span class="n">code</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">detail</span> <span class="o">=</span> <span class="nn">sys</span><span class="p">::</span><span class="nn">os</span><span class="p">::</span><span class="nf">error_string</span><span class="p">(</span><span class="o">*</span><span class="n">code</span><span class="p">);</span>
+        <span class="nd">write!</span><span class="p">(</span><span class="n">fmt</span><span class="p">,</span> <span class="s">"{} (os error {})"</span><span class="p">,</span> <span class="n">detail</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
+      <span class="p">}</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Simple</span><span class="p">(</span><span class="n">kind</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nd">write!</span><span class="p">(</span><span class="n">fmt</span><span class="p">,</span> <span class="s">"{}"</span><span class="p">,</span> <span class="n">kind</span><span class="nf">.as_str</span><span class="p">()),</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Custom</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">c</span><span class="py">.error</span><span class="nf">.fmt</span><span class="p">(</span><span class="n">fmt</span><span class="p">),</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>To sum up, <code>std::io::Error</code>:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>encapsulates its internal representation and optimizes it by boxing large enum variant,</p>
+</li>
+<li>
+<p>provides a convenient way to handle error based on category via <code>ErrorKind</code> pattern,</p>
+</li>
+<li>
+<p>fully exposes underlying OS error, if any.</p>
+</li>
+<li>
+<p>can transparently wrap any other error type.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>The last point means that <code>io::Error</code> can be used for ad-hoc errors, as <code>&amp;str</code> and <code>String</code> are convertible to <code>Box&lt;dyn std::error::Error&gt;</code>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre><span class="nn">io</span><span class="p">::</span><span class="nn">Error</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="nn">io</span><span class="p">::</span><span class="nn">ErrorKind</span><span class="p">::</span><span class="n">Other</span><span class="p">,</span> <span class="s">"something went wrong"</span><span class="p">)</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>It also can be used as a simple replacement for <code>anyhow</code>.
+I <strong>think</strong> some libraries might simplify their error handing with this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre><span class="nn">io</span><span class="p">::</span><span class="nn">Error</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="nn">io</span><span class="p">::</span><span class="nn">ErrorKind</span><span class="p">::</span><span class="n">InvalidData</span><span class="p">,</span> <span class="n">my_specific_error</span><span class="p">)</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>For example, <a href="https://docs.rs/serde_json/1.0.59/serde_json/fn.from_reader.html"><code>serde_json</code></a> provides the following method:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="n">from_reader</span><span class="o">&lt;</span><span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">rdr</span><span class="p">:</span> <span class="n">R</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Result</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="nn">serde_json</span><span class="p">::</span><span class="n">Error</span><span class="o">&gt;</span>
+<span class="k">where</span>
+  <span class="n">R</span><span class="p">:</span> <span class="n">Read</span><span class="p">,</span>
+  <span class="n">T</span><span class="p">:</span> <span class="n">DeserializeOwned</span><span class="p">,</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><code>Read</code> can fail with <code>io::Error</code>, so <code>serde_json::Error</code> needs to be able to represent <code>io::Error</code> internally.
+I think this is backwards (but I don&#8217;t know the whole context, I&#8217;d be delighted to be proven wrong!), and the signature should have been this instead:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="n">from_reader</span><span class="o">&lt;</span><span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">rdr</span><span class="p">:</span> <span class="n">R</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Result</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="nn">io</span><span class="p">::</span><span class="n">Error</span><span class="o">&gt;</span>
+<span class="k">where</span>
+  <span class="n">R</span><span class="p">:</span> <span class="n">Read</span><span class="p">,</span>
+  <span class="n">T</span><span class="p">:</span> <span class="n">DeserializeOwned</span><span class="p">,</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Then, <code>serde_json::Error</code> wouldn&#8217;t have <code>Io</code> variant and would be stashed into <code>io::Error</code> with <code>InvalidData</code> kind.</p>
+</div>
+<div class="sidebarblock">
+<div class="content">
+<div class="title">Addendum, 2021-01-25</div>
+<div class="paragraph">
+<p>Re-reading <a href="https://sled.rs/errors.html">this article</a>, I now think that the right return type would be:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="n">from_reader</span><span class="o">&lt;</span><span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="o">&gt;</span><span class="p">(</span>
+  <span class="n">rdr</span><span class="p">:</span> <span class="n">R</span><span class="p">,</span>
+<span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Result</span><span class="o">&lt;</span><span class="n">Result</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="nn">serde_json</span><span class="p">::</span><span class="n">Error</span><span class="o">&gt;</span><span class="p">,</span> <span class="nn">io</span><span class="p">::</span><span class="n">Error</span><span class="o">&gt;</span>
+<span class="k">where</span>
+  <span class="n">R</span><span class="p">:</span> <span class="n">Read</span><span class="p">,</span>
+  <span class="n">T</span><span class="p">:</span> <span class="n">DeserializeOwned</span><span class="p">,</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This forces separate handling of IO and deserialization errors, which makes sense in this case.
+IO error is probably a hardware/environment problem outside of the domain of the program, while serialization error most likely indicates a bug somewhere in the system.</p>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>I think <code>std::io::Error</code> is a truly marvelous type, which manages to serve many different use-cases without much compromise.
+But can we perhaps do better?</p>
+</div>
+<div class="paragraph">
+<p>The number one problem with <code>std::io::Error</code> is that, when a file-system operation fails, you don&#8217;t know which path it has failed for!
+This is understandable&#8201;&#8212;&#8201;Rust is a systems language, so it shouldn&#8217;t add much fat over what OS provides natively.
+OS returns an integer return code, and coupling that with a heap-allocated <code>PathBuf</code> could be an unacceptable overhead!</p>
+</div>
+<div class="sidebarblock">
+<div class="content">
+<div class="paragraph">
+<p>I was surprised to learn that std in fact
+<a href="https://github.com/rust-lang/rust/blob/e160e5cb80652bc2afe74cb3affbe35b74243ea9/library/std/src/sys/unix/fs.rs#L867-L869">does</a>
+an allocation for every path-related syscall.</p>
+</div>
+<div class="paragraph">
+<p>It needs to be there in some form: OS API require that unfortunate zero byte at the end of strings.
+But I wonder if using a stack-allocated buffer for short paths would&#8217;ve made sense.
+Probably not&#8201;&#8212;&#8201;paths are not that short usually, and modern allocators handle transient allocations efficiently.</p>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>I don&#8217;t know an obviously good solution here.
+One option would be to add compile time (once we get std-aware cargo) or runtime (a-la <code>RUST_BACKTRACE</code>) switch to heap-allocate all path-related IO errors.
+A similarly-shaped problem is that <code>io::Error</code> doesn&#8217;t carry a backtrace.</p>
+</div>
+<div class="paragraph">
+<p>The other problem is that <code>std::io::Error</code> is not as efficient as it could be:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Its size is pretty big:</p>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre><span class="nd">assert_eq!</span><span class="p">(</span><span class="nn">size_of</span><span class="p">::</span><span class="o">&lt;</span><span class="nn">io</span><span class="p">::</span><span class="n">Error</span><span class="o">&gt;</span><span class="p">(),</span> <span class="mi">2</span> <span class="o">*</span> <span class="nn">size_of</span><span class="p">::</span><span class="o">&lt;</span><span class="nb">usize</span><span class="o">&gt;</span><span class="p">());</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+</li>
+<li>
+<p>For custom case, it incurs double indirection and allocation:</p>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+</pre></td><td class="code"><pre><span class="k">enum</span> <span class="n">Repr</span> <span class="p">{</span>
+  <span class="nf">Os</span><span class="p">(</span><span class="nb">i32</span><span class="p">),</span>
+  <span class="nf">Simple</span><span class="p">(</span><span class="n">ErrorKind</span><span class="p">),</span>
+  <span class="c">// First Box :|</span>
+  <span class="nf">Custom</span><span class="p">(</span><span class="nb">Box</span><span class="o">&lt;</span><span class="n">Custom</span><span class="o">&gt;</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">Custom</span> <span class="p">{</span>
+  <span class="n">kind</span><span class="p">:</span> <span class="n">ErrorKind</span><span class="p">,</span>
+  <span class="c">// Second Box :(</span>
+  <span class="n">error</span><span class="p">:</span> <span class="nb">Box</span><span class="o">&lt;</span><span class="n">dyn</span> <span class="nn">error</span><span class="p">::</span><span class="n">Error</span> <span class="o">+</span> <span class="nb">Send</span> <span class="o">+</span> <span class="n">Sync</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>I think we can fix this now!</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, we can get rid of double indirection by using a thin trait object, a-la
+<a href="https://github.com/rust-lang-nursery/failure/blob/135e2a3b9af422d9a9dc37ce7c69354c9b36e94b/src/error/error_impl_small.rs#L9-L18"><code>failure</code></a> or
+<a href="https://github.com/dtolnay/anyhow/blob/840afd84e9dd91ac5340c05afadeecbe45d0b810/src/error.rs#L671-L679"><code>anyhow</code></a>.
+Now that <a href="https://doc.rust-lang.org/stable/std/alloc/trait.GlobalAlloc.html"><code>GlobalAlloc</code></a> exist, it&#8217;s a relatively straight-forward implementation.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, we can make use of the fact that pointers are aligned, and stash both <code>Os</code> and <code>Simple</code> variants into <code>usize</code> with the least significant bit set.
+I think we can even get creative and use the <em>second</em> least significant bit, leaving the first one as a niche.
+That way, even something like <code>io::Result&lt;i32&gt;</code> can be pointer-sized!</p>
+</div>
+<div class="paragraph">
+<p>And this concludes the post.
+Next time you&#8217;ll be designing an error type for your library, take a moment to peer through
+<a href="https://github.com/rust-lang/rust/blob/5565241f65cf402c3dbcb55dd492f172c473d4ce/library/std/src/io/error.rs">sources</a>
+of <code>std::io::Error</code>, you might find something to steal!</p>
+</div>
+<div class="paragraph">
+<p>Discussion on <a href="https://www.reddit.com/r/rust/comments/jbdk5x/blog_post_study_of_stdioerror/">/r/rust</a>.</p>
+</div>
+<div class="sidebarblock">
+<div class="content">
+<div class="title">Bonus puzzler</div>
+<div class="paragraph">
+<p>Take a look at
+<a href="https://github.com/rust-lang/rust/blob/e160e5cb80652bc2afe74cb3affbe35b74243ea9/library/std/src/io/error.rs#L542">this line</a> from the implementation:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+</pre></td><td class="code"><pre><span class="k">impl</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Display</span> <span class="k">for</span> <span class="n">Error</span> <span class="p">{</span>
+  <span class="k">fn</span> <span class="nf">fmt</span><span class="p">(</span><span class="o">&amp;</span><span class="k">self</span><span class="p">,</span> <span class="n">fmt</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Formatter</span><span class="o">&lt;</span><span class="nv">'_</span><span class="o">&gt;</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nn">fmt</span><span class="p">::</span><span class="n">Result</span> <span class="p">{</span>
+    <span class="k">match</span> <span class="o">&amp;</span><span class="k">self</span><span class="py">.repr</span> <span class="p">{</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Os</span><span class="p">(</span><span class="n">code</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">detail</span> <span class="o">=</span> <span class="nn">sys</span><span class="p">::</span><span class="nn">os</span><span class="p">::</span><span class="nf">error_string</span><span class="p">(</span><span class="o">*</span><span class="n">code</span><span class="p">);</span>
+        <span class="nd">write!</span><span class="p">(</span><span class="n">fmt</span><span class="p">,</span> <span class="s">"{} (os error {})"</span><span class="p">,</span> <span class="n">detail</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
+      <span class="p">}</span>
+      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Simple</span><span class="p">(</span><span class="n">kind</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="nd">write!</span><span class="p">(</span><span class="n">fmt</span><span class="p">,</span> <span class="s">"{}"</span><span class="p">,</span> <span class="n">kind</span><span class="nf">.as_str</span><span class="p">()),</span>
+<span class="hll">      <span class="nn">Repr</span><span class="p">::</span><span class="nf">Custom</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">=&gt;</span> <span class="n">c</span><span class="py">.error</span><span class="nf">.fmt</span><span class="p">(</span><span class="n">fmt</span><span class="p">),</span>
+</span>    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Why is it surprising that this line works?</p>
+</li>
+<li>
+<p>Why does it work?</p>
+</li>
+</ol>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2020-10-15-study-of-std-io-error.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

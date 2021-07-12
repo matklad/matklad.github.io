@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Dynamic types in LLDB</title>
+  <meta name="description"
+    content="">
+  <link rel="canonical" href="https://matklad.github.io//2017/10/21/lldb-dynamic-type.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Dynamic types in LLDB</h1>
+  <div class="post-meta sect1">Oct 21, 2017</div>
+  <div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>If you are wondering how debuggers work, I suggest reading Eli Bendersky&#8217;s
+<a href="https://eli.thegreenplace.net/tag/debuggers">eli-on-debuggers</a>. However after having read these notes myself, I still
+had one question unanswered. Namely, how can debugger show fields of a class, if
+the type of the class is known only at runtime?</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="example"><a class="anchor" href="#example"></a>Example</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Consider this situation: you have a pointer of type <code>A*</code>, which at runtime holds
+a value of some subtype of <code>A</code>. Could the debugger display the fields of the
+actual type? Turns out, it can handle cases like the one below just fine!</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="cpp"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="code"><pre><span class="k">struct</span> <span class="nc">Base</span> <span class="p">{</span> <span class="p">...</span> <span class="p">};</span>
+
+<span class="k">struct</span> <span class="nc">Derived</span><span class="o">:</span> <span class="n">Baes</span> <span class="p">{</span> <span class="p">...</span> <span class="p">};</span>
+
+<span class="kt">void</span> <span class="nf">foo</span><span class="p">(</span><span class="n">Base</span><span class="o">&amp;</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// `x` can be `Derived` or `Base` here.</span>
+    <span class="c1">// How can debugger show fields of `Derived` then?</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="dwarf"><a class="anchor" href="#dwarf"></a>DWARF</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Could it be possible that information about dynamic types is present in DWARF?
+If we look at the DWARF, we&#8217;ll see that there&#8217;s layout information for both
+<code>Base</code> and <code>Derive</code> types, as well as a entry for <code>x</code> parameter, which says that
+it has type <code>Base</code>. And this makes sense: we don&#8217;t know that <code>x</code> is  <code>Derived</code>
+until runtime! So debugger must somehow figure the type of the variable
+dynamically.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="no-magic"><a class="anchor" href="#no-magic"></a>No Magic</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>As usual, there&#8217;s no magic. For example, LLDB has a hard-coded knowledge of C++
+programming language, which allows debugger to inspect types at runtime.
+Specifically, this is handled by <code>LanguageRuntime</code> LLDB <strong>plugin</strong>, which has a
+curious function <a href="https://github.com/llvm-mirror/lldb/blob/bc19e289f759c26e4840aab450443d4a85071139/include/lldb/Target/LanguageRuntime.h#L82"><code>GetDynamicTypeAndAddress</code></a>, whose job is to poke the
+representation of value to get its real type and adjust pointer, if necessary
+(remember, with multiple inheritance, casts may change the value of the
+pointer).</p>
+</div>
+<div class="paragraph">
+<p>The implementation of this function for C&#43;&#43; language lives in
+<a href="https://github.com/llvm-mirror/lldb/blob/bc19e289f759c26e4840aab450443d4a85071139/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp#L185">ItaniumABILanguageRuntime.cpp</a> although, unlike C, C&#43;&#43; lacks a
+standardized ABI, almost all compilers on all non-windows platforms use a
+<a href="http://refspecs.linuxbase.org/cxxabi-1.83.html">specific ABI</a>, confusingly called Itanium (after a now effectively dead
+64-bit CPU architecture).</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2017-10-21-lldb-dynamic-type.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

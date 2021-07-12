@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Why is Rust the Most Loved Programming Language?</title>
+  <meta name="description"
+    content="... by me?">
+  <link rel="canonical" href="https://matklad.github.io//2020/02/14/why-rust-is-loved.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Why is Rust the Most Loved Programming Language?</h1>
+  <div class="post-meta sect1">Feb 14, 2020</div>
+  <div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>... by me?</p>
+</div>
+<div class="paragraph">
+<p>Rust is my favorite programming language (other languages I enjoy are Kotlin and Python).
+In this post I want to explain why I, somewhat irrationally, find this language so compelling.
+The post does not try to explain why Rust is the most loved language according to
+<a href="https://insights.stackoverflow.com/survey/2019#most-loved-dreaded-and-wanted">StackOverflow survey</a> :-)</p>
+</div>
+<div class="paragraph">
+<p>Additionally, this post does not cover the actual good reasons why one might want to use Rust.
+Briefly:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>If you use C++ or C, Rust allows you to get roughly the same binary, but with compile-time guaranteed absence of undefined behavior.
+This is a big deal and the reason why Rust exists.</p>
+</li>
+<li>
+<p>If you use a statically typed managed language (Java, C#, Go, etc), the benefit of Rust is a massive simplification of multithreaded programming: data races are eliminated at compile time.
+Additionally, you get the benefits of a lower level language (less RAM, less CPU, direct access to platform libraries) without paying as much cost as you would with C++.
+This is not free: you&#8217;ll pay with compile times and cognitive complexity, but it would be &#8220;why my code does not compile&#8221; complexity, rather than &#8220;why my heap is corrupted&#8221; complexity.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>If you&#8217;d like to hear more about the above, this post will disappoint you :-)</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="its-all-the-small-things"><a class="anchor" href="#its-all-the-small-things"></a>It&#8217;s All the Small Things!</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The reason why I irrationally like Rust is that it, subjectively, gets a lot of small details just right (or at least better than other languages I know).
+The rest of the post would be a laundry list of those things, but first I&#8217;d love to mention why I think Rust is the way it is.</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, it is a relatively young language, so it can have many &#8220;obviously good&#8221; things.
+For example, I feel like there&#8217;s a general consensus now that, by default, local variables should not be reassignable.
+This probably was much less obvious in the 90s, when today&#8217;s mainstream languages were designed.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, it does not try to maintain source/semantic compatibility with any existing language.
+Even if we think that const by default is a good idea, we can&#8217;t employ it in TypeScript, because it needs to stay compatible with JavaScript.</p>
+</div>
+<div class="paragraph">
+<p><em>Third</em>, (and this is a pure speculation on my part) I feel that the initial bunch of people who designed the language and its design principles just had an excellent taste!</p>
+</div>
+<div class="paragraph">
+<p>So, to the list of adorable things!</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="naming-convention"><a class="anchor" href="#naming-convention"></a>Naming Convention</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>To set the right mood for the rest of the discussion, let me start with claiming that <code>snake_case</code> is more readable than <code>camelCase</code> :-)
+Similarly, <code>XmlRpcRequest</code> is better than <code>XMLRPCRequest</code>.</p>
+</div>
+<div class="paragraph">
+<p>I believe that readability is partially a matter of habit.
+But it also seems logical that <code>_</code> is better at separating words than case change or nothing at all.
+And, subjectively, after writing a bunch of <code>camelCase</code> and <code>snake_case</code>, I much prefer <code>_</code>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="keyword-first-syntax"><a class="anchor" href="#keyword-first-syntax"></a>Keyword First Syntax</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>How would you <span class="keyseq"><kbd>Ctrl</kbd>+<kbd>F</kbd></span> the definition of <code>foo</code> function in a Java file on GitHub?
+Probably just <code>foo(</code>, which would give you both the definition and all the calls.
+In Rust, you&#8217;d search for <code>fn foo</code>.
+In general, every construct is introduced by a leading keyword, which makes it much easier to read the code for a human.
+When I read C++, I always have a hard time distinguishing field declarations from method declarations: they start the same.
+Leading keywords also make it easier to do stupid text searches for things.
+If you don&#8217;t find this argument compelling because &#8220;one should just use an IDE to look for methods&#8221;, well, it actually makes implementing an IDE slightly easier as well:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Parsing has a nice LL(1) vibe to it, you just dispatch on the current token.</p>
+</li>
+<li>
+<p>Parser resilience is easy, you can synchronize on leading keywords like <code>fn</code>, <code>struct</code> etc.</p>
+</li>
+<li>
+<p>It&#8217;s easier for the IDE to guess the intention of a user.
+If you type <code>fn</code>, IDE recognizes that you want to add a new function and can, for example, complete function overrides for you.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="type-last-syntax"><a class="anchor" href="#type-last-syntax"></a>Type Last Syntax</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>C-family languages usually use <code>Type name</code> order.
+Languages with type inference, including Rust, usually go for <code>name: Type</code>.
+Technically, this is more convenient because in a recursive descent parser it&#8217;s easier to make the second part optional.
+It&#8217;s also more readable, because you put the most important part, the name, first.
+Because names are usually more uniform in length than types, groups of fields/local variables align better.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="no-dangling-else"><a class="anchor" href="#no-dangling-else"></a>No Dangling Else</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Many languages use <code>if (condition) { then_branch }</code> syntax, where parenthesis around condition are mandatory, and braces around <code>then_branch</code> are optional.
+Rust does the opposite, which has the following benefits:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>There&#8217;s no need for a special rule to associate <code>else</code> with just the right <code>if</code>. Instead, <code>else if</code> is an indivisible unambiguous bit of syntax.</p>
+</li>
+<li>
+<p><a href="https://www.imperialviolet.org/2014/02/22/applebug.html">goto fail;</a> bug is impossible; more generally, you don&#8217;t have to make the decision if it is ok to omit the braces.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="everything-is-an-expression-including-blocks"><a class="anchor" href="#everything-is-an-expression-including-blocks"></a>Everything Is An Expression, Including Blocks</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>I think &#8220;everything is an expression&#8221; is generally a good idea, because it makes things composable.
+Just the other day I tried to handle <code>null</code> in TypeScript in a Kotlin way, with <code>foo() ?? return false</code>, and failed because <code>return</code> is not an expression.</p>
+</div>
+<div class="paragraph">
+<p>The problem with traditional functional (Haskell/OCaml) approach is that it uses <code>let name = expr in</code> expression for introducing new variables, which just feels bulky.
+Specifically, the closing <code>in</code> keyword feels verbose, and also emphasizes the nesting of expression.
+The nesting is undoubtedly there, but usually it is very boring, and calling it out is not very helpful.</p>
+</div>
+<div class="paragraph">
+<p>Rust doesn&#8217;t have a let expression per se, instead it has flat-feeling blocks which can contain many <code>let</code> statements:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="n">d</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">a</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="k">let</span> <span class="n">b</span> <span class="o">=</span> <span class="mi">6</span><span class="p">;</span>
+    <span class="k">let</span> <span class="n">c</span> <span class="o">=</span> <span class="mi">9</span><span class="p">;</span>
+    <span class="n">b</span><span class="o">*</span><span class="n">b</span> <span class="o">-</span> <span class="mi">4</span><span class="o">*</span><span class="n">a</span><span class="o">*</span><span class="n">c</span>
+<span class="p">};</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This gives, subjectively, a lighter-weight syntax for introducing bindings and side-effecting statements, as well as an ability to nicely scope local variables to sub-blocks!</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="immutablenon-reassignable-by-default"><a class="anchor" href="#immutablenon-reassignable-by-default"></a>Immutable/non-Reassignable by Default</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>In Rust, reassignable variables are declared with <code>let mut</code> and non-reassignable with <code>let</code>.
+Note how the rarer option is more verbose, and how it is expressed as a modifier, and not a separate keyword, like <code>let</code> and <code>const</code>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="namespaced-enums"><a class="anchor" href="#namespaced-enums"></a>Namespaced Enums</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>In Rust, enums (sum types, algebraic data types) are namespaced.</p>
+</div>
+<div class="paragraph">
+<p>You declare enums like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="code"><pre><span class="k">enum</span> <span class="n">Expr</span> <span class="p">{</span>
+    <span class="nf">Int</span><span class="p">(</span><span class="nb">i32</span><span class="p">),</span>
+    <span class="nf">Bool</span><span class="p">(</span><span class="nb">bool</span><span class="p">),</span>
+    <span class="n">Sum</span> <span class="p">{</span> <span class="n">lhs</span><span class="p">:</span> <span class="nb">Box</span><span class="o">&lt;</span><span class="n">Expr</span><span class="o">&gt;</span><span class="p">,</span> <span class="n">rhs</span><span class="p">:</span> <span class="nb">Box</span><span class="o">&lt;</span><span class="n">Expr</span><span class="o">&gt;</span> <span class="p">},</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>And use them like <code>Expr::Int</code>, without worrying that it might collide with</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="code"><pre><span class="k">enum</span> <span class="n">Type</span> <span class="p">{</span>
+    <span class="n">Int</span><span class="p">,</span>
+    <span class="n">Bool</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>No more repetitive <code>data Expr = ExprInt Int | ExprBool Bool | ExprSum Expr Expr</code>!</p>
+</div>
+<div class="paragraph">
+<p>Swift does even a nicer trick here, by using an <code>.VariantName</code> syntax to refer to a namespaced enum (<a href="https://docs.swift.org/swift-book/LanguageGuide/Enumerations.html#ID147">docs</a>).
+This makes matching less verbose and completely dodges the sad Rust ambiguity between constants and bindings:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="n">x</span><span class="p">:</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="nb">i32</span><span class="o">&gt;</span> <span class="o">=</span> <span class="nf">Some</span><span class="p">(</span><span class="mi">92</span><span class="p">);</span>
+<span class="k">match</span> <span class="n">x</span> <span class="p">{</span>
+    <span class="nb">None</span> <span class="k">=&gt;</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="n">none</span> <span class="k">=&gt;</span> <span class="mi">2</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="syntactic-separation-of-fields-and-methods"><a class="anchor" href="#syntactic-separation-of-fields-and-methods"></a>Syntactic Separation of Fields and Methods</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Fields and methods are declared in separate blocks (like in Go):</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+</pre></td><td class="code"><pre><span class="nd">#[derive(Clone,</span> <span class="nd">Copy)]</span>
+<span class="k">struct</span> <span class="n">Point</span> <span class="p">{</span>
+    <span class="n">x</span><span class="p">:</span> <span class="nb">f64</span><span class="p">,</span>
+    <span class="n">y</span><span class="p">:</span> <span class="nb">f64</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">impl</span> <span class="n">Point</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">distance_to_origin</span><span class="p">(</span><span class="k">self</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">f64</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">Point</span> <span class="p">{</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="p">}</span> <span class="o">=</span> <span class="k">self</span><span class="p">;</span>
+        <span class="p">(</span><span class="n">x</span><span class="o">*</span><span class="n">x</span> <span class="o">+</span> <span class="n">y</span><span class="o">*</span><span class="n">y</span><span class="p">)</span><span class="nf">.sqrt</span><span class="p">()</span>
+    <span class="p">}</span>
+    <span class="o">...</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This is a <strong>huge</strong> improvement to readability: there are usually far fewer fields than methods, but by looking at the fields you can usually understand which set of methods can exist.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="integer-types"><a class="anchor" href="#integer-types"></a>Integer Types</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>u32</code> and <code>i64</code> are shorter and clearer than <code>unsigned int</code> or <code>long</code>.
+<code>usize</code> and <code>isize</code> cover the most important use case for arch-dependent integer type, and also make it clearer at the type level which things are addresses/indices, and which are quantities.
+There&#8217;s also no question of how integer literals of various types look, it&#8217;s just <code>1i8</code> or <code>92u64</code></p>
+</div>
+<div class="paragraph">
+<p>The overflow during arithmetic operations is considered a bug, traps in debug builds and wraps in release builds.
+However, there&#8217;s a plethora of methods like <code>wrapping_add</code>, <code>saturating_sub</code>, etc, so you can exactly specify behavior on overflow in specific cases where it is not a bug.
+In general, methods on primitives allow to expose a ton of compiler intrinsics in a systematic way, like <code>u64::count_ones</code>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="definitive-initialization"><a class="anchor" href="#definitive-initialization"></a>Definitive Initialization</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Rust uses control flow analysis to check that every local variable is assigned before the first use.
+This is a much better default than making this UB, or initializing all locals to some default value.
+Additionally, Rust has a first-class support for diverging control flow (<code>!</code> type and <code>loop {}</code> construct), which protects it from at-a-distance changes like
+<a href="https://javax0.wordpress.com/2020/01/01/jdk14-instanceof-ea-issue/">this example</a>
+from Java.</p>
+</div>
+<div class="paragraph">
+<p>Definitive initialization analysis is an interesting example of a language feature which requires relatively high-brow implementation techniques, but whose effects seem very intuitive, almost trivial, to the users of the language.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="crates"><a class="anchor" href="#crates"></a>Crates</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The next two things are actually not so small.</p>
+</div>
+<div class="paragraph">
+<p>Rust libraries (&#8220;crates&#8221;) don&#8217;t have names.
+More generally, Rust doesn&#8217;t have any kind of global shared namespace.</p>
+</div>
+<div class="paragraph">
+<p>This is in contrast to languages which have a concept of library path (<code>PYTHONPATH</code>, <code>classpath</code>, <code>-I</code>).
+If you have a library path, you are exposed to name/symbol clashes between libraries.
+While a name clash between two libraries seems pretty unlikely, there&#8217;s a special case where collision happens regularly.
+One of your dependencies can depend on <code>libfoo v1</code>, and another one on <code>libfoo v2</code>.
+Usually this means that you either can&#8217;t use the two libraries together, or need to implement some pretty horrific workarounds.</p>
+</div>
+<div class="paragraph">
+<p>In Rust the name you use for a library is a property of the dependency edge between upstream and downstream crate.
+That is, the single crate can be known under different names in different dependant crates or, vice versa, two different crates might be known under equal names in different parts of the crate graph!
+This (and semver discipline, which is a social thing) is the reason why Cargo doesn&#8217;t suffer from dependency hell as much as some other ecosystems.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="crate-visibility"><a class="anchor" href="#crate-visibility"></a>Crate Visibility</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Related to the previous point, crates are also an important visibility boundary, which allows you clearly delineate public API <strong>of a library</strong> from implementation details.
+This is a major improvement over class-level visibility controls.</p>
+</div>
+<div class="paragraph">
+<p>It&#8217;s interesting though that it took Rust two tries to get first-class &#8220;exported from the library&#8221; (<code>pub</code>) and &#8220;internal to the library&#8221; (<code>pub(crate)</code>) visibilities.
+That is also the reason why more restrictive <code>pub(crate)</code> is unfortunately longer to write, I wish we used <code>pub</code> and <code>pub*</code>.</p>
+</div>
+<div class="paragraph">
+<p>Before 2018 edition, Rust had a simpler and more orthogonal system, where you can only say &#8220;visible in the parent&#8221;, which happens to be &#8220;exported&#8221; if the parent is root or is itself exported.
+But the old system is less convenient in practice, because you can&#8217;t look at the declaration and immediately say if it is a part of crate&#8217;s public API or not.</p>
+</div>
+<div class="paragraph">
+<p>The next language should use these library-level visibilities from the start.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="cross-platform-binaries"><a class="anchor" href="#cross-platform-binaries"></a>Cross Platform Binaries</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Rust programs generally just work on Linux, Mac and Windows, and you don&#8217;t need to install a separate runtime to run them.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="eq"><a class="anchor" href="#eq"></a>Eq</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Equality operator (<code>==</code>) is not polymorphic, comparing things of different types (<code>92 == "the answer"</code>) is a type error.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="ord"><a class="anchor" href="#ord"></a>Ord</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The canonical comparison function returns an <code>enum Ordering { Less, Equal, Greater }</code>, you don&#8217;t need to override all six comparison operators.
+Rust also manages this without introducing a separate <code>&lt;=&gt;</code> spaceship operator just for this purpose.
+And you still can implement fast path for <code>==</code> / <code>!=</code> checks.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="debug-display"><a class="anchor" href="#debug-display"></a>Debug &amp; Display</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Rust defines two ways to turn something into a string: <code>Display</code>, which is intended for user-visible strings, and <code>Debug</code>, which is generally intended for <code>printf</code> debugging.
+This is similar to Python&#8217;s <code>__str__</code> and <code>__repr__</code>.</p>
+</div>
+<div class="paragraph">
+<p>Unlike Python, the compiler derives <code>Debug</code> for you.
+Being able to inspect all data structures is a huge productivity boost.
+I hope some day we&#8217;ll be able to call custom user-provided <code>Debug</code> from a debugger.</p>
+</div>
+<div class="paragraph">
+<p>A nice bonus is that you can debug-print things in two modes:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>compactly on a single-line</p>
+</li>
+<li>
+<p>verbosely, on multiple lines as an indented tree</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="trivial-data-types"><a class="anchor" href="#trivial-data-types"></a>Trivial Data Types</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Creating simple bag of data types takes almost no syntax, and you can opt-into all kinds of useful extra functionality:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+</pre></td><td class="code"><pre><span class="nd">#[derive(</span>
+    <span class="nd">Debug,</span>
+    <span class="nd">Clone,</span> <span class="nd">Copy,</span>
+    <span class="nd">PartialEq,</span> <span class="nd">Eq,</span>
+    <span class="nd">PartialOrd,</span> <span class="nd">Ord,</span>
+    <span class="nd">Hash,</span>
+    <span class="nd">Serialize,</span> <span class="nd">Deserialize,</span>
+<span class="nd">)]</span>
+<span class="k">struct</span> <span class="n">Point</span> <span class="p">{</span>
+    <span class="n">x</span><span class="p">:</span> <span class="nb">i64</span><span class="p">,</span>
+    <span class="n">y</span><span class="p">:</span> <span class="nb">i64</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="strings"><a class="anchor" href="#strings"></a>Strings</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Another obvious in retrospect thing.</p>
+</div>
+<div class="paragraph">
+<p>Strings are represented as utf-8 byte buffers.
+The encoding is fixed, can&#8217;t be changed, and its validity is enforced.
+There&#8217;s no random access to "characters", but you can slice string with a byte index, provided that it doesn&#8217;t fall in the middle of a multi-byte character.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="assert"><a class="anchor" href="#assert"></a>assert!</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The default <code>assert!</code> macro is always enabled.
+The flavor which can be disabled with a compilation flag, <code>debug_assert</code>, is more verbose.</p>
+</div>
+<div class="paragraph">
+<p>Discussion on <a href="https://www.reddit.com/r/rust/comments/f41ynd/blog_post_why_is_rust_the_most_loved_programming/">/r/rust</a>.</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2020-02-14-why-rust-is-loved.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

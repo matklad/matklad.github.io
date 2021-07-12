@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Two Kinds of Code Review</title>
+  <meta name="description"
+    content="I&#8217;ve read a book about management and it helped me to solve a long-standing personal conundrum about the code review process.The book is &#8220;High Ou...">
+  <link rel="canonical" href="https://matklad.github.io//2021/01/03/two-kinds-of-code-review.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Two Kinds of Code Review</h1>
+  <div class="post-meta sect1">Jan 3, 2021</div>
+  <div class="paragraph">
+<p>I&#8217;ve read a book about management and it helped me to solve a long-standing personal conundrum about the code review process.
+The book is &#8220;High Output Management&#8221;.
+Naturally, I recommend it (and read this &#8220;review&#8221; as well: <a href="https://apenwarr.ca/log/20190926" class="bare">https://apenwarr.ca/log/20190926</a>).</p>
+</div>
+<div class="paragraph">
+<p>One of the smaller ideas of the book is that of the managerial meddling.
+If my manager micro-manages me and always tells me what to do, I&#8217;ll grow accustomed to that and won&#8217;t be able to contribute without close supervision.
+This is a facet of a more general <strong>T</strong>ask-<strong>R</strong>elevant <strong>M</strong>aturity framework.
+Irrespective of the overall level of seniority, a person has some expertise level for each <em>specific</em> task.
+The optimal quantity and quality of supervisor&#8217;s involvement depends on this level (TRM).
+When TRM grows, the management style should go from structured control to supervision to nudges and consultations.
+I don&#8217;t need a ton of support when writing Rust, I can benefit a lot from a thorough review when coding in Julia and I certainly require hand-holding when attempting to write Spanish!
+But the overarching goal is to improve my TRM, as that directly improves my productivity and frees up my supervisor&#8217;s time.
+The problem with meddling is not excessive control (it might be appropriate in low-TRM situations), it is that meddling removes the motivation to learn to take the wheel yourself.</p>
+</div>
+<div class="paragraph">
+<p>Now, how on earth all this managerial gibberish relates to the pull request review?
+I now believe that there are two largely orthogonal (and even conflicting) goals to a review process.</p>
+</div>
+<div class="paragraph">
+<p><em>One</em> goal of a review process is good <em>code</em>.
+The review ensures that each change improves the overall quality of a code base.
+Without continuous betterment any code under change reverts to the default architecture: a ball of goo.</p>
+</div>
+<div class="paragraph">
+<p><em>Another</em> goal of a review is good <em>coders</em>.
+The review is a perfect mentorship opportunity, it is a way to increase contributor&#8217;s TRM.
+This is vital for community-driven open-source projects.</p>
+</div>
+<div class="paragraph">
+<p>I personally always felt that the review process I use falls quite short of the proper level of quality.
+Which didn&#8217;t really square with me bootstrapping a couple of successful open source projects.
+Now I think that I just happen to optimize for the people&#8217;s aspect of the review process, while most guides
+(with a notable exception of <a href="http://hintjens.com/blog:106">Optimistic Merging</a>) focus on code aspects.</p>
+</div>
+<div class="paragraph">
+<p>Now, (let me stress this point), I do not claim that the second goal is inherently better (though it sounds nicer).
+It&#8217;s just that in the context of both <a href="https://intellij-rust.github.io">IntelliJ Rust</a> and <a href="https://rust-analyzer.github.io">rust-analyzer</a> (green-field projects with massive scope, big uncertainties and limited payed-for hours) growing the community of contributors and maintainers was more important than maintaining perfectly clean code.</p>
+</div>
+<div class="paragraph">
+<p>Reviews for quality are hard and time consuming.
+I personally can&#8217;t really review the code looking at the diff, I can give only superficial comments.
+To understand the code, most of the time I need to fetch it locally and to try to implement the change myself in a different way.
+To make a meaningful suggestion, I need to implement and run it on my machine (and the first two attempts won&#8217;t fly).
+Hence, a proper review for me takes roughly the same time as the implementation itself.
+Taking into account the fact that there are many more contributors than maintainers, this is an instant game over for reviews for quality.</p>
+</div>
+<div class="paragraph">
+<p>Luckily, folks submitting PRs generally have medium/high TRM.
+They were able to introduce themselves to the codebase, find an issue to work on and come up with a working code without me!
+So, instead of scrutinizing away every last bit of diff&#8217;s imperfection, my goal is to promote the contributor to an autonomous maintainer status.
+This is mostly just a matter of trust.
+I don&#8217;t read every line of code, as I trust the author of the PR to handle ifs and whiles well enough (this is the major time saver).
+I trust that people address my comments and let them merge their own PRs (<a href="https://bors.tech/documentation/"><code>bors d+</code></a>).
+I trust that people can review other&#8217;s code, and share commit access (<code>r+</code>) liberally.</p>
+</div>
+<div class="sidebarblock">
+<div class="content">
+<div class="paragraph">
+<p>Note that explicit calls for contribution such as &#8220;good first issue&#8221; labels tend to attract less experienced contributors.
+When applying this label, make sure that you are ready to closely mentor the PR.</p>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>What new contributors don&#8217;t have and what I do talk about in reviews is the understanding of project-specific architecture and values.
+These are best demonstrated on  specific issues with the diff.
+But the focus isn&#8217;t the improvement of a specific change, the focus is teaching the author of (hopefully) subsequent changes.
+I liberally digress into discussing general code philosophy issues.
+As disseminating this knowledge 1-1 is not very efficient, I also try to document it.
+Rather than writing a PR comment, I put the text into
+<a href="https://github.com/rust-analyzer/rust-analyzer/blob/41454eb1ebc87c0f35d247bfb600e775abe022f4/docs/dev/architecture.md">architecture.md</a> or
+<a href="https://github.com/rust-analyzer/rust-analyzer/blob/41454eb1ebc87c0f35d247bfb600e775abe022f4/docs/dev/style.md">style.md</a>
+and link that instead.
+I also try to do only a small fixed number of review rounds.
+Roughly, the PR is merged after two round-trips, not when there&#8217;s nothing left to improve.</p>
+</div>
+<div class="paragraph">
+<p>All this definitely produces warm fuzzy feelings, but what about code quality?
+Gating PRs on quality is one, but not the only one, way to maintain clean code.
+The approach I use instead is continuous reafactoring / asynchronous reviews.
+One of the (documented) values in rust-analyzer is that anyone is allowed and encouraged to refactor all the code, old and new.</p>
+</div>
+<div class="paragraph">
+<p>Instead of blocking the PR, I merge it and then refactor the code in a follow-up (ccing the original author), when I touch this area next time.
+This gives me a much better context than a diff view, as I can edit the code in-place and run the tests.
+I also don&#8217;t waste time transforming the change I have in mind to a PR comment (the motivation bits go directly into comment/commit message).
+It&#8217;s also easy to do unrelated drive-by fixes!</p>
+</div>
+<div class="paragraph">
+<p>I wish this asynchronous review workflow was better supported by tools.
+By default, changes are merged by the author, but the PR also goes to a review queue.
+Later, the reviewer looks at the merged code in the main branch.
+Any suggestions are submitted as a new PR, with the original author set as a reviewer.
+(The in-editor reviewing reminds me <a href="https://blog.janestreet.com/putting-the-i-back-in-ide-towards-a-github-explorer/">iron workflow</a>.)</p>
+</div>
+<hr>
+<div class="paragraph">
+<p>For conclusion, let me reference another book.
+I like item 32 from &#8220;C&#43;&#43; Coding Standards&#8221;: be clear what kind of class you&#8217;re writing.
+A value type is not an interface is not a base class.
+All three are classes, but each needs a unique set of rules.</p>
+</div>
+<div class="paragraph">
+<p>When doing/receiving a code review, understand the context and purpose.
+If this is a homework assignment, you want to share knowledge.
+In a critical crypto library, you need perfect code.
+And for a young open source project, you aim to get a co-maintainer!</p>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2021-01-03-two-kinds-of-code-review.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

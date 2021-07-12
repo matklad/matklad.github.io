@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Another Generic Dilemma</title>
+  <meta name="description"
+    content="In &#8220;The Generic Dilemma&#8221;, Russ Cox observes that you can have only two of">
+  <link rel="canonical" href="https://matklad.github.io//2021/02/24/another-generic-dilemma.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Another Generic Dilemma</h1>
+  <div class="post-meta sect1">Feb 24, 2021</div>
+  <div class="paragraph">
+<p>In <a href="https://research.swtch.com/generic">&#8220;The Generic Dilemma&#8221;</a>, Russ Cox observes that you can have only two of</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>separate compilation</p>
+</li>
+<li>
+<p>unboxed values</p>
+</li>
+<li>
+<p>parametric polymorphism</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>(but see <a href="https://www.youtube.com/watch?v=ctS8FzqcRug">1</a> and <a href="https://gankra.github.io/blah/swift-abi/">2</a> for how you can achieve a middle ground with enough compiler wizardry)</p>
+</div>
+<div class="paragraph">
+<p>Now that <a href="https://blog.golang.org/generics-proposal">Go is getting generics</a>, I want to point out another dilemma:</p>
+</div>
+<div class="paragraph">
+<p><strong>Any language has parametric polymorphism, eventually</strong></p>
+</div>
+<div class="paragraph">
+<p>If you start with just dynamic dispatch, you&#8217;ll end up adding generics down the road.
+This happened with C&#43;&#43; and Java, and is now happening with Go.
+The last one is interesting&#8201;&#8212;&#8201;even if you don&#8217;t carry accidental OOP baggage (inheritance), interfaces alone are not enough.</p>
+</div>
+<div class="paragraph">
+<p>Why does it happen?
+Well, because generics are useful for simple things.
+Even if the language special-cases several parametric data structures, like go does with slices, maps and channels, it is impossible to abstract over them.
+In particular, it&#8217;s impossible to write <code>list_reverse</code> or <code>list_sort</code> functions without some awkward workarounds.</p>
+</div>
+<div class="paragraph">
+<p>Ok, but where&#8217;s the dilemma?
+The dilemma is that adding parametric polymorphism to the language opens floodgates of complexity.
+At least in my experience, Rust traits, Haskell type classes, and Java generics are the main reason why some libraries in those languages are hard to use.</p>
+</div>
+<div class="paragraph">
+<p>It&#8217;s not that generics are inherently hard, <code>fn reverse&lt;T&gt;(xs: [T]) -&gt; [T]</code> is simple.
+It&#8217;s that they allow creating complicated solutions, and this doesn&#8217;t play well with our human bias for complexity.</p>
+</div>
+<div class="paragraph">
+<p>One thing I am wondering is whether a polymorphic language without bounded quantification would be practical?
+Again, in my anecdotal experience, cognitive complexity soars when there are bounds on type parameters: <code>T: This&lt;S&gt; + That</code>.
+But parametric polymorphism can be useful without them:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="n">sort</span><span class="o">&lt;</span><span class="n">T</span><span class="p">:</span> <span class="nb">Ord</span><span class="o">&gt;</span><span class="p">(</span><span class="n">xs</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>is equivalent to</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="code"><pre><span class="k">struct</span> <span class="nb">Ord</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="p">{</span>
+  <span class="n">cmp</span><span class="p">:</span> <span class="k">fn</span><span class="p">(</span><span class="o">&amp;</span><span class="n">T</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">T</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Ordering</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="n">sort</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">ord</span><span class="p">:</span> <span class="nb">Ord</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">,</span> <span class="n">xs</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Can we build an entire language out of this pattern?</p>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2021-02-24-another-generic-dilemma.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

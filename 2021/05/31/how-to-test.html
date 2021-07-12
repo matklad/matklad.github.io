@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>How to Test</title>
+  <meta name="description"
+    content="Alternative titleUnit Tests are a ScamAlternative titleTest Features, Not CodeAlternative titleData Driven Integrated Tests">
+  <link rel="canonical" href="https://matklad.github.io//2021/05/31/how-to-test.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>How to Test</h1>
+  <div class="post-meta sect1">May 31, 2021</div>
+  <div id="preamble">
+<div class="sectionbody">
+<div class="hdlist">
+<table>
+<tr>
+<td class="hdlist1">
+Alternative title
+</td>
+<td class="hdlist2">
+<p>Unit Tests are a Scam</p>
+</td>
+</tr>
+<tr>
+<td class="hdlist1">
+Alternative title
+</td>
+<td class="hdlist2">
+<p>Test Features, Not Code</p>
+</td>
+</tr>
+<tr>
+<td class="hdlist1">
+Alternative title
+</td>
+<td class="hdlist2">
+<p>Data Driven Integrated Tests</p>
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>This post describes my current approach to testing.
+When I started programming professionally, I knew how to write good code, but good tests remained a mystery for a long time.
+This is not due to the lack of advice&#8201;&#8212;&#8201;on the contrary, there&#8217;s abundance of information &amp; terminology about testing.
+This celestial emporium of benevolent knowledge includes TDD, BDD, unit tests, integrated tests, integration tests, end-to-end tests, functional tests, non-functional tests, blackbox tests, glassbox tests, &#8230;&#8203;</p>
+</div>
+<div class="paragraph">
+<p>Knowing all this didn&#8217;t help me to create better software.
+What did help was trying out different testing approaches myself, and looking at how other people write tests.
+Keep in mind that my background is mostly in writing <a href="https://github.com/intellij-rust/intellij-rust">compiler</a> <a href="https://github.com/rust-analyzer/rust-analyzer/">front-ends</a> for IDEs.
+This is a rather niche area, which is especially amendable to testing.
+Compilers are pure self-contained functions.
+I don&#8217;t know how to best test modern HTTP applications built around inter-process communication.</p>
+</div>
+<div class="paragraph">
+<p>Without further ado, let&#8217;s see what I have learned.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="test-driven-design-ossification"><a class="anchor" href="#test-driven-design-ossification"></a>Test Driven Design Ossification</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>This is something I inflicted upon myself early in my career, and something I routinely observe.
+You want to refactor some code, say add a new function parameter.
+Turns out, there are a dozen of tests calling this function, so now a simple refactor also involves fixing all the tests.</p>
+</div>
+<div class="paragraph">
+<p>There is a simple, mechanical fix to this problem: introduce the <code>check</code> function which encapsulates API under test.
+It&#8217;s easier to explain using a toy example.
+Let&#8217;s look at testing something simple, like a binary search, just to illustrate the technique.</p>
+</div>
+<div class="paragraph">
+<p>We start with direct testing:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+</pre></td><td class="code"><pre><span class="c">/// Given a *sorted* `haystack`, returns `true`</span>
+<span class="c">/// if it contains the `needle`.</span>
+<span class="k">fn</span> <span class="nf">binary_search</span><span class="p">(</span><span class="n">haystack</span><span class="p">:</span> <span class="o">&amp;</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">needle</span><span class="p">:</span> <span class="o">&amp;</span><span class="n">T</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">bool</span> <span class="p">{</span>
+    <span class="o">...</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">binary_search_empty</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="nf">binary_search</span><span class="p">(</span><span class="o">&amp;</span><span class="p">[],</span> <span class="o">&amp;</span><span class="mi">0</span><span class="p">);</span>
+  <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">binary_search_singleton</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="nf">binary_search</span><span class="p">(</span><span class="o">&amp;</span><span class="p">[</span><span class="mi">92</span><span class="p">],</span> <span class="o">&amp;</span><span class="mi">0</span><span class="p">);</span>
+  <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+
+  <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="nf">binary_search</span><span class="p">(</span><span class="o">&amp;</span><span class="p">[</span><span class="mi">92</span><span class="p">],</span> <span class="o">&amp;</span><span class="mi">92</span><span class="p">);</span>
+  <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+
+  <span class="k">let</span> <span class="n">res</span> <span class="o">=</span> <span class="nf">binary_search</span><span class="p">(</span><span class="o">&amp;</span><span class="p">[</span><span class="mi">92</span><span class="p">],</span> <span class="o">&amp;</span><span class="mi">100</span><span class="p">);</span>
+  <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c">// And a dozen more of other similar tests...</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Some time passes, and we realize that <code>-&gt; bool</code> is not the best signature for binary search.
+It&#8217;s better if it returned an insertion point (an index where element should be inserted to maintain sortedness).
+That is, we want to change the signature to</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">binary_search</span><span class="p">(</span><span class="n">haystack</span><span class="p">:</span> <span class="o">&amp;</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">needle</span><span class="p">:</span> <span class="o">&amp;</span><span class="n">T</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Result</span><span class="o">&lt;</span><span class="nb">usize</span><span class="p">,</span> <span class="nb">usize</span><span class="o">&gt;</span><span class="p">;</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Now we have to change every test, because the tests are tightly coupled to the specific API.</p>
+</div>
+<div class="paragraph">
+<p>My solution to this problem is making the tests data driven.
+Instead of every test interacting with the API directly, I like to define a single <code>check</code> function which calls the API.
+This function takes a pair of input and expected result.
+For binary search example, it will look like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+</pre></td><td class="code"><pre><span class="nd">#[track_caller]</span>
+<span class="k">fn</span> <span class="nf">check</span><span class="p">(</span>
+  <span class="n">input_haystack</span><span class="p">:</span> <span class="o">&amp;</span><span class="p">[</span><span class="nb">i32</span><span class="p">],</span>
+  <span class="n">input_needle</span><span class="p">:</span> <span class="nb">i32</span><span class="p">,</span>
+  <span class="n">expected_result</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="p">{</span>
+  <span class="k">let</span> <span class="n">actual_result</span> <span class="o">=</span>
+    <span class="nf">binary_search</span><span class="p">(</span><span class="n">input_haystack</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">input_needle</span><span class="p">);</span>
+  <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">expected_result</span><span class="p">,</span> <span class="n">actual_result</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">binary_search_empty</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nf">check</span><span class="p">(</span><span class="o">&amp;</span><span class="p">[],</span> <span class="mi">0</span><span class="p">,</span> <span class="k">false</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">binary_search_singleton</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nf">check</span><span class="p">(</span><span class="o">&amp;</span><span class="p">[</span><span class="mi">92</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="k">false</span><span class="p">);</span>
+  <span class="nf">check</span><span class="p">(</span><span class="o">&amp;</span><span class="p">[</span><span class="mi">92</span><span class="p">],</span> <span class="mi">92</span><span class="p">,</span> <span class="k">true</span><span class="p">);</span>
+  <span class="nf">check</span><span class="p">(</span><span class="o">&amp;</span><span class="p">[</span><span class="mi">92</span><span class="p">],</span> <span class="mi">100</span><span class="p">,</span> <span class="k">false</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Now, when the API of the <code>binary_search</code> function changes, we only need to adjust the single place&#8201;&#8212;&#8201;<code>check</code> function:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+</pre></td><td class="code"><pre><span class="nd">#[track_caller]</span>
+<span class="k">fn</span> <span class="nf">check</span><span class="p">(</span>
+  <span class="n">input_haystack</span><span class="p">:</span> <span class="o">&amp;</span><span class="p">[</span><span class="nb">i32</span><span class="p">],</span>
+  <span class="n">input_needle</span><span class="p">:</span> <span class="nb">i32</span><span class="p">,</span>
+  <span class="n">expected_result</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="p">{</span>
+  <span class="k">let</span> <span class="n">actual_result</span> <span class="o">=</span>
+<span class="hll">    <span class="nf">binary_search</span><span class="p">(</span><span class="n">input_haystack</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">input_needle</span><span class="p">)</span><span class="nf">.is_ok</span><span class="p">();</span>
+</span>  <span class="nd">assert_eq!</span><span class="p">(</span><span class="n">expected_result</span><span class="p">,</span> <span class="n">actual_result</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>To be clear, after you&#8217;ve done the refactor, you&#8217;ll need to adjust the tests to check the index as well, but this can be done separately.
+Existing test suite does not impede changes.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p><strong>Key point:</strong> keep an eye on tests standing in a way of refactors.
+Use the <code>check</code> idiom to make tests resilient to changes.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>Keep in mind that the binary search example is artificially simple.
+The main danger here is that this is a <a href="https://en.wikipedia.org/wiki/Boiling_frog">boiling frog</a> type of situation.
+While the project is small and the tests are few, you don&#8217;t notice that refactors are ever so slightly longer than necessary.
+Then, several tens of thousands lines of code later, you realize that to make a simple change you need to fix a hundred tests.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="test-friction"><a class="anchor" href="#test-friction"></a>Test Friction</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Almost no one likes to write tests.
+I&#8217;ve noticed many times how, upon fixing a trivial bug, I am prone to skipping the testing work.
+Specifically, if writing a test is more effort than the fix itself, testing tends to go out of the window.
+Hence,</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p><strong>Key point:</strong> work hard on making adding new tests trivial.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>Coming back to the binary search example, note how <code>check</code> function reduces the amount of typing to add a new test.
+For tests, this is a significant saving, not because typing is hard, but because it lowers the cognitive barrier to actually do the work.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="test-features-not-code"><a class="anchor" href="#test-features-not-code"></a>Test Features, Not Code</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The over-simplified binary search example can be stretched further.
+What if you replace the sorted array with a hash map inside your application?
+Or what if the calling code no longer needs to search at all, and wants to process all of the elements instead?</p>
+</div>
+<div class="paragraph">
+<p>Good code <a href="https://programmingisterrible.com/post/139222674273/how-to-write-disposable-code-in-large-systems">is easy to delete</a>.
+Tests represent an investment into existing code, and make it costlier to delete (or change).</p>
+</div>
+<div class="paragraph">
+<p>The solution is to write tests for features in such a way that they are independent of the code.
+I like to use the neural network test for this:</p>
+</div>
+<div class="dlist">
+<dl>
+<dt class="hdlist1">Neural Network Test</dt>
+<dd>
+<p>Can you re-use the test suite if your entire software is replaced with an opaque neural network?</p>
+</dd>
+</dl>
+</div>
+<div class="paragraph">
+<p>To give a real-life example this time, suppose that you are writing that part of code-completion engine which sorts potential completions according to relevance.
+(something I should probably be doing right now, instead of writing this article :-) )</p>
+</div>
+<div class="paragraph">
+<p>Internally, you have a bunch of functions that compute relevance facts, like:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Is there direct type match (<code>.foo</code> has the desired type)?</p>
+</li>
+<li>
+<p>Is there there indirect type match (<code>.foo.bar</code> has the right type)?</p>
+</li>
+<li>
+<p>How frequently is this completion used in the current module?</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Then, there&#8217;s the final ranking function that takes these facts and comes up with an overall rank.</p>
+</div>
+<div class="paragraph">
+<p>The classical unit-test approach here would be to write a bunch of isolated tests for each of the relevance functions,
+and a separate bunch of tests which feeds the ranking function a list of relevance facts and checks the final score.</p>
+</div>
+<div class="paragraph">
+<p>This approach obviously fails the neural network test.</p>
+</div>
+<div class="paragraph">
+<p>An alternative approach is to write a test to check that at a given position a specific ordered list of entries is returned.
+That suite could work as a cross-validation for an ML-based implementation.</p>
+</div>
+<div class="paragraph">
+<p>In practice, it&#8217;s unlikely (but not impossible), that we use actual ML here.
+But it&#8217;s highly probably that the naive independent weights model isn&#8217;t the end of the story.
+At some point there will be special cases which would necessitate change of the interface.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p><strong>Key point:</strong> duh, test features, not code!
+<a href="https://www.tedinski.com/2019/03/19/testing-at-the-boundaries.html">Test at the boundaries</a>.</p>
+</div>
+<div class="paragraph">
+<p>If you build a library, the boundary is the public API.
+If you are building an application, you are not building the library.
+The boundary is what a human in front of a display sees.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>Note that this advice goes directly against one common understanding of unit-testing.
+I am fairly confident that it results in better software over the long run.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="make-tests-fast"><a class="anchor" href="#make-tests-fast"></a>Make Tests Fast</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>There&#8217;s one talk about software engineering, which stands out for me, and which is my favorite.
+It is <a href="https://www.destroyallsoftware.com/talks/boundaries">Boundaries</a> by Gary Bernhardt.
+There&#8217;s a point there though, which I strongly disagree with:</p>
+</div>
+<div class="dlist">
+<dl>
+<dt class="hdlist1">Integration Tests are Superlinear?</dt>
+<dd>
+<p>When you use integration tests, any new feature is accompanied by a bit of new code and a new test.
+However, new code slows down all other tests, so the the overall test suite becomes slow, as the total time grows super-linearly.</p>
+</dd>
+</dl>
+</div>
+<div class="paragraph">
+<p>I don&#8217;t think more code under test translates to slower test suite.
+Merge sort spends more lines of code than bubble sort, but it is way faster.</p>
+</div>
+<div class="paragraph">
+<p>In the abstract, yes, more code generally means more execution time, but I doubt this is the defining factor in tests execution time.
+What actually happens is usually:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Input/Output&#8201;&#8212;&#8201;reading just a bit from a disk, network or another process slows down the tests significantly.</p>
+</li>
+<li>
+<p>Outliers&#8201;&#8212;&#8201;very often, testing time is dominated by only a couple of slow tests.</p>
+</li>
+<li>
+<p>Overly large input&#8201;&#8212;&#8201;throwing enough data at any software makes it slow.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>The problem with integrated tests is not code volume per se, but the fact that they <em>typically</em> mean doing a lot of IO.
+But this doesn&#8217;t need to be the case</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p><strong>Key point:</strong> architecture the software to keep as much as possible <a href="https://sans-io.readthedocs.io">sans io</a>.
+Let the caller do input and output, and let the callee do compute.
+It doesn&#8217;t matter if the callee is large and complex.
+Even if it is the whole compiler, testing is fast and easy as long as no IO is involved.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>Nonetheless, some tests are going to be slow.
+It pays off to introduce the concept of slow tests early on, arrange the skipping of such tests by default and only exercise them on CI.
+You don&#8217;t need to be fancy, just checking an environment variable at the start of the test is perfectly fine:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+</pre></td><td class="code"><pre><span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">completion_works_with_real_standard_library</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="nn">std</span><span class="p">::</span><span class="nn">env</span><span class="p">::</span><span class="nf">var</span><span class="p">(</span><span class="s">"RUN_SLOW_TESTS"</span><span class="p">)</span><span class="nf">.is_err</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">return</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="o">...</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Definitely do <em>not</em> use conditional compilation to hide slow tests&#8201;&#8212;&#8201;it&#8217;s an obvious solution which makes your life harder
+(<a href="https://peter.bourgon.org/blog/2021/04/02/dont-use-build-tags-for-integration-tests.html">similar observation</a> from the Go ecosystem).</p>
+</div>
+<div class="paragraph">
+<p>To deal with outliers, print each test&#8217;s execution time by default.
+Having the numbers fly by gives you immediate feedback and incentive to improve.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="data-driven-testing"><a class="anchor" href="#data-driven-testing"></a>Data Driven Testing</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>All these together lead to a particular style of architecture and tests, which I call data driven testing.
+The bulk of the software is a pure function, where the state is passed in explicitly.
+Removing IO from the picture necessitates that the interface of software is specified in terms of data.
+Value in, value out.</p>
+</div>
+<div class="paragraph">
+<p>One property of data is that it can be serialized and deserialized.
+That means that the <code>check</code> style tests can easily accept arbitrary complex input, which is specified in a structured format (JSON), ad-hoc plain text format, or via embedded DSL (builder-style interface for data objects).</p>
+</div>
+<div class="paragraph">
+<p>Similarly, The &#8220;expected&#8221; argument of <code>check</code> is data.
+It is a result which is more-or-less directly displayed to the user.</p>
+</div>
+<div class="paragraph">
+<p>A convincing example of a data driven test would be a &#8220;Goto Definition&#8221; tests  from rust-analyzer (<a href="https://github.com/rust-analyzer/rust-analyzer/blob/92b9e5ef3c03d51713ff5fa32cd58bdf97701b5e/crates/ide/src/goto_definition.rs#L168-L185">source</a>):</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="/assets/goto-definition-test.png" alt="goto definition test">
+</div>
+</div>
+<div class="paragraph">
+<p>In this case, the <code>check</code> function has only a single argument&#8201;&#8212;&#8201;a string which specifies both the input and the expected result.
+The input is a rust project with three files (<code>//- /file.rs</code> syntax shows the boundary between the files).
+The current cursor position is also a part of the input and is specified with the <code>$0</code> syntax.
+The result is the <code>//^^^</code> comment which marks the target of the &#8220;Goto Definition&#8221; call.
+The <code>check</code> function creates an in-memory Rust project, invokes &#8220;Goto Definition&#8221; at the position signified by <code>$0</code>, and checks that the result is the position marked with <code>^^^</code>.</p>
+</div>
+<div class="paragraph">
+<p>Note that this is decidedly not a unit test.
+Nothing is stubbed or mocked.
+This test invokes the whole compilation pipeline: virtual file system, parser, macro expander, name resolution.
+It runs on top of our incremental computation engine.
+It touches a significant fraction of the IDE APIs.
+Yet, it takes 4ms in debug mode (and 500µs in release mode).
+And note that it absolutely does not depend on any internal API&#8201;&#8212;&#8201;if we replace our dumb compiler with sufficiently smart neural net, nothing needs to be adjusted in the tests.</p>
+</div>
+<div class="paragraph">
+<p>There&#8217;s one question though: why on earth am I using a png image to display a bit of code?
+Only to show that the raw string literal (<code>r#""#</code>) which contains Rust code is highlighted as such.
+This is possible because we re-use the same input format (with <code>//-</code>, <code>$0</code> and couple of other markup elements) for almost every test in rust-analyzer.
+As such, we can invest effort into building cool things on top of this format, which subsequently benefit all our tests.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="expect-tests"><a class="anchor" href="#expect-tests"></a>Expect Tests</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Previous example had a complex data input, but a relatively simple data output&#8201;&#8212;&#8201;a position in the file.
+Often, the output is messy and has a complicated structure as well (a symptom of <a href="https://buttondown.email/hillelwayne/archive/cross-branch-testing/">rho problem</a>).
+Worse, sometimes the output is a part that is changed frequently.
+This often necessitates updating a lot of tests.
+Going back to the binary search example, the change from <code>-&gt; bool</code> to <code>-&gt; Result&lt;usize, usize&gt;</code> was an example of this effect.</p>
+</div>
+<div class="paragraph">
+<p>There is a technique to make such simultaneous changes to all gold outputs easy&#8201;&#8212;&#8201;testing with expectations.
+You specify the expected result as a bit of data inline with the test.
+There&#8217;s a special mode of running the test suite for updating this data.
+Instead of failing the test, a mismatch between expected and actual causes the gold value to be updated in-place.
+That is, the test framework edits the code of the test itself.</p>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s an example of this workflow in rust-analyzer, used for testing code completion:</p>
+</div>
+<div class="videoblock">
+<div class="content">
+<video src="https://user-images.githubusercontent.com/1711539/120119633-73b3f100-c1a1-11eb-91be-4c61a23e7060.mp4" controls>
+Your browser does not support the video tag.
+</video>
+</div>
+</div>
+<div class="paragraph">
+<p>Often, just <code>Debug</code> representation of the type works well for expect tests, but you can do something more fun.
+See this post from Jane Street for a great example:
+<a href="https://blog.janestreet.com/using-ascii-waveforms-to-test-hardware-designs/">Using ASCII waveforms to test hardware designs</a>.</p>
+</div>
+<div class="paragraph">
+<p>There are several libraries for this in Rust: <a href="https://github.com/mitsuhiko/insta">insta</a>, <a href="https://github.com/aaronabramov/k9">k9</a>, <a href="https://github.com/rust-analyzer/expect-test">expect-test</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="fluent-assertions"><a class="anchor" href="#fluent-assertions"></a>Fluent Assertions</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>An extremely popular genre for a testing library is a collection of fluent assertions:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="code"><pre><span class="c">// Built-in assertion:</span>
+<span class="k">assert</span><span class="o">!</span><span class="p">(</span><span class="n">x</span> <span class="o">&gt;</span> <span class="n">y</span><span class="p">);</span>
+
+<span class="c">// Fluent assertion:</span>
+<span class="nf">assert_that</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="nf">.is_greater_than</span><span class="p">(</span><span class="n">y</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The benefit of this style are better error messages.
+Instead of just &#8220;false is not true&#8221;, the testing framework can print values for <code>x</code> and <code>y</code>.</p>
+</div>
+<div class="paragraph">
+<p>I don&#8217;t find this useful.
+Using the <code>check</code> style testing, there are very few assertions actually written in code.
+Usually, I start with plain asserts without messages.
+The first time I debug an actual test failure for a particular function, I spend some time to write a detailed assertion message.
+To me, fluent assertions are not an attractive point on the curve that includes plain asserts and hand-written, context aware explanations of failures.
+A notable exception here is pytest approach&#8201;&#8212;&#8201;this testing framework overrides the standard <code>assert</code> to provide a rich diff without ceremony.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p><strong>Key Point:</strong> invest into testing infrastructure in a scalable way.
+Write a single <code>check</code> function with artisanally crafted error message, define a universal fixture format for the input, use expectation testing for output.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="peeking-inside"><a class="anchor" href="#peeking-inside"></a>Peeking Inside</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>One apparent limitation of the style of integrated testing I am describing is checking for properties which are <em>not</em> part of the output.
+For example, if some kind of caching is involved, you might want to check that the cache is actually being hit, and is not just sitting there.
+But, by definition, cache is not something that an outside client can observe.</p>
+</div>
+<div class="paragraph">
+<p>The solution to this problem is to make this extra data a part of the system&#8217;s output by adding extra observability points.
+A good example here is Cargo&#8217;s test suite.
+It is set-up in an integrated, data-driven fashion.
+Each tests starts with a succinct DSL for setting up a tree of files on disk.
+Then, a full cargo command is invoked.
+Finally, the test looks at the command&#8217;s output and the resulting state of the file system, and asserts the relevant facts.</p>
+</div>
+<div class="paragraph">
+<p>Tests for caching additionally enable verbose internal logging.
+In this mode, Cargo prints information about cache hits and misses.
+These messages are then used <a href="https://github.com/rust-lang/cargo/blob/57b75970e022e8519fe82cc38a7aed4862f67089/tests/testsuite/rustc_info_cache.rs#L68-L70">in assertions</a>.</p>
+</div>
+<div class="paragraph">
+<p>A close idea is <a href="https://ferrous-systems.com/blog/coverage-marks/">coverage marks</a>.
+Some times, you want to check that something <em>does not</em> happen.
+Tests for this tend to be fragile&#8201;&#8212;&#8201;often the thing does not happen, but for the wrong reason.
+You can add a side channel which explains the reasoning behind particular behavior, and additionally assert this as well.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="externalized-tests"><a class="anchor" href="#externalized-tests"></a>Externalized Tests</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>In the ultimate stage of data driven tests the definitions of test cases are moved out of test functions and into external files.
+That is, you don&#8217;t do this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="code"><pre><span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">test_foo</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nf">check</span><span class="p">(</span><span class="s">"foo"</span><span class="p">,</span> <span class="s">"oof"</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">test_bar</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nf">check</span><span class="p">(</span><span class="s">"bar"</span><span class="p">,</span> <span class="s">"rab"</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Rather, there is a <em>single</em> test that looks like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+</pre></td><td class="code"><pre><span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">test_all</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="n">file</span> <span class="n">in</span> <span class="nf">read_dir</span><span class="p">(</span><span class="s">"./test_data/in"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">input</span> <span class="o">=</span> <span class="nf">read_to_string</span><span class="p">(</span>
+      <span class="o">&amp;</span><span class="nd">format!</span><span class="p">(</span><span class="s">"./test_data/in/{}"</span><span class="p">,</span> <span class="n">file</span><span class="p">),</span>
+    <span class="p">);</span>
+    <span class="k">let</span> <span class="n">output</span> <span class="o">=</span> <span class="nf">read_to_string</span><span class="p">(</span>
+      <span class="o">&amp;</span><span class="nd">format!</span><span class="p">(</span><span class="s">"./test_data/out/{}"</span><span class="p">,</span> <span class="n">file</span><span class="p">),</span>
+    <span class="p">);</span>
+    <span class="nf">check</span><span class="p">(</span><span class="n">input</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>I have a love-hate relationship with this approach.
+It has at least two attractive properties.
+<em>First,</em> it forces data driven approach without any cheating.
+<em>Second,</em> it makes the test suite more re-usable.
+An alternative implementation in a different programming language can use the same tests.</p>
+</div>
+<div class="paragraph">
+<p>But there&#8217;s a drawback as well&#8201;&#8212;&#8201;without literal <code>#[test]</code> attributes, integration with tooling suffers.
+For example, you don&#8217;t automatically get &#8220;X out of Y tests passed&#8221; at the end of test run.
+You can&#8217;t conveniently debug just a single test, there isn&#8217;t a helpful &#8220;Run&#8221; icon/shortcut you can use in an IDE.</p>
+</div>
+<div class="paragraph">
+<p>When I do externalized test cases, I like to leave a trivial smoke test behind:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="code"><pre><span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">smoke</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nf">check</span><span class="p">(</span><span class="s">""</span><span class="p">,</span> <span class="s">""</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>If I need to debug a failing external test, I first paste the input into this smoke test, and then get my IDE tooling back.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="beyond-example-based-testing"><a class="anchor" href="#beyond-example-based-testing"></a>Beyond Example Based Testing</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Reading from a file is not the most fun way to come up with a data input for a <code>check</code> function.</p>
+</div>
+<div class="paragraph">
+<p>Here are a few other popular ones:</p>
+</div>
+<div class="dlist">
+<dl>
+<dt class="hdlist1">Property Based Testing</dt>
+<dd>
+<p>Generate the input at random and verify that the output makes sense.
+For a binary search, check that the <code>needle</code> indeed lies between the two elements at the insertion point.</p>
+</dd>
+<dt class="hdlist1">Full Coverage</dt>
+<dd>
+<p>Better still, instead of generating some random inputs, just check that the answer is correct for <em>all</em> inputs.
+This is how you should be testing binary search&#8201;&#8212;&#8201;generate every sorted list of length at most <code>7</code> with numbers in the <code>0..=6</code> range.
+Then, for each list and for each number, check that the binary search gives the same result as a naive linear search.</p>
+</dd>
+<dt class="hdlist1">Coverage Guided Fuzzing</dt>
+<dd>
+<p>Just throw random bytes at the check function.
+Random bytes probably don&#8217;t make much sense, but it&#8217;s good to verify that the program returns an error instead of summoning nasal demons.
+Instead of piling bytes completely at random, observe which branches are taken, and try to invent byte sequences which cover more branches.
+Note that this test is polymorphic in the system under test.</p>
+</dd>
+<dt class="hdlist1">Structured Fuzzing / Coverage Guided Property Testing</dt>
+<dd>
+<p>Use random bytes as a seed to generate &#8220;syntactically valid&#8221; inputs, then see you software crash and burn when the most hideous edge cases are uncovered.
+If you use Rust, check out <a href="https://github.com/bytecodealliance/wasm-tools/tree/f632261627a0ea758762e431d8be32740111e33c/crates/wasm-smith">wasm-smith</a> and <a href="https://lib.rs/crates/arbitrary">arbitrary</a> crates.</p>
+</dd>
+</dl>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p><strong>Key Point:</strong> once you formulated the tests in terms of data, you no longer need to write code to add your tests.
+If code is not required, you can generate test cases easily.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="the-external-world"><a class="anchor" href="#the-external-world"></a>The External World</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>What if isolating IO is not possible, and the application is fundamentally build around interacting with external systems?
+In this case, my advice is to just accept that the tests are going to be slow, and might need extra effort to avoid flakiness.</p>
+</div>
+<div class="paragraph">
+<p>Cargo is the perfect case study here.
+Its raison d&#8217;être is orchestrating a herd of external processes.
+Let&#8217;s look at the basic test:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+</pre></td><td class="code"><pre><span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">cargo_compile_simple</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">let</span> <span class="n">p</span> <span class="o">=</span> <span class="nf">project</span><span class="p">()</span>
+    <span class="nf">.file</span><span class="p">(</span><span class="s">"Cargo.toml"</span><span class="p">,</span> <span class="o">&amp;</span><span class="nf">basic_bin_manifest</span><span class="p">(</span><span class="s">"foo"</span><span class="p">))</span>
+    <span class="nf">.file</span><span class="p">(</span><span class="s">"src/foo.rs"</span><span class="p">,</span> <span class="o">&amp;</span><span class="nf">main_file</span><span class="p">(</span><span class="s">r#""i am foo""#</span><span class="p">,</span> <span class="o">&amp;</span><span class="p">[]))</span>
+    <span class="nf">.build</span><span class="p">();</span>
+
+  <span class="n">p</span><span class="nf">.cargo</span><span class="p">(</span><span class="s">"build"</span><span class="p">)</span><span class="nf">.run</span><span class="p">();</span>
+
+  <span class="k">assert</span><span class="o">!</span><span class="p">(</span><span class="n">p</span><span class="nf">.bin</span><span class="p">(</span><span class="s">"foo"</span><span class="p">)</span><span class="nf">.is_file</span><span class="p">());</span>
+  <span class="n">p</span><span class="nf">.process</span><span class="p">(</span><span class="o">&amp;</span><span class="n">p</span><span class="nf">.bin</span><span class="p">(</span><span class="s">"foo"</span><span class="p">))</span><span class="nf">.with_stdout</span><span class="p">(</span><span class="s">"i am foo</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span><span class="nf">.run</span><span class="p">();</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The <code>project()</code> part is a builder, which describes the state of the a system.
+<em>First,</em> <code>.build()</code> writes the specified files to a disk in a temporary directory.
+<em>Then,</em> <code>p.cargo("build").run()</code> executes the real <code>cargo build</code> command.
+<em>Finally,</em> a bunch of assertions are made about the end state of the file system.</p>
+</div>
+<div class="paragraph">
+<p>Neural network test: this is completely independent of internal Cargo APIs, by virtue of interacting with a <code>cargo</code> process via IPC.</p>
+</div>
+<div class="paragraph">
+<p>To give an order-of-magnitude feeling for the cost of IO, Cargo&#8217;s test suite takes around seven minutes (<code>-j 1</code>), while rust-analyzer finishes in less than half a minute.</p>
+</div>
+<div class="paragraph">
+<p>An interesting case is the middle ground, when the IO-ing part is just big and important enough to be annoying.
+That is the case for rust-analyzer&#8201;&#8212;&#8201;although almost all code is pure, there&#8217;s a part which interacts with a specific editor.
+What makes this especially finicky is that, in the case of Cargo, it&#8217;s Cargo who calls external processes.
+With rust-analyzer, it&#8217;s something which we don&#8217;t control, the editor, which schedules the IO.
+This often results in hard-to-imagine bugs which are caused by particularly weird environments.</p>
+</div>
+<div class="paragraph">
+<p>I don&#8217;t have good answers here, but here are the tricks I use:</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Accept that something <em>will</em> break during integration.
+Even if <em>you</em> always create perfect code and never make bugs, your upstream integration point will be buggy sometimes.</p>
+</li>
+<li>
+<p>Make integration bugs less costly:</p>
+<div class="ulist">
+<ul>
+<li>
+<p>use release trains,</p>
+</li>
+<li>
+<p>make path release process non-exceptional and easy,</p>
+</li>
+<li>
+<p>have a checklist for manual QA before the release.</p>
+</li>
+</ul>
+</div>
+</li>
+<li>
+<p>Separate the tricky to test bits into a separate project.
+This allows you to write slow and not 100% reliable tests for integration parts, while keeping the core test suite fast and dependable.</p>
+</li>
+</ol>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p><strong>Key Point:</strong> if you can&#8217;t avoid IO, embrace it.
+Even if a data driven test suite is slow, it gives you a lot of confidence that features work, without intervening with refactors.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="the-concurrent-world"><a class="anchor" href="#the-concurrent-world"></a>The Concurrent World</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Consider the following API:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">do_stuff_in_background</span><span class="p">(</span><span class="n">p</span><span class="p">:</span> <span class="n">Param</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nn">std</span><span class="p">::</span><span class="nn">thread</span><span class="p">::</span><span class="nf">spawn</span><span class="p">(</span><span class="k">move</span> <span class="p">||</span> <span class="p">{</span>
+    <span class="c">// Stuff</span>
+  <span class="p">})</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This API is fundamentally untestable.
+Can you see why?
+It spawns a concurrent computation, but it doesn&#8217;t allow waiting for this computation to be finished.
+So, any test that calls <code>do_stuff_in_background</code> can&#8217;t check that the &#8220;Stuff&#8221; is done.
+Worse, even tests which do not call this function might start to fail&#8201;&#8212;&#8201;they now can get interference from other tests.
+The concurrent computation can outlive the test that originally spawned it.</p>
+</div>
+<div class="paragraph">
+<p>This problem plagues almost every concurrent application I see.
+A common symptom is adding timeouts and sleeps to test, to increase the probability of stuff getting done.
+Such timeouts are another common cause of slow test suites.</p>
+</div>
+<div class="paragraph">
+<p>What makes this problem truly insidious is that there&#8217;s no work-around.
+Broken once, causality link is not reforgable by a layer above.</p>
+</div>
+<div class="paragraph">
+<p>The solution is simple: don&#8217;t do this.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p><strong>Key Point:</strong> grab a (large) cup of coffee and go read <a href="https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/">Go statement considered harmful</a>.
+I will wait until you are done, and then proceed with my article.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="layers"><a class="anchor" href="#layers"></a>Layers</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Another common problem I see in complex projects is a beautifully layered architecture, which is &#8220;inverted&#8221; in tests.</p>
+</div>
+<div class="paragraph">
+<p>Let&#8217;s say you have something fabulous, like <code>L1 &#8592; L2 &#8592; L3 &#8592; L4</code>.
+To test <code>L1</code>, the path of least resistance is often to write tests which exercise <code>L4</code>.
+You might even think that this is the setup I am advocating for.
+Not exactly.</p>
+</div>
+<div class="paragraph">
+<p>The problem with <code>L1 &#8592; L2 &#8592; L3 &#8592; L4 &#8592; Tests</code> is that working on <code>L1</code> becomes slower, especially in compiled languages.
+If you make a change to <code>L1</code>, then, before you get to the tests, you need to recompile the whole chain of reverse dependencies.
+My &#8220;favorite&#8221; example here is <code>rustc</code>&#8201;&#8212;&#8201;when I worked on the lexer (<code>T1</code>), I spent a lot of time waiting for the rest of the compiler to be rebuild to check my small change.</p>
+</div>
+<div class="paragraph">
+<p>The right setup here is to write integrated tests for each layer:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="code"><pre>L1 &lt;- Tests
+L1 &lt;- L2 &lt;- Tests
+L1 &lt;- L2 &lt;- L3 &lt;- Tests
+L1 &lt;- L2 &lt;- L3 &lt;- L4 &lt;- Tests
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Note that testing <code>L4</code> involves testing <code>L1</code>, <code>L2</code> an <code>L3</code>.
+This is not a problem.
+Due to layering, only <code>L4</code> needs to be <em>recompiled</em>.
+Other layers don&#8217;t affect <em>run</em> time meaningfully.
+Remember&#8201;&#8212;&#8201;it&#8217;s IO (and sleep-based synchronization) that kills performance, not just code volume.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="test-everything"><a class="anchor" href="#test-everything"></a>Test Everything</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>In a nutshell, a <code>#[test]</code> is just a bit of code which is plugged into the build system to be executed automatically.
+Use this to your advantage, simplify the automation by moving as much as possible into tests.</p>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s some things in <code>rust-analyzer</code> which are just tests:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Code formatting (most common one&#8201;&#8212;&#8201;you don&#8217;t need an extra pile of YAML in CI, you can shell out to the formatter from the test).</p>
+</li>
+<li>
+<p>Checking that the history does not contain merge commits and teaching new contributors git survival skills.</p>
+</li>
+<li>
+<p>Collecting the manual from specially-formatted doc comments across the code base.</p>
+</li>
+<li>
+<p>Checking that the code base is, in fact, reasonably well-documented.</p>
+</li>
+<li>
+<p>Ensuring that the licenses of dependencies are compatible.</p>
+</li>
+<li>
+<p>Ensuring that high-level operations are linear in the size of the input.
+Syntax-highlight a synthetic file of 1, 2, 4, 8, 16 kilobytes, run linear regression, check that result looks like a line rather than a parabola.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="use-bors"><a class="anchor" href="#use-bors"></a>Use Bors</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>This essay already mentioned a couple of cognitive tricks for better testing: reducing the fixed costs for adding new tests, and plotting/printing test times.
+The best trick in a similar vein is the <a href="https://graydon2.dreamwidth.org/1597.html">&#8220;not rocket science&#8221;</a> rule of software engineering.</p>
+</div>
+<div class="paragraph">
+<p>The idea is to have a robot which checks that <em>the merge commit</em> passes all the tests, before advancing the state of the main branch.</p>
+</div>
+<div class="paragraph">
+<p>Besides the evergreen master, such bot adds pressure to keep the test suite fast and non-flaky.
+This is another boiling frog, something you need to constantly keep an eye on.
+If you have any a single flaky test, it&#8217;s very easy to miss when the second one is added.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p><strong>Key point:</strong> use <a href="https://bors.tech" class="bare">https://bors.tech</a>, a no-nonsense implementation of &#8220;not rocket science&#8221; rule.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="recap"><a class="anchor" href="#recap"></a>Recap</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>This was a long essay.
+Let&#8217;s look back at some of the key points:</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>There is a lot of information about testing, but it is not always helpful.
+At least, it was not helpful for me.</p>
+</li>
+<li>
+<p>The core characteristic of the test suite is how easy it makes changing the software under test.</p>
+</li>
+<li>
+<p>To that end, a good strategy is to focus on testing the features of the application, rather than on testing the code used to implement those features.</p>
+</li>
+<li>
+<p>A good test suite passes the neural network test&#8201;&#8212;&#8201;it is still useful if the entire application is replaced by an ML model which just comes up with the right answer.</p>
+</li>
+<li>
+<p>Corollary: good tests are not helpful for design in the small&#8201;&#8212;&#8201;a good test won&#8217;t tell you the best signatures for functions.</p>
+</li>
+<li>
+<p>Testing time is something worth optimizing for.
+Tests are sensitive to IO and IPC.
+Tests are relatively insensitive to the amount of code under tests.</p>
+</li>
+<li>
+<p>There are useful techniques which are underused&#8201;&#8212;&#8201;expectation tests, coverage marks, externalized tests.</p>
+</li>
+<li>
+<p>There are not so useful techniques which are over-represented in the discourse: fluent assertions, mocks, BDD.</p>
+</li>
+<li>
+<p>The key for unlocking many of the above techniques is thinking in terms of data, rather than interfaces or objects.</p>
+</li>
+<li>
+<p>Corollary: good tests are helpful for design in the large.
+They help to crystalize the data model your application is built around.</p>
+</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="links"><a class="anchor" href="#links"></a>Links</h2>
+<div class="sectionbody">
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p><a href="https://www.destroyallsoftware.com/talks/boundaries" class="bare">https://www.destroyallsoftware.com/talks/boundaries</a></p>
+</li>
+<li>
+<p><a href="https://www.tedinski.com/2019/03/19/testing-at-the-boundaries.html" class="bare">https://www.tedinski.com/2019/03/19/testing-at-the-boundaries.html</a></p>
+</li>
+<li>
+<p><a href="https://programmingisterrible.com/post/139222674273/how-to-write-disposable-code-in-large-systems" class="bare">https://programmingisterrible.com/post/139222674273/how-to-write-disposable-code-in-large-systems</a></p>
+</li>
+<li>
+<p><a href="https://sans-io.readthedocs.io" class="bare">https://sans-io.readthedocs.io</a></p>
+</li>
+<li>
+<p><a href="https://peter.bourgon.org/blog/2021/04/02/dont-use-build-tags-for-integration-tests.html" class="bare">https://peter.bourgon.org/blog/2021/04/02/dont-use-build-tags-for-integration-tests.html</a></p>
+</li>
+<li>
+<p><a href="https://buttondown.email/hillelwayne/archive/cross-branch-testing/" class="bare">https://buttondown.email/hillelwayne/archive/cross-branch-testing/</a></p>
+</li>
+<li>
+<p><a href="https://blog.janestreet.com/testing-with-expectations/" class="bare">https://blog.janestreet.com/testing-with-expectations/</a></p>
+</li>
+<li>
+<p><a href="https://blog.janestreet.com/using-ascii-waveforms-to-test-hardware-designs/" class="bare">https://blog.janestreet.com/using-ascii-waveforms-to-test-hardware-designs/</a></p>
+</li>
+<li>
+<p><a href="https://ferrous-systems.com/blog/coverage-marks/" class="bare">https://ferrous-systems.com/blog/coverage-marks/</a></p>
+</li>
+<li>
+<p><a href="https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/" class="bare">https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/</a></p>
+</li>
+<li>
+<p><a href="https://graydon2.dreamwidth.org/1597.html" class="bare">https://graydon2.dreamwidth.org/1597.html</a></p>
+</li>
+<li>
+<p><a href="https://bors.tech" class="bare">https://bors.tech</a></p>
+</li>
+<li>
+<p><a href="https://fsharpforfunandprofit.com/posts/property-based-testing/" class="bare">https://fsharpforfunandprofit.com/posts/property-based-testing/</a></p>
+</li>
+<li>
+<p><a href="https://fsharpforfunandprofit.com/posts/property-based-testing-1/" class="bare">https://fsharpforfunandprofit.com/posts/property-based-testing-1/</a></p>
+</li>
+<li>
+<p><a href="https://fsharpforfunandprofit.com/posts/property-based-testing-2/" class="bare">https://fsharpforfunandprofit.com/posts/property-based-testing-2/</a></p>
+</li>
+<li>
+<p><a href="https://www.sqlite.org/testing.html" class="bare">https://www.sqlite.org/testing.html</a></p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>Somewhat amusingly, after writing this article I&#8217;ve learned about an excellent post by Tim Bray which argues for the opposite point:</p>
+</div>
+<div class="paragraph">
+<p><a href="https://www.tbray.org/ongoing/When/202x/2021/05/15/Testing-in-2021" class="bare">https://www.tbray.org/ongoing/When/202x/2021/05/15/Testing-in-2021</a></p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2021-05-31-how-to-test.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

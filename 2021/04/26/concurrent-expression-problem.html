@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Concurrent Expression Problem</title>
+  <meta name="description"
+    content="I am struggling with designing concurrent code.In this post, I want to share a model problem which exemplifies some of the issues.It is reminiscent of the fa...">
+  <link rel="canonical" href="https://matklad.github.io//2021/04/26/concurrent-expression-problem.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Concurrent Expression Problem</h1>
+  <div class="post-meta sect1">Apr 26, 2021</div>
+  <div class="paragraph">
+<p>I am struggling with designing concurrent code.
+In this post, I want to share a model problem which exemplifies some of the issues.
+It is reminiscent of the famous expression problem in that there&#8217;s a two dimensional design grid, and a win along one dimension translates to a loss along the other.
+If you want a refresher on the expression problem (not required to understand this article), take a look at <a href="https://www.tedinski.com/2018/02/27/the-expression-problem.html">this post</a>.
+It&#8217;s not canonical, but I like it.</p>
+</div>
+<div class="paragraph">
+<p>Without further ado, concurrent expression problem:</p>
+</div>
+<div class="sidebarblock">
+<div class="content">
+<div class="paragraph">
+<p>Define a set of concurrent activities which interact with shared mutable state with invariants, such that it is easy to introduce new activities and additional invariants.</p>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>I am not sure that&#8217;s exactly the right formulation, I feel like I am straining it a bit to fit the expression problem shape.
+The explanation that follows matters more.</p>
+</div>
+<div class="paragraph">
+<p>I think there are two ways to code the system described.
+The first approach is to us a separate thread / goroutine / async task for each concurrent activity, with some synchronization around the access to the shared state.
+The alternative approach is to write an explicit state machine / actor loop to receive the next event and process it.</p>
+</div>
+<div class="paragraph">
+<p>In the first scheme, adding new activities is easy, as you just write strait-line code with maybe some <code>.await</code>s here and there.
+In the second scheme, it&#8217;s easy to check and act on invariants, as there is only a single place where the state is modified.</p>
+</div>
+<div class="paragraph">
+<p>Let&#8217;s take a look at a concrete example.
+We&#8217;ll be using a pseudo code for a language with cooperative concurrency and explicit yield points (think Python with async/await).</p>
+</div>
+<div class="paragraph">
+<p>The state consists of two counters.
+One activity decrements the first counter every second.
+The other activity does the same to the other counter.
+When <em>both</em> counters reach zero, we want to print something.</p>
+</div>
+<div class="paragraph">
+<p>The first approach would look roughly like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+</pre></td><td class="code"><pre><span class="k">struct</span> <span class="n">State</span> <span class="p">{</span> <span class="n">c1</span><span class="p">:</span> <span class="nb">u32</span><span class="p">,</span> <span class="n">c2</span><span class="p">:</span> <span class="nb">u32</span> <span class="p">}</span>
+
+<span class="k">async</span> <span class="k">fn</span> <span class="nf">act1</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="n">state</span><span class="py">.c1</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="p">{</span>
+    <span class="nf">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="k">.await</span><span class="p">;</span>
+    <span class="n">state</span><span class="py">.c1</span> <span class="o">-=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="k">if</span> <span class="n">state</span><span class="py">.c1</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">state</span><span class="py">.c2</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+      <span class="nf">print</span><span class="p">(</span><span class="s">"both are zero"</span><span class="p">)</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">async</span> <span class="k">fn</span> <span class="nf">act2</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="n">state</span><span class="py">.c2</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="p">{</span>
+    <span class="nf">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="k">.await</span><span class="p">;</span>
+    <span class="n">state</span><span class="py">.c2</span> <span class="o">-=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="k">if</span> <span class="n">state</span><span class="py">.c1</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">state</span><span class="py">.c2</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+      <span class="nf">print</span><span class="p">(</span><span class="s">"both are zero"</span><span class="p">)</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>And the second one like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+</pre></td><td class="code"><pre><span class="k">async</span> <span class="k">fn</span> <span class="nf">run</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">loop</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">event</span> <span class="o">=</span> <span class="nf">next_event</span><span class="p">()</span><span class="k">.await</span><span class="p">;</span>
+    <span class="k">match</span> <span class="n">event</span> <span class="p">{</span>
+      <span class="nn">Event</span><span class="p">::</span><span class="n">Dec1</span> <span class="k">=&gt;</span> <span class="p">{</span>
+        <span class="n">state</span><span class="py">.c1</span> <span class="o">-=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="k">if</span> <span class="n">state</span><span class="py">.c1</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="p">{</span>
+          <span class="nf">send_event_with_delay</span><span class="p">(</span><span class="nn">Event</span><span class="p">::</span><span class="n">Dec1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">}</span>
+      <span class="p">}</span>
+      <span class="nn">Event</span><span class="p">::</span><span class="n">Dec2</span> <span class="k">=&gt;</span> <span class="p">{</span>
+        <span class="n">state</span><span class="py">.c2</span> <span class="o">-=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="k">if</span> <span class="n">state</span><span class="py">.c2</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="p">{</span>
+          <span class="nf">send_event_with_delay</span><span class="p">(</span><span class="nn">Event</span><span class="p">::</span><span class="n">Dec2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">}</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">state</span><span class="py">.c1</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">state</span><span class="py">.c2</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+      <span class="nf">print</span><span class="p">(</span><span class="s">"both are zero"</span><span class="p">)</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>It&#8217;s much easier to see what the concurrent activities are in the first case.
+It&#8217;s more clear how the overall state evolves in the second case.</p>
+</div>
+<div class="paragraph">
+<p>The second approach also gives you more control&#8201;&#8212;&#8201;if several events are ready, you can process them in the order of priority (usually it makes sense to prioritize writes over reads).
+You can trivially add some logging at the start and end of the loop to collect data about slow events and overall latency.
+But the hit to the programming model is big.
+If you are new to the code and don&#8217;t know which conceptual activities are there, it&#8217;s hard to figure out that just from the code.
+The core issue is that causal links between asynchronous events are not reified in the code:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+</pre></td><td class="code"><pre><span class="k">match</span> <span class="p">{</span>
+  <span class="nn">Event</span><span class="p">::</span><span class="n">X</span> <span class="k">=&gt;</span> <span class="p">{</span> <span class="nf">do_x</span><span class="p">()</span> <span class="p">},</span>
+  <span class="nn">Event</span><span class="p">::</span><span class="n">Y</span> <span class="k">=&gt;</span> <span class="p">{</span> <span class="nf">do_y</span><span class="p">()</span> <span class="p">},</span>
+<span class="p">}</span>
+
+<span class="c">// vs</span>
+
+<span class="k">async</span> <span class="k">fn</span> <span class="nf">do_xy</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nf">do_x</span><span class="p">()</span><span class="k">.await</span><span class="p">;</span>
+  <span class="nf">do_y</span><span class="p">()</span><span class="k">.await</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2021-04-26-concurrent-expression-problem.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Notes On Lock Poisoning</title>
+  <meta name="description"
+    content="Rust&#8217;s libs teams is considering overhauling std::sync module.As a part of this effort, they are launching lock poisoning survey.">
+  <link rel="canonical" href="https://matklad.github.io//2020/12/12/notes-on-lock-poisoning.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Notes On Lock Poisoning</h1>
+  <div class="post-meta sect1">Dec 12, 2020</div>
+  <div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>Rust&#8217;s libs teams is considering overhauling <code>std::sync</code> module.
+As a part of this effort, they are launching lock poisoning survey.</p>
+</div>
+<div class="paragraph">
+<p><a href="https://blog.rust-lang.org/2020/12/11/lock-poisoning-survey.html" class="bare">https://blog.rust-lang.org/2020/12/11/lock-poisoning-survey.html</a></p>
+</div>
+<div class="paragraph">
+<p>This is post is a an extended response to that survey.
+It is not be well-edited :-)</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="panics-should-propagate"><a class="anchor" href="#panics-should-propagate"></a>Panics Should Propagate</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Midori error model makes sharp distinction between two kinds of errors:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>bugs in the program, like indexing an array with <code>-92</code></p>
+</li>
+<li>
+<p>error conditions in programs' environment (reading a file which doesn&#8217;t exist)</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>In Rust, those correspond to panics and Results.
+It&#8217;s important to not mix the two.</p>
+</div>
+<div class="paragraph">
+<p>std I think sadly does mix them in sync API.
+The following APIs convert panics to recoverable results:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>Mutex::lock</code></p>
+</li>
+<li>
+<p><code>thread::JoinHandle::join</code></p>
+</li>
+<li>
+<p><code>mpsc::Sender::send</code></p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>All those APIs return a <code>Result</code> when the other thread panicked.
+These leads to people using <code>?</code> with these methods, using recoverable error handling for bugs in the program.</p>
+</div>
+<div class="paragraph">
+<p>In my mind, a better design would be to make those API <code>panic</code> by default.
+Sometimes synchronization point also happen to be failure isolation boundaries.
+More verbose result-returning <code>catching_lock</code>, <code>catching_join</code>, <code>catching_send</code> would work for those special cases.</p>
+</div>
+<div class="paragraph">
+<p>If <code>std::Mutex</code> did implement lock poisoning, but the <code>lock</code> method returned a <code>LockGuard&lt;T&gt;</code>, rather than <code>Result&lt;LockGuard&lt;T&gt;, PoisonError&gt;</code>, then we wouldn&#8217;t be discussing poisoning in the rust book, in every mutex example, and wouldn&#8217;t consider changing the status quo.
+At the same time, we&#8217;d preserve "safer" semantics of lock poisoning.</p>
+</div>
+<div class="paragraph">
+<p>There&#8217;s an additional consideration here.
+In a single-threaded program, panic propagation is linear.
+One panic is unwound past a sequence of frames.
+If we get the second panic in some <code>Drop</code>, the result is process aborting.</p>
+</div>
+<div class="paragraph">
+<p>In a multi-threaded program, the stack is tree-shaped.
+What should happen if one of the three parallel threads panics?
+I believe the right semantics here is that siblings are cancelled, and then the panic is propagated to the parent.
+How to implement cancellation is an open question.
+If <em>two</em> children panic, we should propagate a pair of panics.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="almost-unwindsafe"><a class="anchor" href="#almost-unwindsafe"></a>Almost UnwindSafe</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>A topic closely related to lock poisoning is unwinding safety&#8201;&#8212;&#8201;<code>UnwindSafe</code> and <code>RefUnwindSafe</code> traits.
+I want to share an amusing story how this machinery almost, but not quiet, saved by bacon.</p>
+</div>
+<div class="paragraph">
+<p>rust-analyzer implements cancellation via unwinding.
+After a user types something and we have new code to process, we set a global flag.
+Long-running background tasks like syntax highlighting read this flag and, if it is set, panic with a <code>struct Cancelled</code> payload.
+We use <code>resume_unwind</code> and not <code>panic</code> to avoid printing backtrace.
+After the stack is unwound, we can start processing new code.</p>
+</div>
+<div class="paragraph">
+<p>This means that rust-analyzer&#8217;s data, stored in the <code>Db</code> type, needs to be unwind safe.</p>
+</div>
+<div class="paragraph">
+<p>One day while I was idly hacking on rust-analyzer during Rust all-hands I&#8217;ve noticed a weird compilation error, telling me that <code>Db</code> doesn&#8217;t implement the corresponding trait.
+What&#8217;s worse, removing the <code>target</code> directory fixed the bug.
+This was an instance of incorrect incremental compilation.</p>
+</div>
+<div class="paragraph">
+<p>The problem stemmed from two issues:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>UnwindSafe</code> and <code>RefUnwindSafe</code> are auto traits, and inference rules for those are complicated</p>
+</li>
+<li>
+<p><code>Db</code> type has a curiously recurring template structure</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>With incremental compilation in the mix, something somewhere went wrong.</p>
+</div>
+<div class="paragraph">
+<p>The compiler bug was fixed after several months, but, to work around it in the meantime, we&#8217;ve added a manual <code>impl UnwindSafe for Db</code> which masked the bug.</p>
+</div>
+<div class="paragraph">
+<p>Couple of months more has passed, and we started integrating chalk into rust-analyzer.
+At that time, chalk had it&#8217;s own layer of caching, in addition to the incremental compilation of rust-analyzer itself.
+So we had something like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="code"><pre>struct Db {
+    solver: parking_lot::Mutex&lt;ChalkSolver&gt;,
+    ...
+}
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>(We used parking_lot for perf, and to share mutex impl between salsa and rust-analyzer).</p>
+</div>
+<div class="paragraph">
+<p>Now, one of the differences between <code>std::Mutex</code> and <code>parking_lot::Mutex</code> is lock poisoning.
+And that means that <code>std::Mutex</code> is unwind safe (as it just becomes poisoned), while <code>parking_lot::Mutex</code> is not.
+Chalk used some <code>RefCell`s internally, so it wasn&#8217;t unwind safe.
+So the whole `Db</code> stopped being <code>UnwindSafe</code> after addition of chalk.
+<em>But</em> because we had that manual <code>impl UnwindSafe for Db</code>, we haven&#8217;t noticed this.</p>
+</div>
+<div class="paragraph">
+<p>And that lead to a heisenbug.
+If cancellation happened during trait solving, we unwond past <code>ChalkSolver</code>.
+And, as didn&#8217;t have strict exception safety guarantees, that messed up its internal questions.
+So the <em>next</em> trait solving query would observe really weird errors like index out of bounds inside chalk.</p>
+</div>
+<div class="paragraph">
+<p>The solution was to:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>remove the manual impl (by that time the underlying compiler bug was fixed).</p>
+</li>
+<li>
+<p>get the <code>Db: !UnwindSafe</code> expected error.</p>
+</li>
+<li>
+<p>replace <code>parking_lot::Mutex</code> with <code>std::Mutex</code> to get unwind-safety.</p>
+</li>
+<li>
+<p>change calls to <code>.lock</code> to propagate cancellation.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>The last point is interesting, it means that we need support for recoverable poisoning in this case.
+We need to understand that the other thread was cancelled mid-operation (so that chalk&#8217;s state might be inconsistent).
+And we also need to re-raise the panic with a <em>specific</em> payload&#8201;&#8212;&#8201;the <code>Cancelled</code> struct.
+This is because the situation is not a bug.</p>
+</div>
+<div class="paragraph">
+<p>Discussion on <a href="https://old.reddit.com/r/rust/comments/kbnphb/blog_post_notes_on_lock_poisoning/">/r/rust</a>.</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2020-12-12-notes-on-lock-poisoning.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

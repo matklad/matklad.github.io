@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Why Not Rust?</title>
+  <meta name="description"
+    content="I&#8217;ve recently read an article criticizing Rust, and, while it made a bunch of good points, I didn&#8217;t enjoy it&#8201;&#8212;&#8201;it was an easy t...">
+  <link rel="canonical" href="https://matklad.github.io//2020/09/20/why-not-rust.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Why Not Rust?</h1>
+  <div class="post-meta sect1">Sep 20, 2020</div>
+  <div class="paragraph">
+<p>I&#8217;ve recently read an article criticizing Rust, and, while it made a bunch of good points, I didn&#8217;t enjoy it&#8201;&#8212;&#8201;it was an easy to argue with piece.
+In general, I feel that I can&#8217;t recommend an article criticizing Rust.
+This is a shame&#8201;&#8212;&#8201;confronting drawbacks is important, and debunking low effort/miss informed attempts at critique sadly inoculates against actually good arguments.</p>
+</div>
+<div class="paragraph">
+<p>So, here&#8217;s my attempt to argue <em>against</em> Rust:</p>
+</div>
+<div class="dlist">
+<dl>
+<dt class="hdlist1">Not All Programming is Systems Programming</dt>
+<dd>
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>Rust is a systems programming language.
+It offers precise control over data layout and runtime behavior of the code, granting  you maximal performance and flexibility.
+Unlike other systems programming languages, it also provides memory safety&#8201;&#8212;&#8201;buggy programs terminate in a well-defined manner, instead of unleashing (potentially security-sensitive) undefined behavior.</p>
+</div>
+<div class="paragraph">
+<p>However, in many (most) cases, one doesn&#8217;t need ultimate performance or control over hardware resources.
+For these situations, modern managed languages like Kotlin or Go offer decent speed, enviable
+<a href="https://qconlondon.com/london-2017/system/files/presentation-slides/highperformancemanagedlanguages.pdf">time to performance</a>, and are memory safe by virtue of using a garbage collector for dynamic memory management.</p>
+</div>
+</div>
+</div>
+</dd>
+<dt class="hdlist1">Complexity</dt>
+<dd>
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>Programmer&#8217;s time is valuable, and, if you pick Rust, expect to spend some of it on learning the ropes.
+Rust community poured a lot of time into creating high-quality teaching materials, but the Rust language <em>is</em> big.
+Even if a Rust implementation would provide value for you, you might not have resources to invest into growing the language expertise.</p>
+</div>
+<div class="paragraph">
+<p>Rust&#8217;s price for improved control is the curse of choice:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+</pre></td><td class="code"><pre><span class="k">struct</span> <span class="n">Foo</span>     <span class="p">{</span> <span class="n">bar</span><span class="p">:</span> <span class="n">Bar</span>         <span class="p">}</span>
+<span class="k">struct</span> <span class="n">Foo</span><span class="o">&lt;</span><span class="nv">'a</span><span class="o">&gt;</span> <span class="p">{</span> <span class="n">bar</span><span class="p">:</span> <span class="o">&amp;</span><span class="nv">'a</span> <span class="n">Bar</span>     <span class="p">}</span>
+<span class="k">struct</span> <span class="n">Foo</span><span class="o">&lt;</span><span class="nv">'a</span><span class="o">&gt;</span> <span class="p">{</span> <span class="n">bar</span><span class="p">:</span> <span class="o">&amp;</span><span class="nv">'a</span> <span class="k">mut</span> <span class="n">Bar</span> <span class="p">}</span>
+<span class="k">struct</span> <span class="n">Foo</span>     <span class="p">{</span> <span class="n">bar</span><span class="p">:</span> <span class="nb">Box</span><span class="o">&lt;</span><span class="n">Bar</span><span class="o">&gt;</span>    <span class="p">}</span>
+<span class="k">struct</span> <span class="n">Foo</span>     <span class="p">{</span> <span class="n">bar</span><span class="p">:</span> <span class="nb">Rc</span><span class="o">&lt;</span><span class="n">Bar</span><span class="o">&gt;</span>     <span class="p">}</span>
+<span class="k">struct</span> <span class="n">Foo</span>     <span class="p">{</span> <span class="n">bar</span><span class="p">:</span> <span class="nb">Arc</span><span class="o">&lt;</span><span class="n">Bar</span><span class="o">&gt;</span>    <span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>In Kotlin, you write <code>class Foo(val bar: Bar)</code>, and proceed with solving your business problem.
+In Rust, there are choices to be made, some important enough to have dedicated syntax.</p>
+</div>
+<div class="paragraph">
+<p>All this complexity is there for a reason&#8201;&#8212;&#8201;we don&#8217;t know how to create a simpler memory safe low-level language.
+But not every task requires a low-level language to solve it.</p>
+</div>
+<div class="paragraph">
+<p>See also <a href="https://www.youtube.com/watch?v=ltCgzYcpFUI">Why C&#43;&#43; Sails When the Vasa Sank</a>.</p>
+</div>
+</div>
+</div>
+</dd>
+<dt class="hdlist1">Compile Times</dt>
+<dd>
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>Compile times are a multiplier for everything.
+A program written in a slower to run but faster to compile programming language can be <em>faster</em> to run because the programmer will have more time to optimize!</p>
+</div>
+<div class="paragraph">
+<p>Rust intentionally picked slow compilers in the <a href="https://research.swtch.com/generic">generics dilemma</a>.
+This is not necessary the end of the world (the resulting runtime performance improvements are real), but it does mean that you&#8217;ll have to fight tooth and nail for reasonable build times in larger projects.</p>
+</div>
+<div class="paragraph">
+<p><code>rustc</code> implements what is probably the most advanced <a href="https://rustc-dev-guide.rust-lang.org/queries/incremental-compilation.html">incremental compilation</a> algorithm in production compilers, but this feels a bit like fighting with language compilation model.</p>
+</div>
+<div class="paragraph">
+<p>Unlike C&#43;&#43;, Rust build is not embarrassingly parallel; the amount of parallelism is limited by length of the critical path in the dependency graph.
+If you have 40+ cores to compile, this shows.</p>
+</div>
+<div class="paragraph">
+<p>Rust also lacks an analog for the <a href="https://en.cppreference.com/w/cpp/language/pimpl">pimpl</a> idiom, which means that changing a crate requires recompiling (and not just relinking) all of its reverse dependencies.</p>
+</div>
+</div>
+</div>
+</dd>
+<dt class="hdlist1">Maturity</dt>
+<dd>
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>Five years old, Rust is definitely a young language.
+Even though its future looks bright, I will bet more money on &#8220;C will be around in ten years&#8221; than on &#8220;Rust will be around in ten years&#8221;
+(See <a href="https://en.wikipedia.org/wiki/Lindy_effect">Lindy Effect</a>).
+If you are writing software to last decades, you should seriously consider risks associated with picking new technologies.
+(But keep in mind that picking Java over Cobol for banking software in 90s retrospectively turned out to be the right choice).</p>
+</div>
+<div class="paragraph">
+<p>There&#8217;s only one complete implementation of Rust&#8201;&#8212;&#8201;the <a href="https://github.com/rust-lang/rust/"><code>rustc</code></a> compiler.
+The most advanced alternative implementation, <a href="https://github.com/thepowersgang/mrustc"><code>mrustc</code></a>, purposefully omits many static safety checks.
+<code>rustc</code> at the moment supports only a single production-ready backend&#8201;&#8212;&#8201;LLVM.
+Hence, its support for CPU architectures is narrower than that of C, which has GCC implementation as well as a number of vendor specific proprietary compilers.</p>
+</div>
+<div class="paragraph">
+<p>Finally, Rust lacks an official specification.
+<a href="https://doc.rust-lang.org/reference/">The reference</a> is a work in progress, and does not yet document all the fine implementation details.</p>
+</div>
+</div>
+</div>
+</dd>
+<dt class="hdlist1">Alternatives</dt>
+<dd>
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>There are other languages besides Rust in systems programming space, notably, C, C&#43;&#43;, and Ada.</p>
+</div>
+<div class="paragraph">
+<p>Modern C&#43;&#43; provides <a href="https://www.viva64.com/en/pvs-studio/">tools</a> and <a href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines">guidelines</a> for improving safety.
+There&#8217;s even a proposal for a Rust-like <a href="https://github.com/isocpp/CppCoreGuidelines/blob/master/docs/Lifetime.pdf">lifetimes</a> mechanism!
+Unlike Rust, using these tools does not <em>guarantee</em> the absence of memory safety issues.
+Modern C&#43;&#43; is <em>safer</em>, Rust is <em>safe</em>.
+However, if you already maintain a large body of C&#43;&#43; code, it makes sense to check if following best practices and using <a href="https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html">sanitizers</a> helps with security issues.
+This is hard, but clearly is easier than rewriting in another language!</p>
+</div>
+<div class="paragraph">
+<p>If you use C, you can use formal methods to <a href="https://sel4.systems/Info/FAQ/proof.pml">prove</a> the absence of undefined behaviors, or just <a href="https://sqlite.org/testing.html">exhaustively test</a> everything.</p>
+</div>
+<div class="paragraph">
+<p>Ada is memory safe if you don&#8217;t use dynamic memory (never call <code>free</code>).</p>
+</div>
+<div class="paragraph">
+<p>Rust is an interesting point on the cost/safety curve, but is far from the only one!</p>
+</div>
+</div>
+</div>
+</dd>
+<dt class="hdlist1">Tooling</dt>
+<dd>
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>Rust tooling is a bit of a hit and miss.
+The baseline tooling, the compiler and the build system
+(<a href="https://doc.rust-lang.org/cargo/index.html">cargo</a>), are often cited as best in class.</p>
+</div>
+<div class="paragraph">
+<p>But, for example, some runtime-related tools (most notably, heap profiling) are just absent&#8201;&#8212;&#8201;it&#8217;s hard to reflect on the runtime of the program if there&#8217;s no runtime!
+Additionally, while IDE support is decent, it is nowhere near the Java-level of reliability.
+Automated complex refactors of multi-million line programs are not possible in Rust today.</p>
+</div>
+</div>
+</div>
+</dd>
+<dt class="hdlist1">Integration</dt>
+<dd>
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>Whatever the Rust promise is, it&#8217;s a fact of life that today&#8217;s systems programming world speaks C, and is inhabited by C and C&#43;&#43;.
+Rust intentionally doesn&#8217;t try to mimic these languages&#8201;&#8212;&#8201;it doesn&#8217;t use C++-style classes or C ABI.</p>
+</div>
+<div class="paragraph">
+<p>That means that integration between the worlds needs explicit bridges.
+These are not seamless.
+They are <code>unsafe</code>, not always completely zero-cost and need to be synchronized between the languages.
+While the general promise of <a href="http://adventures.michaelfbryan.com/posts/how-to-riir/">piece-wise integration</a> holds up and the <a href="https://github.com/dtolnay/cxx">tooling</a> catches up, there is accidental complexity along the way.</p>
+</div>
+<div class="paragraph">
+<p>One specific gotcha is that Cargo&#8217;s opinionated world view (which <em>is</em> a blessing for pure Rust projects) might make it harder to integrate with a bigger build system.</p>
+</div>
+</div>
+</div>
+</dd>
+<dt class="hdlist1">Performance</dt>
+<dd>
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>&#8220;Using LLVM&#8221; is not a universal solution to all performance problems.
+While I am not aware of benchmarks comparing performance of C&#43;&#43; and Rust at scale, it&#8217;s not to hard to come up with a list of cases where Rust leaves some performance on the table relative to C&#43;&#43;.</p>
+</div>
+<div class="paragraph">
+<p>The biggest one is probably the fact that Rust&#8217;s move semantics is based on values (<code>memcpy</code> at the machine code level).
+In contrast, C&#43;&#43; semantics uses special references you can steal data from (pointers at the machine code level).
+In theory, compiler should be able to see through chain of copies; in practice it often doesn&#8217;t: <a href="https://github.com/rust-lang/rust/issues/57077">#57077</a>.
+A related problem is the absence of placement new&#8201;&#8212;&#8201;Rust sometimes need to copy bytes to/from the stack, while C&#43;&#43; can construct the thing in place.</p>
+</div>
+<div class="paragraph">
+<p>Somewhat amusingly, Rust&#8217;s default ABI (which is not stable, to make it as efficient as possible) is sometimes worse than that of C: <a href="https://github.com/rust-lang/rust/issues/26494#issuecomment-619506345">#26494</a>.</p>
+</div>
+<div class="paragraph">
+<p>Finally, while in theory Rust code should be more efficient due to the significantly richer aliasing information, enabling aliasing-related optimizations triggers LLVM bugs and miscompilations: <a href="https://github.com/rust-lang/rust/issues/54878">#54878</a>.</p>
+</div>
+<div class="paragraph">
+<p>But, to reiterate, these are cherry-picked examples, sometimes the field is tilted the other way.
+For example, <code>std::unique_ptr</code> <a href="https://www.youtube.com/watch?v=rHIkrotSwcc&amp;feature=youtu.be&amp;t=1261">has a performance problem</a> which Rust&#8217;s <code>Box</code> lacks.</p>
+</div>
+<div class="paragraph">
+<p>A potentially bigger issue is that Rust, with its definition time checked generics, is less expressive than C&#43;&#43;.
+So, some C&#43;&#43; <a href="http://eigen.tuxfamily.org/index.php?title=Expression_templates">template tricks</a> for high performance are not expressible in Rust using a nice syntax.</p>
+</div>
+</div>
+</div>
+</dd>
+<dt class="hdlist1">Meaning of Unsafe</dt>
+<dd>
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>An idea which is even more core to Rust than ownership &amp; borrowing is perhaps that of <code>unsafe</code> boundary.
+That, by delineating all dangerous operations behind <code>unsafe</code> blocks and functions and insisting on providing a safe higher-level interface to them, it is possible to create a system which is both</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>sound (non-<code>unsafe</code> code can&#8217;t cause undefined behavior),</p>
+</li>
+<li>
+<p>and modular (different <code>unsafe</code> blocks can be checked separately).</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>It&#8217;s pretty clear that the promise works out in practice: <a href="https://github.com/rust-fuzz/trophy-case">fuzzing Rust code</a> unearths panics, not buffer overruns.</p>
+</div>
+<div class="paragraph">
+<p>But the theoretical outlook is not as rosy.</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, there&#8217;s no definition of Rust memory model, so it is impossible to formally check if a given unsafe block is valid or not.
+There&#8217;s informal definition of &#8220;things rustc does or might rely on&#8221; and in in-progress <a href="https://github.com/rust-lang/miri">runtime verifier</a>, but the actual model is in flux.
+So there might be some <code>unsafe</code> code somewhere which works OK in practice today, might be declared invalid tomorrow, and broken by a new compiler optimization next year.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, there&#8217;s also an observation that <code>unsafe</code> blocks are not, in fact, modular.
+Sufficiently powerful <code>unsafe</code> blocks can, in effect, extend the language.
+Two such extensions might be fine in isolation, but lead to undefined behavior if used simultaneously:
+<a href="https://smallcultfollowing.com/babysteps/blog/2016/10/02/observational-equivalence-and-unsafe-code/">Observational equivalence and unsafe code</a>.</p>
+</div>
+<div class="paragraph">
+<p>Finally, there are outright <a href="https://github.com/rust-lang/rust/issues?q=is%3Aopen+is%3Aissue+label%3A%22I-unsound+%F0%9F%92%A5%22">bugs in the compiler</a>.</p>
+</div>
+</div>
+</div>
+</dd>
+</dl>
+</div>
+<hr>
+<div class="paragraph">
+<p>Here are some thing I have deliberately omitted from the list:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Economics (&#8220;it&#8217;s harder to hire Rust programmers&#8221;)&#8201;&#8212;&#8201;I feel that the &#8220;maturity&#8221; section captures the essence of it which is not reducible to chicken and egg problem.</p>
+</li>
+<li>
+<p>Dependencies (&#8220;stdlib is too small / everything has too many deps&#8221;)&#8201;&#8212;&#8201;given how good Cargo and the relevant parts of the language are, I personally don&#8217;t see this as a problem.</p>
+</li>
+<li>
+<p>Dynamic linking (&#8220;Rust should have stable ABI&#8221;)&#8201;&#8212;&#8201;I don&#8217;t think this is a strong argument. Monomorphization is pretty fundamentally incompatible with dynamic linking and there&#8217;s C ABI if you really need to. I do think that the situation here can be improved, <a href="https://internals.rust-lang.org/t/a-stable-modular-abi-for-rust/12347/10?u=matklad">but I don&#8217;t think that improvement needs to be Rust-specific</a>.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Discussion on <a href="https://www.reddit.com/r/rust/comments/iwij5i/blog_post_why_not_rust/">/r/rust</a>.</p>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2020-09-20-why-not-rust.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

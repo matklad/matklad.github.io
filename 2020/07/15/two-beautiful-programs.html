@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Two Beautiful Rust Programs</title>
+  <meta name="description"
+    content="This is a short ad of a Rust programming language targeting experienced C++ developers.Being an ad, it will only whet your appetite, consult other resources ...">
+  <link rel="canonical" href="https://matklad.github.io//2020/07/15/two-beautiful-programs.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Two Beautiful Rust Programs</h1>
+  <div class="post-meta sect1">Jul 15, 2020</div>
+  <div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>This is a short ad of a <a href="https://www.rust-lang.org/">Rust</a> programming language targeting experienced C++ developers.
+Being an ad, it will only whet your appetite, consult other resources for fine print.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="first-program"><a class="anchor" href="#first-program"></a>First Program</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">let</span> <span class="k">mut</span> <span class="n">xs</span> <span class="o">=</span> <span class="nd">vec!</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">];</span>
+  <span class="k">let</span> <span class="n">x</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">i32</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">xs</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+  <span class="n">xs</span><span class="nf">.push</span><span class="p">(</span><span class="mi">92</span><span class="p">);</span>
+  <span class="nd">println!</span><span class="p">(</span><span class="s">"{}"</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This program creates a vector of 32-bit integers (<code>std::vector&lt;int32_t&gt;</code>), takes a reference to the first element, <code>x</code>, pushs one more number onto the vector and then uses <code>x</code>.
+The program is wrong: extending the vector may invalidate references to element, and <code>*x</code> might dereference a danging pointer.</p>
+</div>
+<div class="paragraph">
+<p>The beauty of this program is that it doesn&#8217;t compile:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+</pre></td><td class="code"><pre><span class="err">error[E0502]</span>: cannot borrow xs as mutable
+    because it is also borrowed as immutable
+ --&gt; src/main.rs:4:5
+
+     let x: &amp;i32 = &amp;xs[0];
+                    -- immutable borrow occurs here
+     xs.push(92);
+     <span class="err">^^^^^^^^^^^ mutable borrow occurs here</span>
+     println!(x);
+              - immutable borrow later used here
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Rust compiler tracks the aliasing status of every piece of data and forbids mutations of potentially aliased data.
+In this example, <code>x</code> and <code>xs</code> alias the first integer in the vector&#8217;s storage in the heap.</p>
+</div>
+<div class="paragraph">
+<p>Rust doesn&#8217;t allow doing stupid things.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="second-program"><a class="anchor" href="#second-program"></a>Second Program</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+</pre></td><td class="code"><pre><span class="k">use</span> <span class="nn">crossbeam</span><span class="p">::</span><span class="n">scope</span><span class="p">;</span>
+<span class="k">use</span> <span class="nn">parking_lot</span><span class="p">::{</span><span class="n">Mutex</span><span class="p">,</span> <span class="n">MutexGuard</span><span class="p">};</span>
+
+<span class="k">fn</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">let</span> <span class="k">mut</span> <span class="n">counter</span> <span class="o">=</span> <span class="nn">Mutex</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+
+  <span class="nf">scope</span><span class="p">(|</span><span class="n">s</span><span class="p">|</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="mi">_</span> <span class="n">in</span> <span class="mi">0</span><span class="o">..</span><span class="mi">10</span> <span class="p">{</span>
+      <span class="n">s</span><span class="nf">.spawn</span><span class="p">(|</span><span class="mi">_</span><span class="p">|</span> <span class="p">{</span>
+        <span class="k">for</span> <span class="mi">_</span> <span class="n">in</span> <span class="mi">0</span><span class="o">..</span><span class="mi">10</span> <span class="p">{</span>
+          <span class="k">let</span> <span class="k">mut</span> <span class="n">guard</span><span class="p">:</span> <span class="n">MutexGuard</span><span class="o">&lt;</span><span class="nb">i32</span><span class="o">&gt;</span> <span class="o">=</span> <span class="n">counter</span><span class="nf">.lock</span><span class="p">();</span>
+          <span class="o">*</span><span class="n">guard</span> <span class="o">+=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="p">}</span>
+      <span class="p">});</span>
+    <span class="p">}</span>
+  <span class="p">})</span><span class="nf">.unwrap</span><span class="p">();</span>
+
+  <span class="k">let</span> <span class="n">total</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span> <span class="nb">i32</span> <span class="o">=</span> <span class="n">counter</span><span class="nf">.get_mut</span><span class="p">();</span>
+  <span class="nd">println!</span><span class="p">(</span><span class="s">"total = {}"</span><span class="p">,</span> <span class="o">*</span><span class="n">total</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This program creates an integer counter protected by a mutex, spawns 10 threads, increments the counter 10 times from each thread, and prints the total.</p>
+</div>
+<div class="paragraph">
+<p>The <code>counter</code> variable lives on the stack, and  a pointer to these stack data is shared with other threads.
+The threads have to lock the mutex to do the increments.
+When printing the total, the counter is read bypassing the mutex, without any synchronization.</p>
+</div>
+<div class="paragraph">
+<p>The beauty of this program is that it relies on several bits of subtle reasoning for correctness, each of which is checked by compiler:</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Child threads don&#8217;t escape the <code>main</code> function and so can read <code>counter</code> from its stack.</p>
+</li>
+<li>
+<p>Child threads only access <code>counter</code> through the mutex.</p>
+</li>
+<li>
+<p>Child threads will have terminated by the time we read <code>total</code> out of <code>counter</code> without mutex.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>If any of these constraints is broken, the compiler rejects the code.
+There&#8217;s no need for <code>std::shared_ptr</code> just to defensively make sure that the memory isn&#8217;t freed under your feet.</p>
+</div>
+<div class="paragraph">
+<p>Rust allows doing dangerous, clever, and fast things without fear of introducing undefined behavior.</p>
+</div>
+<div class="paragraph">
+<p>If you like what you see, here are two books I recommend for diving deeper into Rust:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><a href="https://doc.rust-lang.org/book/">The Rust Programming Language</a></p>
+</li>
+<li>
+<p><a href="https://www.oreilly.com/library/view/programming-rust/9781491927274/">Programming Rust</a></p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2020-07-15-two-beautiful-programs.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

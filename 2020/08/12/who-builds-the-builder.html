@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Who Builds the Builder?</title>
+  <meta name="description"
+    content="This is a short note on the builder pattern, or, rather, on the builder method pattern.">
+  <link rel="canonical" href="https://matklad.github.io//2020/08/12/who-builds-the-builder.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Who Builds the Builder?</h1>
+  <div class="post-meta sect1">Aug 12, 2020</div>
+  <div class="paragraph">
+<p>This is a short note on the builder pattern, or, rather, on the builder <em>method</em> pattern.</p>
+</div>
+<div class="paragraph">
+<p>TL;DR: if you have <code>Foo</code> and <code>FooBuilder</code>, consider adding a <code>builder</code> method to <code>Foo</code>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+</pre></td><td class="code"><pre><span class="k">struct</span> <span class="n">Foo</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+
+<span class="nd">#[derive(Default)]</span>
+<span class="k">struct</span> <span class="n">FooBuilder</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+
+<span class="k">impl</span> <span class="n">Foo</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">builder</span><span class="p">()</span> <span class="k">-&gt;</span> <span class="n">FooBuilder</span> <span class="p">{</span>
+        <span class="nn">FooBuilder</span><span class="p">::</span><span class="nf">default</span><span class="p">()</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">impl</span> <span class="n">FooBuilder</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">build</span><span class="p">(</span><span class="k">self</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Foo</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>A more minimal solution is to rely just on <code>FooBuilder::default</code> or <code>FooBuilder::new</code>.
+There are two problems with that:</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, it is hard to discover.
+Nothing in the docs/signature of <code>Foo</code> mentions <code>FooBuilder</code>, you need to look elsewhere to learn how to create a <code>Foo</code>.
+I remember being puzzled at how to create a <a href="https://docs.rs/globset/0.4.5/globset/struct.GlobSet.html"><code>GlobSet</code></a> for exactly this reason.
+In contrast, the <code>builder</code> method is right there on <code>Foo</code>, probably the first one.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, it is more annoying to use, as you need to import <em>both</em> <code>Foo</code> and <code>FooBuilder</code>.
+With <code>Foo::builder</code> method often only one import suffices, as you don&#8217;t need to name the builder type.</p>
+</div>
+<div class="paragraph">
+<p>Case studies:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><a href="https://github.com/rust-analyzer/rust-analyzer/commit/7510048ec0a5d5e7136e3ea258954eb244d15baf"><code>TextEdit::build</code></a> from rust-analyzer.</p>
+</li>
+<li>
+<p><a href="https://doc.rust-lang.org/std/fs/struct.File.html#method.with_options"><code>File::with_options</code></a> from std.</p>
+</li>
+<li>
+<p><a href="https://docs.rs/http/0.2.1/http/request/struct.Request.html#method.builder"><code>Request</code></a> and <a href="https://docs.rs/http/0.2.1/http/response/struct.Response.html#method.builder"><code>Response</code></a> from http.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Discussion on <a href="https://www.reddit.com/r/rust/comments/i8kofk/blog_post_who_builds_the_builder/">/r/rust</a>.</p>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2020-08-12-who-builds-the-builder.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

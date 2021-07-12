@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Spinlocks Considered Harmful</title>
+  <meta name="description"
+    content="Happy new year 🎉!">
+  <link rel="canonical" href="https://matklad.github.io//2020/01/02/spinlocks-considered-harmful.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Spinlocks Considered Harmful</h1>
+  <div class="post-meta sect1">Jan 2, 2020</div>
+  <div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>Happy new year 🎉!</p>
+</div>
+<div class="paragraph">
+<p>In this post, I will be expressing strong opinions about a topic I have relatively little practical experience with, so feel free to roast and educate me in comments (link at the end of the post) :-)</p>
+</div>
+<div class="paragraph">
+<p>Specifically, I&#8217;ll talk about:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>spinlocks,</p>
+</li>
+<li>
+<p>spinlocks in Rust with <code>#[no_std]</code>,</p>
+</li>
+<li>
+<p>priority inversion,</p>
+</li>
+<li>
+<p>CPU interrupts,</p>
+</li>
+<li>
+<p>and a couple of neat/horrible systemsy Rust hacks.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="context"><a class="anchor" href="#context"></a>Context</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>I maintain <a href="https://github.com/matklad/once_cell/"><code>once_cell</code></a> crate, which is a synchronization primitive.
+It uses <code>std</code> blocking facilities under the hood (specifically, <code>std::thread::park</code>), and as such is not compatible with <code>#[no_std]</code>.
+A popular request is to add a spin-lock based implementation for use in <code>#[no_std]</code> environments: <a href="https://github.com/matklad/once_cell/issues/61">#61</a>.</p>
+</div>
+<div class="paragraph">
+<p>More generally, this seems to be a common pattern in Rust ecosystem:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>A crate uses <code>Mutex</code> or other synchronization mechanism from <code>std</code></p>
+</li>
+<li>
+<p>Someone asks for <code>#[no_std]</code> support</p>
+</li>
+<li>
+<p><code>Mutex</code> is swapped for some variation of spinlock.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>For example, the <code>lazy_static</code> crate does this:</p>
+</div>
+<div class="paragraph">
+<p><a href="https://github.com/rust-lang-nursery/lazy-static.rs/blob/421669662b35fcb455f2902daed2e20bbbba79b6/src/core_lazy.rs#L10">github.com/rust-lang-nursery/lazy-static.rs/blob/master/src/core_lazy.rs</a></p>
+</div>
+<div class="paragraph">
+<p>I think this is an anti-pattern, and I am writing this blog post to call it out.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="what-is-a-spinlock-anyway"><a class="anchor" href="#what-is-a-spinlock-anyway"></a>What Is a Spinlock, Anyway?</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>A <code>Spinlock</code> is the simplest possible implementation of a mutex, its general form looks like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="code"><pre><span class="k">static</span> <span class="n">LOCKED</span><span class="p">:</span> <span class="n">AtomicBool</span> <span class="o">=</span> <span class="nn">AtomicBool</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="k">false</span><span class="p">);</span>
+
+<span class="k">while</span> <span class="n">LOCKED</span><span class="nf">.compare_and_swap</span><span class="p">(</span><span class="k">false</span><span class="p">,</span> <span class="k">true</span><span class="p">,</span> <span class="nn">Ordering</span><span class="p">::</span><span class="n">Acquire</span><span class="p">)</span> <span class="p">{</span> <i class="conum" data-value="1"></i><b>(1)</b>
+  <span class="nn">std</span><span class="p">::</span><span class="nn">sync</span><span class="p">::</span><span class="nn">atomic</span><span class="p">::</span><span class="nf">spin_loop_hint</span><span class="p">();</span> <i class="conum" data-value="4"></i><b>(4)</b>
+<span class="p">}</span>
+
+<span class="cm">/* Critical section */</span>  <i class="conum" data-value="2"></i><b>(2)</b>
+
+<span class="n">LOCKED</span><span class="nf">.store</span><span class="p">(</span><span class="k">false</span><span class="p">,</span> <span class="nn">Ordering</span><span class="p">::</span><span class="n">Release</span><span class="p">);</span> <i class="conum" data-value="3"></i><b>(3)</b>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td>To grab a lock, we repeatedly execute compare_and_swap until it succeeds. The CPU "spins" in this very short loop.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="2"></i><b>2</b></td>
+<td>Only one thread at a time can be here.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="3"></i><b>3</b></td>
+<td>To release the lock, we do a single atomic store.</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="4"></i><b>4</b></td>
+<td>Spinning is wasteful, so we use an <a href="https://en.wikipedia.org/wiki/Intrinsic_function">intrinsic</a> to instruct the CPU to enter a low-power mode.</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>Why we need <code>Ordering::Acquire</code> and <code>Ordering::Release</code> is very interesting, but beyond the scope of this article.</p>
+</div>
+<div class="paragraph">
+<p>The key take-away here is that a spinlock is implemented entirely in user space: from OS point of view, a "spinning" thread looks exactly like a thread that does a heavy computation.</p>
+</div>
+<div class="paragraph">
+<p>An OS-based mutex, like <a href="https://doc.rust-lang.org/std/sync/struct.Mutex.html"><code>std::sync::Mutex</code></a> or <a href="https://docs.rs/parking_lot/0.10.0/parking_lot/type.Mutex.html"><code>parking_lot::Mutex</code></a>, uses a <strong>system call</strong> to tell the operating system that a thread needs to be blocked. In pseudo code, an implementation might look like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+</pre></td><td class="code"><pre><span class="k">static</span> <span class="n">LOCKED</span><span class="p">:</span> <span class="n">AtomicBool</span> <span class="o">=</span> <span class="nn">AtomicBool</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="k">false</span><span class="p">);</span>
+
+<span class="k">while</span> <span class="n">LOCKED</span><span class="nf">.compare_and_swap</span><span class="p">(</span><span class="k">false</span><span class="p">,</span> <span class="k">true</span><span class="p">,</span> <span class="nn">Ordering</span><span class="p">::</span><span class="n">Acquire</span><span class="p">)</span>
+  <span class="nf">park_this_thread</span><span class="p">(</span><span class="o">&amp;</span><span class="n">LOCKED</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/* Critical section */</span>
+
+<span class="n">LOCKED</span><span class="nf">.store</span><span class="p">(</span><span class="k">false</span><span class="p">,</span> <span class="nn">Ordering</span><span class="p">::</span><span class="n">Release</span><span class="p">);</span>
+<span class="nf">unpark_some_thread</span><span class="p">(</span><span class="o">&amp;</span><span class="n">LOCKED</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The main difference is <code>park_this_thread</code>&#8201;&#8212;&#8201;a <strong>blocking</strong> system call.
+It instructs the OS to take current thread off the CPU until it is woken up by an <code>unpark_some_thread</code> call.
+The kernel maintains a <strong>queue</strong> of threads waiting for a mutex.
+The <code>park</code> call enqueues current thread onto this queue, while <code>unpark</code> dequeues some thread. The <code>park</code> system call returns when the thread is dequeued.
+In the meantime, the thread waits off the CPU.</p>
+</div>
+<div class="paragraph">
+<p>If there are several different mutexes, the kernel needs to maintain several queues.
+An address of a lock can be used as a token to identify a specific queue (this is a <a href="http://man7.org/linux/man-pages/man2/futex.2.html">futex</a> API).</p>
+</div>
+<div class="paragraph">
+<p>System calls are expensive, so production implementations of <code>Mutex</code> usually spin for several iterations before calling into OS, optimistically hoping that the <code>Mutex</code> will be released soon.
+However, the waiting always bottoms out in a syscall.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="spinning-just-for-a-little-bit-what-can-go-wrong"><a class="anchor" href="#spinning-just-for-a-little-bit-what-can-go-wrong"></a>Spinning Just For a Little Bit, What Can Go Wrong?</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Because spin locks are so simple and fast, it seems to be a good idea to use them for short-lived critical sections.
+For example, if you only need to increment a couple of integers, should you really bother with complicated syscalls? In the worst case, the other thread will spin just for a couple of iterations&#8230;&#8203;</p>
+</div>
+<div class="paragraph">
+<p>Unfortunately, this logic is flawed!
+A thread can be preempted at any time, including during a short critical section.
+If it is preempted, that means that all other threads will need to spin until the original thread gets its share of CPU again.
+And, because a spinning thread looks like a good, busy thread to the OS, the other threads will spin until they exhaust their quants, preventing the unlucky thread from getting back on the processor!</p>
+</div>
+<div class="paragraph">
+<p>If this sounds like a series of unfortunate events, don&#8217;t worry, it gets even worse. Enter <strong>Priority Inversion</strong>. Suppose our threads have priorities, and OS tries to schedule high-priority threads over low-priority ones.</p>
+</div>
+<div class="paragraph">
+<p>Now, what happens if the thread that enters a critical section is a low-priority one, but competing threads have high priority?
+It will likely get preempted: there are higher priority threads after all.
+And, if the number of cores is smaller than the number of high priority threads that try to lock a mutex, it likely won&#8217;t be able to complete a critical section at all: OS will be repeatedly scheduling all the other threads!</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="no-os-no-problem"><a class="anchor" href="#no-os-no-problem"></a>No OS, no problem?</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>But wait!&#8201;&#8212;&#8201;you would say&#8201;&#8212;&#8201;we only use spin locks in <code>#[no_std]</code> crates, so there&#8217;s no OS to preempt our threads.</p>
+</div>
+<div class="paragraph">
+<p><em>First</em>, it&#8217;s not really true: it&#8217;s perfectly fine, and often even desirable, to use <code>#[no_std]</code> crates for usual user-space applications.
+For example, if you write a Rust replacement for a low-level C library, like zlib or openssl, you will probably make the crate <code>#[no_std]</code>, so that non-Rust applications can link to it without pulling the whole of the Rust runtime.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, if there&#8217;s really no OS to speak about, and you are on the bare metal (or in the kernel), it gets even worse than priority inversion.</p>
+</div>
+<div class="paragraph">
+<p>On bare metal, we generally don&#8217;t worry about <em>thread</em> preemption, but we need to worry about <a href="https://en.wikipedia.org/wiki/Interrupt">processor interrupts</a>. That is, while processor is executing some code, it might receive an interrupt from some periphery device, and temporary switch to the interrupt handler&#8217;s code.</p>
+</div>
+<div class="paragraph">
+<p>And here comes the disaster: if the main code is in the middle of the critical section when the interrupt arrives, and if the interrupt handler tries to enter the critical section as well, we get a guaranteed deadlock!
+There&#8217;s no OS to switch threads after a quant expires.
+Here are Linux kernel <a href="https://www.kernel.org/doc/Documentation/locking/spinlocks.txt">docs</a> discussing this issue.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="practical-applications"><a class="anchor" href="#practical-applications"></a>Practical Applications</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Let&#8217;s trigger priority inversion!
+Our victim is the <a href="https://github.com/rust-random/getrandom/tree/v0.1.13"><code>getrandom</code></a> crate.
+I don&#8217;t pick on <code>getrandom</code> specifically here: the pattern is pervasive across the ecosystem.</p>
+</div>
+<div class="paragraph">
+<p>The crate uses spinning in the <a href="https://github.com/rust-random/getrandom/blob/v0.1.13/src/util.rs#L54-L82"><code>LazyUsize</code></a> utility type:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+</pre></td><td class="code"><pre><span class="k">pub</span> <span class="k">struct</span> <span class="nf">LazyUsize</span><span class="p">(</span><span class="n">AtomicUsize</span><span class="p">);</span>
+
+<span class="k">impl</span> <span class="n">LazyUsize</span> <span class="p">{</span>
+  <span class="c">// Synchronously runs the init() function. Only one caller</span>
+  <span class="c">// will have their init() function running at a time, and</span>
+  <span class="c">// exactly one successful call will be run. init() returning</span>
+  <span class="c">// UNINIT or ACTIVE will be considered a failure, and future</span>
+  <span class="c">// calls to sync_init will rerun their init() function.</span>
+
+  <span class="k">pub</span> <span class="k">fn</span> <span class="nf">sync_init</span><span class="p">(</span>
+    <span class="o">&amp;</span><span class="k">self</span><span class="p">,</span>
+    <span class="n">init</span><span class="p">:</span> <span class="k">impl</span> <span class="nf">FnOnce</span><span class="p">()</span> <span class="k">-&gt;</span> <span class="nb">usize</span><span class="p">,</span>
+    <span class="k">mut</span> <span class="n">wait</span><span class="p">:</span> <span class="k">impl</span> <span class="nf">FnMut</span><span class="p">(),</span>
+  <span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">usize</span> <span class="p">{</span>
+    <span class="c">// Common and fast path with no contention.</span>
+    <span class="c">// Don't wast time on CAS.</span>
+    <span class="k">match</span> <span class="k">self</span><span class="na">.0</span><span class="nf">.load</span><span class="p">(</span><span class="n">Relaxed</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nn">Self</span><span class="p">::</span><span class="n">UNINIT</span> <span class="p">|</span> <span class="nn">Self</span><span class="p">::</span><span class="n">ACTIVE</span> <span class="k">=&gt;</span> <span class="p">{}</span>
+      <span class="n">val</span> <span class="k">=&gt;</span> <span class="k">return</span> <span class="n">val</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="c">// Relaxed ordering is fine,</span>
+    <span class="c">// as we only have a single atomic variable.</span>
+    <span class="k">loop</span> <span class="p">{</span>
+      <span class="k">match</span> <span class="k">self</span><span class="na">.0</span><span class="nf">.compare_and_swap</span><span class="p">(</span>
+        <span class="nn">Self</span><span class="p">::</span><span class="n">UNINIT</span><span class="p">,</span>
+        <span class="nn">Self</span><span class="p">::</span><span class="n">ACTIVE</span><span class="p">,</span>
+        <span class="n">Relaxed</span><span class="p">,</span>
+      <span class="p">)</span> <span class="p">{</span>
+        <span class="nn">Self</span><span class="p">::</span><span class="n">UNINIT</span> <span class="k">=&gt;</span> <span class="p">{</span>
+          <span class="k">let</span> <span class="n">val</span> <span class="o">=</span> <span class="nf">init</span><span class="p">();</span>
+          <span class="k">self</span><span class="na">.0</span><span class="nf">.store</span><span class="p">(</span>
+            <span class="k">match</span> <span class="n">val</span> <span class="p">{</span>
+              <span class="nn">Self</span><span class="p">::</span><span class="n">UNINIT</span> <span class="p">|</span> <span class="nn">Self</span><span class="p">::</span><span class="n">ACTIVE</span> <span class="k">=&gt;</span> <span class="nn">Self</span><span class="p">::</span><span class="n">UNINIT</span><span class="p">,</span>
+              <span class="n">val</span> <span class="k">=&gt;</span> <span class="n">val</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">Relaxed</span><span class="p">,</span>
+          <span class="p">);</span>
+          <span class="k">return</span> <span class="n">val</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="nn">Self</span><span class="p">::</span><span class="n">ACTIVE</span> <span class="k">=&gt;</span> <span class="nf">wait</span><span class="p">(),</span>
+        <span class="n">val</span> <span class="k">=&gt;</span> <span class="k">return</span> <span class="n">val</span><span class="p">,</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>There&#8217;s a <code>static</code> instance of <code>LazyUsize</code> which caches file descriptor for <code>/dev/random</code>: <a href="https://github.com/rust-random/getrandom/blob/v0.1.13/src/use_file.rs#L26" class="bare">https://github.com/rust-random/getrandom/blob/v0.1.13/src/use_file.rs#L26</a>.
+This descriptor is used when calling <code>getrandom</code>&#8201;&#8212;&#8201;the only function that is exported by the crate.</p>
+</div>
+<div class="paragraph">
+<p>To trigger priority inversion, we will create <code>1 + N</code> threads, each of which will call <code>getrandom::getrandom</code>.
+We arrange it so that the first thread has a low priority, and the rest are high priority.
+We stagger threads a little bit so that the first one does the initialization.
+We also make creating the file descriptor slow, so that the first thread gets preempted while in the critical section.</p>
+</div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>This is actually a typical scenario for <code>getrandom</code>!
+Getting the first chunk of random bytes might block for a long time while the system gathers entropy after a reboot.
+I even had a fun bug last year, where my desktop environment won&#8217;t start until I press some key.
+It was waiting for entropy for some reason, and the keypress provided it.</p>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>Here is the implementation of this plan: <a href="https://github.com/matklad/spin-of-death" class="bare">https://github.com/matklad/spin-of-death</a>.</p>
+</div>
+<div class="paragraph">
+<p>It uses a couple of systems programming hacks to make this disaster scenario easy to reproduce.
+To simulate slow <code>/dev/random</code>, we want to intercept the <code>poll</code> syscall <code>getrandom</code> is using to ensure that there&#8217;s enough entropy.
+We can use <a href="https://strace.io/">strace</a> to log system calls issued by a program.
+I don&#8217;t know if strace can be used to make a syscall run slow (now, once I&#8217;ve looked at the website, I see that it can in fact be used to tamper with syscalls, <em>sigh</em>), but we actually don&#8217;t need to!
+<code>getrandom</code> does not use the syscall directly, it uses the <code>poll</code> function from <code>libc</code>.
+We can substitute this function by using <code>LD_PRELOAD</code>, but there&#8217;s an even simpler way!
+We can trick the static linker into using a function which we define ourselves:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="code"><pre><span class="nd">#[no_mangle]</span>
+<span class="k">pub</span> <span class="k">extern</span> <span class="s">"C"</span> <span class="k">fn</span> <span class="nf">poll</span><span class="p">(</span>
+  <span class="mi">_</span><span class="n">fds</span><span class="p">:</span> <span class="o">*</span><span class="k">const</span> <span class="nb">u8</span><span class="p">,</span>
+  <span class="mi">_</span><span class="n">nfds</span><span class="p">:</span> <span class="nb">usize</span><span class="p">,</span>
+  <span class="mi">_</span><span class="n">timeout</span><span class="p">:</span> <span class="nb">i32</span><span class="p">,</span>
+<span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">u32</span> <span class="p">{</span>
+  <span class="nf">sleep_ms</span><span class="p">(</span><span class="mi">500</span><span class="p">);</span>
+  <span class="mi">1</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The name of the function accidentally ( :) ) clashes with a well-known <a href="http://man7.org/linux/man-pages/man2/poll.2.html">POSIX function</a>.</p>
+</div>
+<div class="paragraph">
+<p>However, this alone is not enough.
+<code>getrandom</code> <a href="https://github.com/rust-random/getrandom/blob/v0.1.13/src/linux_android.rs">tries to use</a> <code>getrandom</code> syscall first, and that code path does not use a spin lock.
+We need to fool <code>getrandom</code> into believing that the syscall is not available.
+Our <code>extern "C"</code> trick wouldn&#8217;t have worked if <code>getrandom</code> literally used the <code>syscall</code> instruction.
+However, as inline assembly (which you need to issue a syscall manually) is not available on stable Rust, <code>getrandom</code> goes via <code>syscall</code> <em>function</em> from <code>libc</code>.
+That we can override with the same trick.</p>
+</div>
+<div class="paragraph">
+<p>However, there&#8217;s a wrinkle!
+Traditionally, <code>libc</code> API used <code>errno</code> for error reporting.
+That is, on a failure the function would return an single specific invalid value, and set the <code>errno</code> thread local variable to the specific error code. <code>syscall</code> follows this pattern.</p>
+</div>
+<div class="paragraph">
+<p>The <code>errno</code> interface is cumbersome to use.
+The worst part of <code>errno</code> is that the specification requires it to be a macro, and so you can only really use it from <code>C</code> <em>source code</em>.
+Internally, on Linux the macro calls <code>__get_errno_location</code> function to get the thread local, but this is an implementation detail (which we will gladly take advantage of, in this land of reckless systems hacking!). The irony is that the ABI of Linux syscall just <strong>returns</strong> error codes, so <code>libc</code> has to do some legwork to adapt to the awkward <code>errno</code> interface.</p>
+</div>
+<div class="paragraph">
+<p>So, here&#8217;s a strong contender for the most cursed function I&#8217;ve written so far:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+</pre></td><td class="code"><pre><span class="nd">#[no_mangle]</span>
+<span class="k">pub</span> <span class="k">extern</span> <span class="s">"C"</span> <span class="k">fn</span> <span class="nf">syscall</span><span class="p">(</span>
+  <span class="mi">_</span><span class="n">syscall</span><span class="p">:</span> <span class="nb">u64</span><span class="p">,</span>
+  <span class="mi">_</span><span class="n">buf</span><span class="p">:</span> <span class="o">*</span><span class="k">const</span> <span class="nb">u8</span><span class="p">,</span>
+  <span class="mi">_</span><span class="n">len</span><span class="p">:</span> <span class="nb">usize</span><span class="p">,</span>
+  <span class="mi">_</span><span class="n">flags</span><span class="p">:</span> <span class="nb">u32</span><span class="p">,</span>
+<span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">isize</span> <span class="p">{</span>
+  <span class="k">extern</span> <span class="s">"C"</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="mi">__</span><span class="nf">errno_location</span><span class="p">()</span> <span class="k">-&gt;</span> <span class="o">*</span><span class="k">mut</span> <span class="nb">i32</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">unsafe</span> <span class="p">{</span>
+    <span class="o">*</span><span class="mi">__</span><span class="nf">errno_location</span><span class="p">()</span> <span class="o">=</span> <span class="mi">38</span><span class="p">;</span> <span class="c">// ENOSYS</span>
+  <span class="p">}</span>
+  <span class="o">-</span><span class="mi">1</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>It makes <code>getrandom</code> believe that there&#8217;s no <code>getrandom</code> syscall, which causes it to fallback to <code>/dev/random</code> implementation.</p>
+</div>
+<div class="paragraph">
+<p>To set thread priorities, we use <a href="https://docs.rs/thread-priority/0.1.1/thread_priority/">thread_priority</a> create, which is a thin wrapper around around <code>pthread</code> APIs.
+We well be using real time priorities, which require <code>sudo</code>.</p>
+</div>
+<div class="paragraph">
+<p>And here are the results:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="code"><pre>22:37:24|~/projects/spin-of-death|HEAD⚡?
+λ cargo build --release
+    Finished release [optimized] target(s) in 0.01s
+λ time sudo ./target/release/spin-of-death
+^CCommand terminated by signal 2
+real 136.54s
+user 96.02s
+sys  940.70s
+rss  6880k
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Note that I had to kill the program after two minutes.
+Also note the impressive system time, as well as load average</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="/assets/priority-inversion.png" alt="priority inversion">
+</div>
+</div>
+<div class="paragraph">
+<p>If we <a href="https://github.com/matklad/getrandom/commit/a7dc21fed9b789832702b98807a62de7bf7312d4">patch</a> <code>getrandom</code> to use <code>std::sync::Once</code> instead we get a much better result:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="code"><pre>22:32:30|~/projects/spin-of-death|HEAD⚡?
+λ cargo build --release --features os-blocking-getrandom
+    Finished release [optimized] target(s) in 0.01s
+λ time sudo ./target/release/spin-of-death
+real 0.51s <i class="conum" data-value="1"></i><b>(1)</b>
+user 0.01s
+sys  0.04s
+rss  6912k
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td>Note how <code>real</code> is half a second, but <code>user</code> and <code>sys</code> are small.
+That&#8217;s because we are waiting for 500 milliseconds in our <code>poll</code></td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>This is because <code>Once</code> uses OS facilities for blocking, and so OS notices that high priority threads are actually blocked and gives the low priority thread a chance to finish its work.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="if-not-a-spinlock-then-what"><a class="anchor" href="#if-not-a-spinlock-then-what"></a>If Not a Spinlock, Then What?</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><em>First</em>, if you only use a spin lock because "it&#8217;s faster for small critical sections", just replace it with a mutex from <code>std</code> or <code>parking_lot</code>.
+They already do a small amount of spinning iterations before calling into the kernel, so they are as fast as a spinlock in the best case, and infinitely faster in the worst case.</p>
+</div>
+<div class="paragraph">
+<p><em>Second</em>, it seems like most problematic uses of spinlocks come from one time initialization (which is exactly what my <code>once_cell</code> crate helps with). I think it usually is possible to get away without using spinlocks. For example, instead of storing the state itself, the library may just delegate state storing to the user. For <code>getrandom</code>, it can expose two functions:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+</pre></td><td class="code"><pre><span class="k">fn</span> <span class="nf">init</span><span class="p">()</span> <span class="k">-&gt;</span> <span class="n">Result</span><span class="o">&lt;</span><span class="n">RandomState</span><span class="o">&gt;</span><span class="p">;</span>
+<span class="k">fn</span> <span class="nf">getrandom</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="o">&amp;</span><span class="n">RandomState</span><span class="p">,</span> <span class="n">buf</span><span class="p">:</span> <span class="o">&amp;</span><span class="k">mut</span><span class="p">[</span><span class="nb">u8</span><span class="p">])</span> <span class="k">-&gt;</span> <span class="n">Result</span><span class="o">&lt;</span><span class="nb">usize</span><span class="o">&gt;</span><span class="p">;</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>It then becomes the user&#8217;s problem to cache <code>RandomState</code> appropriately.
+For example, std may continue using a thread local (<a href="https://github.com/rust-lang/rust/blob/0ec370670220b712b042ee09aab067ec7e5878d5/src/libstd/collections/hash/map.rs#L2460">src</a>) while rand, with <code>std</code> feature enabled, could use a global variable, protected by <code>Once</code>.</p>
+</div>
+<div class="paragraph">
+<p>Another option, if the state fits into <code>usize</code> and the initializing function is idempotent and relatively quick, is to do a racy initialization:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+</pre></td><td class="code"><pre><span class="k">pub</span> <span class="k">fn</span> <span class="nf">get_state</span><span class="p">()</span> <span class="k">-&gt;</span> <span class="nb">usize</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="n">CACHE</span><span class="p">:</span> <span class="n">AtomicUsize</span> <span class="o">=</span> <span class="nn">AtomicUsize</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="k">let</span> <span class="k">mut</span> <span class="n">res</span> <span class="o">=</span> <span class="n">CACHE</span><span class="nf">.load</span><span class="p">(</span><span class="nn">Ordering</span><span class="p">::</span><span class="n">Relaxed</span><span class="p">);</span>
+  <span class="k">if</span> <span class="n">res</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="nf">init</span><span class="p">();</span>
+    <span class="n">CACHE</span><span class="nf">.store</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="nn">Ordering</span><span class="p">::</span><span class="n">Relaxed</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">res</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">init</span><span class="p">()</span> <span class="k">-&gt;</span> <span class="nb">usize</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Take a second to appreciate the absence of <code>unsafe</code> blocks and cross-core communication in the above example!
+<span class="line-through">At worst, <code>init</code> will be called <code>number of cores</code> times</span> (EDIT: this is wrong, thanks to /u/pcpthm for <a href="https://www.reddit.com/r/rust/comments/eis1tr/blog_post_spinlocks_considered_harmful/fctg66s">pointing this out</a>!).</p>
+</div>
+<div class="paragraph">
+<p>There&#8217;s also a nuclear option: parametrize the library by blocking behavior, and allow the user to supply their own synchronization primitive.</p>
+</div>
+<div class="paragraph">
+<p><em>Third</em>, sometimes you just <strong>know</strong> that there&#8217;s only a single thread in the program, and you might want to use a spinlock just to silence those annoying compiler errors about <code>static mut</code>.
+The primary use case here I think is WASM. A solution for this case is to assume that blocking just doesn&#8217;t happen, and panic otherwise. This is what <a href="https://github.com/rust-lang/rust/blob/0ec370670220b712b042ee09aab067ec7e5878d5/src/libstd/sys/wasm/mutex.rs">std does</a> for <code>Mutex</code> on WASM, and what is implemented for <code>once_cell</code> in this PR: <a href="https://github.com/matklad/once_cell/pull/82">#82</a>.</p>
+</div>
+<div class="paragraph">
+<p>Discussion on <a href="https://www.reddit.com/r/rust/comments/eis1tr/blog_post_spinlocks_considered_harmful/">/r/rust</a>.</p>
+</div>
+<div class="paragraph">
+<p>EDIT: If you enjoyed this post, you might also like this one:</p>
+</div>
+<div class="paragraph">
+<p><a href="https://probablydance.com/2019/12/30/measuring-mutexes-spinlocks-and-how-bad-the-linux-scheduler-really-is/" class="bare">https://probablydance.com/2019/12/30/measuring-mutexes-spinlocks-and-how-bad-the-linux-scheduler-really-is/</a></p>
+</div>
+<div class="paragraph">
+<p>Looks like we have some contention here!</p>
+</div>
+<div class="paragraph">
+<p>EDIT: there&#8217;s now a follow up post, where we actually benchmark spinlocks:</p>
+</div>
+<div class="paragraph">
+<p><a href="https://matklad.github.io/2020/01/04/mutexes-are-faster-than-spinlocks.html" class="bare">https://matklad.github.io/2020/01/04/mutexes-are-faster-than-spinlocks.html</a></p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2020-01-02-spinlocks-considered-harmful.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Fast and Simple Rust Interner</title>
+  <meta name="description"
+    content="This post describes a simple technique for writing interners in Rust which I haven&#8217;t seen documented before.">
+  <link rel="canonical" href="https://matklad.github.io//2020/03/22/fast-simple-rust-interner.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>Fast and Simple Rust Interner</h1>
+  <div class="post-meta sect1">Mar 22, 2020</div>
+  <div class="paragraph">
+<p>This post describes a simple technique for writing interners in Rust which I haven&#8217;t seen documented before.</p>
+</div>
+<div class="paragraph">
+<p>String interning is a classical optimization when you have to deal with many equal strings.
+The canonical example would be a compiler: most identifiers in a program are repeated several times.</p>
+</div>
+<div class="paragraph">
+<p>Interning works by ensuring that there&#8217;s only one canonical copy of each distinct string in memory.
+It can give the following benefits:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Less memory allocated to hold strings.</p>
+</li>
+<li>
+<p>If all strings are canonicalized, comparison can be done in <code>O(1)</code> (instead of <code>O(n)</code>) by using pointer equality.</p>
+</li>
+<li>
+<p>Interned strings themselves can be represented with an index (typically <code>u32</code>) instead of a <code>(ptr, len)</code> pair.
+This makes data structures which embed strings more compact.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>The simplest possible interner in Rust could look like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+</pre></td><td class="code"><pre><span class="k">use</span> <span class="nn">std</span><span class="p">::</span><span class="nn">collections</span><span class="p">::</span><span class="n">HashMap</span><span class="p">;</span>
+
+<span class="nd">#[derive(Default)]</span>
+<span class="k">pub</span> <span class="k">struct</span> <span class="n">Interner</span> <span class="p">{</span>
+    <span class="n">map</span><span class="p">:</span> <span class="n">HashMap</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span> <span class="nb">u32</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">vec</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">impl</span> <span class="n">Interner</span> <span class="p">{</span>
+    <span class="k">pub</span> <span class="k">fn</span> <span class="nf">intern</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="k">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">str</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">u32</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="k">let</span> <span class="nf">Some</span><span class="p">(</span><span class="o">&amp;</span><span class="n">idx</span><span class="p">)</span> <span class="o">=</span> <span class="k">self</span><span class="py">.map</span><span class="nf">.get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="n">idx</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">let</span> <span class="n">idx</span> <span class="o">=</span> <span class="k">self</span><span class="py">.map</span><span class="nf">.len</span><span class="p">()</span> <span class="k">as</span> <span class="nb">u32</span><span class="p">;</span>
+        <span class="k">self</span><span class="py">.map</span><span class="nf">.insert</span><span class="p">(</span><span class="n">name</span><span class="nf">.to_owned</span><span class="p">(),</span> <span class="n">idx</span><span class="p">);</span>
+        <span class="k">self</span><span class="py">.vec</span><span class="nf">.push</span><span class="p">(</span><span class="n">name</span><span class="nf">.to_owned</span><span class="p">());</span>
+
+        <span class="nd">debug_assert!</span><span class="p">(</span><span class="k">self</span><span class="nf">.lookup</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span> <span class="o">==</span> <span class="n">name</span><span class="p">);</span>
+        <span class="nd">debug_assert!</span><span class="p">(</span><span class="k">self</span><span class="nf">.intern</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">==</span> <span class="n">idx</span><span class="p">);</span>
+
+        <span class="n">idx</span>
+    <span class="p">}</span>
+
+    <span class="k">pub</span> <span class="k">fn</span> <span class="nf">lookup</span><span class="p">(</span><span class="o">&amp;</span><span class="k">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="nb">u32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="o">&amp;</span><span class="nb">str</span> <span class="p">{</span>
+        <span class="k">self</span><span class="py">.vec</span><span class="p">[</span><span class="n">idx</span> <span class="k">as</span> <span class="nb">usize</span><span class="p">]</span><span class="nf">.as_str</span><span class="p">()</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>To remove duplicates, we store strings in a <code>HashMap</code>.
+To map from an index back to the string, we also store strings in a <code>Vec</code>.</p>
+</div>
+<div class="paragraph">
+<p>I didn&#8217;t quite like this solution yesterday, for two reasons:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>It allocates a lot&#8201;&#8212;&#8201;each interned string is <em>two</em> separate allocations.</p>
+</li>
+<li>
+<p>Using a <code>HashMap</code> feels like cheating, surely there should be a better, more classical data structure!</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>So I&#8217;ve spent a part of the evening cobbling together a non-allocating <a href="https://en.wikipedia.org/wiki/Trie">trie</a>-based interner.
+The result: trie does indeed asymptotically reduce the number of allocations from <code>O(n)</code> to <code>O(log(n))</code>.
+Unfortunately, it is slower, larger and way more complex than the above snippet.
+Minimizing allocations <em>is</em> important, but allocators are pretty fast, and that shouldn&#8217;t be done at the expense of everything else.
+Also, Rust <code>HashMap</code> (implemented by <a href="https://github.com/Amanieu/">@Amanieu</a> based on <a href="https://abseil.io/blog/20180927-swisstables">Swiss Table</a>) is <em>fast</em>.</p>
+</div>
+<details>
+<summary class="title">For the curious, the Trie design I&#8217;ve used</summary>
+<div class="content">
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>The trie is build on per-byte basis (each node has at most 256 children).
+Each internal node is marked with a single byte.
+Leaf nodes are marked with substrings, so that only the common prefix requires node per byte.</p>
+</div>
+<div class="paragraph">
+<p>To avoid allocating individual interned strings, we store them in a <strong>single</strong> long <code>String</code>.
+An interned string is represented by a <code>Span</code> (pair of indexes) inside the big buffer.</p>
+</div>
+<div class="paragraph">
+<p>Trie itself is a tree structure, and we can use a standard trick of packing its nodes into array and using indexes to avoid allocating every node separately.
+However, nodes themselves can be of varying size, as each node can have different number of children.
+We can still array-allocate them, by rolling our own mini-allocator (using a segregated free list)!</p>
+</div>
+<div class="paragraph">
+<p>Node&#8217;s children are represented as a sorted array of links.
+We use binary search for indexing and simple linear shift insertion.
+With at most 256 children per node, it shouldn&#8217;t be <em>that</em> bad.
+Additionally, we pre-allocate 256 nodes and use array indexing for the first transition.</p>
+</div>
+<div class="paragraph">
+<p>Links are organized in layers.
+The layer <code>n</code> stores a number of <code>[Link]</code> chunks of length <code>2<sup>n</sup></code> (in a single contiguous array).
+Each chunk represents the links for a single node (with possibly some extra capacity).
+Node can find its chunk because it knows the number of links (which gives the number of layers) and the first link in the layer.
+A new link for the node is added to the current chunk if there&#8217;s space.
+If the chunk is full, it is copied to a chunk twice as big first.
+The old chunk is then added to the list of free chunks for reuse.</p>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s the whole definition of the data structure:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+</pre></td><td class="code"><pre><span class="k">pub</span> <span class="k">struct</span> <span class="n">Interner</span> <span class="p">{</span>
+    <span class="n">trie</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="n">Node</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">links</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="n">Layer</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">strs</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="n">Span</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">buf</span><span class="p">:</span> <span class="nb">String</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">Span</span> <span class="p">{</span> <span class="n">start</span><span class="p">:</span> <span class="nb">u32</span><span class="p">,</span> <span class="n">end</span><span class="p">:</span> <span class="nb">u32</span> <span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">Node</span> <span class="p">{</span>
+    <span class="nb">str</span><span class="p">:</span> <span class="nb">Option</span><span class="o">&lt;</span><span class="nb">u32</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">n_links</span><span class="p">:</span> <span class="nb">u8</span><span class="p">,</span>
+    <span class="n">first_link</span><span class="p">:</span> <span class="nb">u32</span><span class="p">,</span>
+<span class="c">//  layer: u32 = first_link.next_power_of_two(),</span>
+<span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">Link</span> <span class="p">{</span> <span class="n">byte</span><span class="p">:</span> <span class="nb">u8</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="nb">u32</span><span class="p">,</span> <span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">Layer</span> <span class="p">{</span>
+    <span class="n">links</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="n">Link</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">free</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="nb">u32</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Isn&#8217;t it incredibly cool that you can look only at the fields and understand how the thing works,
+without even seeing the rest 150 lines of relatively tricky implementation?</p>
+</div>
+</div>
+</div>
+</div>
+</details>
+<div class="paragraph">
+<p>However, implementing a trie made me realize that there&#8217;s a simple optimization we can apply to our naive interner to get rid of extra allocations.
+In the trie, I concatenate all interned strings into one giant <code>String</code> and use <code>(u32, u32)</code> index pairs as an internal representation of string slice.</p>
+</div>
+<div class="paragraph">
+<p>If we translate this idea to our naive interner, we get:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+</pre></td><td class="code"><pre><span class="k">struct</span> <span class="n">Span</span> <span class="p">{</span> <span class="n">start</span><span class="p">:</span> <span class="nb">u32</span><span class="p">,</span> <span class="n">end</span><span class="p">:</span> <span class="nb">u32</span> <span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">Interner</span> <span class="p">{</span>
+    <span class="n">map</span><span class="p">:</span> <span class="n">HashMap</span><span class="o">&lt;</span><span class="n">Span</span><span class="p">,</span> <span class="nb">u32</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">vec</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="n">Span</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">buf</span><span class="p">:</span> <span class="nb">String</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">impl</span> <span class="n">Interner</span> <span class="p">{</span>
+    <span class="k">pub</span> <span class="k">fn</span> <span class="nf">intern</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="k">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">str</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">u32</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+
+    <span class="k">pub</span> <span class="k">fn</span> <span class="nf">lookup</span><span class="p">(</span><span class="o">&amp;</span><span class="k">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="nb">u32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="o">&amp;</span><span class="nb">str</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">Span</span> <span class="p">{</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="p">}</span> <span class="o">=</span> <span class="k">self</span><span class="py">.vec</span><span class="p">[</span><span class="n">idx</span> <span class="k">as</span> <span class="nb">usize</span><span class="p">]</span>
+        <span class="o">&amp;</span><span class="k">self</span><span class="py">.buf</span><span class="p">[</span><span class="n">start</span> <span class="k">as</span> <span class="nb">usize</span><span class="o">..</span><span class="n">end</span> <span class="k">as</span> <span class="nb">usize</span><span class="p">]</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The problem here is that we can&#8217;t actually write implementations of <code>Eq</code> and <code>Hash</code> for <code>Span</code> to make this work.
+In theory, this is possible: to compare two <code>Spans</code>, you resolve them to <code>&amp;str</code> via <code>buf</code>, and then compare the strings.
+However, Rust API does not allow to express this idea.
+Moreover, even if <code>HashMap</code> allowed supplying a key closure at <em>construction</em> time, it wouldn&#8217;t help!</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+</pre></td><td class="code"><pre><span class="k">impl</span> <span class="n">HashMap</span><span class="o">&lt;</span><span class="n">K</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">KeyFn</span><span class="p">,</span> <span class="n">Key</span><span class="o">&gt;</span>
+<span class="k">where</span>
+    <span class="n">KeyFn</span><span class="p">:</span> <span class="nf">Fn</span><span class="p">(</span><span class="o">&amp;</span><span class="n">K</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Key</span><span class="p">,</span>
+    <span class="n">Key</span><span class="p">:</span> <span class="n">Hash</span> <span class="o">+</span> <span class="nb">Eq</span><span class="p">,</span>
+<span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">new_with_key_fn</span><span class="p">(</span><span class="n">key_fn</span><span class="p">:</span> <span class="n">F</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Self</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Such API would run afoul of the borrow checker.
+The <code>key_fn</code> would have to borrow from the same <code>struct</code>.
+What would work is supplying a <code>key_fn</code> at call-site for every <code>HashMap</code> operation, but that would hurt ergonomics and ease of use a lot.
+This exact problem requires
+<a href="https://github.com/matklad/rfcs/blob/std-lazy/text/0000-standard-lazy-types.md#why-not-lazy-as-a-primitive">slightly unusual</a>
+design of lazy values in Rust.</p>
+</div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>If you find yourself in need of such "call-site closure" container, you can use a sorted <code>Vec</code>,
+<a href="https://doc.rust-lang.org/std/primitive.slice.html#method.binary_search_by_key"><code>binary_search_by_key</code></a>
+is exactly this pattern.</p>
+</div>
+<div class="paragraph">
+<p>Another alternative is the <code>hashbrown</code> crate, which has
+<a href="https://docs.rs/hashbrown/0.7.1/hashbrown/hash_map/struct.RawVacantEntryMut.html#method.insert_with_hasher">raw entry API</a>.</p>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>However, with a bit of <code>unsafe</code>, we can make something similar work.
+The trick is to add strings to <code>buf</code> in such a way that they are never moved, even if more strings are added on top.
+That way, we can just store <code>&amp;str</code> in the <code>HashMap</code>.
+To achieve address stability, we use another trick from the <a href="https://crates.io/crates/typed_arena"><code>typed_arena</code></a> crate.
+If the <code>buf</code> is full (so that adding a new string would invalidate old pointers), we allocate a new buffer, twice as large,
+<em>without</em> coping the contents of the old one.</p>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s the full implementation:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+</pre></td><td class="code"><pre><span class="k">use</span> <span class="nn">std</span><span class="p">::{</span><span class="n">mem</span><span class="p">,</span> <span class="nn">collections</span><span class="p">::</span><span class="n">HashMap</span><span class="p">};</span>
+
+<span class="k">pub</span> <span class="k">struct</span> <span class="n">Interner</span> <span class="p">{</span>
+    <span class="n">map</span><span class="p">:</span> <span class="n">HashMap</span><span class="o">&lt;&amp;</span><span class="nv">'static</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">u32</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">vec</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;&amp;</span><span class="nv">'static</span> <span class="nb">str</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">buf</span><span class="p">:</span> <span class="nb">String</span><span class="p">,</span>
+    <span class="n">full</span><span class="p">:</span> <span class="nb">Vec</span><span class="o">&lt;</span><span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">impl</span> <span class="n">Interner</span> <span class="p">{</span>
+    <span class="k">pub</span> <span class="k">fn</span> <span class="nf">with_capacity</span><span class="p">(</span><span class="n">cap</span><span class="p">:</span> <span class="nb">usize</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">Interner</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">cap</span> <span class="o">=</span> <span class="n">cap</span><span class="nf">.next_power_of_two</span><span class="p">();</span>
+        <span class="n">Interner</span> <span class="p">{</span>
+            <span class="n">map</span><span class="p">:</span> <span class="nn">HashMap</span><span class="p">::</span><span class="nf">default</span><span class="p">(),</span>
+            <span class="n">vec</span><span class="p">:</span> <span class="nn">Vec</span><span class="p">::</span><span class="nf">new</span><span class="p">(),</span>
+            <span class="n">buf</span><span class="p">:</span> <span class="nn">String</span><span class="p">::</span><span class="nf">with_capacity</span><span class="p">(</span><span class="n">cap</span><span class="p">),</span>
+            <span class="n">full</span><span class="p">:</span> <span class="nn">Vec</span><span class="p">::</span><span class="nf">new</span><span class="p">(),</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">pub</span> <span class="k">fn</span> <span class="nf">intern</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="k">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">str</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">u32</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="k">let</span> <span class="nf">Some</span><span class="p">(</span><span class="o">&amp;</span><span class="n">id</span><span class="p">)</span> <span class="o">=</span> <span class="k">self</span><span class="py">.map</span><span class="nf">.get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="n">id</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">let</span> <span class="n">name</span> <span class="o">=</span> <span class="k">unsafe</span> <span class="p">{</span> <span class="k">self</span><span class="nf">.alloc</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="p">};</span>
+        <span class="k">let</span> <span class="n">id</span> <span class="o">=</span> <span class="k">self</span><span class="py">.map</span><span class="nf">.len</span><span class="p">()</span> <span class="k">as</span> <span class="nb">u32</span><span class="p">;</span>
+        <span class="k">self</span><span class="py">.map</span><span class="nf">.insert</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">id</span><span class="p">);</span>
+        <span class="k">self</span><span class="py">.vec</span><span class="nf">.push</span><span class="p">(</span><span class="n">name</span><span class="p">);</span>
+
+        <span class="nd">debug_assert!</span><span class="p">(</span><span class="k">self</span><span class="nf">.lookup</span><span class="p">(</span><span class="n">id</span><span class="p">)</span> <span class="o">==</span> <span class="n">name</span><span class="p">);</span>
+        <span class="nd">debug_assert!</span><span class="p">(</span><span class="k">self</span><span class="nf">.intern</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">==</span> <span class="n">id</span><span class="p">);</span>
+
+        <span class="n">id</span>
+    <span class="p">}</span>
+
+    <span class="k">pub</span> <span class="k">fn</span> <span class="nf">lookup</span><span class="p">(</span><span class="o">&amp;</span><span class="k">self</span><span class="p">,</span> <span class="n">id</span><span class="p">:</span> <span class="nb">u32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="o">&amp;</span><span class="nb">str</span> <span class="p">{</span>
+        <span class="k">self</span><span class="py">.vec</span><span class="p">[</span><span class="n">id</span> <span class="k">as</span> <span class="nb">usize</span><span class="p">]</span>
+    <span class="p">}</span>
+
+    <span class="k">unsafe</span> <span class="k">fn</span> <span class="nf">alloc</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="k">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="o">&amp;</span><span class="nb">str</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="o">&amp;</span><span class="nv">'static</span> <span class="nb">str</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">cap</span> <span class="o">=</span> <span class="k">self</span><span class="py">.buf</span><span class="nf">.capacity</span><span class="p">();</span>
+<span class="hll">        <span class="k">if</span> <span class="n">cap</span> <span class="o">&lt;</span> <span class="k">self</span><span class="py">.buf</span><span class="nf">.len</span><span class="p">()</span> <span class="o">+</span> <span class="n">name</span><span class="nf">.len</span><span class="p">()</span> <span class="p">{</span>
+</span><span class="hll">            <span class="k">let</span> <span class="n">new_cap</span> <span class="o">=</span> <span class="p">(</span><span class="n">cap</span><span class="nf">.max</span><span class="p">(</span><span class="n">name</span><span class="nf">.len</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+</span><span class="hll">                <span class="nf">.next_power_of_two</span><span class="p">();</span>
+</span><span class="hll">            <span class="k">let</span> <span class="n">new_buf</span> <span class="o">=</span> <span class="nn">String</span><span class="p">::</span><span class="nf">with_capacity</span><span class="p">(</span><span class="n">new_cap</span><span class="p">);</span>
+</span><span class="hll">            <span class="k">let</span> <span class="n">old_buf</span> <span class="o">=</span> <span class="nn">mem</span><span class="p">::</span><span class="nf">replace</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="k">self</span><span class="py">.buf</span><span class="p">,</span> <span class="n">new_buf</span><span class="p">);</span>
+</span><span class="hll">            <span class="k">self</span><span class="py">.full</span><span class="nf">.push</span><span class="p">(</span><span class="n">old_buf</span><span class="p">);</span>
+</span><span class="hll">        <span class="p">}</span>
+</span>
+        <span class="k">let</span> <span class="n">interned</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="k">let</span> <span class="n">start</span> <span class="o">=</span> <span class="k">self</span><span class="py">.buf</span><span class="nf">.len</span><span class="p">();</span>
+            <span class="k">self</span><span class="py">.buf</span><span class="nf">.push_str</span><span class="p">(</span><span class="n">name</span><span class="p">);</span>
+            <span class="o">&amp;</span><span class="k">self</span><span class="py">.buf</span><span class="p">[</span><span class="n">start</span><span class="o">..</span><span class="p">]</span>
+        <span class="p">};</span>
+
+        <span class="o">&amp;*</span><span class="p">(</span><span class="n">interned</span> <span class="k">as</span> <span class="o">*</span><span class="k">const</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The precise rule for increasing capacity is slightly more complicated:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="n">new_cap</span> <span class="o">=</span> <span class="p">(</span><span class="n">cap</span><span class="nf">.max</span><span class="p">(</span><span class="n">name</span><span class="nf">.len</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="nf">.next_power_of_two</span><span class="p">();</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Just doubling won&#8217;t be enough, we also need to make sure that the new string actually fits.</p>
+</div>
+<div class="paragraph">
+<p>We could have used a single <code>bufs: Vec&lt;String&gt;</code> in place of both <code>buf</code> and <code>full</code>.
+The benefit of splitting the last buffer into a dedicated field is that we statically guarantee that there&#8217;s at least one buffer.
+That way, we void a bounds check and/or <code>.unwrap</code> when accessing the active buffer.</p>
+</div>
+<div class="paragraph">
+<p>We also use <code>&amp;'static str</code> to fake interior references.
+<a href="https://github.com/rust-lang/miri">Miri</a> (rust in-progress UB checker) is not entirely happy about this.
+I haven&#8217;t dug into this yet, it might be another instance of
+<a href="https://github.com/rust-lang/rust/pull/61114">rust-lang/rust#61114</a>.
+To be on the safe side, we can use <code>*const str</code> instead, with a bit of boilerplate to delegate <code>PartialEq</code> and <code>Hash</code>.
+Some kind of (hypothetical) <code>'unsafe</code> lifetime could also be useful here!
+The critical detail that makes our use of fake <code>'static</code> sound here is that the <code>alloc</code> function is private.
+The public <code>lookup</code> function shortens the lifetime to that of <code>&amp;self</code> (via lifetime elision).</p>
+</div>
+<div class="paragraph">
+<p>For the real implementation, I would change two things:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Use <code>rustc_hash::FxHashMap</code>.
+It&#8217;s a standard Rust <code>HashMap</code> with a faster (but not DOS-resistant) hash function&#8201;&#8212;&#8201;<code>FxHash</code>.
+<code>Fx</code> stands for <strong>F</strong>irefo<strong>x</strong>, this is a modification of FNV hash originally used in the browser.</p>
+</li>
+<li>
+<p>Add a newtype wrapper for string indexes:</p>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+</pre></td><td class="code"><pre><span class="nd">#[derive(Debug,</span> <span class="nd">Clone,</span> <span class="nd">Copy,</span> <span class="nd">Eq,</span> <span class="nd">PartialEq,</span> <span class="nd">Hash)]</span>
+<span class="k">struct</span> <span class="nf">StrId</span><span class="p">(</span><span class="nb">u32</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>That&#8217;s all I have to say about fast and simple string interning in Rust!
+Discussion on <a href="https://www.reddit.com/r/rust/comments/fn1jxf/blog_post_fast_and_simple_rust_interner/">/r/rust</a>.</p>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2020-03-22-fast-simple-rust-interner.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>For the Love of Macros</title>
+  <meta name="description"
+    content="I&#8217;ve been re-reading Ted Kaminski blog about software design.I highly recommend all the posts, especially the earlier ones(here&#8217;s the first).He m...">
+  <link rel="canonical" href="https://matklad.github.io//2021/02/14/for-the-love-of-macros.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/ /feed.xml">
+
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    }
+
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+      ;
+      font-weight: bold;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      margin-block-start: 0;
+      margin-block-end: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 300;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 80ch;
+      padding-left: 2ch;
+      padding-right: 2ch;
+    }
+
+    .site-header {
+      width: 100%;
+      max-width: 80ch;
+      margin-bottom: 1.5rem;
+    }
+
+    .site-header>nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .site-header .-title {
+      flex-grow: 2;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 100%;
+      max-width: 80ch;
+      margin-top: 1rem;
+      height: 2rem;
+      padding-left: 1ch;
+      padding-right: 1ch;
+    }
+  </style>
+  <link rel="stylesheet" href=" /css/adoc.css">
+  <link rel="stylesheet" href=" /css/rouge-github.css">
+  <link rel="stylesheet" href=" /css/main.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <nav>
+      <a class="-title" href="/">matklad</a>
+      
+      
+      <a href="/about/">About</a>
+      
+      
+      
+      
+      
+      <a href="/resume/">Resume</a>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </nav>
+  </header>
+
+  <main>
+    <article>
+  <h1>For the Love of Macros</h1>
+  <div class="post-meta sect1">Feb 14, 2021</div>
+  <div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>I&#8217;ve been re-reading Ted Kaminski blog about software design.
+I highly recommend all the posts, especially the earlier ones
+(here&#8217;s <a href="https://www.tedinski.com/2018/01/16/how-humans-write-programs.html">the first</a>).
+He manages to offer design advice which is both non-trivial and sound (a subjective judgment of course), a rare specimen!</p>
+</div>
+<div class="paragraph">
+<p>Anyway, one of the insights of the series is that, when designing an abstraction, we always face the inherent tradeoff between power and properties.
+The more we can express using a particular abstraction, the less we can say about the code using it.
+Our human bias for more expressive power is not inherent however.
+This is evident in programming language communities, where users unceasingly ask for new features and language designers say no.</p>
+</div>
+<div class="paragraph">
+<p>Macros are a language feature which is very far in the &#8220;more power&#8221; side of the chart.
+Macros give you an ability to abstract over the source code.
+In exchange, you give up the ability to (automatically) reason about the surface syntax.
+As a specific <a href="https://rust-analyzer.github.io/blog/2020/03/30/macros-vs-rename.html">example</a>, rename refactoring doesn&#8217;t work 100% reliably in languages with powerful macro systems.</p>
+</div>
+<div class="paragraph">
+<p>I do think that, in the ideal world, this is a wrong trade for a language which wants to scale to gigantic projects.
+The ability to automatically reason about and transform source code gains in importance when you add more programmers, more years, and more millions of lines of code.
+But take this with a huuuge grain of salt&#8201;&#8212;&#8201;I am obviously biased, having spent several years developing Rust IDEs.</p>
+</div>
+<div class="paragraph">
+<p>That said, macros have a tremendous appeal&#8201;&#8212;&#8201;they are a language designer&#8217;s duct tape.
+Macros are rarely the best tool for the job, but they can do almost any job.
+The language design is incremental.
+A macro system relieves the design pressure by providing a ready poor man&#8217;s substitute for many features.</p>
+</div>
+<div class="paragraph">
+<p>In this post, I want to explore what macros are used for in Rust.
+The intention is to find solutions which do not give up the &#8220;reasoning about source code&#8221; property.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="string-interpolation"><a class="anchor" href="#string-interpolation"></a>String Interpolation</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>By far, the most common use-case is the <code>format!</code> family of macros.
+The macro-less solution here is straightforward&#8201;&#8212;&#8201;a string interpolation syntax:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="n">key</span> <span class="o">=</span> <span class="s">"number"</span><span class="p">;</span>
+<span class="k">let</span> <span class="n">value</span> <span class="o">=</span> <span class="p">||</span> <span class="mi">92</span><span class="p">;</span>
+<span class="k">let</span> <span class="n">t</span> <span class="o">=</span> <span class="n">f</span><span class="s">"$key: ${values()}"</span><span class="p">;</span>
+<span class="nd">assert_eq!</span><span class="p">(</span><span class="n">t</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"number: 92"</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>In Rust, interpolation probably shouldn&#8217;t construct a string directly.
+Instead, it can produce a value implementing <code>Display</code> (just like <code>format_args!</code>), which can avoid allocations.
+An interesting extension would be to allow iterating over format string pieces.
+That way, the interpolation syntax could be used for things like SQL statements or command line arguments, without the fear of introducing injection vulnerabilities:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="n">arg</span> <span class="o">=</span> <span class="s">"my dir"</span><span class="p">;</span>
+<span class="k">let</span> <span class="n">cmd</span> <span class="o">=</span> <span class="n">f</span><span class="s">"ls $arg"</span><span class="nf">.to_cmd</span><span class="p">();</span>
+<span class="nd">assert_eq!</span><span class="p">(</span><span class="n">cmd</span><span class="nf">.to_string</span><span class="p">(),</span> <span class="s">"ls 'my dir'"</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><a href="https://julialang.org/blog/2012/03/shelling-out-sucks/">This post</a> about Julia programming language explains the issue.
+<a href="https://github.com/matklad/xshell"><code>xshell</code></a> crate implements this idea for Rust.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="derives"><a class="anchor" href="#derives"></a>Derives</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>I think the second most common, and probably the most important use of macros in Rust are derives.
+Rust is one of the few languages which gets equality right (and forbids comparing apples and oranges), but this crucially depends on the ability to <code>derive(Eq)</code>.
+Common solutions in this space are special casing in the compiler (Haskell&#8217;s <code>deriving</code>) or runtime reflection.</p>
+</div>
+<div class="paragraph">
+<p>But the solution I am most excited about are C# <a href="https://devblogs.microsoft.com/dotnet/introducing-c-source-generators/">source generators</a>.
+Which are nothing new&#8201;&#8212;&#8201;this is just the old (source) code generation, just with a nice quality of implementation.
+You can supply custom code which gets run during the build and which can read existing sources and generate additional files, which are then added back to the compilation.</p>
+</div>
+<div class="paragraph">
+<p>The beauty of this solution is that it moves all the complexity out of the language and into the build system.
+This means that you get baseline tooling support for free.
+Goto definition for generated code? Just works.
+Want to step into some serialization code while debugging? There&#8217;s actual source code on disk, so feel free to!
+You are more of a <code>printf</code> person? Well, you&#8217;d need to convince the build system to not stomp over your changes, but, otherwise, why not?</p>
+</div>
+<div class="paragraph">
+<p>Additionally, source generators turn out to be significantly <em>more</em> expressive.
+They can call into the Roslyn compiler to analyzer the source code, so they are capable of type-directed code generation.</p>
+</div>
+<div class="paragraph">
+<p>To be useful, source generators require some language level support for splitting a single entity across several files.
+In C#, partial classes play this role.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="domain-specific-languages"><a class="anchor" href="#domain-specific-languages"></a>Domain Specific Languages</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The raison d&#8217;être of macros is implementation of embedded DSLs.
+We want to introduce custom syntax within the language for succinctly modeling the program&#8217;s domain.
+For example, a macro can be used to embed HTML fragments in Rust code.</p>
+</div>
+<div class="paragraph">
+<p>To me personally, eDSL is not problem to be solved, but just a problem.
+Introducing a new sublanguage (even if small) spends a lot of cognitive complexity budget.
+If you need it once in a while, better stick to just chaining together somewhat verbose function calls.
+If you need it a lot, it makes sense to introduce external DSL, with a compiler, a language server, and all the tooling that makes programming productive.
+To me, macro-based DSLs just don&#8217;t fell like an interesting point on the cost-benefit curve.</p>
+</div>
+<div class="paragraph">
+<p>That being said, the Kotlin programming language solves the problem of strongly-typed, tooling-friendly DSL nicely (<a href="https://kotlinlang.org/docs/type-safe-builders.html#how-it-works">example</a>).
+Infuriatingly, it&#8217;s hard to point what <em>specifically</em> is the solution.
+It&#8217;s &#8230;&#8203; just the concrete syntax mostly.
+Here are some ingredients:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>The syntax for closures is <code>{ arg -&gt; body }</code>, or just <code>{ body }</code>, so closures syntactically resemble blocks.</p>
+</li>
+<li>
+<p>Extension methods (which are just sugar for static methods).</p>
+</li>
+<li>
+<p>Java style implicit <code>this</code>, which introduces names into scope without an explicit declaration.</p>
+</li>
+<li>
+<p><a href="https://boats.gitlab.io/blog/post/the-problem-of-effects/">TCP-preserving</a> inline closures (this the single non-syntactical feature)</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Nonetheless, this was not enough to implement Jetpack Compose UI DSL, it also needs a compiler plugin.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="sqlx"><a class="anchor" href="#sqlx"></a>sqlx</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>An interesting case of a DSL I want to call out is <a href="https://docs.rs/sqlx/0.5.1/sqlx/macro.query.html"><code>sqlx::query</code></a>.
+It allows one to write code like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="n">account</span> <span class="o">=</span>
+  <span class="nn">sqlx</span><span class="p">::</span><span class="nd">query!</span><span class="p">(</span><span class="s">"select (1) as id, 'Herp Derpinson' as name"</span><span class="p">)</span>
+    <span class="nf">.fetch_one</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="n">conn</span><span class="p">)</span>
+    <span class="k">.await</span><span class="o">?</span><span class="p">;</span>
+
+<span class="c">// anonymous struct has `#[derive(Debug)]` for convenience</span>
+<span class="nd">println!</span><span class="p">(</span><span class="s">"{:?}"</span><span class="p">,</span> <span class="n">account</span><span class="p">);</span>
+<span class="nd">println!</span><span class="p">(</span><span class="s">"{}: {}"</span><span class="p">,</span> <span class="n">account</span><span class="py">.id</span><span class="p">,</span> <span class="n">account</span><span class="py">.name</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This I think is one of the few cases where eDSL does really pull its weight.
+I don&#8217;t know how to do this without macros.
+Using string interpolation (the advanced version to protect from injection), it is possible to specify the query.
+Using a source generator, it is possible to check the syntax of the query and verity the types, to, eg, raise a type error in this case:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="rouge highlight"><code data-lang="rust"><table class="linenotable"><tbody><tr><td class="linenos gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="code"><pre><span class="k">let</span> <span class="p">(</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span> <span class="p">(</span><span class="nb">i32</span><span class="p">,</span> <span class="nb">f32</span><span class="p">)</span> <span class="o">=</span>
+  <span class="nf">query</span><span class="p">(</span><span class="s">"select (1) as id, 'Herp Derpinson' as name"</span><span class="p">)</span>
+    <span class="nf">.fetch_one</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span> <span class="n">conn</span><span class="p">)</span>
+    <span class="k">.await</span><span class="o">?</span><span class="p">;</span>
+</pre></td></tr></tbody></table></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>But this won&#8217;t be enough to generate an anonymous struct, or to get rid of dynamic casts.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="conditional-compilation"><a class="anchor" href="#conditional-compilation"></a>Conditional Compilation</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Rust also uses macros for conditional compilation.
+This use case convincingly demonstrates &#8220;lack of properties&#8221; aspect of power.
+Dealing with feature combinations is a perpetual headache for Cargo.
+Users have to repeatedly recompile large chunks of the crate graph when feature flags change.
+Catching a type error on CI with <code>cargo test --no-default-features</code> is pretty annoying, especially if you did run <code>cargo test</code> before submitting a PR.
+&#8220;Additive Features&#8221; is an uncheckable wishful thinking.</p>
+</div>
+<div class="paragraph">
+<p>In this case, I don&#8217;t know a good macro-less alternative.
+But, in principle, this seems doable, if conditional compilation is pushed further down the compiler pipeline, to the code generation and linking stage.
+Rather than discarding some code early during parsing, the compiler can select the platform-specific version just before producing machine code for a function.
+Before that, it checks that all conditionally-compiled versions of the function have the same interface.
+That way, platform-specific type errors are impossible.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="placeholder-syntax"><a class="anchor" href="#placeholder-syntax"></a>Placeholder Syntax</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The final use-case I want to cover is that of a placeholder syntax.
+Rust&#8217;s <code>macro_call!(&#8230;&#8203;)</code> syntax carves a well-isolated region where anything goes, syntax wise, as long as the parenthesis are balanced.
+In theory, this allow language designers to experiment with provisional syntax before setting something in stone.
+In practice, it looks like this is not at all that beneficial?
+There was some opposition to stabilizing postfix <code>.await</code> without going via intermediate period with <code>await!</code> macro.
+And, after stabilization, all <em>syntax</em> discussions were immediately forgotten?
+On the other hand, we did have <code>try! -&gt; ?</code> transition, and I don&#8217;t think it helped to uncover any design pitfalls?
+At least, we managed to stabilize the <a href="https://internals.rust-lang.org/t/can-try-and-use-the-into-trait-instead-of-from/6714">unnecessary restrictive</a> desugaring on that one.</p>
+</div>
+<hr>
+<div class="paragraph">
+<p>For conclusion, I want to circle back to source generators.
+What <em>exactly</em> makes them easier for tooling than macros?
+I think the following three properties do.
+<em>First</em>, both input and output is, fundamentally, text.
+There&#8217;s no intermediate representation (like token trees), which is used by this meta-programming facility.
+This means that it doesn&#8217;t need to be integrated deeply with the compiler.
+Of course, internally the tool is free to parse, typecheck and transform the code however it likes.
+<em>Second</em>, there is a phase distinction.
+Source generators are executed once, in unordered fashion.
+There&#8217;s no back and forth between meta programming and name resolution, which, again, allows to keep &#8220;meta&#8221; part outside.
+<em>Third</em>, source generators can only add code, they can not change the meaning of the existing code.
+This means that semantically sound source code transformations remains so in the presence of a code generator.</p>
+</div>
+<div class="paragraph">
+<p>That&#8217;s all!
+Discussion on <a href="https://old.reddit.com/r/rust/comments/ljnkwg/blog_post_for_the_love_of_macros/">/r/rust</a>.</p>
+</div>
+</div>
+</div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/_posts/2021-02-14-for-the-love-of-macros.adoc">
+        <i class="fa fa-edit"></i> fix typo
+      </a>
+
+      <a href=" /feed.xml">
+        <i class="fa fa-rss"></i> rss
+      </a>
+
+      <a href="https://github.com/matklad">
+        <i class="fa fa-github"></i> matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
