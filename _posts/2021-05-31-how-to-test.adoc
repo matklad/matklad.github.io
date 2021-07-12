@@ -15,7 +15,7 @@ What did help was trying out different testing approaches myself, and looking at
 Keep in mind that my background is mostly in writing https://github.com/intellij-rust/intellij-rust[compiler] https://github.com/rust-analyzer/rust-analyzer/[front-ends] for IDEs.
 This is a rather niche area, which is especially amendable to testing.
 Compilers are pure self-contained functions.
-I don't know how to best test modern HTTP applications build around inter-process communication.
+I don't know how to best test modern HTTP applications built around inter-process communication.
 
 Without further ado, let's see what I have learned.
 
@@ -105,7 +105,7 @@ fn binary_search_singleton() {
 
 Now, when the API of the `binary_search` function changes, we only need to adjust the single place -- `check` function:
 
-[source,rust,highlight=3]
+[source,rust,highlight=8]
 ----
 #[track_caller]
 fn check(
@@ -435,7 +435,7 @@ This is how you should be testing binary search -- generate every sorted list of
 Then, for each list and for each number, check that the binary search gives the same result as a naive linear search.
 
 Coverage Guided Fuzzing::
-Just through random bytes at the check function.
+Just throw random bytes at the check function.
 Random bytes probably don't make much sense, but it's good to verify that the program returns an error instead of summoning nasal demons.
 Instead of piling bytes completely at random, observe which branches are taken, and try to invent byte sequences which cover more branches.
 Note that this test is polymorphic in the system under test.
@@ -477,16 +477,16 @@ fn cargo_compile_simple() {
 ----
 
 The `project()` part is a builder, which describes the state of the a system.
-_First,_ `.build()` call writes the specified files to a disk in a temporary directory.
+_First,_ `.build()` writes the specified files to a disk in a temporary directory.
 _Then,_ `p.cargo("build").run()` executes the real `cargo build` command.
-_Finally,_ a bunch of assertions is made about the end state of the file system.
+_Finally,_ a bunch of assertions are made about the end state of the file system.
 
 Neural network test: this is completely independent of internal Cargo APIs, by virtue of interacting with a `cargo` process via IPC.
 
 To give an order-of-magnitude feeling for the cost of IO, Cargo's test suite takes around seven minutes (`-j 1`), while rust-analyzer finishes in less than half a minute.
 
 An interesting case is the middle ground, when the IO-ing part is just big and important enough to be annoying.
-That is the case for rust-analyzer -- although almost all code is pure, there's a part which interacts with a specific editor editor.
+That is the case for rust-analyzer -- although almost all code is pure, there's a part which interacts with a specific editor.
 What makes this especially finicky is that, in the case of Cargo, it's Cargo who calls external processes.
 With rust-analyzer, it's something which we don't control, the editor, which schedules the IO.
 This often results in hard-to-imagine bugs which are caused by particularly weird environments.
@@ -571,7 +571,7 @@ Note that testing `L4` involves testing `L1`, `L2` an `L3`.
 This is not a problem.
 Due to layering, only `L4` needs to be _recompiled_.
 Other layers don't affect _run_ time meaningfully.
-Remember -- its IO (and sleep-based synchronization) that kills performance, not just code volume.
+Remember -- it's IO (and sleep-based synchronization) that kills performance, not just code volume.
 
 == Test Everything
 
@@ -612,8 +612,8 @@ Let's look back at some of the key points:
 . There is a lot of information about testing, but it is not always helpful.
   At least, it was not helpful for me.
 . The core characteristic of the test suite is how easy it makes changing the software under test.
-. To that end, a good strategy is to focus on testing the features that the application does, rather than on testing the code used to implement these features.
-. Good test suite passes the neural network test -- it is still useful if the entire application is replaced by an ML model which just comes up with the right answer.
+. To that end, a good strategy is to focus on testing the features of the application, rather than on testing the code used to implement those features.
+. A good test suite passes the neural network test -- it is still useful if the entire application is replaced by an ML model which just comes up with the right answer.
 . Corollary: good tests are not helpful for design in the small -- a good test won't tell you the best signatures for functions.
 . Testing time is something worth optimizing for.
   Tests are sensitive to IO and IPC.
@@ -622,7 +622,7 @@ Let's look back at some of the key points:
 . There are not so useful techniques which are over-represented in the discourse: fluent assertions, mocks, BDD.
 . The key for unlocking many of the above techniques is thinking in terms of data, rather than interfaces or objects.
 . Corollary: good tests are helpful for design in the large.
-  They help to crystalize the data model your application is build around.
+  They help to crystalize the data model your application is built around.
 
 == Links
 
