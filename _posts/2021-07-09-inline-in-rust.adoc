@@ -67,7 +67,7 @@ If, however, `f` is called from some downstream crate `B`, such calls can't be i
 
 That's where the main usage of `+#[inline]+` comes from -- it enables cross-crate inlining.
 Without `+#[inline]+`, even the most trivial of functions can't be inlined across the crate boundary.
-The benefit is not without a cost -- compiler implements this by compiling a separate copy of `+#[inline]+` function with every crate it is used in, significantly increasing compile times.
+The benefit is not without a cost -- the compiler implements this by compiling a separate copy of the `+#[inline]+` function with every crate it is used in, significantly increasing compile times.
 
 Besides `+#[inline]+`, there are two more exceptions to this.
 Generic functions are implicitly inlinable.
