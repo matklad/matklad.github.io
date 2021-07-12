@@ -19,7 +19,7 @@ The secondary goal is to either observe iCache effects in practice, or else to p
 
 The benchmark is based on my https://github.com/matklad/once_cell[once_cell] Rust library.
 The library provides a primitive, similar to https://en.wikipedia.org/wiki/Double-checked_locking[double-checked locking].
-There's a code that looks like this:
+There's a function that looks like this:
 
 [source,rust]
 ----
@@ -38,7 +38,7 @@ where
 }
 ----
 
-I know that performance improves significantly when `initialize` function is not inlined.
+I know that performance improves significantly when the `initialize` function is not inlined.
 It's somewhat obvious that this is the case (that's why the benchmark is synthetic -- real world examples are about cases where we don't know if `inline` is needed).
 But it is unclear why, _exactly_, inlining `initialize` leads to slower code.
 
@@ -144,7 +144,7 @@ $ perf stat -e instructions,cycles,\
 ----
 
 There is some difference in `L1-icache-load-misses`, but there's also a surprising difference in `instructions`.
-What's more, `L1-icache-load-misses` difference is hard to estimate, because it's unclear what `L1-icache-loads` are.
+What's more, the `L1-icache-load-misses` difference is hard to estimate, because it's unclear what `L1-icache-loads` are.
 As a sanity check, statistics for `dcache` are the same, just as we expect.
 
 While `perf` takes the real data from the CPU, an alternative approach is to run the program in a simulated environment.
@@ -361,6 +361,6 @@ For inlining in particular, we found the following reasons why inlining `S` into
 
 . Inlining might cause `C` to use more registers.
   This means that prologue and epiloge grow additional push/pop instructions, which also use stack memory.
-  Without inlining, these instructions are hidden in `S` and are only payed for when `C` actually calls into `S`, as opposed to every time `C` itself is called.
-. Generalizing from the first point, if `S` is called in a loop or in an `if`, compiler might hoist some instructions of `S` to before the branch, moving them from the cold path to the hot path.
+  Without inlining, these instructions are hidden in `S` and are only paid for when `C` actually calls into `S`, as opposed to every time `C` itself is called.
+. Generalizing from the first point, if `S` is called in a loop or in an `if`, the compiler might hoist some instructions of `S` to before the branch, moving them from the cold path to the hot path.
 . With more local variables and control flow in the stack frame to juggle, compiler might accidentally pessimize the hot loop.
