@@ -360,7 +360,9 @@ Tools are not always correct -- it's a good idea to sanity check different tools
 For inlining in particular, we found the following reasons why inlining `S` into `C` might cause a slow down:
 
 . Inlining might cause `C` to use more registers.
-  This means that prologue and epiloge grow additional push/pop instructions, which also use stack memory.
+  This means that prologue and epilogue grow additional push/pop instructions, which also use stack memory.
   Without inlining, these instructions are hidden in `S` and are only paid for when `C` actually calls into `S`, as opposed to every time `C` itself is called.
 . Generalizing from the first point, if `S` is called in a loop or in an `if`, the compiler might hoist some instructions of `S` to before the branch, moving them from the cold path to the hot path.
 . With more local variables and control flow in the stack frame to juggle, compiler might accidentally pessimize the hot loop.
+
+If you are curious under which conditions iCache does become an issue, there's https://www.scylladb.com/2017/07/06/scyllas-approach-improve-performance-cpu-bound-workloads/[this excellent article] about one such case.
