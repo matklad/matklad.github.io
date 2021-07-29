@@ -1,0 +1,312 @@
+= ; echo "Shell Injection"
+
+This is an introductory article about https://en.wikipedia.org/wiki/Code_injection#Shell_injection[shell injection], a security vulnerability allowing an attacker to execute arbitrary code on the user's machine.
+This is a well-studied problem, and there are simple and efficient solutions to it.
+It's relatively easy to design library API in such a way as to shield the application developer from the risk of shell injections.
+
+There are two reasons why I am writing this post.
+First, this year I've pointed out this issue in https://old.reddit.com/r/rust/comments/ls096k/rust_cmd_lib_v010_to_write_shellscript_like_tasks/goqlv3m/[three] https://lobste.rs/s/9yu5sl/after_discussion_here_i_created_lib_for#c_ckkova[different] https://lobste.rs/s/p1hict/zxpy_tool_for_shell_scripting_python#c_zuaapx[libraries].
+It seems that, although the problem is well-studied, its not well known, so just repeating some things might help.
+Second, I've recently reported a related problem about one of the VS Code APIs, and I want to use this piece as an extended GitHub comment :-)
+
+== A Curious Case Of Pwnd Script
+
+Shell injection can happen when a program needs to execute another program, and one of the arguments is controlled by the user/attacker.
+As a model example, let's write a quick script to read a list of URLs from stdin, and run `curl` for each one of those.
+
+That's not realistic, but small and illustrative.
+This is what the script could look like in NodeJS:
+
+.curl-all.js
+[source,js]
+----
+const readline = require('readline');
+
+const util = require('util');
+const exec = util.promisify(require('child_process').exec);
+
+async function main() {
+  const input = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false,
+  });
+
+  for await (const line of input) {
+    if (line.trim().length > 0) {
+      const { stdout, stderr } = await exec(`curl ${line}`);
+      console.log({ stdout, stderr });
+    }
+  }
+}
+
+main()
+----
+
+I would have written this in Rust, but, alas, it's not vulnerable to this particular attack :)
+
+The interesting line is this one:
+
+[source,js]
+----
+const { stdout, stderr } = await exec(`curl ${line}`);
+----
+
+Here, we use are using https://nodejs.org/api/child_process.html#child_process_child_process_exec_command_options_callback[`exec`] API from node to spawn a child `curl` process, passing a line of input as an argument.
+
+Seems to work for simple cases?
+
+[source]
+----
+$ cat urls.txt
+https://example.com
+
+$ node curl-all.js < urls.txt
+{
+  stdout: '<!doctype html>...</html>\n',
+  stderr: '% Total    % Received ...'
+}
+----
+
+But what if we use a slightly more imaginative input?
+
+[source]
+----
+$ node main.js < malice_in_the_wonderland.txt
+{
+  stdout: 'PWNED, reading your secrets from /etc/passwd\n' +
+    'root:x:0:0:System administrator:/root:/bin/fish\n' +
+    '...' +
+    'matklad:x:1000:100::/home/matklad:/bin/fish\n',
+  stderr: "curl: try 'curl --help' for more information\n"
+}
+----
+
+That feels bad -- seems that the script somehow reads the contents of my `/etc/passwd`.
+How did this happen, we've only invoked `curl`?
+
+== Spawning a Process
+
+To understand what have just happened, we need to learn a bit about how spawning a process works in general.
+This section is somewhat UNIX-specific -- things are implemented a bit differently on Windows.
+Nonetheless, the big picture conclusions hold there as well.
+
+The main API to run a program with command line arguments is the `exec` family of functions.
+For example, here's `execve`:
+
+
+[source,c]
+----
+int execve(const char *pathname, char *const argv[],
+           char *const envp[]);
+----
+
+It takes the name of the program (`pathname`), a list of command line arguments (`argv`), and a list of environment variable for the new process (`envp`), and uses those to run the specified binary.
+How exactly this happens is a fascinating story with many forks in the plot, but it is beyond the scope of the article.
+
+What is curious though, is that while the underlying system API wants an array of arguments, the `child_process.exec` function from node takes only a single string: `+exec("curl http://example.com")+`.
+
+Let's find out!
+To do that, we'll use the https://strace.io[strace] tool.
+This tool inspects (traces) all the system calls invoked by the program.
+We'll ask `strace` to look for `execve` in particular, to understand how node's `exec` maps to the underlying system's API.
+We'll need the `--follow` argument to trace all processes, and not just the top-level one.
+To reduce the amount of output and only print `execve`, we'll use the `--trace` flag:
+
+[source]
+----
+$ strace --follow --trace execve node main.js < urls.txt
+execve("/bin/node", ["node", "curl-all.js"], 0x7fff97776be0)
+...
+execve("/bin/sh", ["/bin/sh", "-c", "curl https://example.com"], 0x3fcacc0)
+...
+execve("/bin/curl", ["curl", "https://example.com"], 0xec4008)
+----
+
+The first `execve` we see here is our original invocation of the `node` binary itself.
+The last one is what we want to do -- spawn `curl` with a single argument, an url.
+And the middle one is what node's `exec` actually does.
+
+Let's take a closer look:
+
+[source]
+----
+/bin/sh -c "curl https://example.com"
+----
+
+Here, node invokes the `sh` binary (system's shell) with two arguments: `-c` and the string we originally passed to `child_process.exec`.
+`-c` stands for command, and instructs the shell to interpret the value as a shell command, parse, it and then run it.
+
+In other words, rather then running the command directly, node asks the shell to do the heavy lifting.
+But the shell is an interpreter of the shell language, and, by carefully crafting the input to `exec`, we can ask it to run arbitrary code.
+In particular, that's what we used as a payload in the bad example above:
+
+.malice_in_the_wonderland.txt
+[source]
+----
+; echo 'PWNED, reading your secrets from /etc/passwd' && cat /etc/passwd
+----
+
+After the string interpolation, the resulting command was
+
+[source]
+----
+/bin/sh -c "curl; echo '...' && cat /etc/passwd"
+----
+
+That is, first run `curl`, then `echo`, then read the `/etc/passwd`.
+
+== Those Who Study History Are Doomed to Repeat It
+
+There's an equivalent safe API in node: https://nodejs.org/api/child_process.html#child_process_child_process_spawn_command_args_options[`spawn`].
+unlike `exec`, it uses an array of arguments rather then a single string.
+
+[source,js]
+----
+-  exec(`curl ${line}`)
++ spawn("curl", line)
+----
+
+Internally, the API bypasses the shell and uses `execve` directly.
+Thus, this API is not vulnerable to shell injection -- attacked can run `curl` with bad arguments, but it can't run something else than `curl`.
+
+Note that it's easy to implement `exec` in terms of `spawn`:
+
+[source,js]
+----
+function myExec(cmd) {
+  return spawn("/bin/sh", "-c", cmd)
+}
+----
+
+It's a common pattern among many languages:
+
+* there's an `exec`-style function that takes a string and spawns `/bin/sh -c` under the hood,
+* the docs for this function include a giant disclaimer, saying that using it with user input is a bad idea,
+* there's a safe alternative which takes arguments as an array and spawns the process directly.
+
+Why provide an exploitable API, while a safe version is possible and is more direct?
+I don't know, but my guess is that it's mostly just history.
+C has https://en.cppreference.com/w/c/program/system[`system`], Perl's backticks correspond directly to that, Ruby got backticks from Perl, Python just has `system`, node was probably influenced by all these scripting languages.
+
+Note that security isn't the only issue with `/bin/sh -c` based API.
+Read https://julialang.org/blog/2012/03/shelling-out-sucks/[this other post] to learn about the rest of the problems.
+
+== Take Aways
+
+If you are an __application developer__, be aware that this issue exists.
+Read the language documentation carefully -- most likely, there are two flavors of process spawning functions.
+Note how shell injection is similar to https://en.wikipedia.org/wiki/SQL_injection[SQL injection] and https://en.wikipedia.org/wiki/Cross-site_scripting[XSS].
+
+If you __develop a library__ for conveniently working with external processes, use and expose only the shell-less API from the underlying platform.
+
+If you __build a new platform__, don't provide `bin/sh -c` API in the first place.
+Be like https://deno.land/manual@v1.12.2/examples/subprocess[deno] (and also Go, Rust, Julia), don't be like https://nodejs.org/api/child_process.html#child_process_child_process_exec_command_options_callback[node] (and also Python, Ruby, Perl, C).
+If you _have_ to maintain such API for legacy reasons, clearly document the issue about shell injection.
+Documenting how to do `/bin/sh -c` by hand might also be a good idea.
+
+If you are __designing a programming language__, be careful with string interpolation syntax.
+It's important that string interpolation can be used to spawn a command in a safe way.
+That mostly means that library authors should be able to deconstruct a `"cmd -j $arg1 -f $arg2"` literal into two (compile-time) arrays: `["cmd -j ", " -f "]` and `[arg1, arg2]`.
+If you don't provide this feature in the language, library authors will split the interpolated string, which would be unsafe (not only for shelling out -- for SQLing or HTMLing as well).
+Good examples to learn from are JavaScript's
+https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals#tagged_templates[tagged templates]
+and Julia's
+https://julialang.org/blog/2013/04/put-this-in-your-pipe/#do-nothing_backticks[backticks].
+
+== What's About VS Code?
+
+Oh, right, the actual reason why I am writing this thing.
+The TL;DR for this section is that I want to complain about a specific API design a bit.
+
+This story begins in https://github.com/rust-analyzer/rust-analyzer/issues/9058[#9058].
+
+I was happily hacking on some Rust library.
+At some point I pressed the "`run tests`" button in https://rust-analyzer.github.io[rust-analyzer].
+And, surprised, accidentally pwned myself!
+
+[source]
+----
+Executing task: cargo test --doc -- Plotter<D>::line_fill --nocapture
+
+warning: An error occurred while redirecting file 'D'
+open: No such file or directory
+
+The terminal process
+/bin/fish '-c', 'cargo test --doc -- Plotter<D>::line_fill --nocapture'
+failed to launch (exit code: 1).
+
+Terminal will be reused by tasks, press any key to close it.
+----
+
+That was disappointing.
+C'mon, how come there's a shell injection in the code I help to maintain?
+While this is not a big problem for rust-analyzer (our security model assumes trusted code, as each of `rustup`, `cargo`, and `rustc` can execute arbitrary code by design), it's definitely was big blow to my aesthetics sensibilities!
+
+Looking at the git history, it was me who had missed "`concatenate arguments into a single string`" during review.
+So I was definitely a part of the problem here.
+But the other part is that the API that takes a single string exists at all.
+
+Let's look at the API:
+
+[source,ts]
+----
+export class ShellExecution {
+  /**
+    * Creates a shell execution with a full command line.
+    *
+    * @param commandLine The command line to execute.
+    * @param options Optional options for the started the shell.
+    */
+  constructor(
+    commandLine: string,
+    options?: ShellExecutionOptions
+  );
+
+  /* ... */
+}
+----
+
+So, this is exactly what I am describing -- a process-spawning API that takes a single string.
+I guess, in this case this _might_ even be justified -- the API opens a literal shell in the GUI, and the user can interact with it after the command finishes.
+
+Anyway, after looking around I quickly found another API, which _seemed_ (ominous music in the background) like what I was looking for:
+
+[source,ts]
+----
+
+export class ShellExecution {
+  /**
+    * Creates a shell execution with a command and arguments.
+    * For the real execution the editor will construct a
+    * command line from the command and the arguments. This
+    * is subject to interpretation especially when it comes to
+    * quoting. If full control over the command line is needed
+    * please use the constructor that creates a `ShellExecution`
+    * with the full command line.
+    *
+    * @param command The command to execute.
+    * @param args The command arguments.
+    * @param options Optional options for the started the shell.
+    */
+  constructor(
+    command: string | ShellQuotedString,
+    args: (string | ShellQuotedString)[],
+    options?: ShellExecutionOptions
+  );
+}
+----
+
+The API takes a array of strings.
+It also tries to say something about quoting, which is a good sign!
+The wording is perplexing, but seems that it struggles to explain to me that passing `["ls", ">", "out.txt"]` won't actually redirect, because `>` will get quoted.
+This is exactly what I want!
+The absence of any kind of a security note on both APIs is concerning, but oh well.
+
+So, I refactored the code to use this second constructor, and, 🥁 🥁 🥁, it still had the exact same behavior!
+Turns out that this API takes an array of arguments, and just concatenates them, unless I explicitly say that each argument needs to be escaped.
+
+And _this_ is what I am complaining about -- that the API looks like it is safe for an untrusted user input, while it is not.
+This is misuse resistance resistance.
+
+That's all, thanks for reading!
