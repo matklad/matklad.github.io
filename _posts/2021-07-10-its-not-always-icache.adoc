@@ -1,4 +1,4 @@
-= It's Not Always iCache
+= It's Not Always ICache
 
 This is a follow up to the https://matklad.github.io/2021/07/09/inline-in-rust.html[previous post] about `+#[inline]+` in Rust specifically.
 This post is a bit more general, and a bit more ranty.
@@ -8,14 +8,14 @@ When inlining optimization is discussed, the following is almost always mentione
 
 I myself have seen this repeated on various forms many times.
 I have also seen a lot of benchmarks where judicious removal of inlining annotations did increase performance.
-However, not once have I seen the performance improvement being traced to iCache specifically.
-To me at least, this explanation doesn't seem to be grounded -- people know that iCache is to blame because other people say this, not because there's a benchmark everyone points to.
-It doesn't mean that the iCache explanation is wrong -- just that I personally don't have evidence to believe it is better than any other explanation.
+However, not once have I seen the performance improvement being traced to ICache specifically.
+To me at least, this explanation doesn't seem to be grounded -- people know that ICache is to blame because other people say this, not because there's a benchmark everyone points to.
+It doesn't mean that the ICache explanation is wrong -- just that I personally don't have evidence to believe it is better than any other explanation.
 
 Anyway, I've decided to look at a specific case where I know `+#[inline]+` to cause an observable slow down, and understand why it happens.
 Note that the goal here is not to explain real-world impact of `+#[inline]+`, the benchmark is artificial.
 The goal is, first and foremost, to learn more about the tools to use for explaining results.
-The secondary goal is to either observe iCache effects in practice, or else to provide an alternative hypothesis for why removing inlining can speed the things up.
+The secondary goal is to either observe ICache effects in practice, or else to provide an alternative hypothesis for why removing inlining can speed the things up.
 
 The benchmark is based on my https://github.com/matklad/once_cell[once_cell] Rust library.
 The library provides a primitive, similar to https://en.wikipedia.org/wiki/Double-checked_locking[double-checked locking].
@@ -106,7 +106,7 @@ $ cp ./target/release/examples/bench always
 
 On Linux, the best tool to quickly access the performance of any program is `perf stat`.
 It runs the program and shows a bunch of CPU-level performance counters, which might explain what's going on.
-As we suspect that iCache might be to blame, let's include the counters for caches:
+As we suspect that ICache might be to blame, let's include the counters for caches:
 
 [source,console]
 ----
@@ -192,9 +192,9 @@ $ valgrind --tool=cachegrind ./never
 ----
 
 Note that, because `cachegrind` simulates the program, it runs much slower.
-Here, we don't see a big difference in iCache misses (I1 -- first level instruction cache, LLi -- last level instruction cache).
-We do see a difference in iCache references.
-Note that the number of times CPU refers to iCache should correspond to the number of instructions it executes.
+Here, we don't see a big difference in ICache misses (I1 -- first level instruction cache, LLi -- last level instruction cache).
+We do see a difference in ICache references.
+Note that the number of times CPU refers to ICache should correspond to the number of instructions it executes.
 Cross-checking the number with `perf`, we see that both `perf` and `cachegrind` agree on the number of instructions executed.
 They also agree that `inline_always` version executes less instructions.
 It's still hard to say what perf's `sL1-icache-loads` means.
@@ -346,7 +346,7 @@ Looking at the assembly, we can see the following:
 * the core loop is very tight in both cases, just a handful of instructions
 * the core loop counts upwards rather than downwards, adding an extra `cmp` instruction
 
-Note that it's highly unlikely that iCache affects the running code, as it's a small bunch of instructions next to each other in memory.
+Note that it's highly unlikely that ICache affects the running code, as it's a small bunch of instructions next to each other in memory.
 On the other hand, an extra `cmp` with a large immediate precisely accounts for the amount of extra instructions we observe (the loop is run 800_000_000 times).
 
 == Conclusions
@@ -365,4 +365,4 @@ For inlining in particular, we found the following reasons why inlining `S` into
 . Generalizing from the first point, if `S` is called in a loop or in an `if`, the compiler might hoist some instructions of `S` to before the branch, moving them from the cold path to the hot path.
 . With more local variables and control flow in the stack frame to juggle, compiler might accidentally pessimize the hot loop.
 
-If you are curious under which conditions iCache does become an issue, there's https://www.scylladb.com/2017/07/06/scyllas-approach-improve-performance-cpu-bound-workloads/[this excellent article] about one such case.
+If you are curious under which conditions ICache does become an issue, there's https://www.scylladb.com/2017/07/06/scyllas-approach-improve-performance-cpu-bound-workloads/[this excellent article] about one such case.
