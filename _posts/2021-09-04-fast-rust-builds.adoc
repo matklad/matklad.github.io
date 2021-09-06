@@ -12,7 +12,7 @@ rust-analyzer CI takes **8** minutes on GitHub actions.
 It is a fairly large and complex project with 200k lines of own code and 1 million lines of dependencies on top.
 
 It is true that Rust is slow to compile in a rather fundamental way.
-It picked "`slow compiler`" in the https://research.swtch.com/generic[generic dilemma], and its overall philosophy prioritizes runtime over compile time (an excellent series of posts about that: https://pingcap.com/blog/rust-compilation-model-calamity[1], https://pingcap.com/blog/generics-and-compile-time-in-rust[2], https://pingcap.com/blog/rust-huge-compilation-units[3], https://pingcap.com/blog/rust-huge-compilation-units[4]).
+It picked "`slow compiler`" in the https://research.swtch.com/generic[generic dilemma], and its overall philosophy prioritizes runtime over compile time (an excellent series of posts about that: https://pingcap.com/blog/rust-compilation-model-calamity[1], https://pingcap.com/blog/generics-and-compile-time-in-rust[2], https://pingcap.com/blog/rust-huge-compilation-units[3], https://pingcap.com/blog/reasons-rust-compiles-slowly[4]).
 But `rustc` is not a slow compiler -- it implements the most link:pass:[https://blog.jetbrains.com/kotlin/2020/09/the-dark-secrets-of-fast-compilation-for-kotlin/#:~:text=I%20think%20Rust%20qualifies%20as%20a%20counter%20example%20here][advanced incremental compilation] in industrial compilers, it takes advantage of compilation model based on proper modules (crates), and it has been https://blog.mozilla.org/nnethercote/2020/09/08/how-to-speed-up-the-rust-compiler-one-last-time/[meticulously optimized].
 Fast to compile Rust projects are a reality, even if they are not common.
 Admittedly, some care and domain knowledge is required to do that.
