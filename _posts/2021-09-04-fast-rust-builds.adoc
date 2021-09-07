@@ -210,7 +210,7 @@ It is important to architect the applications to look like the second picture --
 The most important property of a crate is which crates it doesn't (transitively) depend on.
 
 Another important consideration is the number of final artifacts (most typically binaries).
-Rust is statically linked, so, if two different binaries use the same library, each binary contains a separately liked copy of the library.
+Rust is statically linked, so, if two different binaries use the same library, each binary contains a separately linked copy of the library.
 If you have `n` binaries and `m` libraries, and each binary uses each library, then the amount of work to do during the linking is `m * n`.
 For this reason, it's better to minimize the number of artifacts.
 One common technique here is https://www.busybox.net/FAQ.html#design[BusyBox]-style Swiss Army knife executables.
