@@ -119,7 +119,7 @@ It also significantly increases the amount of IO and the size of `./target`, whi
 https://github.com/rust-analyzer/rust-analyzer/blob/48f84a7b60bcbd7ec5fa6434d92d9e7a8eb9731b/Cargo.toml#L6-L10[Disable] debuginfo -- it makes `./target` much bigger, which again harms caching.
 Depending on your preferred workflow, you might consider disabling debuginfo unconditionally, this brings some benefits for local builds as well.
 
-While we are at it, set `-D warnings` environmental variable to deny warning for all crates at the same time.
+While we are at it, https://github.com/rust-analyzer/rust-analyzer/blob/3dae94bf2b3e496adb049da589c7efef272a39b8/.github/workflows/ci.yaml#L15[add] `-D warnings` to the `RUSTFLAGS` environmental variable to deny warning for all crates at the same time.
 It's a bad idea to `#![deny(warnings)]` in code: you need to repeat it for every crate, it needlessly makes local development harder, and it might break your users when they upgrade their compiler.
 It might also make sense to bump cargo network retry limits.
 
