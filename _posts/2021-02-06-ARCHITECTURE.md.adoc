@@ -13,43 +13,43 @@ If I am new to a code base, I read each file as a sequence of logical chunks spe
 If I've made significant contributions before, the perception is quite different.
 I have a mental map of the code in my head, so I no longer read sequentially.
 Instead, I just jump to where the thing should be, and, if it is not there, I move it.
-Mental map is the source of truth.
+One's mental map is the source of truth.
 
-I find `ARCHITECTURE` file to be a low-effort high-leverage way to bridge this gap.
-As the name suggest, this file should describe the high-level architecture of the project.
+I find the `ARCHITECTURE` file to be a low-effort high-leverage way to bridge this gap.
+As the name suggests, this file should describe the high-level architecture of the project.
 Keep it short: every recurring contributor will have to read it.
 Additionally, the shorter it is, the less likely it will be invalidated by some future change.
-This is the main rule of thumb for `ARCHITECTURE` -- specify only things which are unlikely to frequently change.
+This is the main rule of thumb for `ARCHITECTURE` -- only specify things that are unlikely to frequently change.
 Don't try to keep it synchronized with code.
 Instead, revisit it a couple of times a year.
 
 Start with a bird's eye overview of the problem being solved.
-Then, specify a more-or-less detailed codemap.
+Then, specify a more-or-less detailed _codemap_.
 Describe coarse-grained modules and how they relate to each other.
-Codemap should answer "`where's the thing that does X?`".
+The codemap should answer "`where's the thing that does X?`".
 It should also answer "`what does the thing that I am looking at do?`".
 Avoid going into details of _how_ each module works, pull this into separate documents or (better) inline documentation.
-Codemap is a map of a country, and not an atlas of maps of its states.
+A codemap is a map of a country, not an atlas of maps of its states.
 Use this as a chance to reflect on the project structure.
-Are the things you want to put near each other in the codemap adjacent in `exa -TD`?
+Are the things you want to put near each other in the codemap adjacent when you run `tree .`?
 
-Do name important files, modules, and types.
-Do not directly link them (links go stale).
+_Do_ name important files, modules, and types.
+Do _not_ directly link them (links go stale).
 Instead, encourage the reader to use symbol search to find the mentioned entities by name.
-This doesn't require maintenance, and will help to discover related, similarly named things.
+This doesn't require maintenance and will help to discover related, similarly named things.
 
 Explicitly call-out architectural invariants.
 Often, important invariants are expressed as an _absence_ of something, and it's pretty hard to divine that from reading the code.
-Nothing in the model layer specifically doesn't depend on the views.
+Think about a common example from web development: nothing in the model layer specifically doesn't depend on the views.
 
 Point out boundaries between layers and systems as well.
 A boundary implicitly contains information about the implementation of the system behind it.
-It even constraints all _possible_ implementations.
+It even constrains all _possible_ implementations.
 But finding a boundary by just randomly looking at the code is hard -- good boundaries have measure zero.
 
 After finishing the codemap, add a separate section on cross-cutting concerns.
 
-A good example of `ARCHITECTURE` document is the one from rust-analyzer:
+A good example of `ARCHITECTURE` document is this one from rust-analyzer:
 https://github.com/rust-analyzer/rust-analyzer/blob/d7c99931d05e3723d878bea5dc26766791fa4e69/docs/dev/architecture.md[architecture.md].
 
 NOTE: This post is a part of https://matklad.github.io/2021/09/05/Rust100k.html[One Hundred Thousand Lines of Rust] series.
