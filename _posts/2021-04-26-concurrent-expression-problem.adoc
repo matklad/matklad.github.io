@@ -19,7 +19,7 @@ I think there are two ways to code the system described.
 The first approach is to us a separate thread / goroutine / async task for each concurrent activity, with some synchronization around the access to the shared state.
 The alternative approach is to write an explicit state machine / actor loop to receive the next event and process it.
 
-In the first scheme, adding new activities is easy, as you just write strait-line code with maybe some ``.await``s here and there.
+In the first scheme, adding new activities is easy, as you just write straight-line code with maybe some ``.await``s here and there.
 In the second scheme, it's easy to check and act on invariants, as there is only a single place where the state is modified.
 
 Let's take a look at a concrete example.
