@@ -501,3 +501,44 @@ That means that the first example which fails a property test is actually guaran
 That's all!
 Next time when you need to test something, consider if you can just exhaustively enumerate all "`sufficiently small`" inputs.
 If that's feasible, you can either write the classical recursive enumerator, or use this imperative `Gen` thing.
+
+**Update(2021-11-28):**
+
+There are now Rust (https://crates.io/crates/exhaustigen[crates.io link]) and {CPP} (https://github.com/graydon/exhaustigen[GitHub link]) implementations.
+https://arxiv.org/abs/1710.10385["`Capturing the Future by Replaying the Past`"] is a related paper which includes the above technique as a special case of "`simulate any monad by simulating delimited continuations via exceptions and replay`" trick.
+
+Balanced parentheses sequences:
+
+[source,rust]
+----
+#[test]
+fn gen_parenthesis() {
+  let n = 5;
+  let expected_total = 1 + 1 + 2 + 5 + 14 + 42;
+
+  let mut total = 0;
+  let mut all = HashSet::new();
+  let mut g = Gen::new();
+  while !g.done() {
+    let l = g.gen(n);
+    let mut s = String::new();
+    let mut bra = 0;
+    let mut ket = 0;
+    while ket < l {
+      if bra < l && (bra == ket || g.gen(1) == 1) {
+        s.push('(');
+        bra += 1;
+      } else {
+        s.push(')');
+        ket += 1;
+      }
+    }
+
+    all.insert(s);
+    total += 1;
+  }
+
+  assert_eq!(expected_total, total);
+  assert_eq!(expected_total, all.len() as u32);
+}
+----
