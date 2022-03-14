@@ -1,0 +1,293 @@
+= RPATH, or why lld doesn't work on NixOS
+
+I've learned a thing I wish I didn't know.
+As a revenge, I am going to write it down so that you, my dear reader, also learn about this.
+You probably want to skip this post unless you are interested and somewhat experienced in all of Rust, NixOS, and dynamic linking.
+
+== Problem
+
+I use NixOS and Rust.
+For linking my Rust code, I would love to use lld, the LLVM linker, as it is significantly faster.
+Unfortunately, this often leads to errors when trying to run the resulting binary:
+
+[source]
+----
+error while loading shared libraries: libbla.so.92:
+cannot open shared object file: No such file or directory
+----
+
+Let's see what's going on here!
+
+== Baseline
+
+We'll be using `evdev-rs` as a running example.
+It is binding to the evdev shared library on Linux.
+First, we'll build it with the default liker, which just works (haha, nope, this is NixOS).
+
+Let's get the crate:
+
+[source,bash]
+----
+$ git clone git@github.com:ndesh26/evdev-rs.git
+$ cd evdev-rs
+----
+
+And run the example
+
+[source]
+----
+$ cargo run --example evtest
+    Updating crates.io index
+  Downloaded libc v0.2.120
+  Downloaded 1 crate (574.7 KB) in 1.10s
+   Compiling cc v1.0.73
+   Compiling pkg-config v0.3.24
+   Compiling libc v0.2.120
+   Compiling log v0.4.14
+   Compiling cfg-if v1.0.0
+   Compiling bitflags v1.3.2
+   Compiling evdev-sys v0.2.4
+error: failed to run custom build command for `evdev-sys`
+<---SNIP--->
+  Couldn't find libevdev from pkgconfig
+<---SNIP--->
+----
+
+This of course doesn't just work and spits out humongous error message, which contains one line of important information: we are missing `libevdev` library.
+As this is NixOS, we are not going to barbarically install it globally.
+Let's create an isolated environment instead, using `nix-shell`:
+
+.shell.nix
+[source,nix]
+----
+with import <nixpkgs> {};
+mkShell {
+    buildInputs = [
+        pkgconfig
+        libevdev
+    ];
+}
+----
+
+And activate it:
+
+[source,bash]
+----
+$ nix-shell
+----
+
+This environment gives us two things -- the `pkg-config` binary and the `evdev` library.
+`pkg-config` is a sort of half of a C package manager for UNIX: it can't install libraries, but it helps to locate them.
+Let's ask it about `libevdev`:
+
+[source,bash]
+----
+$ pkg-config --libs libevdev
+-L/nix/store/62gwpvp0c1i97lr84az2p0qg8nliwzgh-libevdev-1.11.0/lib -levdev
+----
+
+Essentially, it resolved library's short name (`libevdev`) to the full path to the directory were the library resides:
+
+[source,bash]
+----
+$ exa -l /nix/store/62gwpvp0c1i97lr84az2p0qg8nliwzgh-libevdev-1.11.0/lib
+libevdev.la
+libevdev.so -> libevdev.so.2.3.0
+libevdev.so.2 -> libevdev.so.2.3.0
+libevdev.so.2.3.0
+pkgconfig
+----
+
+The `libevdev.so.2.3.0` file is the actual dynamic library.
+The symlinks stuff is another bit of a C package manager which implements somewhat-semver: `libevdev.so.2` version requirement gets resolved to `libevdev.so.2.3.0` version.
+
+Anyway, this works well enough to allow us to finally run the example
+
+[source,bash]
+----
+$ cargo run --example evtest
+    Finished dev [unoptimized + debuginfo] target(s) in 0.01s
+     Running `target/debug/examples/evtest`
+Usage: evtest /path/to/device
+----
+
+Success!
+
+Ooook, so let's now do what we wanted to from the begining and configure cargo to use `lld`, for blazingly fast linking.
+
+== lld
+
+The magic spell you need need to put into `.cargo/config` is (courtesy of @lnicola):
+
+[source,toml]
+----
+[build]
+rustflags = ["-Clink-arg=-fuse-ld=lld"]
+----
+
+To unpack this:
+
+* `-C` set codegen option `link-arg=-fuse-ld=lld`.
+* `link-arg` means that `rustc` will pass "-fuse-ld=lld" to the linker.
+* Because linkers are not in the least confusing, the "`liker`" here is actually the whole gcc/clang.
+  That is, rather than invoking the linker, `rustc` will call `cc` and _that_ will then call the linker.
+* So `-fuse-ld` (unlike `-C`, I _think_ this is an atomic option, not `-f use-ld`) is an argument to gcc/clang,
+  which asks it to use `lld` liker.
+* And note that it's `lld` rather than `ldd` which confusingly exists and does something completely different.
+
+Anyhow, the end result is that we switch the linker from `ld` (default slow GNU linker) to `lld` (fast LLVM linker).
+
+And that breaks!
+
+_Building_ the code still works fine:
+
+[source]
+----
+$ cargo build --example evtest
+   Compiling libc v0.2.120
+   Compiling pkg-config v0.3.24
+   Compiling cc v1.0.73
+   Compiling log v0.4.14
+   Compiling cfg-if v1.0.0
+   Compiling bitflags v1.3.2
+   Compiling evdev-sys v0.2.4 (/home/matklad/tmp/evdev-rs/evdev-sys)
+   Compiling evdev-rs v0.5.0 (/home/matklad/tmp/evdev-rs)
+    Finished dev [unoptimized + debuginfo] target(s) in 2.87s
+----
+
+But _running_ the binary fails:
+
+[source,bash]
+----
+$ cargo run --example evtest
+    Finished dev [unoptimized + debuginfo] target(s) in 0.01s
+     Running `target/debug/examples/evtest`
+target/debug/examples/evtest: error while loading shared libraries:
+libevdev.so.2: cannot open shared object file: No such file or directory
+----
+
+== rpath
+
+Ok, what's now?
+Now, let's understand why the first example, with `ld` rather than `lld`, can't work :-)
+
+As a reminder, we use NixOS, so there's no global folder a-la `/usr/lib` where all shared libraries are stored.
+Coming back to our `pkgconfig` example,
+
+[source,bash]
+----
+$ pkg-config --libs libevdev
+-L/nix/store/62gwpvp0c1i97lr84az2p0qg8nliwzgh-libevdev-1.11.0/lib -levdev
+----
+
+the `libevdev.so` is well-hidden behind the hash.
+So we need a `pkg-config` binary at compile time to get from `libevdev` name to actual location.
+
+However, as this is a dynamic library, we need it not only during compilation, but during runtime as well.
+And at runtime loader (also known as dynamic linker (its binary name is something like `ld-linux-x86-64.so`, but despite the `.so` suffix, it's an executable (I kid you not, this stuff is indeed this confusing))) loads the executable together with shared libraries required by it.
+Normally, the loader looks for libraries in well-known locations, like the aforementioned `/usr/lib` or `LD_LIBRARY_PATH`.
+So we need _something_ which would tell the loader that `libevdev` lives at `/nix/store/$HASH/lib`.
+
+That something is rpath (also known as RUNPATH) -- this is more or less `LD_LIBRARY_PATH`, just hard-coded into the executable.
+We can use `readelf` to inspect program's rpath.
+
+When the binary is linked with the default linker, the result is as follows (lightly edited for clarity):
+
+[source]
+----
+λ readelf -d target/debug/examples/evtest | rg PATH
+ 0x000000000000001d (RUNPATH)            Library runpath: [
+    /nix/store/a9m53x4b3jf6mp1ll9acnh55lnx48hcj-nix-shell/lib64
+    /nix/store/a9m53x4b3jf6mp1ll9acnh55lnx48hcj-nix-shell/lib
+    /nix/store/62gwpvp0c1i97lr84az2p0qg8nliwzgh-libevdev-1.11.0/lib
+    /nix/store/z56jcx3j1gfyk4sv7g8iaan0ssbdkhz1-glibc-2.33-56/lib
+    /nix/store/c9f15p1kwm0mw5p13wsnvd1ixrhbhb12-gcc-10.3.0-lib/lib
+]
+----
+
+And sure, we see path to `libevdev` right there!
+
+With `rustflags = ["-Clink-arg=-fuse-ld=lld"]`, the result is different, the library is missing from rpath:
+
+[source]
+----
+0x000000000000001d (RUNPATH)            Library runpath: [
+    /nix/store/a9m53x4b3jf6mp1ll9acnh55lnx48hcj-nix-shell/lib64
+    /nix/store/a9m53x4b3jf6mp1ll9acnh55lnx48hcj-nix-shell/lib
+]
+----
+
+
+
+At this point, I think we know what's going on.
+To recap:
+
+* With both `ld` and `lld`, we don't have problems at compile time, because `pkg-config` helps the compiler to find the library.
+* At runtime, the library linked with `lld` fails to find the shared library, while the one linked with `ld` works.
+* The difference between the two binaries is the value of rpath in the binary itself.
+  `ld` somehow manages to include rpath which contains path to the library.
+  This rpath is what allows the loader to locate the library at runtime.
+
+Curious observation: dynamic linking on NixOS is not _entirely_ dynamic.
+Because executables expect to find shared libraries in specific locations marked with hashes of the libraries themselves, it's not possible to _just_ upgrade `.so` on disk for all the binaries to pick it up.
+
+== Who sets rpath?
+
+At this point, we have only one question left:
+
+Why?
+
+Why do we have that magical rpath thing in one of the binaries.
+The answer is simple -- to set rpath, one passes `+-rpath /nix/store/...+` flag to the linker at compile time.
+The linker then just embeds the specified string as rpath field in the executable, without really inspecting it in any way.
+
+And here comes the magical/hacky bit -- the thing that adds that `-rpath` argument to the linker's command line is the NixOS wrapper script!
+That is, the `ld` on NixOS is not a proper ld, but rather a shell script which does a bit of extra fudging here and there, including the rpath:
+
+[source,bash]
+----
+$ cat (which ld)
+<---SNIP--->
+
+# Three tasks:
+#
+#   1. Find all -L... switches for rpath
+#
+#   2. Find relocatable flag for build id.
+#
+#   3. Choose 32-bit dynamic linker if needed
+declare -a libDirs
+<---SNIP--->
+        case "$prev" in
+            -L)
+                libDirs+=("$p")
+                ;;
+<---SNIP--->
+
+    for dir in ${libDirs+"${libDirs[@]}"}; do
+        <---SNIP--->
+                extraAfter+=(-rpath "$dir")
+        <---SNIP--->
+    done
+<---SNIP--->
+/nix/store/sga0l55gm9nlwglk79lmihwb2bpv597j-binutils-2.35.2/bin/ld \
+    ${extraBefore+"${extraBefore[@]}"} \
+    ${params+"${params[@]}"} \
+    ${extraAfter+"${extraAfter[@]}"}
+----
+
+There's a lot of going on in that wrapper script, but the relevant to us thing, as far as I understand, is that everything that gets passed as `-L` at compile time gets embedded into the binary's rpath, so that it can be used at runtime as well.
+
+Now, let's take a look at `lld`'s wrapper:
+
+[source,bash]
+----
+$ cat (which lld)
+@@@@@@@TT@@pHpH<<E8o	8o	wN:HgPHwHpp@p@ @@  Stdpp@p@ Ptd@G@@QtdRtd/nix/store/4s21k8k7p1mfik0b33r2spq5hq7774k1-glibc-2.33-108/lib/ld-linux-x86-64.so.2GNUGNU r	\X
+0F                                                                                                                                                                        <C5`
+Bx	rZ1V3	y
+----
+
+Haha, nope, there's no wrapper!
+Unlike `ld`, `lld` on NixOS is an honest-to-Bosch binary file, and that's why we can't have great things!
+This is tracked in issue #24744 in the nixpkgs repo :)
