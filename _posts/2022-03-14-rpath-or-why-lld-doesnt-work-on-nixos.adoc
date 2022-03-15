@@ -291,3 +291,12 @@ Bx	rZ1V3	y
 Haha, nope, there's no wrapper!
 Unlike `ld`, `lld` on NixOS is an honest-to-Bosch binary file, and that's why we can't have great things!
 This is tracked in issue #24744 in the nixpkgs repo :)
+
+Update:
+
+So..... turns out there's more than one `lld` on NixOS.
+There's `pkgs.lld`, the thing I have been using in the post.
+And then there's `pkgs.llvmPackages.bintools` package, which also contains `lld`.
+And that version is actually wrapped into an rpath-setting shell script, the same way `ld` is.
+
+That is, `pkgs.lld` is the wrong `lld`, the right one is `pkgs.llvmPackages.bintools`.
