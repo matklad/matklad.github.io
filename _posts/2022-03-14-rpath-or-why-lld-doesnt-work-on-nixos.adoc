@@ -22,7 +22,7 @@ Let's see what's going on here!
 
 We'll be using `evdev-rs` as a running example.
 It is binding to the evdev shared library on Linux.
-First, we'll build it with the default liker, which just works (haha, nope, this is NixOS).
+First, we'll build it with the default linker, which just works (haha, nope, this is NixOS).
 
 Let's get the crate:
 
@@ -129,10 +129,10 @@ To unpack this:
 
 * `-C` set codegen option `link-arg=-fuse-ld=lld`.
 * `link-arg` means that `rustc` will pass "-fuse-ld=lld" to the linker.
-* Because linkers are not in the least confusing, the "`liker`" here is actually the whole gcc/clang.
+* Because linkers are not in the least confusing, the "`linker`" here is actually the whole gcc/clang.
   That is, rather than invoking the linker, `rustc` will call `cc` and _that_ will then call the linker.
 * So `-fuse-ld` (unlike `-C`, I _think_ this is an atomic option, not `-f use-ld`) is an argument to gcc/clang,
-  which asks it to use `lld` liker.
+  which asks it to use `lld` linker.
 * And note that it's `lld` rather than `ldd` which confusingly exists and does something completely different.
 
 Anyhow, the end result is that we switch the linker from `ld` (default slow GNU linker) to `lld` (fast LLVM linker).
