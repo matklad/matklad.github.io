@@ -15,7 +15,7 @@ I have a field-less enum representing various error conditions:
 pub enum Error {
   InvalidSignature,
   AccountNotFound,
-  InsufficientBallance,
+  InsufficientBalance,
 }
 ----
 
@@ -49,7 +49,7 @@ impl Error {
     let res = match code {
       0 => Error::InvalidSignature,
       1 => Error::AccountNotFound,
-      2 => Error::InsufficientBallance,
+      2 => Error::InsufficientBalance,
       _ => return None,
     };
     Some(res)
@@ -77,7 +77,7 @@ We can do this by adding a fake element at the end of the enum:
 pub enum Error {
   InvalidSignature,
   AccountNotFound,
-  InsufficientBallance,
+  InsufficientBalance,
   __LAST,
 }
 
@@ -85,7 +85,7 @@ impl Error {
   const ALL: [Error; Error::__LAST as usize] = [
     Error::InvalidSignature,
     Error::AccountNotFound,
-    Error::InsufficientBallance,
+    Error::InsufficientBalance,
   ];
 
   pub fn from_code(code: u32) -> Option<Error> {
@@ -113,7 +113,7 @@ Now, let's get to macros, and let's start with the simplest possible one I can t
 define_error![
   InvalidSignature,
   AccountNotFound,
-  InsufficientBallance,
+  InsufficientBalance,
 ];
 
 impl Error {
@@ -157,7 +157,7 @@ Here, ideally I'd write
 match code {
   0 => Error::InvalidSignature,
   1 => Error::AccountNotFound,
-  2 => Error::InsufficientBallance,
+  2 => Error::InsufficientBalance,
 }
 ----
 
@@ -186,7 +186,7 @@ Let's imagine we are new to a codebase, and come across the following snippet:
 define_error![
   InvalidSignature,
   AccountNotFound,
-  InsufficientBallance,
+  InsufficientBalance,
 ];
 
 impl Error {
@@ -219,7 +219,7 @@ define_error![
   pub enum Error {
     InvalidSignature,
     AccountNotFound,
-    InsufficientBallance,
+    InsufficientBalance,
   }
 ];
 
@@ -272,7 +272,7 @@ define_error![
   pub enum Error {
     InvalidSignature,
     AccountNotFound,
-    InsufficientBallance,
+    InsufficientBalance,
   }
 ];
 ----
@@ -310,7 +310,7 @@ macro_rules! define_error {
 }
 
 define_error![
-  data Error = InvalidSignature | AccountNotFound | InsufficientBallance
+  data Error = InvalidSignature | AccountNotFound | InsufficientBalance
     deriving (Debug, Clone, Copy, PartialEq, Eq)
 
 ];
@@ -337,7 +337,7 @@ use macros::FromCode;
 enum Error {
   InvalidSignature,
   AccountNotFound,
-  InsufficientBallance,
+  InsufficientBalance,
 }
 
 impl Error {
@@ -416,7 +416,7 @@ So what we are going to do is:
 ----
 #[derive(Debug, Clone, Copy)]
 pub enum Error {
-  InsufficientBallance,
+  InsufficientBalance,
   InvalidSignature,
   AccountNotFound,
 }
@@ -429,7 +429,7 @@ impl Error {
   fn from_code(code: u32) -> Option<Error> {
     let res = match code {
       // region:sourcegen
-      0 => Error::InsufficientBallance,
+      0 => Error::InsufficientBalance,
       1 => Error::InvalidSignature,
       2 => Error::AccountNotFound,
       // endregion:sourcegen
