@@ -257,9 +257,9 @@ macro_rules! define_error {
     impl Error {
       pub fn from_code(code: u32) -> Option<Error> {
         #![allow(non_upper_case_globals)]
-        $(const $err: u32 = Error::$err as u32;)*
+        $(const $err: u32 = $Error::$err as u32;)*
         match code {
-          $($err => Some(Error::$err),)*
+          $($err => Some($Error::$err),)*
           _ => None,
         }
       }
@@ -297,11 +297,11 @@ macro_rules! define_error {
     impl Error {
       pub fn from_code(code: u32) -> Option<Error> {
         #![allow(non_upper_case_globals)]
-        const $err0: u32 = Error::$err0 as u32;
-        $(const $err: u32 = Error::$err as u32;)*
+        const $err0: u32 = $Error::$err0 as u32;
+        $(const $err: u32 = $Error::$err as u32;)*
         match code {
-          $err0 => Some(Error::$err0),
-          $($err => Some(Error::$err),)*
+          $err0 => Some($Error::$err0),
+          $($err => Some($Error::$err),)*
           _ => None,
         }
       }
