@@ -138,7 +138,7 @@ Alas, it doesn't.
 Rust borrow checker doesn't distinguish between `mut` and non-`mut` lifetimes (for a good reason: doing that would be unsound).
 So, although `w` is just `&Widget`, the lifetime there is the same as on the `&mut self`, so the app remains mutably borrowed while the widget exists.
 
-_Third_, perhaps the most important point, the `&mut self` becomes viral -- most of functions in the program begin requiring `&mut`, and you loose type-system distinction between read-only and read-write operations.
+_Third_, perhaps the most important point, the `&mut self` becomes viral -- most of functions in the program begin requiring `&mut`, and you lose type-system distinction between read-only and read-write operations.
 There's no distinction between "`this function can only modify the cache`" and "`this function can modify literally everything`".
 
 _Finally_, even implementing `get_widget` is not pleasant.
