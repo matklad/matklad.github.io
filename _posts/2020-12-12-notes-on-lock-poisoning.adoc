@@ -49,7 +49,7 @@ If _two_ children panic, we should propagate a pair of panics.
 == Almost UnwindSafe
 
 A topic closely related to lock poisoning is unwinding safety -- `UnwindSafe` and `RefUnwindSafe` traits.
-I want to share an amusing story how this machinery almost, but not quiet, saved by bacon.
+I want to share an amusing story how this machinery almost, but not quite, saved my bacon.
 
 rust-analyzer implements cancellation via unwinding.
 After a user types something and we have new code to process, we set a global flag.
@@ -88,12 +88,12 @@ struct Db {
 
 Now, one of the differences between `std::Mutex` and `parking_lot::Mutex` is lock poisoning.
 And that means that `std::Mutex` is unwind safe (as it just becomes poisoned), while `parking_lot::Mutex` is not.
-Chalk used some `RefCell`s internally, so it wasn't unwind safe.
+Chalk used some `RefCell`'s internally, so it wasn't unwind safe.
 So the whole `Db` stopped being `UnwindSafe` after addition of chalk.
 _But_ because we had that manual `impl UnwindSafe for Db`, we haven't noticed this.
 
 And that lead to a heisenbug.
-If cancellation happened during trait solving, we unwond past `ChalkSolver`.
+If cancellation happened during trait solving, we unwound past `ChalkSolver`.
 And, as didn't have strict exception safety guarantees, that messed up its internal questions.
 So the _next_ trait solving query would observe really weird errors like index out of bounds inside chalk.
 
