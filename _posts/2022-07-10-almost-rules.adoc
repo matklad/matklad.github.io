@@ -1,0 +1,176 @@
+= Almost Rules
+
+This is going to be a philosophical post, vaguely about language design, and vaguely about Rust.
+If you've been following this blog for a while, you know that one theme I consistently hammer at is that of boundaries.
+This article is no exception!
+
+Obligatory link to Ted Kaminski:
+
+https://www.tedinski.com/2018/02/06/system-boundaries.html
+
+
+The most important boundary for a software project is its external interface, that which the users directly interact with and which you give backwards compatibility guarantees for.
+For a web-service, this would be the URL scheme and the shape of JSON request and responses.
+For a command line application -- the set and the meaning of command-line flags.
+For an OS kernel -- the set of syscalls (Linux) or the blessed user-space libraries (Mac).
+And, for a programming language, this would be the definition of the language itself, its syntax and semantics.
+
+Sometimes, however, it is beneficial to install somewhat artificial, internal boundaries, a sort-of macro level layers pattern.
+Boundaries have a high cost.
+They prevent changes.
+But a skillfully placed internal (or even an artificial external) boundary can also help.
+
+It cuts the system in two, and, if the cut is relatively narrow in comparison to the overall size of the system (hourglass shape), this boundary becomes a great way to understand the system.
+Understanding _just_ the boundary allows you to imagine how the subsystem beneath it _could_ be implemented.
+Most of the time, your imaginary version would be pretty close to what actually happens, and this mental meap would help you a great deal to peel off the layers of glue code and get a gut feeling for where the core logic is.
+
+Even if an internal boundary starts out in the right place, it, unlike an external one, is ever in danger of being violated.
+"`Internal boundary`" is a very non-physical thing, most of the time it's just informal rules like "`module A shall not import module B`".
+It's very hard to notice that something is _not_ being done!
+That's why, I think, larger companies can benefit from microservices architecture: in theory, if we _just_ solve human coordination problem, a monolith can be architectured just as cleanly, while offering much better performance.
+In practice, at sufficient scale, maintaining good architecture across teams is hard, and becomes much easier if the intended internal boundaries are reified as processes.
+
+It's hard enough to protect from accidental breaching of internal boundaries.
+But there's a bigger problem: often, internal boundaries stand in the way of user-visible system features, and it takes a lot of authority to protect internal system's boundary at the cost of not shipping something.
+
+In this post, I'd want to catalog some of the cases I've seen in the Rust programming language where I think an internal boundaries were eroded with time.
+
+== Namespaces
+
+It's a somewhat obscure feature of Rust's name resolution, but various things that inhabit Rust's scopes (structs, modules, traits, variables) are split into three namespaces: types, values and macros.
+This allows to have two things with the same name in the same scope without causing conflicts:
+
+[source,rust]
+----
+struct x { }
+fn x() {}
+----
+
+The above is legal Rust, because the `x` struct lives in the types namespace, while the `x` _function_ lives in the values namespace.
+The namespaces are reflected syntactically: `.` is used to traverse value namespace, while `::` traverses types.
+
+Except that this is _almost_ a rule.
+There are some cases where compiler gives up on clear syntax-driven namespacing rules and just does ad-hoc disambiguation.
+For example:
+
+[source,rust]
+----
+use std::str;
+
+fn main() {
+  let s: &str = str::from_utf8(b"hello").unwrap();
+  str::len(s);
+}
+----
+
+Here, the `str` in ``&str`` and `str::len` is the `str` _type_, from the type namespace.
+Thee two other ``str``s are the `str` _module_.
+In other words, the `str::len` is a method of a `str` type, while `str::from_utf8` is a free-standing function in the `str` module.
+Like types, modules inhabit the types namespace, so normally the code here would cause a compilation error.
+Compiler (and rust-analyzer) just hacks the primitive types case.
+
+Another recently added case is that of const generics.
+Previously, the `T` in `foo::<T>()` was a syntactically-unambiguous reference to something from the types namespace.
+Today, it can refer either to a type or to a value.
+This begs the question: is splitting type and value namespaces a good idea?
+If we have to disambiguate anyway, perhaps we could have just a single namespace and avoid introducing second lookup syntax?
+That is, just `use std.collections.HashMap;`.
+
+I _think_ these namespace aspirations re-enact similar developments from C.
+I haven't double checked my history here, so take the following with the grain of salt and do your own research before quoting, but I _think_ that C, in the initial versions, used to have very strict syntactic separation between types and values.
+That's why you are required to write `struct` when declaring a local variable of struct type:
+
+[source,C]
+----
+struct foo { int a; };
+
+int main(void) {
+  struct foo x;
+  return 0;
+}
+----
+
+The `struct` keyword tells the parser that it is parsing a type, and, therefore a declaration.
+But then at a latter point typedefs were added, and so the parser was taught to disambiguate types and values via the the lexer hack:
+
+[source,C]
+----
+struct foo {
+  int a;
+};
+typedef struct foo bar;
+
+int main(void) {
+  bar x;
+  return 0;
+}
+----
+
+== Patterns and Expressions
+
+Rust has separate grammatical categories for patterns and expressions.
+It used to be the case that any utterance can be unambiguously classified, depending solely on the syntactic context, as either an expression or a pattern.
+But then a minor exception happened:
+
+[source,rust]
+----
+fn f(value: Option<i32>) {
+  match value {
+    None => (),
+    none => (),
+  }
+}
+----
+
+Syntactically, `None` and `none` are indistinguishable.
+But they play quite different roles: `None` refers to the `Option::None` constant, while `none` introduces a fresh binding into the scope.
+Swift elegantly disambiguates the two at the syntax level, by requiring a leading `.` for enum variants.
+Rust just hacks this at the name-resolution layer, by defaulting to a new binding unless there's a matching constant in the scope.
+
+Recently, the scope of the hack was increased greatly: with destructing assignment implemented, an expression can be re-classified as a pattern now:
+
+[source,rust]
+----
+let (mut a, mut b) = (0, 1);
+(a, b) = (b, a)
+----
+
+Syntactically, `=` is a binary expression, so both the left hand side and the right hand side are expressions.
+But now the `lhs` is re-interpreted as a pattern.
+
+So perhaps the syntactic boundary between expressions and patterns is a fake one, and we should have used unified expression syntax throughout?
+
+== `::<>`
+
+A boundary which stands intact is the class of the grammar.
+Rust is still an `LL(k)` language: it can be parsed using a straightforward single-pass algorithm which doesn't require backtracking.
+The cost of this boundary is that we have to type `.collect::<Vec<_>>()` rather than `.collect<Vec<_>>()` (nowadays, I type just `.collect()` and use the light-bulb to fill-in the turbofish).
+
+== `().0.0`
+
+Another recent development is the erosion of the boundary between the lexer and the parser.
+Rust has tuple structs, and uses `.0` cutesy syntax to access numbered field.
+This is problematic for nested tuple struct.
+They need syntax like `foo.1.2`, but to the lexer this string looks like three tokens: `foo`, `.`, `1.2`.
+That is, `1.2` is a floating point number, `6/5`.
+So, historically one had to write this expression as `foo.1 .2`, with a meaningful whitespace.
+
+Today, this is hacked in the parser, which takes the `1.2` token from the lexer, inspects its text and further breaks it up into `1`, `.` and `2` tokens.
+
+The last example is quite interesting: in Rust, unlike many programming languages, the separation between the lexer and the parser is not an arbitrary internal boundary, but is actually a part of an external, semver protected API.
+Tokens are the input to macros, so macro behavior depends on how exactly the input text is split into tokens.
+
+And there's a second boundary violation here: in theory, "`token`" as seen by a macro is just its text plus hygiene info.
+In practice though, to implement captures in macro by example (`$x:expr` things), a token could also be a fully-formed fragment of internal compiler's AST data structure.
+The API is carefully future proofed such that, as soon as the macro looks at such a magic token, it gets decomposed into underlying true tokens, but there are some examples where the internal details leak via changes in observable behavior.
+
+== Lifetime Parametricity
+
+To end this on a more positive note, here's one pretty important internal boundary which is holding up pretty well.
+In Rust, lifetimes don't affect code generation.
+In fact, lifetimes are fully stripped from the data which is passed to codegen.
+This is pretty important: although the inferred lifetimes are opaque and hard to reason about, you can be sure that, for example, the exact location where a value is dropped is independent from the whims of the borrow checker.
+
+---
+
+Conclusion: not really? It seems that we are generally overly-optimistic about internal boundaries, and they seem to crumble under the pressure of feature requests, unless the boundary in question is physically reified (please don't take this as an endorsement of microservice architecture for compilers).
