@@ -615,7 +615,7 @@ AllVotedFor(q, b, v) ≡
 -- λ x ∈ X: y: function that maps x to y
 -- ¬: "not", negation
 --
--- f' = λ x1 ∈ X: if x1 = x then y else f(a):
+-- f' = λ x1 ∈ X: if x1 = x then y else f(x1):
 -- A tedious way to write that f' is the same function as f,
 -- except on x, where it returns y instead.
 --
@@ -824,10 +824,10 @@ Phase2a(b, v) ≡
 Phase2b(a) ≡
   ∃ m ∈ msgs:
       m.type = "2a" ∧ maxBal(a) < m.bal
-    ∧ maxBal' = λ a1 ∈ 𝔸: if a = a1 then m.bal else maxBal(a)
+    ∧ maxBal' = λ a1 ∈ 𝔸: if a = a1 then m.bal else maxBal(a1)
     ∧ lastVote' = λ a1 ∈ 𝔸: if a = a1
                               then {bal: m.bal, val: m.val}
-                              else lastVote(a)
+                              else lastVote(a1)
     ∧ Send({type: "2b", bal: m.bal, val: m.val, acc: a})
 
 Init ≡
