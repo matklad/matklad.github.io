@@ -1,0 +1,882 @@
+= Hard Mode Rust
+
+This post is a case study of writing a Rust application using only minimal, artificially constrained API (eg, no dynamic memory allocation).
+It assumes a fair bit of familiarity with the language.
+
+== Hard Mode Rust
+
+The back story here is a particular criticism of Rust and {cpp} from hard-core C programmers.
+This criticism is aimed at https://en.cppreference.com/w/cpp/language/raii[RAII] -- the language-defining feature of {cpp}, which was wholesale imported to Rust as well.
+RAII makes using various resources requiring cleanups (file descriptors, memory, locks) easy -- any place in the program can create a resource, and the cleanup code will be invoked automatically when needed.
+And herein lies the problem -- because allocating resources becomes easy, RAII encourages a sloppy attitude to resources, where they are allocated and destroyed all over the place.
+In particular, this leads to:
+
+* Decrease in reliability. Resources are usually limited in principle, but actual resource exhaustion happens rarely.
+  If resources are allocated throughout the program, there are many virtually untested codepaths.
+* Lack of predictability. It usually is impossible to predict up-front how much resources will the program consume.
+  Instead, resource-consumption is observed empirically.
+* Poor performance. Usually, it is significantly more efficient to allocate and free resources in batches.
+  Cleanup code for individual resources is scattered throughout codebase, increasing code bloat
+* Spaghetti architecture. Resource allocation is an architecturally salient thing.
+  If all resource management is centralized to a single place, it becomes significantly easier to understand lifecycle of resources.
+
+I think this is a fair criticism.
+In fact, I think this is the same criticism that {cpp} and Rust programmers aim at garbage collected languages.
+This is a spectrum:
+
+[source]
+----
+           GC object graph
+                 v v
+                  v
+        Tree of values with RAII
+                 v v
+                  v
+Static allocation of resources at startup
+----
+
+Rust programmers typically are not exposed to the lowest level of this pyramid.
+But there's a relatively compact exercise to gain the relevant experience: try re-implementing your favorite Rust programs on hard mode.
+
+**Hard Mode** means that you split your program into `std` binary and `#![no_std]` no-alloc library.
+Only the small binary is allowed to directly ask OS for resources.
+For the library, all resources must be injected.
+In particular, to do memory allocation, the library receives a slice of bytes of a fixed size, and should use that for all storage.
+Something like this:
+
+
+[source,rust]
+----
+// app/src/main.rs
+fn main() {
+  let mem_limit = 64 * 1024;
+  let memory = vec![0u8; mem_limit];
+  app::run(&mut memory)
+}
+
+// app/src/lib.rs
+#![no_std] // <- the point of the exercise
+
+pub fn run(memory: &mut [u8]) {
+  ...
+}
+----
+
+== Ray Tracing
+
+So, this is what the post is about: my experience implementing a toy hard mode ray tracer.
+You can find the code on GitHub: http://github.com/matklad/crt.
+
+The task of a ray tracer is to convert a description of a 3D scene like the following one:
+
+[source]
+----
+background #000000
+
+camera {
+    pos 0,10,-50
+    look_at 0,0,0
+    up 0,-1,0
+    focus 50
+    dim 80x60
+}
+
+light {
+    pos -20,10,0
+    color #aa1111
+}
+
+plane {
+    pos 0,-10,0
+    normal 0,1,0
+    material {
+        color #5566FF
+        diffuse 3
+    }
+}
+
+mesh {
+    material {
+        color #BB5566
+        diffuse 3
+    }
+
+    data {
+        v 5.92,4.12,0.00
+        v 5.83,4.49,0.00
+        v 5.94,4.61,0.00
+        v 6.17,4.49,0.00
+        v 6.42,4.12,0.00
+        v 5.38,4.12,2.74
+        ...
+
+        vn -0.96,-0.25,0.00
+        vn -0.96,0.25,0.00
+        vn -0.09,0.99,0.00
+        vn 0.68,0.73,0.00
+        vn 0.87,0.49,0.00
+        vn -0.89,-0.25,-0.36
+        ...
+
+        f 1/1 2/2 3/3
+        f 4/4 5/5 6/6
+        ...
+    }
+
+}
+----
+
+Into a rendered image like this:
+
+image::https://user-images.githubusercontent.com/1711539/194287665-05583649-dcb0-4014-82b9-424f945e19a4.png[]
+
+This works rather intuitive conceptually.
+First, imagine the above scene, with an infinite fuchsia colored plane and a red Utah teapot hovering above that.
+Then, imagine a camera standing at `0,10,-50` (in cartesian coordinates) and aiming at the origin.
+Now, draw an imaginary rectangular 80x60 screen at a focus distance of 50 from the camera along its line of side.
+To get a 2D picture, we shoot a ray from the camera through each "`pixel`" on the screen, note which object on the scene is hit (plan, teapot, background), and color the pixel accordingly.
+See https://pbrt.org[PBRT Book] if you feel like falling further into this particular rabbit hole (warning: it is very deep) (I apologize for "`little square pixels`" simplification I use throughout the post :-) ).
+
+I won't focus on specific algorithms to implement that (indeed, crt is a very naive tracer), but rather highlight Hard Mode Rust specific concerns.
+
+== Pixel Buffer
+
+Ultimately, the out of a ray tracer is a 2D buffer with 8bit RGB pixels.
+One would typically represent it as follows:
+
+[source,rust]
+----
+pub struct Color { r: u8, g: u8, b: u8 }
+
+pub struct Buf {
+  dim: [u32; 2]
+  // invariant: data.len() == dim.0 * dim.1
+  data: Box<[Color]>,
+}
+----
+
+For us, we want someone else (main) to allocate that box of colors for us, so instead we do the following:
+
+[source,rust]
+----
+pub struct Buf<'m> {
+  dim: [u32; 2],
+  buf: &'m mut [Color],
+}
+
+impl<'m> Buf<'m> {
+  pub fn new(dim: Idx, buf: &'m mut [Color]) -> Buf<'m> {
+    assert!(dim.0 * dim.1 == buf.len() as u32);
+    Buf { dim, buf }
+  }
+}
+----
+
+The `'m` lifetime we use for abstract memory managed elsewhere.
+Note how the struct grew an extra lifetime!
+This is extra price we have to pay for not relying on RAII to cleanup resources for us:
+
+[source,rust]
+----
+// Easy Mode
+fn paint(buf: &mut Buf) { ... }
+
+struct PaintCtx<'a> {
+  buf: &'a mut Buf
+}
+
+// Hard Mode
+fn paint(buf: &mut Buf<'_>) { ... }
+
+struct PaintCtx<'a, 'm> {
+  buf: &'a mut Buf<'m>
+}
+----
+
+Note in particular how the `Ctx` struct now has to include two lifetimes.
+This feels unnecessary: `'a` is shorter than `'m`.
+I wish it was possible to somehow abstract that away:
+
+[source,rust]
+----
+struct PaintCtx<'a> {
+  buf: &'a mut Buf<'_> // &'a mut exists<'m>: Buf<'m>
+}
+----
+
+I don't think that's really possible (https://matklad.github.io/2018/05/04/encapsulating-lifetime-of-the-field.html[earlier post about this]).
+In particular, the following would run into variance issues:
+
+[source,rust]
+----
+struct PaintCtx<'a> {
+  buf: &'a mut Buf<'a>
+}
+----
+
+Ultimately, this is annoying, but not a deal breaker.
+
+With this `rbg::Buf<'_>`, we can sketch the program:
+
+[source,rust]
+----
+// hard mode library
+#![no_std]
+pub fn render<'a>(
+  crt: &'a str,   // textual description of the scene
+  mem: &mut [u8], // all the memory we can use
+  buf: &mut rgb::Buf, // write image here
+) -> Result<(), Error<'a>> {
+  ...
+}
+
+// main
+#[derive(argh::FromArgs)]
+struct Args {
+  #[argh(option, default = "64")]  mem: usize,
+  #[argh(option, default = "800")] width: u32,
+  #[argh(option, default = "600")] height: u32,
+}
+
+fn main() -> anyhow::Result<()> {
+  let args: Args = argh::from_env();
+
+  let mut crt = String::new();
+  io::stdin()
+    .read_to_string(&mut crt)
+    .context("reading input")?;
+
+  // Allocate all the memory.
+  let mut mem = vec![0; args.mem * 1024];
+
+  // Allocate the image
+  let mut buf = vec![
+    rgb::Color::default();
+    (args.width * args.height) as usize
+  ];
+  let mut buf =
+    rgb::Buf::new([args.width, args.height], &mut buf);
+
+  render::render(
+    &crt,
+    &mut mem,
+    &mut buf,
+  )
+  .map_err(|err| anyhow::format_err!("{err}"))?;
+
+  // Write result as a PPM image format.
+  write_ppm(&buf, &mut io::stdout().lock())
+    .context("writing output")?;
+  Ok(())
+}
+
+fn write_ppm(
+  buf: &rgb::Buf,
+  w: &mut dyn io::Write,
+) -> io::Result<()> {
+  ...
+}
+----
+
+== Hard Mode Rayon
+
+Ray tracing is an embarrassingly parallel task -- the color of each output pixel can be computed independently.
+Usually, the excellent https://lib.rs/crates/rayon[rayon] library is used to take advantage of parallelism, but for our raytracer I want to show a significantly simpler API design for taking advantage of many cores.
+I've seen this design in https://github.com/sorbet/sorbet/blob/master/common/concurrency/WorkerPool.h[Sorbet], a type checker for Ruby.
+
+Here's how a `render` function with support for parallelism looks:
+
+[source,rust,highlight="1,6"]
+----
+type ThreadPool<'t> = dyn Fn(&(dyn Fn() + Sync)) + 't;
+
+pub fn render<'a>(
+  crt: &'a str,
+  mem: &mut [u8],
+  in_parallel: &ThreadPool<'_>,
+  buf: &mut rgb::Buf<'_>,
+) -> Result<(), Error<'a>> {
+----
+
+The interface here is the `in_parallel` function, which takes another function as an argument and runs it, in parallel, on all available threads.
+You typically use it like this:
+
+[source,rust]
+----
+let work: ConcurrentQueue<Work> = ConcurrentQueue::new();
+work.extend(available_work);
+in_parallel(&|| {
+  while let Some(item) = work.pop() {
+    process(item);
+  }
+})
+----
+
+This is _similar_ to a typical threadpool, but different.
+Similar to a threadpool, there's a number of threads (typically one per core) which execute arbitrary jobs.
+The first difference is that a typical threadpool sends a job to to a single thread, while in this design the same job is broadcasted to all threads.
+The job is `Fn + Sync` rather than `FnOnce + Send`.
+The second difference is that we _block_ until the job is done on all threads, so we can borrow data from the stack.
+
+It's on the caller to explicitly implement a concurrent queue to distributed specific work items.
+In my implementation, I slice the image in rows
+
+[source,rust]
+----
+type ThreadPool<'t> = dyn Fn(&(dyn Fn() + Sync)) + 't;
+
+pub fn render<'a>(
+  crt: &'a str,
+  mem: &mut [u8],
+  in_parallel: &ThreadPool<'_>,
+  buf: &mut rgb::Buf<'_>,
+) -> Result<(), Error<'a>> {
+  ...
+  // Note: this is not mut, because this is
+  // a concurrent iterator.
+  let rows = buf.partition();
+  in_parallel(&|| {
+    // next_row increments an atomic and
+    // uses the row index to give an `&mut`
+    // into the row's pixels.
+    while let Some(row) = rows.next_row() {
+      let y: u32 = row.y;
+      let buf: &mut [rgb::Color] = row.buf;
+      for x in 0..dim[0] {
+        let color = render::render_pixel(&scene, [x, y]);
+        buf[x as usize] = to_rgb(&color);
+      }
+    }
+  });
+  ...
+}
+----
+
+In `main`, we implement a concrete `ThreadPool` by spawning a thread per core:
+
+[source,rust]
+----
+fn main() -> anyhow::Result<()> {
+  ...
+  let threads = match args.jobs {
+    Some(it) => Threads::new(it),
+    None => Threads::with_max_threads()?,
+  };
+  render::render(
+    &crt,
+    &mut mem,
+    &|f| threads.in_parallel(f),
+    &mut buf,
+  )
+  .map_err(|err| anyhow::format_err!("{err}"))?;
+}
+----
+
+== Allocator
+
+The scenes we are going to render are fundamentally dynamically sized.
+They can contain arbitrary number of objects.
+So we can't just statically allocate all the memory up-front.
+Instead, there's a CLI argument which sets the amount of memory a ray tracer can use, and we should either manage with that, or return an error.
+So we do need to write our own allocator.
+But we'll try very hard to only allocate the memory we actually need, so we won't have to implement memory deallocation at all.
+So a simple bump allocator would do:
+
+[source,rust]
+----
+pub struct Mem<'m> {
+  raw: &'m mut [u8],
+}
+
+#[derive(Debug)]
+pub struct Oom;
+
+impl<'m> Mem<'m> {
+  pub fn new(raw: &'m mut [u8]) -> Mem<'m> {
+    Mem { raw }
+  }
+
+  pub fn alloc<T>(&mut self, t: T) -> Result<&'m mut T, Oom> { ... }
+
+  pub fn alloc_array<T>(
+    &mut self,
+    n: usize,
+    mut element: impl FnMut(usize) -> T,
+  ) -> Result<&'m mut [T], Oom> { ... }
+
+  pub fn alloc_array_default<T: Default>(
+    &mut self,
+    n: usize,
+  ) -> Result<&'m mut [T], Oom> {
+    self.alloc_array(n, |_| T::default())
+  }
+}
+----
+
+We can create an allocator from a slice of bytes, and then ask it to allocate values and arrays.
+Schematically, `alloc` looks like this:
+
+[source,rust]
+----
+// PSEUDOCODE, doesn't handle alignment and is broken.
+pub fn alloc<'a, T>(
+  &'a mut self,
+  val: T,
+) -> Result<&'m mut T, Oom> {
+  let size = mem::size_of::<T>();
+  if self.raw.len() < size {
+    // Return error if there isn't enough of memory.
+    return Err(Oom);
+  }
+
+  // Split off size_of::<T> bytes from the start,
+  // doing a little `mem::take` dance to placate
+  // the borrowchecker.
+  let res: &'m mut [u8] = {
+    let raw = mem::take(&mut self.raw);
+    let (res, raw) = raw.split_at_mut(size);
+    self.raw = raw;
+    res
+  }
+
+  // Initialize the value
+  let res = res as *mut [u8] as *mut u8 as *mut T;
+  unsafe {
+    ptr::write(res, val);
+    Ok(&mut *res)
+  }
+}
+----
+
+To make this fully kosher we need to handle alignment as well, but I cut that bit out for brevity.
+
+For allocating arrays, it's useful if all-zeros bitpattern is a valid default instance of type, as that allows to skip element-wise initialization.
+This condition isn't easily expressible in today's Rust though, so we require initializing every array member.
+
+The result of an allocation is `&'m T` -- this is how we spell `Box<T>` on hard mode.
+
+== Parsing
+
+The scene contains various objects, like spheres and planes:
+
+[source,rust]
+----
+pub struct Sphere {
+  pub center: v64, // v64 is [f64; 3]
+  pub radius: f64,
+}
+
+pub struct Plane {
+  pub origin: v64,
+  pub normal: v64,
+}
+----
+
+Usually, we'd represent a scene as
+
+[source,rust]
+----
+pub struct Scene {
+  pub camera: Camera,
+  pub spheres: Vec<Sphere>,
+  pub planes: Vec<Plane>,
+}
+----
+
+We _could_ implement a resizable array (`Vec`), but doing that would require us to either leak memory, or to implement proper deallocation logic in our allocator, and add destructors to reliably trigger that.
+But destructors is exactly something we are trying to avoid in this exercise.
+So our scene will have to look like this instead:
+
+[source,rust]
+----
+pub struct Scene<'m> {
+  pub camera: Camera,
+  pub spheres: &'m mut [Sphere],
+  pub planes: &'m mut [Plane],
+}
+----
+
+And that means we want to know the number of objects we'll need upfront.
+The way we solve this problem is by doing two-pass parsing.
+In the first pass, we just count things, then we allocate them, then we actually parse them into allocated space.
+
+[source,rust]
+----
+pub(crate) fn parse<'m, 'i>(
+  mem: &mut Mem<'m>,
+  input: &'i str,
+) -> Result<Scene<'m>, Error<'i>> {
+  // Size the allocations.
+  let mut n_spheres = 0;
+  let mut n_planes = 0;
+  for word in input.split_ascii_whitespace() {
+    match word {
+      "sphere" => n_spheres += 1,
+      "plane" => n_planes += 1,
+      _ => (),
+    }
+  }
+
+  // Allocate.
+  let mut res = Scene {
+    camera: Default::default(),
+    spheres: mem.alloc_array_default(n_spheres)?
+    planes: mem.alloc_array_default(n_planes)?,
+  };
+
+  // Parse _into_ the allocated scene.
+  let mut p = Parser::new(mem, input);
+  scene(&mut p, &mut res)?;
+  Ok(res)
+}
+----
+
+If an error is encountered during parsing, we want to create a helpful error message.
+If the message is fully dynamic, we'd have to allocate it _into_ `'m`, but it seems simpler to just re-use bits of input for error message.
+Hence, `Error<'i>` is tied to the input lifetime `'i`, rather memory lifetime `'m`.
+
+== Nested Objects
+
+One interesting type of object on the scene is a mesh of triangles (for example, the teapot is just a bunch of triangles).
+A naive way to represent a bunch of triangles is to use a vector:
+
+[source,rust]
+----
+pub struct Triangle {
+  pub a: v64,
+  pub b: v64,
+  pub c: v64,
+}
+
+type Mesh = Vec<Triangle>;
+----
+
+This is wasteful: in a mesh, each edge is shared by two triangles.
+So a single vertex belongs to a bunch of triangles.
+If we store a vector of triangles, we are needlessly duplicating vertex data.
+A more compact representation is to store unique vertexes once, and to use indexes for sharing:
+
+[source,rust]
+----
+pub struct Mesh {
+  pub vertexes: Vec<v64>,
+  pub faces: Vec<MeshFace>,
+}
+// Indexes point into vertexes vector.
+pub struct MeshFace { a: u32, b: u32, c: u32 }
+----
+
+Again, on hard mode that would be
+
+[source,rust]
+----
+pub struct Mesh<'m> {
+  pub vertexes: &'m mut [v64],
+  pub faces: &'m mut [MeshFace],
+}
+----
+
+And a scene contains a bunch of meshes :
+
+[source,rust]
+----
+pub struct Scene<'m> {
+  pub camera: Camera,
+  pub spheres: &'m mut [Sphere],
+  pub planes: &'m mut [Plane],
+  pub meshes: &'m mut [Mesh<'m>],
+}
+----
+
+Note how, if the structure is recursive, we have "`owned pointers`" of `&'m mut T<'m>` shape.
+Originally I worried that that would cause problem with variance, but it seems to work fine for ownership specifically.
+During processing, you still need `&'a mut T<'m>` though.
+
+And that's why parsing functions hold an uncomfortable bunch of lifetimes:
+
+[source,rust]
+----
+fn mesh<'m, 'i>(
+  p: &mut Parser<'m, 'i, '_>,
+  res: &mut Mesh<'m>,
+) -> Result<(), Error<'i>> { ... }
+----
+
+The parser `p` holds `&'i str` input and a `&'a mut Mem<'m>` memory.
+It parses input _into_ a `&'b mut Mesh<'m>`.
+
+== Bounding Volume Hierarchy
+
+With `Scene<'m>` fully parsed, we can finally get to rendering the picture.
+A naive way to do this would be to iterate through each pixel, shooting a ray through it, and then do a nested iterations over every shape, looking for the closest intersection.
+That's going to be slow!
+The teapot model contains about 1k triangles, and we have 640*480 pixels, which gives us 307_200_000 ray-triangle intersection tests, which is quite slow even with multithreading.
+
+So we are going to speed this up.
+The idea is simple -- just don't intersect a ray with each triangle.
+It is possible to quickly discard batches of triangles.
+If we have a  batch of triangles, we can draw a 3D box around them as a pre-processing step.
+Now if the ray doesn't intersect the bounding box, we know that it can't intersect any of the triangles.
+So we can use one test with a bounding box instead of many tests for each triangle.
+
+This is of course one-sided -- if the ray intersects the box, it might still miss all of the triangles.
+But, if we place bounding boxes smartly (small boxes which cover many adjacent triangles), we can hope to skip a lot of work.
+
+We won't go for really smart ways of doing that, and instead will use a simple divide-and-conquer scheme.
+Specifically, we'll draw a large box around all triangles we have.
+Then, we'll note which dimension of the resulting box is the longest.
+If, for example, the box is very tall, we'll cut it in half horizontally, such that each half contains half of the triangles.
+Then, we'll recursively subdivide the two halves.
+
+In the end, we get a binary tree, where each node contains a bounding box and two children, whose bounding boxes are contained in the parent's bounding box.
+Leaves contains triangles.
+This construction is called a bounding volume hierarchy, bvh.
+
+To intersect the ray with bvh, we use a recursive procedure.
+Starting at the root node, we descend into children whose bounding boxes are intersected by the ray.
+Sometimes we'll have to descent into both children, but often enough at least one child's bounding box won't touch the ray, allowing us to completely skip the subtree.
+
+On easy mode Rust, we can code it like this:
+
+[source,rust]
+----
+struct BoundingBox {
+  // Opposite corners of the box.
+  lo: v64, hi: v64,
+}
+
+struct Bvh {
+  root: BvhNode
+}
+
+enum BvhNode {
+  Split {
+    bb: BoundingBox,
+    children: [Box<BvhNode>; 2],
+    /// Which of X,Y,Z dimensions was used
+    // to cut the bb in two.
+    axis: u8,
+  }
+  Leaf {
+    bb: BoundingBox,
+    /// Index of the triangle in a mesh.
+    triangle: u32,
+  }
+}
+----
+
+On hard mode, we don't really love all those separate boxes, we love arrays!
+So what we'd rather have is
+
+[source,rust]
+----
+pub struct Bvh<'m> {
+  splits: &'m mut [BvhSplit],
+  leaves: &'m mut [BvhLeaf],
+}
+
+struct BvhSplit {
+  /// Index into either splits or leaves.
+  /// The `tag` is in the highest bit.
+  children: [u32; 2],
+  bb: BoundingBox,
+  axis: u8,
+}
+
+struct BvhLeaf {
+  face: u32,
+  bb: BoundingBox,
+}
+----
+
+So we want to write the following function which recursively constructs a bvh for a mesh:
+
+[source,rust]
+----
+pub fn build(
+  mem: &mut Mem<'m>,
+  mesh: &Mesh<'m>,
+) -> Result<Bvh<'m>, Oom> { ... }
+----
+
+The problem is, unlike the parser, we can't cheaply determine the number of leaves and splits without actually building the whole tree.
+
+== Scratch Space
+
+So what we are going to do here is to allocate a pointer-tree structure into some scratch space, and then copy that into an `&'m mut` array.
+How do we find the scratch space?
+Our memory is `&'m [u8]`.
+We allocate stuff from the start of the region.
+So we can split of some amount of scratch space from the end:
+
+[source,rust]
+----
+&'m mut [u8] -> (&'m mut [u8], &'s mut [u8])
+----
+
+Stuff we allocate into the first half is allocated "permanently".
+Stuff we allocate into the second half is allocated temporarily.
+When we drop temp buffer, we can reclaim all that space.
+
+This... probably is the most sketchy part of the whole endeavor.
+It is `unsafe`, requires lifetimes casing, and I actually can't get it past miri.
+But it should be fine, right?
+
+So, I have the following thing API:
+
+[source,rust]
+----
+impl Mem<'m> {
+  pub fn with_scratch<T>(
+    &mut self,
+    size: usize,
+    f: impl FnOnce(&mut Mem<'m>, &mut Mem<'_>) -> T,
+  ) -> T { ... }
+}
+----
+
+It can be used like this:
+
+[source,rust]
+----
+#[test]
+fn test_scratch() {
+  let mut buf = [0u8; 4];
+  let mut mem = Mem::new(&mut buf);
+
+  let x = mem.alloc(0u8).unwrap();
+  let y = mem.with_scratch(2, |mem, scratch| {
+    // Here, we can allocate _permanent_ stuff from `mem`,
+    // and temporary stuff from `scratch`.
+    // Only permanent stuff can escape.
+
+    let y = mem.alloc(1u8).unwrap();
+    let z = scratch.alloc(2u8).unwrap();
+    assert_eq!((*x, *y, *z), (0, 1, 2));
+
+    // The rest of memory is occupied by scratch.
+    assert!(mem.alloc(0u8).is_err());
+
+    y // Returning z here fails.
+  });
+
+  // The scratch memory is now reclaimed.
+  let z = mem.alloc(3u8).unwrap();
+  assert_eq!((*x, *y, *z), (0, 1, 3));
+  assert_eq!(buf, [0, 1, 3, 0]);
+  // Will fail to compile.
+  // assert_eq!(*x, 0);
+}
+----
+
+And here's how `with_scratch` implemented:
+
+[source,rust]
+----
+pub fn with_scratch<T>(
+  &mut self,
+  size: usize,
+  f: impl FnOnce(&mut Mem<'m>, &mut Mem<'_>) -> T,
+) -> T {
+  let raw = mem::take(&mut self.raw);
+
+  // Split off scratch space.
+  let mid = raw.len() - size;
+  let (mem, scratch) = raw.split_at_mut(mid);
+
+  self.raw = mem;
+  let res = f(self, &mut Mem::new(scratch));
+
+  let data = self.raw.as_mut_ptr();
+  // Glue the scratch space back in.
+  let len = self.raw.len() + size;
+  // This makes miri unhappy, any suggestions? :(
+  self.raw = unsafe { slice::from_raw_parts_mut(data, len) };
+  res
+}
+----
+
+With this infrastructure in place, we can finally implement bvh construction!
+We'll do it in three steps:
+
+. Split of half the memory into a scratch space.
+. Build a dynamically-sized tree in that space, counting leaves and interior nodes.
+. Allocate arrays of the right size in the permanent space, and copy data over once.
+
+[source,rust]
+----
+pub struct Bvh<'m> {
+  splits: &'m mut [BvhSplit],
+  leaves: &'m mut [BvhLeaf],
+}
+
+struct BvhSplit {
+  children: [u32; 2],
+  bb: BoundingBox,
+  axis: u8,
+}
+
+struct BvhLeaf {
+  face: u32,
+  bb: BoundingBox,
+}
+
+// Temporary tree we store in the scratch space.
+enum Node<'s> {
+  Split {
+    children: [&'s mut Node<'s>; 2],
+    bb: BoundingBox,
+    axis: u8
+  },
+  Leaf { face: u32, bb: BoundingBox },
+}
+
+pub fn build(
+  mem: &mut Mem<'m>,
+  mesh: &Mesh<'m>,
+) -> Result<Bvh<'m>, Oom> {
+  let free_mem = mem.free();
+  mem.with_scratch(free_mem / 2, |mem, scratch| {
+    let (node, n_splits, n_leaves) =
+      build_scratch(scratch, mesh);
+
+    let mut res = Bvh {
+      splits: mem.alloc_array_default(n_splits as usize)?,
+      leaves: mem.alloc_array_default(n_leaves as usize)?,
+    };
+    copy(&mut res, &node);
+
+    Ok(res)
+  })
+}
+
+fn build_scratch<'s>(
+  mem: &mut Mem<'s>,
+  mesh: &Mesh<'_>,
+) -> Result<(&'s mut Node<'s>, usize, usize), Oom> {
+  ...
+}
+
+fn copy<'m, 's>(res: &mut Bvh<'m>, node: &Node<'s>) {
+  ...
+}
+----
+
+And that's it!
+The thing actually works, miri complaints notwithstanding!
+
+== Conclusions
+
+Actually, I am impressed.
+I was certain that this won't actually work out, and that I'd have to write copious amount of unsafe to get the runtime behavior I want.
+Specifically, I believed that `&'m mut T<'m>` variance issue would force my hand to add `'m`, `'mm`, `'mmm` and further lifetimes, but that didn't happen.
+For "`owning`" pointers, `&'m mut T<'m'>` turned out to work fine!
+It's only when processing you might need extra lifetimes.
+`Parser<'m, 'i, 'a>` is at least two lifetimes more than I am completely comfortable with, but I guess I can live with that.
+
+I wonder how far this style of programming can be pushed.
+Aesthetically, I quite like that I can tell precisely how much memory the program would use!
+
+Code for the post: http://github.com/matklad/crt.
+
+Discussion on https://old.reddit.com/r/rust/comments/xx7xci/blog_post_hard_mode_rust/[/r/rust].
