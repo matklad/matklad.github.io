@@ -216,7 +216,7 @@ struct PaintCtx<'a> {
 
 Ultimately, this is annoying, but not a deal breaker.
 
-With this `rbg::Buf<'_>`, we can sketch the program:
+With this `rgb::Buf<'_>`, we can sketch the program:
 
 [source,rust]
 ----
@@ -634,7 +634,7 @@ This construction is called a bounding volume hierarchy, bvh.
 
 To intersect the ray with bvh, we use a recursive procedure.
 Starting at the root node, we descend into children whose bounding boxes are intersected by the ray.
-Sometimes we'll have to descent into both children, but often enough at least one child's bounding box won't touch the ray, allowing us to completely skip the subtree.
+Sometimes we'll have to descend into both children, but often enough at least one child's bounding box won't touch the ray, allowing us to completely skip the subtree.
 
 On easy mode Rust, we can code it like this:
 
