@@ -1,5 +1,7 @@
-# rm ./vendor -rf && nix-shell --run 'bundle install'
-# nix-shell --run 'bundle exec jekyll serve --livereload'
 with import <nixpkgs> {}; mkShell {
-  packages = [ ruby ];
+  packages = [ 
+    (writeShellScriptBin "serve" "bundle exec jekyll serve --livereload")
+    (writeShellScriptBin "install" "rm ./vendor -rf && bundle install")
+    ruby libffi pkg-config
+  ];
 }
