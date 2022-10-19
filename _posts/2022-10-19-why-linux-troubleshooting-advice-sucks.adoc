@@ -1,0 +1,52 @@
+= Why Linux Troubleshooting Advice Sucks
+
+A short post on how to create better troubleshooting documentation, prompted by me spending last evening trying to get builtin display of my laptop working with Linux.
+
+What finally fixed the blank screen for me was this advice from NixOS wiki:
+
+.12th Gen (Alder Lake)
+****
+X Server may fail to start with the newer 12th generation, Alder Lake, iRISxe integrated graphics chips.
+If this is the case, you can give the kernel a hint as to what driver to use.
+First confirm the graphic chip's device ID by running in a terminal:
+
+[source]
+----
+$ nix-shell -p pciutils --run "lspci | grep VGA"
+00:02.0 VGA compatible controller: Intel Corporation Device 46a6 (rev 0c)
+----
+
+In this example, "46a6" is the device ID. You can then add this to your configuration and reboot:
+
+[source]
+----
+boot.kernelParams = [ "i915.force_probe=46a6" ];
+----
+****
+
+While this particular approach worked, in contrast to a dozen different ones I tried before, I think it shares a very common flaw, which is endemic to troubleshooting documentation.
+Can you spot it?
+
+The advice tells you the remedy ("`add this kernel parameter`"), but it doesn't explain how to verify that this indeed is the problem.
+That is, if the potential problem is a not loaded kernel driver, it would really help me to know how to check which kernel driver is in use, so that I can do both:
+
+* _Before_ adding the parameter, check that `46a6` doesn't have a driver
+* _After_ the fix, verify that `i915` is indeed use.
+
+If a "`fix`" doesn't come with a linked "`diagnostic`", a very common outcome is:
+
+. Apply some random fix from the Internet
+. Observe that the final problem (blank screen) isn't fixed
+. Wonder which of the two is the case:
+  * the fix is not relevant for the problem,
+  * the fix is relevant, but is applied wrong.
+
+So, call to action: if you are writing any kind of documentation, before explaining how to _fix_ the problem, teach the user how to _diagnose_ it.
+
+When helping with `git`, start with explaining `git log` and `git status`, not with `git reset` or `git reflog`.
+
+---
+
+While the post might come as just a tiny bit angry, I want to explicitly mention that I am eternally grateful to all the people who write _any_ kind of docs for using Linux on desktop.
+I've been running it for more than 10 years at this point, and I am still completely clueless as to how debug issues from the first principles.
+If not for all of the wikis, stackoverflows and random forum posts out there, I wouldn't be able to use the OS, so thank you all!
