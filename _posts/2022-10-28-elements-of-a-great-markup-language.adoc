@@ -1,0 +1,347 @@
+= Elements Of a Great Markup Language
+
+This post contains some inconclusive musing on lightweight markup languages (Markdown, AsciiDoc, LaTeX, reStructuredText, etc).
+The overall mood is that I don't think a genuinely great markup languages exists.
+I wish it did though.
+As an appropriate disclosure, this text is written in AsciiDoctor.
+
+== Document Model
+
+This I think is the big one.
+Very often, a particular markup language is married to a particular output format, either syntactically (markdown supports HTML syntax), or by the processor just not making a crisp enough distinction between the input document and the output (AsciiDoctor).
+
+Roughly, if the markup language is for emitting HTML, or PDF, or DocBook XML, that's bad.
+A good markup language describes an abstract hierarchical structure of the document, and lets a separate program to adapt that structure to the desired output.
+
+More or less, what I want from markup is to convert a text string into a document tree:
+
+[source,rust]
+----
+enum Element {
+  Text(String),
+  Node {
+    tag: String,
+    attributes: Map<String, String>
+    children: Vec<Element>,
+  }
+}
+
+fn parse_markup(input: &str) -> Element { ... }
+----
+
+Markup language which nails this perfectly is HTML.
+It directly expresses this tree structure.
+Various viewers for HTML can then render the document in a particular fashion.
+HTML's syntax itself doesn't really care about tag names and semantics: you can imagine authoring HTML documents using an alternative set of tag names.
+
+Markup language which completely falls over this is Markdown.
+There's no way to express generic tree structure, conversion to HTML with specific browser tags is hard-coded.
+
+Language which does this half-good is AsciiDoctor.
+
+In AsciiDoctor, it is possible to express genuine nesting.
+Here's a bunch of nested blocks with some inline content and attributes:
+
+[source,AsciiDoc]
+----
+
+====
+Here are your options:
+
+.Red Pill
+[%collapsible]
+======
+Escape into the real world.
+======
+
+.Blue Pill
+[%collapsible]
+======
+Live within the simulated reality without want or fear.
+======
+
+====
+----
+
+The problem with AsciiDoctor is that generic blocks come of as a bit of implementation detail, not as a foundation.
+It is difficult to untangle presentation-specific semantics of particular blocks (examples, admonitions, etc) from the generic document structure.
+As a fun consequence, a semantic-neutral block (equivalent of a `</div>`) is the only kind of block which can't actually nest in AsciiDoctor, due to syntactic ambiguity.
+
+[NOTE]
+====
+Great markup format unambiguously interprets an input string as an abstract tree model of a document.
+It doesn't ascribe semantics to particular tag names or attributes.
+====
+
+== Concrete Syntax
+
+Syntax matters.
+For lightweight text markup languages, syntax is of utmost importance.
+
+The only right way to spell a list is
+
+[source]
+----
+- Foo
+- Bar
+- Baz
+----
+
+Not
+
+[source,html]
+----
+<ul>
+    <li>Foo</li>
+    <li>Bar</li>
+    <li>Baz</li>
+</ul>
+----
+
+And most definitely not
+
+[source,LaTeX]
+----
+\begin{itemize}
+    \item foo
+    \item Bar
+    \item Baz
+\end{itemize}
+----
+
+Similarly, you lose if you spell links like this:
+
+[source]
+----
+`My Blog <https://matklad.github.io>`_
+----
+
+Markdown is the trailblazer here, it picked a lot of great concrete syntaxes.
+Though, some choices are questionable, like trailing double space rule, or the syntax for including images.
+
+AsciiDoctor is the treasure trove of tasteful syntactic decisions.
+
+=== Inline Formatting
+
+For example ``++*bold*++`` is *bold*, ``++_italics_++`` is _italics_, and repeating the emphasis symbol twice (`++__like *this*__++`) allows for __unambiguous **nesting**__.
+
+=== Links
+
+URls are spelled like this
+
+[source]
+----
+https://matklad.github.io[My Blog]
+----
+
+And images like this:
+
+[source]
+----
+image:/media/logo.png[width=640,height=480]
+----
+
+This is a generic syntax:
+
+[source]
+----
+tag : argument [attributes]
+----
+
+For example `http://example.com[]` gets parsed as `<http>//example.com</http>`, and the converter knows basic url schemes.
+And of course there's a generic link syntax for corner cases where a URL syntax isn't a valid AsciiDoctor syntax:
+
+[source,asciidoctor]
+----
+link:downloads/report.pdf[Get Report]
+----
+
+(`image:` produces an inline element, while `image::` emits a block. Again, this _isn't_ hard-coded to images, it is a generic syntax for `whatever::`).
+
+=== Lists
+
+Another tasteful decision are numbered lists, which use `.` to avoid tedious renumbering:
+
+++++
+<style>
+.two-col > .content { display: flex; flex-direction: row; }
+.two-col > .content > *:first-child { flex: 30%; }
+.two-col > .content > *:last-child { flex: 30%; }
+</style>
+++++
+
+[.two-col]
+--
+[source]
+----
+[lowerroman]
+. One
+. Two
+. Three
+----
+
+[lowerroman]
+. One
+. Two
+. Three
+--
+
+=== Tables
+
+And AsciiDoctor also has a reasonable-ish syntax for tables, with one-line per cell and a blank like to delimit rows.
+
+[.two-col]
+--
+[source]
+----
+[cols="1,1"]
+|===
+|First
+|Row
+
+|X
+|Y
+
+|Last
+|Row
+|===
+----
+
+[cols="1,1"]
+|===
+|First
+|Row
+
+|X
+|Y
+
+|Last
+|Row
+|===
+--
+
+---
+
+[NOTE]
+====
+Great markup format contains a tasteful selection of syntactic forms to express common patterns:
+lists, admonitions, links, footnotes, cross-references, quotes, tables, images.
+
+The syntax is fundamentally sugary, and expands to the standard tree-of-nodes-with-attributes.
+====
+
+== Composable Processing
+
+To convert our nice, sweet syntax to general tree and than into the final output, we need some kind of a tool.
+One way to do that is by direct translation from our source document to, eg, html.
+
+Such one-step translation is convenient for all-inclusive tools, but is a barrier for extensibility.
+Amusingly, AsciiDoctor is both a positive and a negative example here.
+
+On the negative side of things, classical AsciiDoctor is an extensible Ruby processor.
+To extend it, you essentially write a "`compiler plugin`" -- a bit of Ruby code which gets hook into the main processor and gets invoked as a callback when certain "`tags`" are parsed.
+This plugin interacts with the Ruby API of the processor itself, and is tied to a particular toolchain.
+
+In contrast, asciidoctor-web, a newer thing (which non-the-less uses the same Ruby core), approaches the task a bit differently.
+There's no API to extend the processor itself.
+Rather, the processor produces an abstract document tree, and then a user-supplied JavaScript function can convert that __piece of data__ into whatever html it needs, by following a lightweight visitor pattern.
+I think this is the key to a rich ecosystem:  strictly separate converting input text to an abstract document model from rendering the model through some template.
+The two parts could be done by two separate processes which exchange serialized data.
+It's even possible to imagine some canonical JSON encoding of the parsed document.
+
+There's one more behavior where all-inclusive approach of AsciiDoctor gets in a way of doing the right thing.
+AsciiDoctor supports includes, and they are textual, preprocessor includes, meaning that syntax of the included file affects what follows afterwards.
+A much cleaner solution would have been to keep includes in the document tree as distinct nodes (with the path to the included file as an attribute), and let it to the output layer to interpret those as either verbatim text, or subdocuments.
+
+Another aspect of composability is that the parsing part of the processing should have, at minimum, a lightweight, embeddable implementation.
+Ideally, of course, there's a spec and an array of implementations to choose from.
+
+Markdown fairs fairly well here: there never was a shortage of implementations, and today we even have a bunch of different specs!
+
+AsciiDoctor...
+Well, I am amazed.
+The original implementation of AsciiDoc was in Python.
+AsciiDoctor, the current tool, is in Ruby.
+Neither is too embeddable.
+_But!_ AsciiDoctor folks are crazy, they compiled Ruby to JavaScript (and Java), and so the toolchain is available on JVM and Node.
+At least for Node, I can confidently say that that's a real production-ready thing which is quite convenient to use!
+Still, I'd prefer a Rust library or a small WebAssembly blob instead.
+
+A different aspect of composability is extensibility.
+In Markdown land, the usual answer for when Markdown doesn't quite do everything needed (i.e., in 90% of cases), the answer is to extend _concrete syntax_.
+This is quite unfortunate, changing syntax is _hard_.
+A much better avenue I think is to take advantage of the generic tree structure, and extend the _output_ layer instead.
+Tree-with-attributes should be enough to express whatever structure is needed, and than its up to the converter to pattern-match this structure and emit its special thing.
+
+Do you remember the fancy two-column rendering above with source-code on the left, and rendered document on the right?
+This is how I've done it:
+
+[source]
+------
+[.two-col]
+--
+```
+[lowerroman]
+. One
+. Two
+. Three
+```
+
+[lowerroman]
+. One
+. Two
+. Three
+--
+------
+
+That is, a generic block, with `.two-col` attribute and two children -- a listing block and a list.
+Then there's a separate css which assigns an appropriate `flexbox` layout for `.two-col` elements.
+There's no need for special "`two column layout`" extension.
+It would be perhaps _nice_ to have a dedicated syntax here, but just re-using generic `--` block is quite ok!
+
+[NOTE]
+====
+Great markup language defines the semantics of converting text to a document tree, and provides a lightweight library to do the parsing.
+
+Converting an abstract document tree to a specific output type is left to a thriving ecosystem of converters.
+A particularly powerful form of converter allows calling user-supplied functions on document elements.
+Combined with a generic syntax for nodes and attributes, this provides extensibility which is:
+
+* Easy to use (there's no new syntax to learn, only new attributes)
+* Easy to implement (no need to depend on internal API of particular converter, extension is a pure function from data to data)
+* Powerful (everything can be expressed as a tree of nodes with attributes)
+====
+
+== Where Do We Stand Now?
+
+Note quite there, I would think!
+AsciiDoctor at least half-ticks quite a few of the checkboxes, but it is still not perfect.
+
+There is a specification in progress, I have high hopes that it'll spur alternative implementations (and most of AsciiDoctor problems are implementation issues).
+At the same time, I am not overly-optimistic.
+The overriding goal for AsciiDoctor is compatibility, and rightfully so.
+There's a lot of content already written, and I would hate to migrate this blog, for example :)
+
+At the same time, there are quite a few rough edges in AsciiDoctor:
+
+* includes
+* non-nestable generic blocks
+* many ways to do certain things (AsciiDoctor essentially supports the union of Markdown and AsciiDoc concrete syntaxes)
+* lack of some concrete sugar (reference-style links are notably better in Markdown)
+
+It feels like there's a smaller, simpler language somewhere (no, I will not link that xkcd for once (though `xkcd:927[]` would be a nice use of AsciiDoctor extensibility))
+
+On the positive side of things, it seems that in the recent years we built a lot of infrastructure to make these kinds of projects more feasible.
+
+_Rust_ is just about the perfect language to take a `String` from a user and parse it into some sort of a tree, while packaging the whole thing into a self-contained zero-dependency, highly
+embeddable, reliable, and reusable library.
+
+_WebAssembly_ greatly extends reusability of low-level libraries: between a static library with a `C` ABI, and a `.wasm` module, you got all important platforms covered.
+
+True extensibility _fundamentally_ requires taking code as input data.
+A converter from a great markup language to HTML should accept some user-written script file as an argument, to do fine tweaking of the conversion process.
+WebAssembly can be a part of the solution, it is a toolchain-neutral way of expressing computation.
+But we have something even more appropriate.
+_Deno_ with its friendly scripting language with nice template literals and a capabilities based security model, is just about the perfect runtime to implement a static site generator which takes a bunch of input documents, a custom conversion script, and outputs a bunch of HTML files.
+
+If I didn't have anything else to do, I'd certainly be writing my own lightweight markup language today!
