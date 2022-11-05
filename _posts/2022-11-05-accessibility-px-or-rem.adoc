@@ -1,0 +1,137 @@
+= Accessibility: px or rem?
+
+The genre of this post is: "`I am having opinions on something I am not an expert at, so hopefully the Internet would correct me`".
+
+The specific question in question is:
+
+> Should you use `px` or `rem` units in your CSS?
+
+I am not a web developer, but I do have a blog where I write CSS myself, and I very much want to do the right thing.
+I was researching and agonizing over this question for years, as I wasn't able to find a conclusive argument one way or another.
+So I am writing one.
+
+This isn't ideal, but I am lazy, so this post assumes that you already did the research and understand the mechanics of and the difference between `px`, `em`, and `rem`.
+And so, you position is probably:
+
+> Of course `rem`, because that honors user's setting for the font-size, and so is more accessible, although ...
+
+Although there are buts:
+
+_But_ the default font-size is `16px`, and that's just too small.
+If you just roll with intended defaults, than the text will be painful to read even for folks with great vision!
+
+_But_ default font-size of `x` pixels just doesn't make sense: the actual perceived font size very much depends on the font itself.
+At `16px`, some fonts will be small, some tiny, and some maybe even just about right.
+
+_But_ the recommended way to _actually_ use rem boils down to setting a percentage font-size for the root element, such that `1rem` is not the intended "`font size of the root element`", but is equal to 1px (under default settings).
+Which, at this point, sounds like using pixels, just with more steps?
+After all, the modern browsers can zoom the pixels just fine?
+
+So, yeah, lingering doubts...
+If you are like me, you painstakingly used ``rem``'s everywhere, and then ``html { font-size: 22px }`` because default is unusable, and percentage of default is stupidly ugly :-)
+
+---
+
+So lets settle the question then.
+
+The practical data we want is what do the users actually do in practice?
+Do they zoom or do they change default font size?
+I have spent 10 minutes googling that, didn't find the answer.
+
+After that, I decided to just check how it actually works.
+So, I opened browser's settings, cranked the font size to the max, and opened Google.
+
+To be honest, that was the moment where the question was mentally settled for me.
+If Google's search page doesn't respect user-agent's default font-size, it's an indirect, but also very strong, evidence that that's not a meaningful thing to do.
+
+The result of my ad-hoc survey:
+
+++++
+<style>
+.two-col > .content { display: flex; flex-direction: row; }
+.two-col > .content > *:first-child { flex: 30%; }
+.two-col > .content > *:last-child { flex: 30%; }
+</style>
+++++
+
+[.two-col]
+--
+.Don't care
+- Google
+- Lobsters
+- Hackernews
+- Substack
+- antirez.com
+- tonsky.me
+- New Reddit
+
+.Embiggen
+- Wikipedia
+- Discourse
+- Old Reddit
+--
+
+Google versus Wikipedia it is, eh?
+But this is actually quite informative: if you adjust your browser's default font-size, you are in an "`Alice in the Wonderland`" version of the web which alternates between too large and too small.
+
+The next useful question is: what about mobile?
+After some testing and googling, it seems that changing browser's default font-size is just not possible on the iPhone?
+That the only option is page zoom?
+
+Again, I don't actually have the data on whether users rely on zoom or on font size.
+But so far it looks like the user doesn't really have a choice?
+Only zoom seems to actually work in practice?
+
+The final bit of evidence which completely settled the question in my mind comes from this post:
+
+https://www.craigabbott.co.uk/blog/accessibility-and-font-sizes
+
+It tells us that
+
+> Using the wrong units of measurement in your Cascading Style Sheets (CSS) is a
+big barrier for many visually impaired users, and it can cause your website fail
+the Web Content Accessibility Guidelines (WCAG) 2.1 on
+https://www.w3.org/WAI/WCAG21/Understanding/resize-text.html[1.4.4 Resize text].
+
+That WCAG document is really worth the read:
+
+> The scaling of content is primarily a user agent responsibility. User agents
+that satisfy UAAG 1.0 Checkpoint 4.1 allow users to configure text scale. The
+author's responsibility is to create Web content that does not prevent the
+user agent from scaling the content effectively. Authors may satisfy this
+Success Criterion by verifying that content does not interfere with user agent
+support for resizing text, including text-based controls, or by providing direct
+support for resizing text or changing the layout. An example of direct support
+might be via server-side script that can be used to assign different style
+sheets.
+>
+> **The author cannot rely on the user agent to satisfy this Success Criterion
+for HTML content if users do not have access to a user agent with zoom support.
+For example, if they work in an environment that requires them to use IE 6.**
+>
+> If the author is using a technology whose user agents do not provide zoom
+support, the author is responsible to provide this type of functionality
+directly or to provide content that works with the type of functionality
+provided by the user agent. If the user agent doesn't provide zoom functionality
+but does let the user change the text size, the author is responsible for
+ensuring that the content remains usable when the text is resized.
+
+My reading of the above text: it's on me, as an author, to ensure that my readers can scale the content using whatever method their user agent employs.
+If the UA can zoom, that's prefect, we are done.
+
+If the reader's actual UA can't zoom, but it can change default font size (eg, IE 6), then I need to support that.
+
+That's ... most reasonable I guess?
+Just make sure that the you actual users, in their actual use, can read stuff.
+And I am pretty sure my target audience doesn't use IE 6, which I don't support anyway.
+
+**TL;DR** for the whole post:
+
+Use pixels.
+The goal is not to check the "`I suffered pain to make my website accessible`" checkbox, the goal is to make the site accessible to real users.
+There's an explicit guideline about that.
+There's a strong evidence that, barring highly unusual circumstances, real users zoom, and pixels zoom just fine.
+
+---
+
+As a nice bonus, if you __don't__ use rem, you make browser's font size setting more useful, because it can control the scale of the browser's own chrome (which is fixed) independently from the scale of websites (which vary).
