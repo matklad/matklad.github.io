@@ -10,11 +10,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - uses: actions/setup-ruby@v1
+    - uses: denoland/setup-deno@v1
       with:
-        ruby-version: '2.7'
+        deno-version: v1.x
 
-    - run: bundle install && bundle exec jekyll build
+    - run: sudo apt install lua5.3
+    - run: ./main.ts build
 
     - name: Deploy
       uses: peaceiris/actions-gh-pages@364c31d33bb99327c77b3a5438a83a357a6729ad # v3.4.0
