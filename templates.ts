@@ -142,7 +142,7 @@ export const feed = (posts: Post[]): HtmlString => {
 <feed xmlns="http://www.w3.org/2005/Atom">
 <link href="${site_url}/feed.xml" rel="self" type="application/atom+xml"/>
 <link href="${site_url}" rel="alternate" type="text/html"/>
-<updated>${new Date().toUTCString()}</updated>
+<updated>${new Date().toISOString()}</updated>
 <id>${site_url}/feed.xml</id>
 <title type="html">matklad</title>
 <subtitle>Yet another programming blog by Alex Kladov aka matklad.</subtitle>
