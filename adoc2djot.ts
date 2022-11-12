@@ -2,12 +2,8 @@
 
 /*
 TODO:
-- tables (pipes, style)
-- youtube video
-- "`quotes`"
 - footnotes (unsafe is a human-assited type system)
 - stripes in highligted lines
-- `++`
 */
 
 const path = Deno.args[0];
