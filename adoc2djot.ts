@@ -7,7 +7,6 @@ TODO:
 - "`quotes`"
 - footnotes (unsafe is a human-assited type system)
 - stripes in highligted lines
-- emdashes (`\w -- \w`)
 - `++`
 */
 

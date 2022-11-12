@@ -17,7 +17,7 @@ where
 }
 ```
 
-This function applies a `+T -> T+` function to a `&mut T` value, a-la [`take_mut`](https://crates.io/crates/take_mut) crate.
+This function applies a `T -> T` function to a `&mut T` value, a-la [`take_mut`](https://crates.io/crates/take_mut) crate.
 
 There is a safe way to do this in Rust, by temporary replacing the value with something useless ([Jones's trick](http://giphygifs.s3.amazonaws.com/media/MS0fQBmGGMaRy/giphy.gif)):
 
@@ -80,7 +80,7 @@ For example, if you implement `Vec`, you can (safely) write to its `length` fiel
 That means that correctness of `Deref` impl for `Vec` depends on the whole module.
 Common wisdom says that the boundary for `unsafe` code is a module, but I would love to see a more precise characteristic.
 For example, in `map_in_place` case it's pretty clear that only a single function should be examined.
-On the other hand, if ``Vec``'s field are `pub(super)`, parent module should be scrutinized as well.
+On the other hand, if `Vec`'s field are `pub(super)`, parent module should be scrutinized as well.
 
 _Third_, it's trivial to make all `unsafe` blocks technically correct by just making every function `unsafe`.
 That wouldn't be a useful thing to do though!

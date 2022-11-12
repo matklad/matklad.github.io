@@ -43,7 +43,7 @@ struct Context<'f, 'a: 'f> {
 
 And this is the problem which is the subject of this post. Although
 `Foo` is supposed to be an implementation detail, its lifetime, `'a`,
-bleeds to ``Context``'s interface, so most of the clients of `Context`
+bleeds to `Context`'s interface, so most of the clients of `Context`
 would need to name this lifetime together with `'a: 'f` bound. Note
 that this effect is transitive: in general, rust struct has to name
 lifetimes of contained types, and their contained types, and their
@@ -322,7 +322,7 @@ fn test<'f, 'a>(foo: &'f mut Foo<'a>) {
 
 We've added a `Push` trait, which has the same interface as the `Foo`
 struct, but is **not** parametrized over the lifetime. This is
-possible because ``Foo``'s interface doesn't actually depend on the `'a`
+possible because `Foo`'s interface doesn't actually depend on the `'a`
 lifetime. And this allows us to magically write `foo: &'f mut (Push + 'f)`.
 This `+ 'f` is what hides `'a` as "some unknown lifetime, which outlives ``'f``".
 
@@ -396,7 +396,7 @@ able to feed our `Foo` with a particular lifetime to it.
 
 ## Conclusion
 
-While the code examples in the post juggled ``Foo``s and ``Bar``s, the
+While the code examples in the post juggled `Foo`s and `Bar`s, the
 core problem is real and greatly affects the design of Rust code. When
 you add a lifetime to a struct, you "poison" it, and all structs which
 contain it as a member need to declare this lifetime as well. I would

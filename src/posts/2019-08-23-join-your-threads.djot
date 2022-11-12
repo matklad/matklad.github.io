@@ -65,13 +65,13 @@ In `doWork`, for example, `goodVals` is a local variable that is captured by ref
 It’s also modified inside the lambda (via the call to `push_back`).
 Suppose, then, that while the lambda is running asynchronously, `conditionsAreSatisfied()` returns `false`.
 In that case, `doWork` would return, and its local variables (including `goodVals`) would be destroyed.
-Its stack frame would be popped, and execution of its thread would continue at ``doWork``’s call site.
+Its stack frame would be popped, and execution of its thread would continue at `doWork`’s call site.
 
 Statements following that call site would, at some point, make additional function calls, and at least one such call would probably end up using some or all of the memory that had once been occupied by the doWork stack frame.
 Let’s call such a function `f`.
 While `f` was running, the lambda that doWork initiated would still be running asynchronously.
-That lambda could call push_back on the stack memory that used to be `goodVals` but that is now somewhere inside ``f``’s stack frame.
-Such a call would modify the memory that used to be `goodVals`, and that means that from ``f``’s perspective, the content of memory in its stack frame could spontaneously change!
+That lambda could call push_back on the stack memory that used to be `goodVals` but that is now somewhere inside `f`’s stack frame.
+Such a call would modify the memory that used to be `goodVals`, and that means that from `f`’s perspective, the content of memory in its stack frame could spontaneously change!
 Imagine the fun you’d have debugging _that_.
 :::
 

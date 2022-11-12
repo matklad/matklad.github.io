@@ -95,7 +95,7 @@ This means that, to compile `rustc` itself, one needs to have a previous version
 This _could_ make compiler's build process peculiar.
 My thesis is that this doesn't need to be the case, and that the compiler could be just a crate.
 
-Bootstrapping does make this harder to see though, so, as a thought experiment, let's imagine what would ``rustc``'s build process look like were it not written in Rust.
+Bootstrapping does make this harder to see though, so, as a thought experiment, let's imagine what would `rustc`'s build process look like were it not written in Rust.
 Let's imagine the world where `rustc` is implemented in Go.
 How would one build and test this rust compiler?
 
@@ -130,7 +130,7 @@ Now, let's see if the above setup has any bottlenecks:
 
 5. Running tens of thousands of full integration tests will be slow.
    Each such test would need to do IO to read the source code, write the executable, and run the process.
-   It is reasonable to assume that _most_ of potential failures are covered with compiler's and ``std``'s unit tests.
+   It is reasonable to assume that _most_ of potential failures are covered with compiler's and `std`'s unit tests.
    But it would be foolish to rely solely on those tests --- fully integrated test suite is important to make sure that compiler indeed does what it is supposed to, and it is vital to compare several independent implementations --- who knows, maybe one day we'll rewrite `rustc` from Go to Rust, and re-using compiler's unit-tests would be much harder in that context.
 
 So, it seems like except for the final integration test suite, there's no complexity/performance bottlenecks in our setup for a from-scratch build.
@@ -138,35 +138,35 @@ The problem with integrated suite can be handled by running a subset of smoke te
 Testing is embarrassingly parallel, so a beefy CI fleet should handle that just fine.
 
 What about incremental builds?
-Let's say we want to contribute a change to ``std``.
+Let's say we want to contribute a change to `std`.
 First time around, this requires building the compiler, which is unfortunate.
 This is a one-time cost though, and it shouldn't be prohibitive (or we will have troubles with changes to the compiler itself anyway).
-We can also cheat here, and just download some version of `rustc` from the internet to check ``std``.
-This will mostly work, except for the bits where ``std`` and rustc need to know about each other (lang items and intrinsics).
-For those, we can use `#[cfg(not(bootstrap))]` in the ``std`` to compile different code for older versions of the compiler.
-This makes ``std`` implementation mind-bending though, so a better alternative might be to just make CI publish the artifacts for the compiler built off the master branch.
-That is, if you only contribute to ``std``, you download the latest compiler instead of building it yourself.
+We can also cheat here, and just download some version of `rustc` from the internet to check `std`.
+This will mostly work, except for the bits where `std` and rustc need to know about each other (lang items and intrinsics).
+For those, we can use `#[cfg(not(bootstrap))]` in the `std` to compile different code for older versions of the compiler.
+This makes `std` implementation mind-bending though, so a better alternative might be to just make CI publish the artifacts for the compiler built off the master branch.
+That is, if you only contribute to `std`, you download the latest compiler instead of building it yourself.
 We have a trade off between implementation complexity and compile times.
 
 If we want to contribute a change to the compiler, then we are golden as long as it can be checked by the unit-tests (which, again, in theory is everything except for `run-pass` tests).
-If we need to run integrated tests with ``std``, then we need to recompile ``std`` with the new compiler, after every change to the compiler.
+If we need to run integrated tests with `std`, then we need to recompile `std` with the new compiler, after every change to the compiler.
 This is pretty unfortunate, but:
 
-* if you fundamentally need to recompile ``std`` (for example, you change lang-items), there's no way around this,
-* if you don't need to recompile ``std``, than you probably can write an ``std``-less unit-test,
-* as an escape hatch, there might be some kind of `KEEP_STDLIB` env var, which causes integrated tests to re-use existing ``std``, even if the compiler is newer.
+* if you fundamentally need to recompile `std` (for example, you change lang-items), there's no way around this,
+* if you don't need to recompile `std`, than you probably can write an `std`-less unit-test,
+* as an escape hatch, there might be some kind of `KEEP_STDLIB` env var, which causes integrated tests to re-use existing `std`, even if the compiler is newer.
 
 To sum up, compiler is just a program which does some text processing.
 In the modern world full of distributed highly-available long-running systems, compiler is actually a pretty simple program.
 It also is fairly easy to test.
 The hard bit is not the compiler itself, but the standard library: to even start building the standard library, we need to compile the compiler.
-However, most of the compiler can be tested without ``std``, and ``std`` itself can be tested using compiler binary built from the master branch by CI.
+However, most of the compiler can be tested without `std`, and `std` itself can be tested using compiler binary built from the master branch by CI.
 
 ### Why Today's Build Process is not Simple?
 
 In theory, it should be possible to replace Go from the last section with Rust, and get a similarly simple bootstrapping compiler.
-That is, we would use latest stable/beta Rust to compile `rustc`, then we'll use this `rustc` to compile ```std```, and we are done.
-We might add a sanity check --- using the freshly built compiler & ``std``, recompile the compiler again and check that everything works.
+That is, we would use latest stable/beta Rust to compile `rustc`, then we'll use this `rustc` to compile ``std``, and we are done.
+We might add a sanity check --- using the freshly built compiler & `std`, recompile the compiler again and check that everything works.
 This is optional, and in a sense just a subset of a crater run, where we check one specific crate --- compiler itself.
 
 However, today's build is _more_ complicated than that.
@@ -174,14 +174,14 @@ However, today's build is _more_ complicated than that.
 _First_, instead of using a "standard distribution" of the compiler for bootstrapping, `x.py` downloads custom beta toolchain.
 This could and should be replaced with using `rustup` by default.
 
-_Second_, master `rustc` requires master ``std`` to build.
+_Second_, master `rustc` requires master `std` to build.
 This is the bit which makes `rustc` not a simple crate.
 Remember how before the build started with just compiling the compiler as a usual program?
-Today, `rustc` build starts with compiling master ``std`` using the beta compiler, than with compiling master `rustc` using master ``std`` and beta compiler.
-So, there's a requirement that ``std`` builds with both master and beta compilers, and we also has this weird state where versions of compiler and ``std`` we are using to compile the code do not match. In other words, while `#[cfg(not(bootstrap))]` was an optimization in the previous section (which could be replaced with downloading binary `rustc` from CI), today it is required.
+Today, `rustc` build starts with compiling master `std` using the beta compiler, than with compiling master `rustc` using master `std` and beta compiler.
+So, there's a requirement that `std` builds with both master and beta compilers, and we also has this weird state where versions of compiler and `std` we are using to compile the code do not match. In other words, while `#[cfg(not(bootstrap))]` was an optimization in the previous section (which could be replaced with downloading binary `rustc` from CI), today it is required.
 
 _Third_, there's not much in a way of the unit tests in the compiler.
-Almost all tests require ``std``, which means that, to test anything, one needs to rebuild everything.
+Almost all tests require `std`, which means that, to test anything, one needs to rebuild everything.
 
 _Fourth_, LLVM & linkers.
 A big part of "compilers are easy to test" is the fact that they are, in theory, closed systems interacting with the outside world in a limited well-defined way.
@@ -197,23 +197,23 @@ With all this in mind, here are specific steps which I believe would make the bu
 * By default, rely on `rust-toolchain` file and rustup to get the beta compiler.
 * Switch from `x.py` to something like [`cargo-xtask`](https://github.com/matklad/cargo-xtask), to remove dependency on Python.
 * Downgrade rustc's libstd requirements to beta.
-  Note that this refers solely to the ``std`` used to build `rustc` itself.
-  `rustc` will use master ``std`` for building user's code.
-* Split compiler and ``std`` into separate Cargo workspaces.
+  Note that this refers solely to the `std` used to build `rustc` itself.
+  `rustc` will use master `std` for building user's code.
+* Split compiler and `std` into separate Cargo workspaces.
 * Make sure that, by default, `rustc` is using system llvm, or llvm downloaded from a CI server.
   Building llvm from source should require explicit op-in.
 * Make sure that `cd compiler && cargo test` just works.
 * Add ability to to make a build of the compiler which can run `check`, but doesn't do llvm-dependent codegen.
 * Split the test suite into cross-platform codegen-less `check` part, and the fully-integrated part.
 * Split the compiler itself into frontend and codegen parts, such that changes in frontend can be tested without linking backend, and changes in backend can be tested without recompiling the frontend.
-* Stop building ``std`` with beta compiler and remove all `#[cfg(bootstrap)]`.
-* _Somehow_ make `cargo test` just work in ``std``.
+* Stop building `std` with beta compiler and remove all `#[cfg(bootstrap)]`.
+* _Somehow_ make `cargo test` just work in `std`.
   This will require some hackery to plug the logic for "build compiler from source or download from CI" somewhere.
 
-At this stage, we have a compiler which is 100% bog standard crate, and ``std``, which is _almost_ a typical crate (it only requires a very recent compiler to build).
+At this stage, we have a compiler which is 100% bog standard crate, and `std`, which is _almost_ a typical crate (it only requires a very recent compiler to build).
 
 After this, we can start the standard procedure to optimize compile and test times, just how you would do for any other Rust project (I am planning to write a couple of posts on these topics).
-I have a suspicion that there's a lot of low-hanging fruit there --- one of the reasons why I writing this post is that I've noticed that doctests in ``std`` are insanely slow, and that nobody complains about that just because everything else is even slower!
+I have a suspicion that there's a lot of low-hanging fruit there --- one of the reasons why I writing this post is that I've noticed that doctests in `std` are insanely slow, and that nobody complains about that just because everything else is even slower!
 
 This post ended up being too technical for the genre, but, to recap, there seems to be two force multipliers we could leverage to develop Rust itself:
 

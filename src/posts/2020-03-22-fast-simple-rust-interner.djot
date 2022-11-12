@@ -141,7 +141,7 @@ impl Interner {
 ```
 
 The problem here is that we can't actually write implementations of `Eq` and `Hash` for `Span` to make this work.
-In theory, this is possible: to compare two ``Spans``, you resolve them to ``&str`` via `buf`, and then compare the strings.
+In theory, this is possible: to compare two `Spans`, you resolve them to ``&str`` via `buf`, and then compare the strings.
 However, Rust API does not allow to express this idea.
 Moreover, even if `HashMap` allowed supplying a key closure at _construction_ time, it wouldn't help!
 

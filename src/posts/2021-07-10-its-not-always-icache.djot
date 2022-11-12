@@ -190,7 +190,7 @@ Note that the number of times CPU refers to ICache should correspond to the numb
 Cross-checking the number with `perf`, we see that both `perf` and `cachegrind` agree on the number of instructions executed.
 They also agree that `inline_always` version executes more instructions.
 It's still hard to say what perf's `sL1-icache-loads` means.
-Judging by the name, it should correspond to ``cachegrind``'s ``I refs``, but it doesn't.
+Judging by the name, it should correspond to `cachegrind`'s `I refs`, but it doesn't.
 
 Anyway, it seems there's one thing that bears further investigation --- why inlining changes the number of instructions executed?
 Inlining doesn't actually change the code the CPU runs, so the number of instructions should stay the same.
