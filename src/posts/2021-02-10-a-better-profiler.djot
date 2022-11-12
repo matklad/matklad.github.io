@@ -1,0 +1,118 @@
+# A Better Rust Profiler
+
+I want a better profiler for Rust.
+Here's what a rust-analyzer benchmark looks like:
+
+```rust
+#[test]
+fn benchmark_syntax_highlighting_parser() {
+  if skip_slow_tests() {
+    return;
+  }
+
+  let fixture = bench_fixture::glorious_old_parser();
+  let (analysis, file_id) = fixture::file(&fixture);
+
+  let hash = {
+    let _pt = bench("syntax highlighting parser");
+    analysis
+      .highlight(file_id)
+      .unwrap()
+      .iter()
+      .filter(|it| {
+        it.highlight.tag == HlTag::Symbol(SymbolKind::Function)
+      })
+      .count()
+  };
+  assert_eq!(hash, 1629);
+}
+```
+
+Here's how I want to profile it:
+
+{highlight="12"}
+```rust
+#[test]
+fn benchmark_syntax_highlighting_parser() {
+  if skip_slow_tests() {
+    return;
+  }
+
+  let fixture = bench_fixture::glorious_old_parser();
+  let (analysis, file_id) = fixture::file(&fixture);
+
+  let hash = {
+    let _b = bench("syntax highlighting parser");
+    let _p = better_profiler::profile();
+    analysis
+      .highlight(file_id)
+      .unwrap()
+      .iter()
+      .filter(|it| {
+        it.highlight.tag == HlTag::Symbol(SymbolKind::Function)
+      })
+      .count()
+  };
+  assert_eq!(hash, 1629);
+}
+```
+
+First, the profiler prints to stderr:
+
+```
+warning: run with `--release`
+warning: add `debug=true` to Cargo.toml
+warning: set `RUSTFLAGS="-Cforce-frame-pointers=yes"`
+```
+
+Otherwise, if everything is setup correctly, the output is
+
+```
+Output is saved to:
+   ~/projects/rust-analyzer/profile-results/
+```
+
+The `profile-results` folder contains the following:
+
+* `report.txt` with
+
+  * user, cpu, sys time
+  * cpu instructions
+  * stats for caches & branches a-la `pref-stat`
+  * top ten functions by cumulative time
+  * top ten functions by self-time
+  * top ten hot-spot
+* `flamegraph.svg`
+* `data.smth`, which can be fed into some existing profiler UI (kcachegrind, firefox profiler, etc).
+* `report.html` which contains a basic interactive UI.
+
+To tweak settings, the following API is available:
+
+```rust
+let _p = better_profiler::profile()
+  .output("./other-dir/")
+  .samples_per_second(999)
+  .flamegraph(false);
+```
+
+Naturally, the following also works and produces an aggregate profile:
+
+```rust
+for _ in 0..100 {
+  {
+    let _p = profile();
+    interesting_computation();
+  }
+  not_interesting_computation();
+}
+```
+
+I don't know how this should work.
+I think I would be happy with a perf-based Linux-only implementation.
+The [perf-event](https://github.com/jimblandy/perf-event) crate by Jim Blandy (co-author of "Programming Rust") is good.
+
+Have I missed something?
+Does this tool already exist?
+Or is it impossible for some reason?
+
+Discussion on [/r/rust](https://old.reddit.com/r/rust/comments/lgqs35/blog_post_i_want_a_better_rust_profiler/).

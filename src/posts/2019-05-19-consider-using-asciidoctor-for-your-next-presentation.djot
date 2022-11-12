@@ -1,0 +1,207 @@
+# Consider Using Asciidoctor for Your Next Presentation
+
+I've spend years looking for a good tool to make slides.
+I've tried LaTeX Beamer, Google Docs, Slides.com and several reveal.js offsprings, but neither was satisfactory for me.
+Last year, I stumbled upon [Asciidoctor.js PDF](https://github.com/Mogztter/asciidoctor-pdf.js) (which had like three GitHub starts at that moment), and it is *perfect*.
+
+At least, it is perfect for my use case, your requirements might be different.
+I make presentations for teaching programming at [Computer Science Center](https://compscicenter.ru), so my slides are full of code, bullet lists, and sometimes have moderately complex layout.
+To make reviewing course material easier, slides need to have high information density
+
+If you want to cut down straight to the code, see the repository with slides for my Rust course:
+
+<http://github.com/matklad/rust-course>
+
+[sibling]: /2019/05/19/rust-course-retrospective.html
+
+By the way, [the sibling post][sibling] talks about the course in more detail.
+
+## Requirements
+
+The specific things I want from the slides are:
+
+* A source markup language: I like to keep my slides on GitHub
+* Ease of styling and layout.
+  A good test here is two-column layout with code snippet on the left and a bullet list on the right
+* The final output should be a PDF.
+  I don't use animations, but I need exactly the same look of slides on different computers
+
+All the tools I've tried don't quite fit the bill.
+
+While TeX is good for formatting formulas, LaTeX is a relatively poor language for describing the structure of the document.
+Awesome Emacs mode fixes the issue partially, but still, `\begin{itemize}` is way to complex for a bullet list.
+Additionally, quality of implementation is not perfect: unicode support needs opt-in, and the build process is fiddly.
+
+[Google Docs](http://slides.google.com/) and [Slides.com](https://slides.com/) are pretty solid choices if you want WYSWIG.
+In fact, I primarily used these two tools before AsciiDoctor.
+However WYSWIG and limited flexibility which come with it are significant drawbacks
+
+I think I've never made a serious presentation in any of the JavaScript presentation frameworks.
+I've definitely tried [reveal.js](https://revealjs.com/), [remark](https://remarkjs.com/#1) and [shower](https://shwr.me), but turned back to Google Docs in the end.
+The two main reasons for this were:
+
+* Less than ideal source language:
+
+  * if it is Markdown, I struggled with creating complex layouts like the two column one;
+  * if it is HTML, simple things like bullet lists or emphasis are hard.
+
+* Cross browser CSS.
+  These frameworks pack a lot of JS and CSS, which I don't really need, but which makes tweaking stuff difficult for me, as I am not a professional web developer.
+
+## AsciiDoc Language
+
+The killer feature behind Asciidoctor.js PDF is the AsciiDoc markup language.
+Like Markdown, it's a lightweight markup language.
+When I was translating this blog from `.md` to `.adoc` the only significant change in the syntax was for links, from
+
+```
+[some link](http://example.com)
+```
+
+to
+
+```
+[some link](http://example.com)
+```
+
+However, unlike Markdown and LaTeX, AsciiDoc has native support for rich hierarchical document model.
+AsciiDoc source is parsed into a tree of nested elements with attributes (historically, AsciiDoc was created as an easier way to author [DocBook](https://docbook.org/) XML).
+This allows to express complex document structure without ad-hoc syntax extensions.
+Additionally, the concrete syntax feels very orthogonal and well rounded up.
+We've seen the syntax for links before, and this is how one includes an image:
+
+```
+image::assets/logo.svg[alt text]
+```
+
+Or a snippet from another file:
+
+```
+include::code_samples/worker.rs[]
+```
+
+A couple of more examples, just to whet your appetite (Asciidoctor has [extensive documentation](https://asciidoctor.org/docs/user-manual/))
+
+
+{cap="Paragraphs"}
+```adoc
+This is a paragraph
+
+[.lead]
+This is a paragraph with an attribute (which translates to CSS class)
+```
+
+:::
+This is a paragraph
+
+{.lead}
+This is a paragraph with an attribute (which translates to CSS class)
+:::
+
+{cap="List with nested elements"}
+```adoc
+* This is a bullet list
+* Bullet with table (+ joins blocks)
++
+|===
+|Are tables in lists stupid?| Probably!
+|===
+```
+
+:::
+* This is a bullet list
+* Bullet with table (+ joins blocks)
+
+  |Are tables in lists stupid?| Probably!|
+:::
+
+{cap="Code with inline markup"}
+```adoc
+[source,rust,subs="+quotes"]
+----
+let x = 1;
+let r: &i32;
+{
+    let y = 2;
+    r = [.hl-error]##&y##;  // borrowed value does not live long enough
+}
+println!("{}", *r);
+----
+```
+
+![](/assets/adoc-hl-error.png)
+
+That is, in addition to the usual syntax highlighting, the `&xs[0]` bit is wrapped into a `<span class="hl-error">`.
+This can be used to call out specific bits of code, or, like in this case, to show compiler errors:
+
+
+Here's an example of a complex slide:
+
+```adoc
+[.two-col] <1> <4>
+## Ссылки в C++ и Rust
+
+.C++
+- создаются неявно
+- не являются первоклассными объектами (`std::reference_wrapper`)
+- не всегда валидны
+
+.Rust
+- требуют явных `&`/[.language-rust]`&mut` и `*` <2>
+- обычные объекты <3>
++
+[source,rust]
+----
+let x = 1;
+let y = 2;
+let mut r: &i32 = &x;
+r = &y;
+----
+- всегда валидны
+````
+
+1) `.two-col` sets the css class for two-column flex layout.
+2) `[.language-rust]` sets css class for inline `<code>` element, so `mut` gets highlighted.
+3) This bullet-point contains a longer snippet of code.
+4) Have you noticed these circled numbered callouts? They are another useful feature of AsciiDoc!
+
+The result is the following slide
+
+![](/assets/adoc-slide.png)
+
+## HTML Translation
+
+AsciiDoc markup language is a powerful primitive, but how do we turn it into pixels on the screen?
+The hard part of making slides is laying out the contents: breaking paragraphs in lines, aligning images, arranging columns.
+As was [pointed out by Asciidoctor maintainer](https://github.com/asciidoctor/asciidoctor/issues/2972#issuecomment-441475262), browsers are extremely powerful layout engines, and HTML + CSS is a decent way to describe the layout.
+
+And here's where Asciidoctor.js PDF comes in: it allows one to transform AsciiDoc DOM into HTML, by supplying a functional-style visitor.
+This HTML is then rendered to PDF by chromium (but you can totally use HTML slides directly if you like it more).
+
+Here's the visitor which produces the slides for my Rust course:
+
+[https://github.com/matklad/rust-course/blob/master/lectures/template.js](https://github.com/matklad/rust-course/blob/0fe5fea215514f4aaff6ae61bca5ac033fcfe348/lectures/template.js#L1-L63)
+
+In contrast to reveal.js, I have full control over the resulting HTML and CSS.
+As I don't need cross browser support or complex animations, I can write a relatively simple modern CSS, which I myself can understand.
+
+## Bits and Pieces
+
+Note that Asciidoctor.js PDF is a relatively new piece of technology (although the underlying Asciidoctor project is **very** mature).
+For this reason for my slides I just vendor a specific version of the tool.
+
+Because the intermediate result is HTML, the development workflow is very smooth.
+It's easy to make a live preview with a couple of editor plugins, and you can use browser's dev-tools to debug CSS.
+I've also written a tiny bit of JavaScript to enable keyboard navigation for slides during preview.
+Syntax highlighting is also a bespoke pile of regexes :-)
+
+One thing I am worried about is the depth of the stack of technologies of Asciidoctor.js PDF.
+
+1. Original AsciiDoc tool was written in Python.
+2. Asciidoctor is a modern enhanced re-implementation in Ruby.
+3. Asciidoctor.js PDF runs on NodeJS via [Opal](https://opalrb.com/) Ruby -> JavaScript compiler
+4. It is used to produce HTML which is then fed into chromium to produce PDF!
+
+Oh, and syntax highlighting on this blog is powered by [pygments](http://pygments.org/), so Ruby calls into Python!
+
+This is quite a Zoo, but it works reliably for me!

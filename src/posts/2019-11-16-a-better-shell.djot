@@ -1,0 +1,123 @@
+# A Better Shell
+
+I want a better shell.
+
+There are exciting projects to improve data-processing capabilities of shells, like [nushell](https://github.com/nushell/nushell).
+However, I personally don't use this capability of shell a lot: 90% of commands I enter are simpler than `some cmd | rg pattern`.
+
+I primarily use shell as a way to *use* my system, and it is these interactive capabilities that I find lacking.
+So I want something closer in spirit to [notty](https://github.com/withoutboats/notty).
+
+## Things I Need
+
+The most commands I type are `cd`, `exa`, `rm`, `git ...`, `cargo ...`.
+I also type `mg`, which launches a GUI version of Emacs with Magit:
+
+![](/assets/magit.png)
+
+These tools make me productive.
+Keyboard-only input is fast and "composable" (I can press [up]{.kbd} to see previous commands, I can copy-paste paths, etc).
+Colored character-box based presentation is very clear and predictable, I can scan it very quickly.
+
+::: note
+Take a second to appreciate how Magit interface manages to be both *faster* then command line flags (you don't have to type spaces and dashes) and infinitely more **discoverable**.
+It was Magit who taught me about `--force-with-lease`.
+:::
+
+However, there are serious gaps in the UX:
+
+* [ctrl+c]{.kbd} doesn't work as it works in every other application.
+
+* I launch GUI version of Emacs: the terminal one changes some keybindings, which is confusing to me.
+  For example, I have splits inside emacs, and inside my terminal as well, and I just get confused as to which shortcut I should use.
+
+* The output of programs is colored with escaped codes, which are horrible, and not flexible enough.
+  When my Rust program panics and prints that it failed in `my_crate::foo::bar` function, I want this to be a hyperlink to the source code of the function.
+  I want to `cat` images and PDFs in my terminal (and html, obviously).
+
+* My workflow after I've done a bunch of changes is:
+
+  1. type `cargo test` to launch tests
+  2. type [ctrl+shift+Enter]{.kbd} to split the terminal
+  3. type `git status` or `mg` in the split to start making a commit in parallel to testing
+
+The last step is crazy!
+
+Like, `cargo test` is being run by my shell (fish), the split is handled by the terminal emulator (kitty), which launches a fresh instance of fish and arranges the working directory to be saved.
+
+As a user, I don't care about this terminal/terminal emulator/shell split.
+I want to launch a program, and just type commands.
+Why `cargo test` blocks my input?
+Why can't I type `cargo test`, [Enter]{.kbd}, `exa -l`, [Enter]{.kbd} and have this program to automatically create the split?
+
+``` console
+$ cargo test
+...
+tons of output in progress
+...
+
+# -- split (healed once `cargo test` finishes) -- #
+
+$ ls
+foo.txt
+bar.rs
+
+$ git ...
+```
+
+Additionally, while `magit` awesome, I want an option to use such interface for **all** my utilities.
+Like, for [`tar`](https://xkcd.com/1168/)?
+And, when I type `cargo test --package`, I really want completion for the set of packages which are available in the current directory.
+
+## New Shell
+
+What I really want is an **extensible application container**, a-la Emacs or Eclipse, but focused for a shell use-case.
+It could look like this:
+
+* A GUI application (which draws using raw OpenGL: we won't be using native OS GUI widgets).
+* A UI framework for text-based UIs, using magit as a model. [ctrl+c]{.kbd}, [ctrl+v]{.kbd} and friends should work as expected.
+* A tilling frame management, again, like the one in Emacs (and golden-ratio should be default).
+* Some concept of process-let, which can occupy a frame.
+* A prompt, which is **always** available, and smartly (without blocking, splitting screen if necessary) spawns new processlets.
+* An API to let processlets interact with text UI.
+* A plugin system for in-process processlets (obviously, plugins should be implemented in WASM).
+* A plugin marketplace (versions, dependencies, lockfile, backwards compatibility).
+* A plugin system for out-of-process processlets (JSON over stdio?).
+* A backwards compatibility wrapper to treat usual Unix utilities as processlets.
+
+## Emacs?
+
+Isn't it Emacs that I am trying to describe?
+Well, sort-of.
+Emacs is definitely in the same class of "application containers", but it has some severe problems, in my opinion:
+
+* Emacs Lisp is far from the best possible language for writing extensions.
+* Plugin ecosystem is not really dependable.
+* It doesn't define out-of-process plugin API (things like hyperlinking output).
+* Async support is somewhere between non-existent and awkward.
+* Its main focus is text editing.
+* Its defaults are not really great (fish shell is a great project to learn from here).
+* [ctrl+c]{.kbd}, [ctrl+v]{.kbd} do not work by default, [M-x]{.kbd} is not really remappable.
+
+## Random Closing Thoughts
+
+This post contains the best plugin diagram ever:
+
+<https://www.tedinski.com/2018/01/30/the-one-ring-problem-abstraction-and-power.html>
+
+This talk echoes similar sentiments:
+
+<https://www.destroyallsoftware.com/talks/a-whole-new-world>
+
+If you build some like this, please sign me up!
+
+## Addendum (2020-03-27)
+
+A "terminals are a mess" story from today.
+I wanted "kill other split" shortcut shortcut for my terminal, bound to [ctrl+k, 1]{.kbd}.
+Implementing it was easy, as kitty has a nice plugin API.
+After that I've realized that I need to remap `kill_line` from [ctrl+k]{.kbd} to [ctrl+shift+k]{.kbd}, so that it doesn't conflict with the [ctrl+k, 1]{.kbd} chord.
+It took me a while to realize that searching for `kill_line` in kitty is futile --- editing is handled by the shell.
+Ok, so it looks like I can just remap the key in fish, by `bind \cK kill_line`, except that, no, [ctrl]{.kbd} shortcuts do not work with [Shift]{.kbd} because of some obscure terminal limitation.
+So, let's go back to kitty and add a [ctrl+shift+k]{.kbd} shortcut that sends `^k` to the fish!
+[An hour wasted](https://github.com/matklad/config/commit/fa1bbcb1813242a571f3aba44f7d986db45ef7cc).

@@ -1,0 +1,180 @@
+# Notes On Module System
+
+Unedited summary of what I think a better module system for a Rust-like
+language would look like.
+
+Today's Rust module system is it's most exciting feature, after borrow checker.
+Explicit separation between crates (which form a DAG) and modules (which might
+be mutually dependent) and the absence of a single global namespace (crates
+don't have innate names; instead, the name is written on a dependency edge
+between two crates, and the same crate might be known under different names in
+two of its dependents) makes decentralized ecosystems of libraries a-la
+crates.io robust. Specifically, Rust allows linking-in several versions of the
+same crate without the fear of naming conflicts.
+
+However, the specific surface syntax we use to express the model I feel is
+suboptimal. Module system is pretty confusing (in the pre-2018 surveys, it was
+by far the most confusing aspect of the language after lifetimes. Post-2018
+system is better, but there are still regular questions about module system).
+What can we do better?
+
+_First_, be more precise about visibilities. The most single most important
+question about an item is "can it be visible outside of CU?". Depending on the
+answer to that, you have either closed world (all usages are known) or open
+world (usages are not-knowable) assumption. This should be reflected in the
+modules system. `pub` is for "visible inside the whole CU, but not further".
+`export` or (my favorite) `pub*` is for "visible to the outer world". You sorta
+can have these in today's rust with `pub(crate)`, `-Dunreachable_pub` and some
+tolerance for compiler false-positive.
+
+I am not sure if the rest of Rust visibility systems pulls its weight. It is OK,
+but it is pretty complex `pub(in some::path)` and doesn't _really_ help ---
+making visibilities more precise within a single CU doesn't meaningfully make
+the code better, as you can control and rewrite all the code anyway. CU doesn't
+have internal boundaries which can be reflected in visibilities. If we go this
+way, we get a nice, simple system: `fn foo()` is visible in the current module
+only (not its children), `pub fn foo()` is visible anywhere inside the current
+crate, and `pub* fn foo()` is visible to other crates using ours. But then,
+again, the current tree-based visibility is OK, can leave it in as long as
+`pub/pub*` is more explicit and `-Dunreachable_pub` is an error by default.
+
+In a similar way, the fact that `use` is an item (ie, `a::b` can `use` items
+imported in `a`) is an unnecessary cuteness. Imports should only introduce the
+name into module's namespace, and should be separate from intentional
+re-exports. It _might_ make sense to ban glob re-export --- this'll give you a
+nice property that all the names existing in the module are spelled out
+explicitly, which is useful for tooling. Though, as Rust has namespaces, looking
+at `pub use submod::thing` doesn't tell you whether the thing is a type or a
+value, so this might not be a meaningful property after all.
+
+The _second_ thing to change would be module tree/directory structure mapping.
+The current system creates quite some visible problems:
+
+* library/binary confusion. It's common for new users to have `mod foo;` in both
+  `src/main.rs` and `src/lib.rs`.
+
+* `mod {}` file confusion --- it's common (even for some production code I've
+  seen) to have `mod foo { stuff }` _inside_ `foo.rs`.
+
+* duplicate inclusion --- again, it's common to start every file in `tests/` with
+  `mod common;`. Rust book even recommends some awful work-around to put common
+  into `common/mod.rs`, just so it itself isn't treated as a test.
+
+* inconsistency --- large projects which don't have super-strict code style
+  process end up using both the older `foo/mod.rs` and the newer `foo.rs, foo/*`
+  conventions.
+
+* forgotten files --- it is again pretty common to have some file somewhere in
+  `src/` which isn't actually linked into the module tree at all by mistake.
+
+A bunch of less-objective issues:
+
+* `mod.rs`-less system is self-inconsistent. `lib.rs` and `main.rs` _still_
+  behave like `mod.rs`, in a sense that nested modules are their direct
+  siblings, and not in the `lib` directory.
+* naming for crates roots (`lib.rs` and `main.rs`) is ad-hoc
+* current system doesn't work well for tools, which have to iteratively
+  discover the module tree. You can't process all of the crate's files in
+  parallel, because you don't know what those files are until you process them.
+
+I think a better system would say that a compilation unit is equivalent to a
+directory with Rust source files, and that (relative) file paths correspond to
+module paths. There's neither `mod foo;` nor `mod foo {}` (yes, sometimes those
+are genuinely useful. No, the fact that something _can_ be useful doesn't mean
+it should be part of the language --- it's very hard to come up with a language
+features which would be completely useless (though `mod foo {}` I think can be
+added back relatively painless)). We use `mod.rs`, but we name it
+`_$name_of_the_module$.rs` instead, to solve two issues: sort it first
+alphabetically, and generate a unique fuzzy-findable name. So, something like
+this:
+
+```
+/home/matklad/projects/regex
+  Cargo.toml
+  src/
+    _regex.rs
+    parsing/
+      _parsing.rs
+      ast.rs
+    rt/
+     _rt.rs
+     dfa.rs
+     nfa.rs
+  bins/
+    grep/
+      _grep.rs
+      cli.rs
+  tests/
+    _tests.rs   # just a single integration tests binary by default!
+    lookahead.rs
+    fuzz.rs
+```
+
+The library there would give the following module tree:
+
+```
+crate::{
+    parsing::{ast}
+    rt::{nfa, dfa}
+}
+```
+
+To do conditional compilation, you'd do:
+
+```
+mutex/
+  _mutex.rs
+  linux_mutex.rs
+  windows_mutex.rs
+```
+
+where `_mutex.rs` is
+
+```rust
+#[cfg(linux)]
+use linux_mutex as os_mutex;
+#[cfg(windows)]
+use windows_mutex as os_mutex;
+
+pub struct Mutex {
+   inner: os_mutex::Mutex
+}
+```
+
+and `linux_mutex.rs` starts with `#![cfg(linux)]`. But of course we shouldn't
+implement conditional compilation by barbarically cutting the AST, and instead
+should push conditional compilation to after the type checking, so that you at
+least can check, on Linux, that the windows version of your code wouldn't fail
+due to some stupid typos in the name of `#[cfg(windows)]` functions. Alas, I
+don't know how to design such conditional compilation system.
+
+The same re-export idiom would be used for specifying non-default visibility:
+`pub* use rt;` would make `regex::rt` a public module (yeah, this
+particular bit is sketchy :-) ).
+
+I think this approach would make most of pitfalls impossible. E.g, it wouldn't
+be possible to mix several different crates in one source tree. Additionally,
+it'd be a great help for IDEs, as each file can be processed independently, and
+it would be clear just from the file contents and path where in the crate
+namespace the items are mounted, unlocking
+[map-reduce
+style IDE](https://rust-analyzer.github.io/blog/2020/07/20/three-architectures-for-responsive-ide.html).
+
+While we are at it, `use` definitely should use exactly the same path resolution
+rules as the rest of the language, without any kind of "implicit leading `::`"
+special cases. Oh, and we shouldn't have nested use groups:
+
+```rust
+use collections::{
+    hash::{HashMap, HashSet},
+    BTreeMap,
+}
+```
+
+Some projects use them, some projects don't use them, sufficiently large
+projects inconsistently both use and don't use them.
+
+Afterword: as I've said in the beginning, this is unedited and not generally
+something I've thought very hard and long about. Please don't take this as one
+true way to do things, my level of confidence about these ideas is about `0.5` I
+guess.

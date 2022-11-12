@@ -1,0 +1,154 @@
+# Large Rust Workspaces
+
+In this article, I'll share my experience with organizing large Rust projects.
+This is in no way authoritative --- just some tips I've discovered through trial and error.
+
+Cargo, Rust's build system, follows convention over configuration principle.
+It provides a set of good defaults for small projects, and it is especially well-tailored for public crates.io libraries.
+The defaults are not perfect, but they are good enough.
+The resulting ecosystem-wide consistency is also welcome.
+
+However, Cargo is less opinionated when it comes to large, multi-crate projects, organized as a Cargo workspace.
+Workspaces are flexible --- Cargo doesn't have a preferred layout for them.
+As a result, people try different things, with varying degrees of success.
+
+To cut to the chase, I think for projects in between ten thousand and one million lines of code, the flat layout makes the most sense.
+rust-analyzer (200k lines) is good example here.
+The [repository](https://github.com/rust-analyzer/rust-analyzer) is laid out this:
+
+```
+rust-analyzer/
+  Cargo.toml
+  Cargo.lock
+  crates/
+    rust-analyzer/
+    hir/
+    hir_def/
+    hir_ty/
+    ...
+```
+
+In the root of the repo, Cargo.toml defines a virtual manifest:
+
+{cap="Cargo.toml"}
+```toml
+[workspace]
+members = ["crates/*"]
+```
+
+Everything else (including rust-analyzer "main" crate) is nested one-level deep under `crates/`.
+The name of each directory is equal to the name of the crate:
+
+{cap="crates/hir_def/Cargo.toml"}
+```
+[package]
+name = "hir_def"
+version = "0.0.0"
+edition = "2018"
+```
+
+At the time of writing, there are 32 different subfolders in `crates/`.
+
+## Flat Is Better Than Nested
+
+It's interesting that this advice goes against the natural tendency to just organize everything hierarchically:
+
+```
+rust-analyzer/
+  Cargo.toml
+  src/
+  hir/
+    Cargo.toml
+    src/
+    def/
+    ty/
+```
+
+There are several reasons why trees are inferior in this case.
+
+_First_, the Cargo-level namespace of crates is flat.
+It's not possible to write `hir::def` in Cargo.toml, so crates typically have prefixes in their names.
+Tree layout creates an alternative hierarchy, which adds a possibility for inconsistencies.
+
+_Second_, even comparatively large lists are easier to understand at a glance than even small trees.
+`ls ./crates` gives immediate bird's eye view of the project, and this view is small enough:
+
+```
+16:22:57|~/projects/rust-analyzer|master✓
+λ ls ./crates
+base_db
+cfg
+flycheck
+hir
+hir_def
+hir_expand
+hir_ty
+ide
+ide_assists
+ide_completion
+ide_db
+ide_diagnostics
+ide_ssr
+limit
+mbe
+parser
+paths
+proc_macro_api
+proc_macro_srv
+proc_macro_test
+profile
+project_model
+rust-analyzer
+sourcegen
+stdx
+syntax
+test_utils
+text_edit
+toolchain
+tt
+vfs
+```
+
+Doing the same for a tree-based layout is harder.
+Looking at a single level doesn't tell you which folders contains nested crates.
+Looking at _all_ level lists too many folders.
+Looking only at folder that contain Cargo.toml gives the right result, but is not as trivial as just `ls`.
+
+It is true that nested structure scales better than a flat one.
+But the constant matters --- until you hit a million lines of code, the number of crates in the project will probably fit on one screen.
+
+_Finally_, the last problem with hierarchical layout is that there are no perfect hierarchies.
+With a flat structure, adding or splitting the crates is trivial.
+With a tree, you need to figure out where to put the new crate, and, if there isn't a perfect match for it already, you'll have to either:
+
+* add a stupid mostly empty folder near the top
+* add a catch-all utils folder
+* place the code in a known suboptimal directory.
+
+This is a significant issue for long-lived multi-person projects --- tree structure tends to deteriorate over time, while flat structure doesn't need maintenance.
+
+## Smaller Tips
+
+Make the root of the workspace a virtual manifest.
+It might be tempting to put the main crate into the root, but that pollutes the root with `src/`, requires passing `--workspace` to every Cargo command, and adds an exception to an otherwise consistent structure.
+
+Don't succumb to the temptation to strip common prefix from folder names.
+If each crate is named exactly as the folder it lives in, navigation and renames become easier.
+Cargo.tomls of reverse dependencies mention both the folder and the crate name, it's useful when they are exactly the same.
+
+For large projects a lot of repository bloat often comes from ad-hoc automation --- Makefiles and various prepare.sh scripts here and there.
+To avoid both the bloat and proliferation of ad-hoc workflows, write all automation in Rust in a dedicated crate.
+One pattern useful for this is [`cargo xtask`](https://github.com/matklad/cargo-xtask).
+
+Use `version = "0.0.0"` for internal crates you don't intend to publish.
+If you do want to publish a subset of crates with proper semver API, be very deliberate about them.
+It probably makes sense to extract all such crates into a separate top-level folder, `libs/`.
+It makes it easier to check that things in `libs/` don't use things from `crates/`.
+
+Some crates consist only of a single-file.
+For those, it is tempting to flatten out the `src` directory and keep `lib.rs` and `Cargo.toml` in the same directory.
+I suggest not doing that --- even if crate is single file now, it might get expanded later.
+
+::: note
+This post is a part of [One Hundred Thousand Lines of Rust](https://matklad.github.io/2021/09/05/Rust100k.html) series.
+:::

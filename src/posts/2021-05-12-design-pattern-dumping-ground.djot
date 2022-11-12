@@ -1,0 +1,47 @@
+# Design Pattern: Kitchen Sink
+
+These are the notes on a design pattern I noticed in several contexts.
+
+Suppose, metaphorically, you have a neatly organized bookcase which categorizes the books by their topics.
+And now, suppose you've got a new book, which doesn't fit clearly into any existing category.
+What would you do?
+
+Here are some common solutions I've seen:
+
+* Put the book somewhere in the bookcase.
+* Start rearranging the shelves until you have a proper topic for this new book.
+  Maybe introduce a dedicated topic just for this single book.
+* Don't store the book in the bookcase, keep it on the bedside table.
+
+Here's the "kitchen sink pattern" solution for this problem: have the "Uncategorized" shelf for books which don't clearly fit into the existing hierarchy.
+
+The idea here is that the overall organization becomes better, if you explicitly designate some place as "stuff that doesn't fit goes here by default".
+Let's see the examples.
+
+_First_, the Django web framework has a `shortcuts` module with contains conveniences functions, not fitting model/view separation.
+The `get_object_or_404` function lookups an object in the database and returns HTTP404 if it is not found.
+Models (SQL) and views (HTTP) don't know about each other, so the function doesn't belong to either of these modules.
+Placing it in `shortcuts` allows this separation to be more crisp.
+
+_Second_, I have two tricks to keep my home folder organized.
+I have a script that clears `~/downloads` on every reboot, and I have a `~/tmp` as my dumping ground.
+Before `~/tmp`, various semi-transient things polluted my otherwise perfectly organized workspace.
+
+_Third_, I asked my colleague recently about some testing infrastructure.
+They replied that they have an extensive document for it in their fork, because it's unclear what's the proper place for it in the main repo.
+In this case the absence of a "dumping ground" prevented useful work for no good reason.
+
+_Fourth_, in `rust-analyzer` we have a `ast::make` module which is intended to contain the minimal orthogonal set of constructors for AST nodes.
+Historically, people kept adding non-minimal, non-orthogonal constructors there as well.
+Useful work was done, but it muddied the design.
+This was fixed by adding a dedicated `ast::make::ext` submodule for convenient shortcuts.
+
+_Fifth_, for big projects I like having `stdext` modules, which fill-in missing batteries for the standard library.
+Without it, various modules tend to accumulate unrelated, and often slightly duplicated, functionality.
+
+_Sixth_, to avoid overthinking and setup costs to start a new hobby project (of which I have a tonne), I have a single monorepo for all incomplete things.
+Adding a folder there is much easier than creating a GitHub repo.
+
+To sum up, many classifications work best if there is an explicit "can't classify this" category.
+If there's no obvious place to put things which don't fit, a solid design might erode with time.
+Note that for this pattern to be useful, an existence of a good solid design is prerequisite, lest all the code ends up in an `utils` module.

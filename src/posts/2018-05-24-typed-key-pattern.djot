@@ -1,0 +1,186 @@
+# Typed Key Pattern
+
+In this post, I'll talk about a pattern for extracting values from a
+weakly typed map. This pattern applies to all statically typed
+languages, and even to dynamically typed ones, but the post is rather
+Rust-specific.
+
+I've put together a small crate which implements the pattern:\
+<https://github.com/matklad/typed_key>
+
+If you want to skip all the
+blah-blah-blah, you can dig right into the code & docs :)
+
+
+## The problem
+
+[serde]: https://crates.io/crates/serde
+[envy]: https://github.com/softprops/envy
+
+
+You have an untyped `Map<String, Object>` and you need to get a typed
+`Foo` out of it by the `"foo"` key. The untyped map is often some kind
+of configuration, like a JSON file, but it can be a real map with
+type-erased `Any` objects as well.
+
+In the common case of statically known configuration, the awesome
+solution that Rust offers is [serde][serde]. You stick `derive(Deserialize)`
+in front of the `Config` struct and read it from JSON, YML, TOML or
+even just [environment variables][envy]!
+
+```rust
+#[derive(Deserialize)]
+struct Config {
+    foo: Foo
+}
+
+fn parse_config(data: &str) -> Result<Config> {
+    let config = serde_json::from_str(data)?;
+    Ok(config)
+}
+```
+
+However, occasionally you can't use serde. Some of the cases where
+this might happen are:
+
+* merging configuration from several sources, which requires writing a
+  non-trivial serde deserializer,
+
+* lazy deserialization, when you don't want to care about invalid values
+  until you actually use them,
+
+* extensible plugin architecture, where various independent modules
+  contribute options to a shared global config, and so the shape of
+  the config is not known upfront.
+
+* you are working with `Any` objects or otherwise don't do
+  serialization per se.
+
+
+## Typical solutions
+
+The simplest approach here is to just grab an untyped object using a
+string literal and specify its type on the call site:
+
+```rust
+impl Config {
+    fn get<T: Deserialize>(&self, key: &str) -> Result<T> {
+        let json_value = self.map.get("key")
+            .ok_or_else(|| bail!("key is missing: `{}`", key))?;
+        Ok(T::deserialize(json_value)?)
+    }
+}
+
+...
+
+
+let foo = config.get::<Foo>("foo")?;
+```
+
+I actually think that this is a fine approach as long as such snippets
+are confined within a single module.
+
+One possible way to make it better is to extract `"foo"` constant to a
+variable:
+
+```rust
+const FOO: &str = "foo";
+
+...
+
+let foo = config.get::<Foo>(FOO)?;
+```
+
+This does bring certain benefits:
+
+* fewer places to make a typo in,
+
+* behavior is moved from the code (`.get("foo")`) into data (`const FOO`), which
+makes it easier to reason about the code (at a glance, you can see all available
+config option and get an idea why they might be useful),
+
+* there's now an obvious place to document keys: write a doc-comment for a
+constant.
+
+While great in theory, I personally feel that this usually brings little
+tangible benefit in most cases, especially if some constants are used only once.
+This is the case where the implementation, a literal `"foo"`, is more clear than
+the abstraction, a constant `FOO`.
+
+
+## Adding types
+
+[phantom]: https://doc.rust-lang.org/beta/std/marker/struct.PhantomData.html
+
+However, the last pattern can become much more powerful and
+interesting if we associate types with string constants. The idea is
+to encode that the `"foo"` key can be used to extract an object of
+type `Foo`, and make it impossible to use it for, say,
+`Vec<String>`. To do this, we'll need a pinch of
+[`PhantomData`][phantom]:
+
+```rust
+pub struct Key<T> {
+    name: &'static str,
+    marker: PhantomData<T>,
+}
+
+impl<T> Key<T> {
+    pub const fn new(name: &'static str) -> Key<T> {
+        Key { name, marker: PhantomData }
+    }
+
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+}
+```
+
+Now, we can add type knowledge to the `"foo"` literal:
+
+```rust
+const FOO: Key<Foo> = Key::new("foo");
+```
+
+And we can take advantage of this in the `get` method:
+
+```rust
+impl Config {
+    fn get<T: Deserialize>(&self, key: Key<T>) -> Result<T> {
+        let json_value = self.map.get(key.name())
+            .ok_or_else(|| bail!("key is missing: `{}`", key))?;
+        Ok(T::deserialize(json_value)?)
+    }
+}
+
+...
+
+
+let foo = config.get(FOO)?;
+```
+
+Note how we were able to get rid of the turbofish at the call-site!
+Moreover, the understandably aspect of the previous pattern is also
+enhanced: if you know both the type and the name of the config option,
+you can pretty reliably predict how it is going to be used.
+
+
+## Pattern in the wild
+
+[IntelliJ]: https://github.com/JetBrains/intellij-community/blob/16bfca92199dca383b66c69c3427b4639ea8e213/platform/util/src/com/intellij/openapi/util/Key.java
+[UDH]: https://github.com/JetBrains/intellij-community/blob/16bfca92199dca383b66c69c3427b4639ea8e213/platform/util/src/com/intellij/openapi/util/UserDataHolder.java
+[PR]: https://github.com/exonum/exonum/pull/417
+[typed_key]: https://crates.io/crates/typed_key
+
+
+I've first encountered this pattern in [IntelliJ][IntelliJ] code. It uses
+[`UserDataHolder`][UDH], which is basically `Map<String, Object>`, everywhere.
+It helps plugin authors to extend built-in objects in crazy ways but is rather
+hard to reason about, and type-safety improves the situation a lot. I've also
+changed Exonum's config to employ this pattern in this [PR][PR]. It also was a
+case of plugin extensible, where an upfront definition of all configuration
+option is impossible.
+
+Finally, I've written a small crate for this [`typed_key`][typed_key] :)
+
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/8ls25e/blog_post_typed_key_pattern/).

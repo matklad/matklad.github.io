@@ -1,0 +1,137 @@
+# A Trick For Test Maintenance
+
+This is a post about an interesting testing technique which feels like it should
+be well known. However, I haven't seen it mentioned anywhere. I don't even have
+a good name for it, I've semi-discovered it in the wild. If you know how this
+thing is called, please leave a comment!
+
+:::note
+[cov-mark](https://github.com/matklad/cov-mark) crate is the currently maintained and used in production implementation of this idea.
+:::
+
+## A long time ago...
+
+I was reading Dart analysis server source code, and came across [this
+line](https://github.com/dart-lang/sdk/blob/f6d2c2378a00160ca1b79f8f7bd45df97b1275e4/pkg/analysis_server/lib/src/services/correction/assist_internal.dart#L1063).
+Immediately I was struck as if by lighting. Well, not exactly in the same way,
+but you get the idea.
+
+What does this line do? I actually don't know, but I have a guess. My
+explanation is further down (to give you a chance to discover the
+trick as well!), but the general idea is that this line helps
+tremendously with making tests more maintainable.
+
+
+## The two mundane problems
+
+Two tasks which programmers typically enjoy less than furiously
+cranking out new features are maintaining existing code and writing
+tests. And, as an old Russian joke says, maintaining tests is the
+worst. Here are some pain points specific to the post:
+
+**Negative tests**. You want to check that something does not
+happen. Writing a test in this situation is tricky because the test
+might actually pass for a trivial reason instead of the intended
+one. The rule of thumb is to verify that the test actually fails if
+the specific condition which it covers is commented out. The problem
+with this rule of thumb is that it works in a single point in time. As
+the code evolves, the test might begin to pass for a trivial reason.
+
+**Duplicated tests**. Test suites are usually append-only and grow
+indefinitely. Almost inevitably this leads to a situation where
+different tests are testing essentially the same features, or where
+one test is a superset of another.
+
+**Bifurcated suites**. Somewhat similar to the previous point, you may
+end up in a situation where a single component has two separate
+test-suites in different parts of the code base. I'd want to say that
+this happens when two developers write tests independently, but
+practice says that me and me one month later are enough to create such
+a mess :)
+
+**Tests discoverability**. This is a problem a new contributor usually
+faces. Finding a piece of code where the bug fix should be applied is
+usually comparatively easier than locating the corresponding tests.
+
+
+The underlying issue is that it is non-trivial to answer these two
+questions:
+
+* Given a line of code, where is the test for this specific line?
+
+* Given a test, where is the code that is being tested?
+
+
+## The solution
+
+The beautiful solution to this problem (which I *hypothesise* the
+`_coverageMarker()` line in Dart does) is to track code coverage on the
+test-by-test basis. That is, when running a test, verify that
+*specific* lines of code were covered by this test.
+
+I've put together a small Rust library to do this, called
+[`uncover`](https://crates.io/crates/uncover). It provides two macros:
+`covered_by` and `covers`.
+
+
+The first macro is used in the code under test, [like
+this](https://github.com/matklad/tom/blob/081b09e90b4ff64246969783fe9fb9261ba188f1/src/factory.rs#L72-L75):
+
+```rust
+if !self.keys.is_empty() {
+    covered_by!("table_with_two_names");
+    panic!("table header is already specified, can't reset to {:?}", key)
+}
+```
+
+The second macro is used in the [corresponding test](https://github.com/matklad/tom/blob/081b09e90b4ff64246969783fe9fb9261ba188f1/tests/suite/factory.rs#L55-L64):
+
+
+```rust
+#[test]
+fn table_with_two_names() {
+    covers!("table_with_two_names");
+    let f = Factory::new();
+    check_panics(|| {
+        f.table()
+            .with_name("foo")
+            .with_name("bar")
+            .build();
+    })
+}
+```
+
+
+If the block where `covers` is used does not cause the execution of
+the corresponding `covered_by` line then the error will be raised at
+the end of the block.
+
+Under the hood, this is implemented as a global `HashMap<String, u64>` which
+counts how many times each line was executed. So `covered_by!`
+[increments](https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L146)
+the corresponding count, and `covers!` returns a guard object that
+[checks](https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L174-L176)
+in `Drop` that the count was incremented. It is possible to disable these checks
+at compile time. And yes, the library actually
+[exposes
+a macro which defines macros](https://github.com/matklad/uncover/blob/1d0770d997e29731b287e9e11e4ffbbea5f456da/src/lib.rs#L110-L137) :)
+
+I haven't had a chance to apply this technique in large projects (and
+it is less useful for smaller ones), but it looks very promising.
+
+It's now easy to navigate between code and tests: just ripgrep the
+string literal (or write a plugin for this for your IDE). You will be
+able to find the test for the specific if-branch! This should be
+especially handy for new contributors.
+
+If this technique is used pervasively, you also get an idea about the
+overall test coverage.
+
+During refactorings, you became aware of tests which might be
+affected. Moreover, because coverage is actually checked by the tests
+themselves, you'll notice if some test stop to exercise the code it
+was intended to check.
+
+
+Once again, if you know how this thing is called, please do enlighten
+me in comments! Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/8s1eu1/blog_post_a_trick_for_test_maintenance/).

@@ -1,0 +1,96 @@
+# Unsafe as a Human-Assisted Type System
+
+This is a short note about yet another way to look at Rust's `unsafe`.
+
+Today, an interesting [bug](https://github.com/rust-lang/rust/issues/62894) was found in rustc, which made me aware just how useful `unsafe` is for making code maintainable.
+The story begins a couple of months ago, when I was casually browsing through recent pull requests for [rust-lang/rust](http://github.com/rust-lang/rust/).
+I was probably waiting for my code to compile at that moment :]
+Anyway, a [pull request](https://github.com/rust-lang/rust/pull/58061) caught my attention, and, while I was reading the diff, I noticed a usage of `unsafe`.
+It looked roughly like this:
+
+```rust
+fn map_in_place<T, F>(t: &mut T, f: F)
+where
+    F: FnOnce(T) -> T,
+{
+    unsafe { std::ptr::write(t, f(std::ptr::read(t))); }
+}
+```
+
+This function applies a `+T -> T+` function to a `&mut T` value, a-la [`take_mut`](https://crates.io/crates/take_mut) crate.
+
+There is a safe way to do this in Rust, by temporary replacing the value with something useless ([Jones's trick](http://giphygifs.s3.amazonaws.com/media/MS0fQBmGGMaRy/giphy.gif)):
+
+```rust
+fn map_in_place_safe<T, F>(t: &mut T, f: F)
+where
+    F: FnOnce(T) -> T,
+    T: Default,
+{
+    let stolen_t = std::mem::replace(t, T::default());
+    t = f(stolen_t)
+}
+```
+
+In `map_in_place` we don't have a `T: Default` bound, so the trick is not applicable.
+Instead, the function uses (`unsafe`) `ptr::read` to get an owned value out of a unique reference, and then uses `ptr::write` to store the new value back, without calling the destructor.
+
+However, the code has a particular `unsafe` code smell: it calls user-supplied code (`f`) from within an `unsafe` block.
+This is usually undesirable, because it makes reasoning about invariants harder: arbitrary code can do arbitrary unexpected things.
+
+::: note
+In this particular case, "user code" is clearly visible: it is literally a user-supplied closure.
+The problem is not always that obvious: for example, arbitrary code might hide behind an innocent-looking `<` operator that is invoked on a generic `T: Ord`.
+:::
+
+And, indeed, this function is unsound: if `f` panics and unwinds, the `t` value would be dropped twice!
+The solution here (which I know from the `take_mut` crate) is to just abort the process if the closure panics.
+Stern, but effective!
+
+I felt really torn about bringing this issue up: clearly, inside the compiler we know what we are doing, and the error case seems extremely marginal.
+Nevertheless, I did leave the comment, and the abort trick was implemented.
+
+And guess what?
+Today a bug report came in ([#62894](https://github.com/rust-lang/rust/issues/62894)), demonstrating that closure does panic in some cases, and `rustc` aborts.
+To be clear, the abort in this case _is a good thing_!
+If rustc didn't abort, it would be a use-after-free.
+
+Note how cool is this: a casual code-reviewer was able to prevent a memory-safety issue by looking at just a single one-line function.
+This was possible for two reasons:
+
+1. The code was marked `unsafe` which made it stand out.
+2. The safety reasoning was purely local: I didn't need to understand the PR (or surrounding code) as a whole to reason about the `unsafe` block.
+
+The last bullet point is especially interesting, because it is what makes type systems  ^[1]^ in general effective in large-scale software development:
+
+1. Checking types is a local (per-expression, per-function, per-module, depending on the language) procedure.
+  Every step is almost trivial: verify that sub-expressions have the right type and work out the result type.
+2. Together, these local static checks guarantee a highly non-trivial global property:
+  during runtime, actual types of all the values match inferred static types of variables.
+
+Rust's `unsafe` is similar: if we verify every usage of `unsafe` (local property!) to be correct, then we guarantee that the program as a whole does not contain undefined behavior.
+
+The devil is in the details, however, so the reality is slightly more nuanced.
+
+_First_, `unsafe` should be checked by humans, thus a human-assisted type system.
+The problem with humans, however, is that they make mistakes all the time.
+
+_Second_, checking `unsafe` can involve a rather large chunk of code.
+For example, if you implement `Vec`, you can (safely) write to its `length` field from anywhere in the defining module.
+That means that correctness of `Deref` impl for `Vec` depends on the whole module.
+Common wisdom says that the boundary for `unsafe` code is a module, but I would love to see a more precise characteristic.
+For example, in `map_in_place` case it's pretty clear that only a single function should be examined.
+On the other hand, if ``Vec``'s field are `pub(super)`, parent module should be scrutinized as well.
+
+_Third_, it's trivial to make all `unsafe` blocks technically correct by just making every function `unsafe`.
+That wouldn't be a useful thing to do though!
+Similarly, if `unsafe` is used willy-nilly across the ecosystem, its value is decreased, because there would be many incorrect `unsafe` blocks, and reviewing each additional block would be harder.
+
+_Fourth_, and probably most disturbing, correctness of two `unsafe` blocks in isolation [does not guarantee](http://smallcultfollowing.com/babysteps/blog/2016/10/02/observational-equivalence-and-unsafe-code/) that they together are correct!
+We shouldn't panic though: in practice, realistic usages of `unsafe` do compose.
+
+Discussion on [r/rust](https://www.reddit.com/r/rust/comments/chvl50/blog_post_unsafe_as_a_humanassisted_type_system/).
+
+**Update(2020-08-17):** oops, [I did it again](https://lobste.rs/s/9e7o8e/comparative_unsafety#c_btqrdt).
+
+[1] `unsafe` is really an effect system, but the difference is not important here.

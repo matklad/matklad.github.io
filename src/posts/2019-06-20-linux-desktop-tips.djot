@@ -1,0 +1,214 @@
+# Linux Desktop Tips
+
+Over time I have accumulated a number of tricks and hacks that make "`linux desktop`" more natural for me.
+Today I've discovered another one: a way to minimize Firefox on close.
+This seems like a good occasion to write about things I've been doing!
+
+## Window Switching
+
+I've never understood the appeal of multiple desktops, tiling window managers,
+or Mac style "`full screen window is outside of your desktop`".
+They for sure let you to neatly organize several applications at once, but I never need an overview of all applications.
+What I need most of the time is switching to a specific application, like a browser.
+
+Windows has a feature for this, that fits this workflow perfectly.
+If you pin an application to start menu, then [win + number]{.kbd} will launch or focus that app.
+That is, if the app is already running, its window will be raised and focused.
+
+For some reason, this is not available out of the box in any of the Linux window
+managers I've tried. What is easy is binding launching an application to a
+shortcut, but I rarely use more than once instance of Firefox!
+
+Luckily, [jumpapp](https://github.com/mkropat/jumpapp) is exactly what is needed
+to implement this properly.
+
+I use [Xbindkeys](https://wiki.archlinux.org/index.php/Xbindkeys) for global
+shortcuts, with the following config:
+
+{cap="~/.xbindkeysrc"}
+```
+"jumpapp -m kitty"
+  F1
+
+"jumpapp -m firefox"
+  F2
+
+"jumpapp -m code"
+  F3
+```
+
+Note that I bind [F?]{.kbd} keys without any modifiers: these keys are rarely used
+by applications and are very convenient for personal use.
+
+## Drop Down Terminal
+
+I've always liked Quake-style terminals, which you can bring to front with a
+single keypress.
+For this reason, I was stuck with
+[yakuake](https://kde.org/applications/system/org.kde.yakuake) for a really long time.
+
+`jumpapp` allows me to use any terminal in
+this fashion, so now I use full screen [kitty](https://sw.kovidgoyal.net/kitty/).
+
+## Window Tiling
+
+Because switching windows/applications is easy for me, I typically look at a single maximized window.
+However, sometimes I like to have two windows side-by-side, for example an editor and a browser with preview.
+A full blown tiling window manager will be an overkill for this use-case, but another Windows feature comes in handy.
+In Windows, [Win + ←]{.kbd} and [Win + →]{.kbd} tiles active window to the left and right side of the screen.
+Luckily, this _is_ a built in feature in most window managers, including KWin and Openbox (the two I use the most).
+
+## Screen Real Estate
+
+This one is tricky!
+On one hand, because I use one maximized window at a time, I feel comfortable with smaller displays.
+I was even disappointed with a purchase of external display for my laptop: turns out, bigger screen doesn't really help me!
+On the other hand, I really like when all pixels I have are utilized fully.
+
+I've tried to work in full screen windows, but that wasn't very convenient for two reasons:
+
+* Tray area is useful for current time, other status information, and notifications.
+* Full screen doesn't play well with `jumpapp` window switching.
+
+After some experiments, I've settled with the following setup:
+
+* Use of maximized, but not full screen windows.
+* When window is maximized, its borders and title bar are hidden. To do this in `kwin` add the following to `~/.config/kwinrc`:
+
+  ````
+  [Windows]
+  BorderlessMaximizedWindows=true
+  ````
+
+* To still have an ability to close/minimize the window with the mouse, I use [Active Window Menu](https://store.kde.org/p/998910/) Plasmoid.
+  What it does is that it packs window title and close/maximize/minimize buttons into the desktop panel, without spending extra pixels:
+
+  ![](/assets/active-window.png)
+
+Another thing I've noticed is that I look to the bottom side of the screen much more often.
+For this reason, I move desktop panel to the top.
+You can imagine how inconvenient Mac's dock is for me: it wastes so many pixels in the most important area of the display :-)
+
+## Keybindings
+
+After several years of using Emacs and a number of short detours into Vim-land, I grew a profound dislike for the arrow keys.
+It's not that they make me slower: they distract me because I need to think about moving my hands.
+
+For the long time I've tried to banish arrow keys from my life by making every
+application understand [ctrl+b]{.kbd}, [ctrl+f]{.kbd} and the like.
+But that was always a whack-a-mole game without a chance to win.
+
+A much better approach is [Home Row Computing](https://manybutfinite.com/post/home-row-computing/).
+I rebind, on the low level, [CapsLock + i/j/k/l]{.kbd} to arrow keys.
+This works in every app.
+It also works with [alt]{.kbd} and [shift]{.kbd} modifiers.
+
+I use [xkbcomp](https://jlk.fjfi.cvut.cz/arch/manpages/man/xkbcomp.1) with [this config](https://github.com/matklad/config/blob/ed588057545276e05ea4979ea7086addc3724a4e/home-row.xkb) to set this up.
+I have no idea how this actually works :-)
+
+## File Organization
+
+I used to pile up *everything* on the desktop.
+But now my desktop is completely empty, and I enjoy uncluttered view of
+[The Hunters in the Snow](https://upload.wikimedia.org/wikipedia/commons/d/d8/Pieter_Bruegel_the_Elder_-_Hunters_in_the_Snow_%28Winter%29_-_Google_Art_Project.jpg)
+every time I boot my laptop.
+
+The trick is to realize that accreting "`junk`" files is totally normal, and
+"`just don't put garbage on desktop`" is not a solution.
+Instead, one can create a dedicated place for hoarding.
+
+I have two of those:
+
+* `~/downloads` which I remove automatically on every reboot
+* `~/tmp` which I `rm -fr ~/tmp` manually once in a while
+
+## Shell
+
+I used to use `Zsh` with a bunch of plugins, hoping that I'll learn `bash` this way.
+I still google "`How to `if` in bash?`" every single time though.
+
+For this reason, I've switched to [fish](http://fishshell.com/) with mostly default config.
+The killer feature for me is autosuggestions: completion of the commands based on the history.
+`Zsh` has something similar, via a plugin, but this crucial feature works in `fish` out of the box.
+
+One slightly non-standard thing I do is a two-line prompt that looks like this:
+
+```
+02:43:39|~/.config
+λ
+```
+
+Two line prompts are great! You can always see a full working directory, and commands are always visually in the same place.
+Having current time in the prompt is also useful in case you run a long command and forget to `time` it.
+
+## Minimizing Firefox
+
+Finally, the direct cause of this post!
+
+I don't use a lot of desktop apps, but I keep a browser with at least five tabs for different messaging apps.
+By the way, [Tree Style Tab](https://addons.mozilla.org/en-US/firefox/addon/tree-style-tab/) is the best tool for taming modern "`apps`"!
+
+The problem with this is that I automatically [Alt+F4]{.kbd} Firefox once I am done with it, but launching it every time is slow.
+Ideally, I want to minimize it on close, just how I do with qBittorrent and Telegram.
+Unfortunately, there's no built-in feature for this in Firefox.
+
+I once tried to build it with `Xbindkeys` and `Xdotool`.
+The idea was to intercept [Alt+F4]{.kbd} and minize active window if it is Firefox.
+That didn't work too well: to close all other applications, I tried to forward [Alt+F4]{.kbd}, but that recursed badly :-)
+
+Luckily, today I've realized that I can write a KWin script for this!
+This turned out to be much harder than anticipated, because the docs are thin and setup is fiddly.
+
+[This
+post](https://zren.github.io/2019/03/14/quick-tile-an-app-when-it-opens-using-a-kwin-script) was instrumental for me to figure this stuff out. Thanks Chris!
+
+I've created two files:
+
+{cap="~/.local/share/kwin/scripts/SmartCloseWindow/metadata.desktop"}
+```
+[Desktop Entry]
+Name=Smart Close Window
+Comment=
+Icon=preferences-system-windows-script-test
+
+Type=Service
+
+X-Plasma-API=javascript
+X-Plasma-MainScript=code/main.js
+X-KDE-ServiceTypes=KWin/Script
+
+X-KDE-PluginInfo-Name=SmartCloseWindow # Note, the same name as the dir
+X-KDE-PluginInfo-Author=matklad
+X-KDE-PluginInfo-Email=...
+X-KDE-PluginInfo-License=GPL
+X-KDE-PluginInfo-Version=3
+```
+
+{cap="~/.local/share/kwin/scripts/SmartCloseWindow/contents/code/main.js"}
+```
+registerShortcut("Smart Close Window.",
+    "Smart Close Window.",
+    "alt+f4",
+    function () {
+        var c = workspace.activeClient;
+        if (c.caption.indexOf("Firefox") == -1) {
+            c.closeWindow();
+        } else {
+            c.minimized = true;
+        }
+    });
+```
+
+After than, I've ticked a box in front of `Smart Close Window` in [System Settings > Window Management > KWin Scripts]{.menu} and
+added a shortcut in [System Settings > Shortcuts > Global Shortcuts > System Settings]{.menu}.
+The last step took a while fo figure out: although it looks like we set shortcut in the script itself, this doesn't actually work for some reason.
+
+## Linux Distribution
+
+Finally, my life has become significancy easier since I've settled on [NixOS](https://nixos.org/).
+I had mainly used [Arch](https://www.archlinux.org/) and a bit of [Ubuntu](https://ubuntu.com/) before, but NixOS is so much easier to control.
+I highly recommend to check it out!
+
+## My Dotfiles
+
+Most of the stuff in this post is codified in my config repo: <https://github.com/matklad/config>.

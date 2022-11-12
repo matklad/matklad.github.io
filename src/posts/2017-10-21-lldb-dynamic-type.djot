@@ -1,0 +1,57 @@
+# Dynamic types in LLDB
+
+[eli]: https://eli.thegreenplace.net/tag/debuggers
+
+If you are wondering how debuggers work, I suggest reading Eli Bendersky's
+[eli-on-debuggers][eli]. However after having read these notes myself, I still
+had one question unanswered. Namely, how can debugger show fields of a class, if
+the type of the class is known only at runtime?
+
+## Example
+
+Consider this situation: you have a pointer of type `A*`, which at runtime holds
+a value of some subtype of `A`. Could the debugger display the fields of the
+actual type? Turns out, it can handle cases like the one below just fine!
+
+```cpp
+struct Base { ... };
+
+struct Derived: Base { ... };
+
+void foo(Base& x) {
+    // `x` can be `Derived` or `Base` here.
+    // How can debugger show fields of `Derived` then?
+}
+```
+
+## DWARF
+
+Could it be possible that information about dynamic types is present in DWARF?
+If we look at the DWARF, we'll see that there's layout information for both
+`Base` and `Derive` types, as well as a entry for `x` parameter, which says that
+it has type `Base`. And this makes sense: we don't know that `x` is  `Derived`
+until runtime! So debugger must somehow figure the type of the variable
+dynamically.
+
+
+## No Magic
+
+[gdta]: https://github.com/llvm-mirror/lldb/blob/bc19e289f759c26e4840aab450443d4a85071139/include/lldb/Target/LanguageRuntime.h#L82
+
+As usual, there's no magic. For example, LLDB has a hard-coded knowledge of C++
+programming language, which allows debugger to inspect types at runtime.
+Specifically, this is handled by `LanguageRuntime` LLDB *plugin*, which has a
+curious function [`GetDynamicTypeAndAddress`][gdta], whose job is to poke the
+representation of value to get its real type and adjust pointer, if necessary
+(remember, with multiple inheritance, casts may change the value of the
+pointer).
+
+[ItaniumRT]: https://github.com/llvm-mirror/lldb/blob/bc19e289f759c26e4840aab450443d4a85071139/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp#L185
+[ABI]: http://refspecs.linuxbase.org/cxxabi-1.83.html
+
+
+The implementation of this function for C++ language lives in
+[ItaniumABILanguageRuntime.cpp][ItaniumRT] although, unlike C, C++ lacks a
+standardized ABI, almost all compilers on all non-windows platforms use a
+[specific ABI][ABI], confusingly called Itanium (after a now effectively dead
+64-bit CPU architecture).

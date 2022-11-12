@@ -1,0 +1,223 @@
+# Rust in 2021
+
+This is my response for this year's [call for blog posts](https://blog.rust-lang.org/2020/09/03/Planning-2021-Roadmap.html).
+I am writing this as a language implementor, not as a language user.
+I also don't try to prioritize the problems.
+The two things I'll mention are the things that worry me most without reflecting on the overall state of the project.
+They are not necessary the most important things.
+
+## Funding Teams to Work on Rust
+
+For the past several years, I've been a maintainer of "Sponsored Open Source" projects (rust-analyzer & IntelliJ Rust).
+These projects:
+
+* have a small number of core developers who work full-time at company X, and whose job is to maintain the project,
+* are explicitly engineered for _active_ open source:
+
+  * significant fraction of maintainer's time goes to contribution documentation, issue mentoring, etc,
+  * non-trivial amount of features end up being implemented by the community.
+
+This experience taught me that there's a great deal of a difference between the work done by the community, and the work done during payed hours.
+To put it bluntly, a small team of 2-3 people working full-time on a specific project with a long time horizon can do __a lot__.
+Not because `payed hours == higher quality work`, but because of the cumulative effect of:
+
+ * being able to focus on a single thing,
+ * keeping the project in a mental cache and accumulating knowledge,
+ * being able to "invest" into the code and do long-term planing effectively.
+
+In other words, community gives breadth of contributions, while payed hours give depth.
+Both are important, but I feel that Rust could use a lot of the latter at the moment, in two senses.
+
+_First_, marginal utility of adding a full-time developer to the Rust project will be high for quite a few full-time developers.
+
+_Second_, perhaps more worrying, I have a nagging feeling that the imbalance between community and payed hours can affect the quality of the technical artifact, and not just the speed of development.
+The two styles of work lend themselves to different kinds of work actually getting done.
+Most of pull requests I merge are about new features, and some are about bug-fixes.
+Most of pull requests I submit are about refactoring existing code.
+Community naturally picks the work of __incrementally adding__ new code, maintainers can __refactor and rewrite__ existing code.
+It's easy to see that, in the limit, this could end with an effectively immutable/append only code base.
+I think we are pretty far from the limit today, but I don't exactly like the current dynamics.
+I keep coming back to this [Rust 2019](https://graydon2.dreamwidth.org/263429.html) post when I think about this issue.
+
+The conclusion from this section is that we should find ways to fund teams of people to focus on improving the Rust programming language.
+Through luck, hard work of my colleagues at JetBrains and Ferrous Systems, and my own efforts it became possible to move in this direction for both IntelliJ Rust and rust-analyzer.
+This was pretty stressful, and, well, I feel that the marginal utility of one more compiler engineer is still huge in the IDE domain at least.
+
+## Compiling the Compiler
+
+And now to something completely different!
+I want this:
+
+```console
+$ git clone git@github.com:rust-lang/rust.git && cd rust
+$ cargo t
+info: syncing channel updates for 'beta-x86_64-unknown-linux-gnu'
+info: latest update on 2020-09-10, rust version 1.47.0-beta
+info: downloading component 'cargo'
+info: downloading component 'rustc'
+info: installing component 'cargo'
+info: installing component 'rustc'
+Compiling unicode-xid v0.2.1
+Compiling proc-macro2 v1.0.20
+
+...
+
+Finished test [unoptimized] target(s) in 5m 45s
+  Running target/debug/deps/rustc-bf0145d0690d0fbc
+
+running 9001 tests
+
+...
+
+test result: ok. 9001 passed;  in 1m 3s
+```
+
+That is, I want to simplify working on the compiler itself to it being just a crate.
+This section of the article expands on the comment I've made on the
+[irlo](https://internals.rust-lang.org/t/experience-report-contributing-to-rust-lang-rust/12012/17?u=matklad)
+a while ago.
+
+Since a couple of months ago, I am slowly pivoting from doing mostly green field dev in the rust-analyzer's code base to refactoring `rustc` internals towards merging the two.
+The process has been underwhelming, and slow and complicated build process plays a significant part in this: I feel like my own productivity is at least five times greater when I work on `rust-analyzer` in comparison to `rustc`.
+
+Before I go into details about my vision here, I want to give shout-outs to
+[@Mark-Simulacrum](https://github.com/Mark-Simulacrum/), [@mark-i-m](https://github.com/mark-i-m), and [@jyn514](https://github.com/jyn514)
+who already did a lot of work on simplifying the build process in the recent several months.
+
+Note that I am going to make a slightly deeper than "Rust in 20XX" dive into the topic, feel free to skip the rest of the post if technical details about bootstrapping process are not your cup of tea.
+
+Finally, I also should warn that I have an intern advantage here --- I have absolutely no idea about how Rust's current build process works, so I tell how it should work from the position of ignorance. Without further ado,
+
+### How Simple Could the Build Process Be?
+
+`rustc` is a bootstrapping compiler.
+This means that, to compile `rustc` itself, one needs to have a previous version of `rustc` available.
+This _could_ make compiler's build process peculiar.
+My thesis is that this doesn't need to be the case, and that the compiler could be just a crate.
+
+Bootstrapping does make this harder to see though, so, as a thought experiment, let's imagine what would ``rustc``'s build process look like were it not written in Rust.
+Let's imagine the world where `rustc` is implemented in Go.
+How would one build and test this rust compiler?
+
+First, we clone the `rust-lang/rust` repository.
+Then we download the latest version of the Go compiler --- as we are shipping `rustc` binaries to the end user, it's OK to require a cutting-edge compiler.
+But there's probably some script or gvm config file to make getting the latest Go compiler easier.
+After that, `go test` builds the compiler and runs the unit tests.
+Unit tests take a snippet of Rust code as an input and check that the compiler correctly analyses the snippet: that the parse tree is correct, that diagnostics are emitted, that borrow checker correctly accepts or rejects certain problems.
+
+What we can not check in this way is that the compiler is capable of producing a real binary which we can run (that is, `run-pass` tests).
+The reason for that is slightly subtle --- to produce a binary, compiler needs to link the tested code with the standard library.
+But we've only compiled the compiler, we don't have a standard library yet!
+
+So, in addition to unit-tests, we also need somewhat ad-hoc integration tests, which assume that the compiler has been build already, use it to compile the standard library, and then compile, link, and run the corpus of the test programs.
+Running std's own `#[test]` tests is also a part of this integration testing.
+
+Now, let's see if the above setup has any bottlenecks:
+
+1. Getting the Go compiler is fast and straightforward.
+   In fact, it's reasonable to assume that the user already have a recent Go compiler installed, and that they are familiar with standard Go workflows.
+
+2. Compiling `rustc` would take a little while.
+   On the one hand, Rust is a big language, and you need to spend quite a few lines of code to implement it.
+   On the other hand, compilers are very straightforward programs, which don't do a lot of IO, don't have to deal with changing business requirements and don't have a lot of dependencies.
+   Besides, Go is a language known for fast compile times.
+   So, spending something like five minutes on a quad-core machine for compiling the compiler seems reasonable.
+
+3. After that, running unit-tests is a breeze: unit-tests do not depend on any state external to the test itself; we are testing pure functions.
+
+4. The first integration tests is compiling and ``#[test]``ing `std`.
+   As `std` is relatively small, compiling it with our compiler should be relatively fast.
+
+5. Running tens of thousands of full integration tests will be slow.
+   Each such test would need to do IO to read the source code, write the executable, and run the process.
+   It is reasonable to assume that _most_ of potential failures are covered with compiler's and ``std``'s unit tests.
+   But it would be foolish to rely solely on those tests --- fully integrated test suite is important to make sure that compiler indeed does what it is supposed to, and it is vital to compare several independent implementations --- who knows, maybe one day we'll rewrite `rustc` from Go to Rust, and re-using compiler's unit-tests would be much harder in that context.
+
+So, it seems like except for the final integration test suite, there's no complexity/performance bottlenecks in our setup for a from-scratch build.
+The problem with integrated suite can be handled by running a subset of smoke tests by default, and only running the full set of integrated tests on CI.
+Testing is embarrassingly parallel, so a beefy CI fleet should handle that just fine.
+
+What about incremental builds?
+Let's say we want to contribute a change to ``std``.
+First time around, this requires building the compiler, which is unfortunate.
+This is a one-time cost though, and it shouldn't be prohibitive (or we will have troubles with changes to the compiler itself anyway).
+We can also cheat here, and just download some version of `rustc` from the internet to check ``std``.
+This will mostly work, except for the bits where ``std`` and rustc need to know about each other (lang items and intrinsics).
+For those, we can use `#[cfg(not(bootstrap))]` in the ``std`` to compile different code for older versions of the compiler.
+This makes ``std`` implementation mind-bending though, so a better alternative might be to just make CI publish the artifacts for the compiler built off the master branch.
+That is, if you only contribute to ``std``, you download the latest compiler instead of building it yourself.
+We have a trade off between implementation complexity and compile times.
+
+If we want to contribute a change to the compiler, then we are golden as long as it can be checked by the unit-tests (which, again, in theory is everything except for `run-pass` tests).
+If we need to run integrated tests with ``std``, then we need to recompile ``std`` with the new compiler, after every change to the compiler.
+This is pretty unfortunate, but:
+
+* if you fundamentally need to recompile ``std`` (for example, you change lang-items), there's no way around this,
+* if you don't need to recompile ``std``, than you probably can write an ``std``-less unit-test,
+* as an escape hatch, there might be some kind of `KEEP_STDLIB` env var, which causes integrated tests to re-use existing ``std``, even if the compiler is newer.
+
+To sum up, compiler is just a program which does some text processing.
+In the modern world full of distributed highly-available long-running systems, compiler is actually a pretty simple program.
+It also is fairly easy to test.
+The hard bit is not the compiler itself, but the standard library: to even start building the standard library, we need to compile the compiler.
+However, most of the compiler can be tested without ``std``, and ``std`` itself can be tested using compiler binary built from the master branch by CI.
+
+### Why Today's Build Process is not Simple?
+
+In theory, it should be possible to replace Go from the last section with Rust, and get a similarly simple bootstrapping compiler.
+That is, we would use latest stable/beta Rust to compile `rustc`, then we'll use this `rustc` to compile ```std```, and we are done.
+We might add a sanity check --- using the freshly built compiler & ``std``, recompile the compiler again and check that everything works.
+This is optional, and in a sense just a subset of a crater run, where we check one specific crate --- compiler itself.
+
+However, today's build is _more_ complicated than that.
+
+_First_, instead of using a "standard distribution" of the compiler for bootstrapping, `x.py` downloads custom beta toolchain.
+This could and should be replaced with using `rustup` by default.
+
+_Second_, master `rustc` requires master ``std`` to build.
+This is the bit which makes `rustc` not a simple crate.
+Remember how before the build started with just compiling the compiler as a usual program?
+Today, `rustc` build starts with compiling master ``std`` using the beta compiler, than with compiling master `rustc` using master ``std`` and beta compiler.
+So, there's a requirement that ``std`` builds with both master and beta compilers, and we also has this weird state where versions of compiler and ``std`` we are using to compile the code do not match. In other words, while `#[cfg(not(bootstrap))]` was an optimization in the previous section (which could be replaced with downloading binary `rustc` from CI), today it is required.
+
+_Third_, there's not much in a way of the unit tests in the compiler.
+Almost all tests require ``std``, which means that, to test anything, one needs to rebuild everything.
+
+_Fourth_, LLVM & linkers.
+A big part of "compilers are easy to test" is the fact that they are, in theory, closed systems interacting with the outside world in a limited well-defined way.
+In the real world, however, rustc relies on a bunch of external components to work, the biggest one of which is LLVM.
+Luckily, these external components are required only for making the final binary.
+The bulk of the compiler, analysis phases which reject invalid programs and lower valid ones, does not need them.
+
+### Specific Improvements
+
+With all this in mind, here are specific steps which I believe would make the build process easier:
+
+* Gear the overall build process and defaults to the "hacking on the compiler" use case.
+* By default, rely on `rust-toolchain` file and rustup to get the beta compiler.
+* Switch from `x.py` to something like [`cargo-xtask`](https://github.com/matklad/cargo-xtask), to remove dependency on Python.
+* Downgrade rustc's libstd requirements to beta.
+  Note that this refers solely to the ``std`` used to build `rustc` itself.
+  `rustc` will use master ``std`` for building user's code.
+* Split compiler and ``std`` into separate Cargo workspaces.
+* Make sure that, by default, `rustc` is using system llvm, or llvm downloaded from a CI server.
+  Building llvm from source should require explicit op-in.
+* Make sure that `cd compiler && cargo test` just works.
+* Add ability to to make a build of the compiler which can run `check`, but doesn't do llvm-dependent codegen.
+* Split the test suite into cross-platform codegen-less `check` part, and the fully-integrated part.
+* Split the compiler itself into frontend and codegen parts, such that changes in frontend can be tested without linking backend, and changes in backend can be tested without recompiling the frontend.
+* Stop building ``std`` with beta compiler and remove all `#[cfg(bootstrap)]`.
+* _Somehow_ make `cargo test` just work in ``std``.
+  This will require some hackery to plug the logic for "build compiler from source or download from CI" somewhere.
+
+At this stage, we have a compiler which is 100% bog standard crate, and ``std``, which is _almost_ a typical crate (it only requires a very recent compiler to build).
+
+After this, we can start the standard procedure to optimize compile and test times, just how you would do for any other Rust project (I am planning to write a couple of posts on these topics).
+I have a suspicion that there's a lot of low-hanging fruit there --- one of the reasons why I writing this post is that I've noticed that doctests in ``std`` are insanely slow, and that nobody complains about that just because everything else is even slower!
+
+This post ended up being too technical for the genre, but, to recap, there seems to be two force multipliers we could leverage to develop Rust itself:
+
+* Creating a space for small teams of people to work full-time on Rust.
+* Simplifying hacking on the compiler to just `cargo test`.
+
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/irhj4o/blog_post_rust_in_2021/).

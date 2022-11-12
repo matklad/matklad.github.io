@@ -1,0 +1,272 @@
+# Why is Rust the Most Loved Programming Language?
+
+\... by me?
+
+Rust is my favorite programming language (other languages I enjoy are Kotlin and Python).
+In this post I want to explain why I, somewhat irrationally, find this language so compelling.
+The post does not try to explain why Rust is the most loved language according to
+[StackOverflow survey](https://insights.stackoverflow.com/survey/2019#most-loved-dreaded-and-wanted) :-)
+
+Additionally, this post does not cover the actual good reasons why one might want to use Rust.
+Briefly:
+
+* If you use C++ or C, Rust allows you to get roughly the same binary, but with compile-time guaranteed absence of undefined behavior.
+  This is a big deal and the reason why Rust exists.
+* If you use a statically typed managed language (Java, C#, Go, etc), the benefit of Rust is a massive simplification of multithreaded programming: data races are eliminated at compile time.
+  Additionally, you get the benefits of a lower level language (less RAM, less CPU, direct access to platform libraries) without paying as much cost as you would with C++.
+  This is not free: you'll pay with compile times and cognitive complexity, but it would be "why my code does not compile" complexity, rather than "why my heap is corrupted" complexity.
+
+If you'd like to hear more about the above, this post will disappoint you :-)
+
+## It's All the Small Things!
+
+The reason why I irrationally like Rust is that it, subjectively, gets a lot of small details just right (or at least better than other languages I know).
+The rest of the post would be a laundry list of those things, but first I'd love to mention why I think Rust is the way it is.
+
+_First_, it is a relatively young language, so it can have many "obviously good" things.
+For example, I feel like there's a general consensus now that, by default, local variables should not be reassignable.
+This probably was much less obvious in the 90s, when today's mainstream languages were designed.
+
+_Second_, it does not try to maintain source/semantic compatibility with any existing language.
+Even if we think that const by default is a good idea, we can't employ it in TypeScript, because it needs to stay compatible with JavaScript.
+
+_Third_, (and this is a pure speculation on my part) I feel that the initial bunch of people who designed the language and its design principles just had an excellent taste!
+
+So, to the list of adorable things!
+
+## Naming Convention
+
+To set the right mood for the rest of the discussion, let me start with claiming that `snake_case` is more readable than `camelCase` :-)
+Similarly, `XmlRpcRequest` is better than `XMLRPCRequest`.
+
+I believe that readability is partially a matter of habit.
+But it also seems logical that `_` is better at separating words than case change or nothing at all.
+And, subjectively, after writing a bunch of `camelCase` and `snake_case`, I much prefer `_`.
+
+## Keyword First Syntax
+
+How would you [Ctrl+F]{.kbd} the definition of `foo` function in a Java file on GitHub?
+Probably just `foo(`, which would give you both the definition and all the calls.
+In Rust, you'd search for `fn foo`.
+In general, every construct is introduced by a leading keyword, which makes it much easier to read the code for a human.
+When I read C++, I always have a hard time distinguishing field declarations from method declarations: they start the same.
+Leading keywords also make it easier to do stupid text searches for things.
+If you don't find this argument compelling because "one should just use an IDE to look for methods", well, it actually makes implementing an IDE slightly easier as well:
+
+* Parsing has a nice LL(1) vibe to it, you just dispatch on the current token.
+* Parser resilience is easy, you can synchronize on leading keywords like `fn`, `struct` etc.
+* It's easier for the IDE to guess the intention of a user.
+  If you type `fn`, IDE recognizes that you want to add a new function and can, for example, complete function overrides for you.
+
+## Type Last Syntax
+
+C-family languages usually use `Type name` order.
+Languages with type inference, including Rust, usually go for `name: Type`.
+Technically, this is more convenient because in a recursive descent parser it's easier to make the second part optional.
+It's also more readable, because you put the most important part, the name, first.
+Because names are usually more uniform in length than types, groups of fields/local variables align better.
+
+## No Dangling Else
+
+Many languages use `if (condition) { then_branch }` syntax, where parenthesis around condition are mandatory, and braces around `then_branch` are optional.
+Rust does the opposite, which has the following benefits:
+
+* There's no need for a special rule to associate `else` with just the right `if`. Instead, `else if` is an indivisible unambiguous bit of syntax.
+* [goto fail;](https://www.imperialviolet.org/2014/02/22/applebug.html) bug is impossible; more generally, you don't have to make the decision if it is ok to omit the braces.
+
+## Everything Is An Expression, Including Blocks
+
+I think "everything is an expression" is generally a good idea, because it makes things composable.
+Just the other day I tried to handle `null` in TypeScript in a Kotlin way, with `foo() ?? return false`, and failed because `return` is not an expression.
+
+The problem with traditional functional (Haskell/OCaml) approach is that it uses `let name = expr in` expression for introducing new variables, which just feels bulky.
+Specifically, the closing `in` keyword feels verbose, and also emphasizes the nesting of expression.
+The nesting is undoubtedly there, but usually it is very boring, and calling it out is not very helpful.
+
+Rust doesn't have a let expression per se, instead it has flat-feeling blocks which can contain many `let` statements:
+
+```rust
+let d = {
+    let a = 1;
+    let b = 6;
+    let c = 9;
+    b*b - 4*a*c
+};
+```
+
+This gives, subjectively, a lighter-weight syntax for introducing bindings and side-effecting statements, as well as an ability to nicely scope local variables to sub-blocks!
+
+## Immutable/non-Reassignable by Default
+
+In Rust, reassignable variables are declared with `let mut` and non-reassignable with `let`.
+Note how the rarer option is more verbose, and how it is expressed as a modifier, and not a separate keyword, like `let` and `const`.
+
+## Namespaced Enums
+
+In Rust, enums (sum types, algebraic data types) are namespaced.
+
+You declare enums like this:
+
+```rust
+enum Expr {
+    Int(i32),
+    Bool(bool),
+    Sum { lhs: Box<Expr>, rhs: Box<Expr> },
+}
+```
+
+And use them like `Expr::Int`, without worrying that it might collide with
+
+```rust
+enum Type {
+    Int,
+    Bool
+}
+```
+
+No more repetitive `data Expr = ExprInt Int | ExprBool Bool | ExprSum Expr Expr`!
+
+Swift does even a nicer trick here, by using an `.VariantName` syntax to refer to a namespaced enum ([docs](https://docs.swift.org/swift-book/LanguageGuide/Enumerations.html#ID147)).
+This makes matching less verbose and completely dodges the sad Rust ambiguity between constants and bindings:
+
+```rust
+let x: Option<i32> = Some(92);
+match x {
+    None => 1,
+    none => 2,
+}
+```
+
+## Syntactic Separation of Fields and Methods
+
+Fields and methods are declared in separate blocks (like in Go):
+
+```rust
+#[derive(Clone, Copy)]
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Point {
+    fn distance_to_origin(self) -> f64 {
+        let Point { x, y } = self;
+        (x*x + y*y).sqrt()
+    }
+    ...
+}
+```
+
+This is a **huge** improvement to readability: there are usually far fewer fields than methods, but by looking at the fields you can usually understand which set of methods can exist.
+
+## Integer Types
+
+`u32` and `i64` are shorter and clearer than `unsigned int` or `long`.
+`usize` and `isize` cover the most important use case for arch-dependent integer type, and also make it clearer at the type level which things are addresses/indices, and which are quantities.
+There's also no question of how integer literals of various types look, it's just `1i8` or `92u64`
+
+The overflow during arithmetic operations is considered a bug, traps in debug builds and wraps in release builds.
+However, there's a plethora of methods like `wrapping_add`, `saturating_sub`, etc, so you can exactly specify behavior on overflow in specific cases where it is not a bug.
+In general, methods on primitives allow to expose a ton of compiler intrinsics in a systematic way, like `u64::count_ones`.
+
+## Definitive Initialization
+
+Rust uses control flow analysis to check that every local variable is assigned before the first use.
+This is a much better default than making this UB, or initializing all locals to some default value.
+Additionally, Rust has a first-class support for diverging control flow (`!` type and `loop {}` construct), which protects it from at-a-distance changes like
+[this example](https://javax0.wordpress.com/2020/01/01/jdk14-instanceof-ea-issue/)
+from Java.
+
+Definitive initialization analysis is an interesting example of a language feature which requires relatively high-brow implementation techniques, but whose effects seem very intuitive, almost trivial, to the users of the language.
+
+## Crates
+
+The next two things are actually not so small.
+
+Rust libraries ("crates") don't have names.
+More generally, Rust doesn't have any kind of global shared namespace.
+
+This is in contrast to languages which have a concept of library path (`PYTHONPATH`, `classpath`, `-I`).
+If you have a library path, you are exposed to name/symbol clashes between libraries.
+While a name clash between two libraries seems pretty unlikely, there's a special case where collision happens regularly.
+One of your dependencies can depend on `libfoo v1`, and another one on `libfoo v2`.
+Usually this means that you either can't use the two libraries together, or need to implement some pretty horrific workarounds.
+
+In Rust the name you use for a library is a property of the dependency edge between upstream and downstream crate.
+That is, the single crate can be known under different names in different dependant crates or, vice versa, two different crates might be known under equal names in different parts of the crate graph!
+This (and semver discipline, which is a social thing) is the reason why Cargo doesn't suffer from dependency hell as much as some other ecosystems.
+
+## Crate Visibility
+
+Related to the previous point, crates are also an important visibility boundary, which allows you clearly delineate public API **of a library** from implementation details.
+This is a major improvement over class-level visibility controls.
+
+It's interesting though that it took Rust two tries to get first-class "exported from the library" (`pub`) and "internal to the library" (`pub(crate)`) visibilities.
+That is also the reason why more restrictive `pub(crate)` is unfortunately longer to write, I wish we used `pub` and `pub*`.
+
+Before 2018 edition, Rust had a simpler and more orthogonal system, where you can only say "visible in the parent", which happens to be "exported" if the parent is root or is itself exported.
+But the old system is less convenient in practice, because you can't look at the declaration and immediately say if it is a part of crate's public API or not.
+
+The next language should use these library-level visibilities from the start.
+
+## Cross Platform Binaries
+
+Rust programs generally just work on Linux, Mac and Windows, and you don't need to install a separate runtime to run them.
+
+## Eq
+
+Equality operator (`==`) is not polymorphic, comparing things of different types (`92 == "the answer"`) is a type error.
+
+## Ord
+
+The canonical comparison function returns an `enum Ordering { Less, Equal, Greater }`, you don't need to override all six comparison operators.
+Rust also manages this without introducing a separate `<=>` spaceship operator just for this purpose.
+And you still can implement fast path for `==` / `!=` checks.
+
+## Debug & Display
+
+Rust defines two ways to turn something into a string: `Display`, which is intended for user-visible strings, and `Debug`, which is generally intended for `printf` debugging.
+This is similar to Python's `__str__` and `__repr__`.
+
+Unlike Python, the compiler derives `Debug` for you.
+Being able to inspect all data structures is a huge productivity boost.
+I hope some day we'll be able to call custom user-provided `Debug` from a debugger.
+
+A nice bonus is that you can debug-print things in two modes:
+
+* compactly on a single-line
+* verbosely, on multiple lines as an indented tree
+
+## Trivial Data Types
+
+Creating simple bag of data types takes almost no syntax, and you can opt-into all kinds of useful extra functionality:
+
+```rust
+#[derive(
+    Debug,
+    Clone, Copy,
+    PartialEq, Eq,
+    PartialOrd, Ord,
+    Hash,
+    Serialize, Deserialize,
+)]
+struct Point {
+    x: i64,
+    y: i64,
+}
+```
+
+## Strings
+
+Another obvious in retrospect thing.
+
+Strings are represented as utf-8 byte buffers.
+The encoding is fixed, can't be changed, and its validity is enforced.
+There's no random access to "characters", but you can slice string with a byte index, provided that it doesn't fall in the middle of a multi-byte character.
+
+## assert!
+
+The default `assert!` macro is always enabled.
+The flavor which can be disabled with a compilation flag, `debug_assert`, is more verbose.
+
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/f41ynd/blog_post_why_is_rust_the_most_loved_programming/).

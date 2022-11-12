@@ -1,0 +1,484 @@
+# Self Modifying Code
+
+This post has nothing to do with JIT-like techniques for patching machine code on the fly (though they are cool!).
+Instead, it describes a cute/horrible trick/hack you can use to generate _source_ code if you are not a huge fan of macros.
+The final technique is going to be independent of any particular programming language, but the lead-up is going to be Rust-specific.
+The pattern can be applied to a wide variety of tasks, but we'll use a model problem to study different solutions.
+
+## Problem
+
+I have a field-less enum representing various error conditions:
+
+```rust
+#[derive(Debug, Clone, Copy)]
+pub enum Error {
+  InvalidSignature,
+  AccountNotFound,
+  InsufficientBalance,
+}
+```
+
+This is a type I expect to change fairly often.
+I predict that it will grow a lot.
+Even the initial version contains half a dozen variants already!
+For brevity, I am showing only a subset here.
+
+For the purposes of serialization, I would like to convert this error to and from an error code.
+One direction is easy, there's built in mechanism for this in Rust:
+
+```rust
+impl Error {
+  pub fn as_code(self) -> u32 {
+    self as u32
+  }
+}
+```
+
+The other direction is more annoying: it isn't handled by the language automatically yet (although there's an in-progress PR which adds just that!), so we have to write some code ourselves:
+
+```rust
+impl Error {
+  pub fn as_code(self) -> u32 {
+    self as u32
+  }
+
+  pub fn from_code(code: u32) -> Option<Error> {
+    let res = match code {
+      0 => Error::InvalidSignature,
+      1 => Error::AccountNotFound,
+      2 => Error::InsufficientBalance,
+      _ => return None,
+    };
+    Some(res)
+  }
+}
+```
+
+Now, given that I expect this type to change frequently, this is asking for trouble!
+It's very easy for the `match` and the enum definition to get out of sync!
+
+What should we do? What _can_ we do?
+
+## Minimalist Solution
+
+Now, seasoned Rust developers are probably already thinking about macros (or maybe even about specific macro crates).
+And we'll get there!
+But first, let's see how I usually solve the problem, when (as I am by default) I am not keen on adding macros.
+
+The idea is to trick the compiler into telling us the number of elements in the enum, which would allow us to implement some sanity checking.
+We can do this by adding a fake element at the end of the enum:
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Error {
+  InvalidSignature,
+  AccountNotFound,
+  InsufficientBalance,
+  __LAST,
+}
+
+impl Error {
+  const ALL: [Error; Error::__LAST as usize] = [
+    Error::InvalidSignature,
+    Error::AccountNotFound,
+    Error::InsufficientBalance,
+  ];
+
+  pub fn from_code(code: u32) -> Option<Error> {
+    Error::ALL.get(code as usize).copied()
+  }
+  pub fn as_code(self) -> u32 {
+    Error::ALL
+      .into_iter()
+      .position(|it| it == self)
+      .unwrap_or_default() as u32
+  }
+}
+```
+
+Now, if we add a new error variant, but forget to update the `ALL` array, the code will fail to compile --- exactly the reminder we need.
+The major drawback here is that `__LAST` variant has to exist.
+This is fine for internal stuff, but something not really great for a public, clean API.
+
+## Minimalist Macro
+
+Now, let's get to macros, and let's start with the simplest possible one I can think of!
+
+```rust
+define_error![
+  InvalidSignature,
+  AccountNotFound,
+  InsufficientBalance,
+];
+
+impl Error {
+  pub fn as_code(self) -> u32 {
+    self as u32
+  }
+}
+```
+
+Pretty simple, heh? Let's look at the definition of `define_error!` though:
+
+```rust
+macro_rules! define_error {
+  ($($err:ident,)*) => {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Error {
+      $($err,)*
+    }
+
+    impl Error {
+      pub fn from_code(code: u32) -> Option<Error> {
+        #![allow(non_upper_case_globals)]
+        $(const $err: u32 = Error::$err as u32;)*
+        match code {
+          $($err => Some(Error::$err),)*
+          _ => None,
+        }
+      }
+    }
+  };
+}
+```
+
+That's ... quite literally a puzzle!
+Declarative macro machinery is comparatively inexpressive, so you need to get creative to get what you want.
+Here, ideally I'd write
+
+```rust
+match code {
+  0 => Error::InvalidSignature,
+  1 => Error::AccountNotFound,
+  2 => Error::InsufficientBalance,
+}
+```
+
+Alas, counting in macro by example is possible, but not trivial.
+It's a subpuzle!
+Rather than solving it, I use the following work-around:
+
+```rust
+const InvalidSignature: u32 = Error::InvalidSignature as u32;
+match {
+  InvalidSignature => Error::InvalidSignature,
+}
+```
+
+And then I have to `#![allow(non_upper_case_globals)]`, to prevent the compiler from complaining.
+
+## Idiomatic Macro
+
+The big problem with macro is that it's not only the internal implementation which is baroque!
+The call-site is pretty inscrutable as well!
+Let's imagine we are new to a codebase, and come across the following snippet:
+
+```rust
+define_error![
+  InvalidSignature,
+  AccountNotFound,
+  InsufficientBalance,
+];
+
+impl Error {
+  pub fn as_code(self) -> u32 {
+    self as u32
+  }
+}
+```
+
+The question I would ask here would be "what's that `Error` thing is?".
+Luckily, we live in the age of powerful IDEs, so we can just "goto definition" to answer that, right?
+
+![](/assets/gotodef-macro-1.gif)
+
+Well, not really.
+An IDE says that the `Error` token is produced by _something_ inside that macro invocation.
+That's a correct answer, if not the most useful one!
+So I have to read the definition of the `define_error` macro and understand how that works internally to get the idea about public API available externally (e.g., that the `Error` refers to a public enum).
+And here the puzzler nature of declarative macros is exacerbated.
+It's hard enough to figure out how to express the idea you want using the restricted language of macros.
+It's doubly hard to understand the idea the macro's _author_ had when you can't peek inside their brain and observer only to the implementation of the macro.
+
+One remedy here is to make macro input look more like the code we want to produce.
+Something like this:
+
+```rust
+define_error![
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  pub enum Error {
+    InvalidSignature,
+    AccountNotFound,
+    InsufficientBalance,
+  }
+];
+
+impl Error {
+  pub fn as_code(self) -> u32 {
+    self as u32
+  }
+}
+```
+
+This indeed is marginally friendlier for IDEs and people to make sense of:
+
+![](/assets/gotodef-macro-2.gif)
+
+The cost for this is a more complicated macro implementation.
+Generally, a macro needs to do two things: parse arbitrary token stream input, and emit valid Rust code as output.
+Parsing is usually the more complicated task.
+That's why in our minimal attempt we used maximally simple syntax, just a list of identifiers.
+However, if we want to make the input of the macro look more like Rust, we have to parse a subset of Rust, and that's more involved:
+
+```rust
+macro_rules! define_error {
+  (
+    $(#[$meta:meta])*
+    $vis:vis enum $Error:ident {
+      $($err:ident,)*
+    }
+  ) => {
+    $(#[$meta])*
+    $vis enum $Error {
+      $($err,)*
+    }
+
+    impl Error {
+      pub fn from_code(code: u32) -> Option<Error> {
+        #![allow(non_upper_case_globals)]
+        $(const $err: u32 = $Error::$err as u32;)*
+        match code {
+          $($err => Some($Error::$err),)*
+          _ => None,
+        }
+      }
+    }
+  };
+}
+
+define_error![
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  pub enum Error {
+    InvalidSignature,
+    AccountNotFound,
+    InsufficientBalance,
+  }
+];
+```
+
+We have to carefully deal with all those visibilities and attributes.
+Even after we do that, the connection between the input Rust-like syntax and the output Rust is skin-deep.
+This is mostly smoke and mirrors, and is not much different from, e.g., using Haskell syntax here:
+
+```rust
+macro_rules! define_error {
+  (
+    data $Error:ident = $err0:ident $(| $err:ident)*
+      $(deriving ($($derive:ident),*))?
+  ) => {
+    $(#[derive($($derive),*)])?
+    enum $Error {
+      $err0,
+      $($err,)*
+    }
+
+    impl Error {
+      pub fn from_code(code: u32) -> Option<Error> {
+        #![allow(non_upper_case_globals)]
+        const $err0: u32 = $Error::$err0 as u32;
+        $(const $err: u32 = $Error::$err as u32;)*
+        match code {
+          $err0 => Some($Error::$err0),
+          $($err => Some($Error::$err),)*
+          _ => None,
+        }
+      }
+    }
+  };
+}
+
+define_error![
+  data Error = InvalidSignature | AccountNotFound | InsufficientBalance
+    deriving (Debug, Clone, Copy, PartialEq, Eq)
+
+];
+
+impl Error {
+  pub fn as_code(self) -> u32 {
+    self as u32
+  }
+}
+```
+
+## Attribute Macro
+
+We can meaningfully increase the fidelity between macro input and macro output by switching to a derive macro.
+In contrast to function-like macros, derives require that their input is syntactically and even semantically valid Rust.
+
+So the result looks like this:
+
+```rust
+use macros::FromCode;
+
+#[derive(FromCode, Debug, Clone, Copy, PartialEq, Eq)]
+enum Error {
+  InvalidSignature,
+  AccountNotFound,
+  InsufficientBalance,
+}
+
+impl Error {
+  pub fn as_code(self) -> u32 {
+    self as u32
+  }
+}
+```
+
+Again, the `enum Error` here is an honest, simple enum!
+It's not an alien beast which just wears enum's skin.
+
+And the implementation of the macro doesn't look too bad either, thanks to @dtolnay's tasteful API design:
+
+```rust
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{parse_macro_input, DeriveInput};
+
+#[proc_macro_derive(FromCode)]
+pub fn from_code(input: TokenStream) -> TokenStream {
+  let input = parse_macro_input!(input as DeriveInput);
+  let error_name = input.ident;
+  let enum_ = match input.data {
+    syn::Data::Enum(it) => it,
+    _ => panic!("expected an enum"),
+  };
+
+  let arms =
+    enum_.variants.iter().enumerate().map(|(i, var)| {
+      let i = i as u32;
+      let var_name = &var.ident;
+      quote! {
+        #i => Some(#error_name::#var_name),
+      }
+    });
+
+  quote! {
+    impl #error_name {
+      pub fn from_code(code: u32) -> Option<#error_name> {
+        match code {
+          #(#arms)*
+          _ => None,
+        }
+      }
+    }
+  }
+  .into()
+}
+```
+
+Unlike declarative macros, here we just directly express the syntax that we want to emit --- a match over consecutive natural numbers.
+
+The biggest drawback here is that on the call-site now we don't have _any_ idea about the extra API generated by the macro.
+If, with declarative macros, you can notice an `pub fn from_code` in the same file and guess that that's a part of an API, with a procedural macro that string is in a completely different crate!
+While proc-macro can greatly improve the ergonomics of using and implementing macros (inflated compile times notwithstanding), for the reader, they are arguably even more opaque than declarative macros.
+
+## Self Modifying Code
+
+Finally, let's see the promised hacky solution :)
+While, as you might have noticed, I am not a huge fan of macros, I like plain old code generation --- text in, text out.
+Text manipulation is much worse-is-betterer than advanced macro systems.
+
+So what we are going to do is:
+
+* Read the file with the enum definition as a string (`file!()` macro will be useful here).
+* "Parse" enum definition using unsophisticated string splitting (`str::split_once`, aka `cut` would be our parser).
+* Generate the code we want by concatenating strings.
+* Paste the resulting code into a specially marked position.
+* Overwrite the file in place, if there are changes.
+* And we are going to use a `#[test]` to drive the process!
+
+
+```rust
+#[derive(Debug, Clone, Copy)]
+pub enum Error {
+  InsufficientBalance,
+  InvalidSignature,
+  AccountNotFound,
+}
+
+impl Error {
+  fn as_code(self) -> u32 {
+    self as u32
+  }
+
+  fn from_code(code: u32) -> Option<Error> {
+    let res = match code {
+      // region:sourcegen
+      0 => Error::InsufficientBalance,
+      1 => Error::InvalidSignature,
+      2 => Error::AccountNotFound,
+      // endregion:sourcegen
+      _ => return None,
+    };
+    Some(res)
+  }
+}
+
+#[test]
+fn sourcegen_from_code() {
+  let original_text = std::fs::read_to_string(file!()).unwrap();
+  let (_, variants, _) =
+    split_twice(&original_text, "pub enum Error {\n", "}")
+      .unwrap();
+
+  let arms = variants
+    .lines()
+    .map(|line| line.trim().trim_end_matches(','))
+    .enumerate()
+    .map(|(i, var)| format!("      {i} => Error::{var},\n"))
+    .collect::<String>();
+
+  let new_text = {
+    let start_marker = "      // region:sourcegen\n";
+    let end_marker = "      // endregion:sourcegen\n";
+    let (prefix, _, suffix) =
+      split_twice(&original_text, start_marker, end_marker)
+        .unwrap();
+    format!("{prefix}{start_marker}{arms}{end_marker}{suffix}")
+  };
+
+  if new_text != original_text {
+    std::fs::write(file!(), new_text).unwrap();
+    panic!("source was not up-to-date")
+  }
+}
+
+fn split_twice<'a>(
+  text: &'a str,
+  start_marker: &str,
+  end_marker: &str,
+) -> Option<(&'a str, &'a str, &'a str)> {
+  let (prefix, rest) = text.split_once(start_marker)?;
+  let (mid, suffix) = rest.split_once(end_marker)?;
+  Some((prefix, mid, suffix))
+}
+```
+
+That's the whole pattern!
+Note how, unlike every other solution, it is crystal clear how the generated code works.
+It's just code which you can goto-definition, or step through in debugging.
+You can be completely oblivious about the shady `#[test]` machinery, and that won't harm understanding in any way.
+
+The code of the "macro" is also easy to understand --- that's literally string manipulation.
+What's more, you can easily see how it works by just running the test!
+
+The "read and update your own source code" part is a bit mind-bending!
+But the implementation is tiny and only uses the standard library, so it should be easy to understand.
+
+Unlike macros, this doesn't try to enforce at compile time that the generated code is fresh.
+If you update the `Error` definition, you need to re-run test for the generated code to be updated as well.
+But this _will_ be caught by the tests.
+Note the important detail --- the test only tries to update the source code if there are, in fact, changes.
+That is, writable `src/` is required only during development.
+
+That's all, hope this survey was useful! Discussion on [/r/rust](https://old.reddit.com/r/rust/comments/tp8tmn/blog_post_self_modifying_code/).

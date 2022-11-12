@@ -1,0 +1,135 @@
+# Inline In Rust
+
+There's a lot of tribal knowledge surrounding [`#[inline]`](https://doc.rust-lang.org/reference/attributes/codegen.html#the-inline-attribute) attribute in Rust.
+I often find myself teaching how it works, so I finally decided to write this down.
+
+Caveat Emptor: this is what I know, not necessarily what is true.
+Additionally, exact semantics of `#[inline]` is not set in stone and may change in future Rust versions.
+
+## Why Inlining Matters?
+
+Inlining is an optimizing transformation which replaces a call to a function with its body.
+
+To give a trivial example, during compilation the compiler can transform this code:
+
+```rust
+fn f(w: u32) -> u32 {
+    inline_me(w, 2)
+}
+
+fn inline_me(x: u32, y: u32) -> u32 {
+    x * y
+}
+```
+
+Into this code:
+
+```rust
+fn f(w: u32) -> u32 {
+    w * 2
+}
+```
+
+To paraphrase [A Catalogue of Optimizing Transformations](https://www.clear.rice.edu/comp512/Lectures/Papers/1971-allen-catalog.pdf) by [Frances Allen](https://en.wikipedia.org/wiki/Frances_Allen) and [John Cocke](https://en.wikipedia.org/wiki/John_Cocke):
+
+```
+There are many obvious advantages to inlining; two are:
+
+a. There is no function call overhead whatsoever.
+b. Caller and callee are optimized together. Advantage can be taken
+   of particular argument values and relationships: constant arguments
+   can be folded into the code, invariant instructions in the callee
+   can be moved to infrequently executed areas of the caller, etc.
+```
+
+In other words, for an ahead of time compiled language inlining is the mother of all other optimizations.
+It gives the compiler the necessary context to apply further transformations.
+
+## Inlining and Separate Compilation
+
+Inlining is at odds with another important idea in compilers --- that of separate compilation.
+When compiling big programs, it is desirable to separate them into modules which can be compiled independently to:
+
+* Process everything in parallel.
+* Scope incremental recompilations to individual changed modules.
+
+To achieve separate compilation, compilers expose signatures of functions, but keep function bodies invisible to other modules, preventing inlining.
+This fundamental tension is what makes `#[inline]` in Rust trickier than just a hint for the compiler to inline the function.
+
+## Inlining in Rust
+
+In Rust, a unit of (separate) compilation is a crate.
+If a function `f` is defined in a crate `A`, then all calls to `f` from within `A` can be inlined, as the compiler has full access to `f`.
+If, however, `f` is called from some downstream crate `B`, such calls can't be inlined.
+`B` has access only to the signature of `f`, not its body.
+
+That's where the main usage of `#[inline]` comes from --- it enables cross-crate inlining.
+Without `#[inline]`, even the most trivial of functions can't be inlined across the crate boundary.
+The benefit is not without a cost --- the compiler implements this by compiling a separate copy of the `#[inline]` function with every crate it is used in, significantly increasing compile times.
+
+Besides `#[inline]`, there are two more exceptions to this.
+Generic functions are implicitly inlinable.
+Indeed, the compiler can only compile a generic function when it knows the specific type arguments it is instantiated with.
+As that is known only in the calling crate, bodies of generic functions have to be always available.
+
+The other exception is link-time optimization.
+LTO opts out of separate compilation --- it makes bodies of all functions available, at the cost of making compilation much slower.
+
+## Inlining in Practice
+
+Now that the underlying semantics is explained, it's possible to infer some rule-of-thumbs for using `#[inline]`.
+
+_First_, it's not a good idea to apply `#[inline]` indiscriminately, as that makes compile time worse.
+If you don't care about compile times, a much better solution is to set `lto = true` in Cargo profile ([docs](https://doc.rust-lang.org/cargo/reference/profiles.html#lto)).
+
+_Second_, it usually isn't necessary to apply `#[inline]` to private functions --- within a crate, the compiler generally makes good inline decisions.
+There's [a joke](https://twitter.com/ManishEarth/status/936084757212946432) that LLVM's heuristic for when the function should be inlined is "yes".
+
+_Third_, when building an application, apply `#[inline]` reactively when profiling shows that a particular small function is a bottleneck.
+Consider using lto for releases.
+It might make sense to proactively `#[inline]` trivial public functions.
+
+_Fourth_, when building libraries, proactively add `#[inline]` to small non-generic functions.
+Pay special attention to impls: `Deref`, `AsRef` and the like often benefit from inlining.
+A library can't anticipate all usages upfront, it makes sense to not prematurely pessimize future users.
+Note that `#[inline]` is not transitive: if a trivial public function calls a trivial private function, you need to `#[inline]` both.
+See [this benchmark](https://github.com/matklad/benchmarks/tree/91171269f0a6e260a27111d07661021a89d20085/rust-inline) for details.
+
+_Fifth_, mind generic functions.
+It's not too wrong to say that generic functions are implicitly inline.
+As a result, they often are a cause for code bloat.
+Generic functions, especially in libraries, should be written to minimize unwanted inlining.
+To give an example from [wat](https://github.com/bytecodealliance/wasm-tools/blob/0486fb4de505b8116a0034bdde4918cd783325b9/crates/wat/src/lib.rs#L214-L222):
+
+```rust
+// Public, generic function.
+// Will cause code bloat if not handled carefully!
+pub fn parse_str(wat: impl AsRef<str>) -> Result<Vec<u8>> {
+  // Immediately delegate to a non-generic function.
+  _parse_str(wat.as_ref())
+}
+
+// Separate-compilation friendly private implementation.
+fn _parse_str(wat: &str) -> Result<Vec<u8>> {
+    ...
+}
+```
+
+## References
+
+
+1. [Language reference](https://doc.rust-lang.org/reference/attributes/codegen.html#the-inline-attribute).
+2. [Rust performance book](https://nnethercote.github.io/perf-book/inlining.html).
+3. @alexcrichton [explains inline](https://github.com/rust-lang/hashbrown/pull/119#issuecomment-537539046).
+   Note that, in reality, the compile time costs are worse than what I described --- inline functions are compiled per codegen-unit, not per crate.
+4. [More @alexcrichton](https://users.rust-lang.org/t/enable-cross-crate-inlining-without-suggesting-inlining/55004/9?u=matklad).
+5. [Even more @alexcrichton](https://internals.rust-lang.org/t/inlining-policy-for-functions-in-std/14189/10?u=matklad).
+
+
+Discussion on [/r/rust](https://old.reddit.com/r/rust/comments/oh4s2j/blog_post_inline_in_rust/).
+
+There is now a follow up post: [It's Not Always iCache](https://matklad.github.io/2021/07/10/its-not-always-icache.html).
+
+::: note
+This post is a part of [One Hundred Thousand Lines of Rust](https://matklad.github.io/2021/09/05/Rust100k.html) series.
+:::

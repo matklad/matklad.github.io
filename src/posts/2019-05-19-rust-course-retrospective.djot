@@ -1,0 +1,71 @@
+# Rust Course Retrospective
+
+It was the last week of the Rust course at [Computer Science Center](https://compscicenter.ru).
+This post is my experience report from teaching this course.
+
+## Materials
+
+Note that the course is in Russian :-)
+
+[adoc]: /2019/05/19/consider-using-asciidoctor-for-your-next-presentation.html
+[rtiow]: http://www.realtimerendering.com/raytracing/Ray%20Tracing%20in%20a%20Weekend.pdf
+
+Course slides are available under CC-BY at <https://github.com/matklad/rust-course>.
+See [the sibling post][adoc] if you want to learn more about how the slides were made
+(TL;DR: Asciidoctor is better than beamer, Google Docs, slides.com, reveal.js, remark).
+
+High-quality recordings of lectures are available on YouTube:
+
+<https://www.youtube.com/playlist?list=PLlb7e2G7aSpTfhiECYNI2EZ1uAluUqE_e>
+
+The homework is not available, but it was based on the [Ray Tracing in One Weekend][rtiow] book.
+
+## Good Parts
+
+Teaching is hard, but very rewarding.
+Teaching Rust feels especially good because the language is very well designed and the quality of the implementation is great.
+Overall, I don't feel like this was a particularly hard course for the students.
+In the end most of the folks successfully completed all assignments, which were fairly representative of the typical Rust code.
+
+## Hard Parts
+
+There were one extremely hard topic and one poorly explained topic.
+
+The hard one was the module system.
+Many students were completely stumped by it.
+It's difficult to point out the specific hard aspect of the current (Rust 2018) module system: each student struggled in their own way.
+
+Here's a selection of points of confusion:
+
+* you don't need to wrap contents of `foo.rs` in `mod foo { ... }`
+* you don't need to add `mod lib;` to `main.rs`
+* child module lives in the `parent/child.rs` file, **unless** the parent is `lib.rs` or `main.rs`
+
+I feel like my explanation of modules was an OK one, it contained all the relevant details and talked about how things work under the hood.
+However, it seems like just explaining the modules is not enough: one really needs to arrange a series of exercises about modules, and make sure that all students successfully pass them.
+
+I don't think that modules are the hardest feature of the language: advanced lifetimes and `unsafe` subtleties are more difficult.
+However, you don't really write `mem::transmute` or HRTB every day, while you face modules pretty early.
+
+The poorly explained topic was `Send/Sync`.
+I was like "compiler infers `Send/Sync` automatically, and after that your code just fails to compile if it would had a data race, isn't Rust wonderful?".
+But this misses the crucial point: in generic code (both for `impl T` and `dyn T`), you'll need to write `: Sync` bounds yourself.
+Of course the homework was about generic code, and there were a number of solutions with (unsound) `unsafe impl<T> Sync for MyThing<T>` :-)
+
+## Annoying Parts
+
+It's very hard to google Rust documentation at the moment, because google links
+you to redirect stubs of the old book, which creates that weird feeling that you
+are inside of a [science-fiction novel](https://en.wikipedia.org/wiki/Sepulka).
+I know that the problem is already fixed, and we just need to wait until the new version of the old book is deployed, but I wish we could have fixed it earlier.
+
+Editions are a minor annoyance as well. I've completely avoided talking about Rust 2015, hoping that I'll just teach the shiny new thing.
+But of course students google for help and get outdated info.
+
+* many used `extern crate` syntax
+* `dyn` in `dyn T` was sometimes omitted
+* there was a couple of `mod.rs`
+
+Additionally, several students somehow ended up without `edition = "2015"` in `Cargo.toml`.
+
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/bqlctn/rust_course_retrospective/).

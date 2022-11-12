@@ -1,0 +1,222 @@
+# Fast Thread Locals In Rust
+
+Rust thread-locals are slower than they could be.
+This is because they violate zero-cost abstraction principle, specifically the "you don't pay for what you don't use bit".
+
+Rust's thread-local implementation(
+[1](https://github.com/rust-lang/rust/blob/6f56fbdc1c58992a9db630f5cd2ba9882d32e84b/library/std/src/thread/local.rs#L156-L188),
+[2](https://github.com/rust-lang/rust/blob/6f56fbdc1c58992a9db630f5cd2ba9882d32e84b/library/std/src/thread/local.rs#L445-L459)
+) comes with built-in support for laziness --- thread locals are initialized on the first access.
+Sometimes this overhead is a big deal, as thread locals are a common tool for writing high-performance code.
+For example, allocator fast path often involves looking into thread-local heap.
+
+There's an unstable `#[thread_local]` attribute for a zero-cost implementation
+(see the [tracking issue](https://github.com/rust-lang/rust/issues/29594)).
+
+Let's see how much "is thread local initialized?" check costs by comparing these two programs:
+
+{cap="./src/main.rs"}
+```rust
+thread_local! {
+  static COUNTER: Cell<u32> = Cell::new(0);
+}
+
+const STEPS: u32 = 1_000_000_000;
+fn sum_rust() -> u32 {
+  for step in 0..STEPS {
+    COUNTER.with(|it| {
+      let inc = step.wrapping_mul(step) ^ step;
+      it.set(it.get().wrapping_add(inc))
+    })
+  }
+  COUNTER.with(|it| it.get())
+}
+
+fn main() {
+  let t = Instant::now();
+  let r = sum_rust();
+  eprintln!("Rust:   {} {}ms", r, t.elapsed().as_millis());
+}
+```
+
+{cap="./src/main.c"}
+```c
+#define _POSIX_C_SOURCE 200809L
+
+#include "inttypes.h"
+#include "stdint.h"
+#include "stdio.h"
+#include "threads.h"
+#include "time.h"
+
+thread_local uint32_t COUNTER = 0;
+
+const uint32_t STEPS = 1000000000;
+
+uint32_t sum_c() {
+  for (uint32_t step = 0; step < STEPS; step++) {
+    uint32_t inc = (step * step) ^ step;
+    COUNTER += inc;
+  }
+  return COUNTER;
+}
+
+uint64_t now_ms() {
+  struct timespec spec;
+  clock_gettime(CLOCK_MONOTONIC, &spec);
+  return spec.tv_sec * 1000 + spec.tv_nsec / 1000000;
+}
+
+int main(void) {
+  uint64_t t = now_ms();
+  uint32_t r = sum_c();
+  printf("C:      %" PRIu32 " %"PRIu64"ms\n", r, now_ms() - t);
+  return 0;
+}
+```
+
+In this test, we declare an integer thread-local variable, and use it as an accumulator for the summation.
+
+We use non-trivial summation term: `(step * step) ^ step` -- this is to prevent LLVM from evaluating the sum at compile time.
+If a term of a summation is a polynomial (like `1`, `step` or `step * step`), then the sum itself is a one degree higher polynomial, and LLVM can figure this out!
+We rely on wrapping overflow of _unsigned_ integers in C, and use `wrapping_mul` and `wrapping_add` in Rust.
+To make sure that both programs are equivalent, we also print the result.
+
+One optimization we specifically don't protect from is caching thread-local access.
+That is, instead of doing a billion of thread-local loads and stores, the compiler could generate code to compute the sum into the local variable, and do a single store at the end.
+This is because "can the compiler optimize thread-local access?" is exactly the property we want to measure.
+
+There's no standard way to get monotonic wall-clock time in C, so the C version is not cross-platform.
+
+This code gives the following results on my machine:
+
+```console
+$ cargo build --release -q        && ./target/release/ftl
+Rust:   62565888 487ms
+$ clang -std=c17 -O3 ./src/main.c && ./a.out
+C:      62565888 239ms
+```
+
+This benchmark doesn't allow to measure the cost of thread-local access per se, but the overall time is about 2x longer for Rust.
+
+Can we make Rust faster?
+I don't know how to do that, but I know how to cheat.
+We can apply a general Rust extension trick --- write some C code and link it with Rust!
+
+Let's implement a simple C library which declares a thread-local and provides access to it:
+
+{cap="../src/thread_local.c"}
+```c
+#include "stdint.h"
+#include "threads.h"
+
+thread_local uint32_t COUNTER = 0;
+
+uint32_t* get_thread_local() {
+  return &COUNTER;
+}
+```
+
+Link it with Rust:
+
+{cap="../build.rs"}
+```rust
+use std::{env, path::Path, process::Command};
+
+fn main() {
+  let out_dir = env::var("OUT_DIR").unwrap();
+
+  Command::new("clang")
+    .args(&[ "src/thread_local.c", "-O3", "-c", "-o"])
+    .arg(&format!("{}/thread_local.o", out_dir))
+    .status()
+    .unwrap();
+  Command::new("ar")
+    .args(&["crus", "libthread_local.a", "thread_local.o"])
+    .current_dir(&Path::new(&out_dir))
+    .status()
+    .unwrap();
+
+  println!("cargo:rustc-link-search=native={}", out_dir);
+  println!("cargo:rustc-link-lib=static=thread_local");
+  println!("cargo:rerun-if-changed=src/thread_local.c");
+}
+```
+
+And use it:
+
+{cap="../src/main.rs"}
+```rust
+fn with_counter<T>(f: impl FnOnce(&Cell<u32>) -> T) -> T {
+  extern "C" { fn get_thread_local() -> *mut u32; }
+  let counter =
+    unsafe { &*(get_thread_local() as *mut Cell<u32>) };
+  f(&counter)
+}
+
+fn sum_rust_c() -> u32 {
+  for step in 0..STEPS {
+    with_counter(|it| {
+      let inc = step.wrapping_mul(step) ^ step;
+      it.set(it.get().wrapping_add(inc))
+    })
+  }
+  with_counter(|it| it.get())
+}
+```
+
+The result are underwhelming:
+
+```
+C:               62565888 239ms
+Rust:            62565888 485ms
+Rust/C:          62565888 1198ms
+```
+
+This is expected --- we replaced access to a thread local with a function call.
+As we are crossing the language boundary, the compiler can't inline it, which destroys performance.
+However, there's a way around that: Rust allows cross-language **L**ink **T**ime **O**ptimization ([docs](https://doc.rust-lang.org/rustc/linker-plugin-lto.html)).
+That is, Rust and C compilers can cooperate, to allow the linker to do inlining across the languages.
+
+This requires to manually align a bunch of stars:
+
+* The C compiler, the Rust compiler and the linker must use the same version of LLVM.
+  As you might have noticed, this excludes gcc.
+  I had luck with `rustc 1.46.0`, `clang 10.0.0`, and `LLD 10.0.0`.
+* `-flto=thin` in the  C compiler flags.
+* `RUSTFLAGS`:
+
+  ```console
+  $ export RUSTFLAGS=\
+    "-Clinker-plugin-lto -Clinker=clang -Clink-arg=-fuse-ld=lld"
+  ```
+
+Now, just recompiling the old code gives the same performance for C and Rust:
+
+```
+C:               62565888 240ms
+Rust:            62565888 495ms
+Rust/C:          62565888 241ms
+```
+
+Interestingly, this is the same performance we get without any thread-locals at all:
+
+```rust
+fn sum_local() -> u32 {
+  let mut counter = 0u32;
+  for step in 0..STEPS {
+    let inc = step.wrapping_mul(step) ^ step;
+    counter = counter.wrapping_add(inc)
+  }
+  counter
+}
+```
+
+So, either the compiler/linker was able to lift thread-local access out of the loop, or its cost is masked by arithmetics.
+
+Full code for the benchmarks is available at <https://github.com/matklad/ftl>.
+Note that this research only scratches the surface of the topic: thread locals are implemented differently on different OSes.
+Even on a single OS, there are be differences depending on compilation flags (dynamic libraries differ from static libraries, for example).
+Looking at the generated assembly could also be illuminating (code on [Compiler Explorer](https://godbolt.org/z/zMqdn4)).
+
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/j4iy50/blog_post_fast_thread_locals_in_rust/).

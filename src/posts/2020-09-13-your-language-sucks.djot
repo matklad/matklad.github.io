@@ -1,0 +1,89 @@
+# Your Language Sucks, It Doesn't Matter
+
+This post describes my own pet theory of programming languages popularity.
+My understanding is that no one knows why some languages are popular and others aren't, so there's no harm done if I add my own thoughts to the overall confusion.
+Obviously, this is all wild speculation and a just-so story without any kind of data backed research.
+
+The central thesis is that the actual programming language (syntax, semantics, paradigm) doesn't really matter.
+What matters is characteristics of the runtime --- roughly, what does memory of the running process look like?
+
+To start, an observation.
+A lot of software is written in vimscript and emacs lisp ([magit](https://magit.vc/) being one example I can't live without).
+And these languages are objectively bad.
+This happens even with less esoteric technologies, notable examples being PHP and JavaScript.
+While JavaScript is great in some aspects (it's the first mainstream language with lambdas!), it surely isn't hard to imagine a trivially better version of it (for example, without two different ``null``s).
+
+This is a general rule --- as soon as you have a language which is Turing-complete, and has some capabilities for building abstractions, people will just get the things done with it.
+Surely, some languages are more productive, some are less productive, but, overall, FP vs OOP vs static types vs dynamic types doesn't seem super relevant.
+It's always possible to overcome the language by spending some more time writing a program.
+
+In contrast, overcoming language runtime is not really possible.
+If you want to extend vim, you kinda have to use vimscript.
+If you want your code to run in the browser, JavaScript is still the best bet.
+Need to embed your code anywhere? GC is probably not an option for you.
+
+This two observations lead to the following hypothesis:
+
+::: note
+Languages generally become popular when they bring innovative runtime, or when they have runtime exclusivity.
+The quality of the language itself is secondary.
+:::
+
+Let's see some examples which can be "explained" by this theory.
+
+: C
+
+  C has a pretty spartan runtime, which is notable for two reasons.
+  First, it was the first fast enough runtime for a high-level language.
+  It was possible to write the OS kernel in C, which had been typically done in assembly before that for performance.
+  Second, C is the language of Unix.
+  (And yes, I would put C into the "easily improved upon" category of languages. Null-terminated strings are just a bad design).
+
+: JavaScript
+
+  This language has been exclusive in the browsers for quite some time.
+
+:  Java
+
+  This case I think is the most interesting for the theory.
+  A common explanation for Java's popularity is "marketing by Sun", and subsequent introduction of Java into University's curricula.
+  This doesn't seem convincing to me.
+  Let's look at the 90's popular languages (I am not sure about percentage and relative ranking here, but the composition seems broadly correct to me):
+
+  {cap="https://www.youtube.com/watch?v=Og847HVwRSI"}
+  ![](/assets/lang-pop.png)
+
+  On this list, Java is the only non-dynamic cross-platform memory safe language.
+  That is, Java is both memory safe (no manual error-prone memory management) and can be implemented reasonably efficiently (field access is a load and not a dictionary lookup).
+  This seems like a pretty compelling reason to choose Java, irrespective of what the language itself actually looks like.
+
+: Go
+
+  One can argue whether focus on simplicity at the expense of everything else is good or bad, but statically linked zero dependency binaries definitely were a reason for Go popularity in the devops sphere.
+  In a sense, Go is an upgrade over "memory safe & reasonably fast" Java runtime, when you no longer need to install JVM separately.
+
+Naturally, there are also some things which are not explained by my hypothesis.
+One is scripting languages.
+A highly dynamic runtime with `eval` and ability to easily link C extensions indeed would be a differentiator, so we would expect a popular scripting language.
+However, it's unclear why they are Python and PHP, and not Ruby and Perl.
+
+Another one is language evolutions: C++ and TypeScript don't innovate runtime-wise, yet they are still major languages.
+
+Finally, let's make some bold predictions using the theory.
+
+_First_, I expect Rust to become a major language, naturally :)
+This needs some explanation --- on the first blush, Rust is runtime-equivalent to C and C++, so the theory should predict just the opposite.
+But I would argue that memory safety is a runtime property, despite the fact that it is, uniquely to Rust, achieved exclusively via language machinery.
+
+_Second_, I predict Julia to become more popular.
+It's pretty unique, runtime-wise, with its stark rejection of [Ousterhout's Dichotomy](https://en.wikipedia.org/wiki/Ousterhout's_dichotomy++) and insisting that, yeah, we'll just JIT highly dynamic language to suuuper fast numeric code at runtime.
+
+_Third_, I wouldn't be surprised if Dart grows.
+On the one hand, it's roughly in the same boat as Go and Java, with memory safe runtime with fixed layout of objects and pervasive dynamic dispatch.
+But the quality of implementation of the runtimes is staggering: it has first-class JIT, AOT and JS compilers.
+Moreover, it has top-notch hot-reload support.
+Nothing here is a breakthrough, but the combination is impressive.
+
+_Fourth_, I predict that Nim, Crystal and Zig (which is very interesting, language design wise) would not become popular.
+
+_Fifth_, I predict that Swift will be pretty popular on Apple hardware due to platform exclusivity, but won't grow much outside of it, _despite_ being very innovative in language design (generics in Swift are the opposite of the generics in Go).

@@ -1,0 +1,34 @@
+# Notes on GATs
+
+There's a bit of discussion happening in Rust community on the generic associated types topic.
+I can not help but add my own thoughts to the pile :-)
+
+I don't intend to write a well-edited post considering all pros and cones (intentional typo to demonstrate how unedited this is).
+Rather, I just want to dump my experience as is.
+Ultimately I trust the lang team to make the right call here **way** more than I trust myself.
+The post could be read as a bit inflammatory, but my stated goal here is not to sway someone's mind by the arguments, but rather expose my own thinking process.
+
+This post is partially prompted by the following comment from the RFC:
+
+> I probably have GATs in every project I do write.
+
+It stuck with me, because this is very much the opposite of the experience I have.
+I've been using Rust extensively for a while, mostly as an application (as opposed to library) developer, and I can't remember a single instance where I really wanted to have GATs.
+This is a consequences of my overall code style --- I try to use abstraction sparingly and rarely reach out for traits.
+I don't think I've ever build a meaningful abstraction which was expressed via traits?
+On the contrary, I try hard to make everything concrete and non-generic on the language level.
+
+What's more, when I do reach out for traits, most of the time this is to use trait objects, which give me a new runtime capability to use different, substitutable concrete type.
+For the static,monomorphization based subset of traits I find that most of the time non-trait solution seem to work.
+
+And I think GATs (and associated types in general) don't work with trait objects, which probably explains why, even when I use traits, I don't generally need GATs.
+Though, it seems to me that lifetime-only subset of GATs actually works with trait objects?
+That is, lending iterator seems to be object safe?
+
+I guess, the only place where I do, indirectly, want GATs is to make `async trait` work, but even then, I usually am interested in object-safe async traits, which I think don't need and can't use GATs?
+
+---
+
+Another disconnection between my usage of Rust and discussion surrounding the GATs is in one of the prominent examples --- parser combinator library.
+In practice, for me parser combinator's primary use-case was always a vehicle for teaching advanced types (eg, the monads paper uses parsers as one of the examples).
+For production use-cases I've encountered, it was always either a hand-written parser, or a full-blown parser generator.

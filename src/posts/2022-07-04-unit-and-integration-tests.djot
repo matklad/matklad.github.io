@@ -1,0 +1,133 @@
+# Unit and Integration Tests
+
+In this post I argue that integration-vs-unit is a confused, and harmful, distinction.
+I provide a more useful two-dimensional mental model instead.
+The model is descriptive (it allows to think more clearly about any test), but I also include my personal prescriptions (the model shows metrics which are and aren't worth optimizing).
+
+Credit for the idea goes to the [SWE book](https://abseil.io/resources/swe-book).
+I always felt that integration versus unit debate is confused, the book helped me to formulate in which way exactly.
+
+I won't actually rigorously demonstrate the existing confusion --- I find it self-evident.
+As just two examples:
+
+* Unit-testing is used as a synonym with automated testing (x-unit frameworks).
+* Cargo uses "unit" and "integration" terminology to describe Rust-specific properties of the compilation model, which is orthogonal to the traditional, however fuzzy, meaning of this terms.
+
+Most of the time, it's more productive to speak about just "tests", or maybe "automated tests", rather than argue where something should be considered a unit or an integration tests.
+
+But I argue that a useful, more precise classification exists.
+
+## Purity
+
+_The first_ axis of classification is, broadly speaking, performance.
+"How much time would a thousand of similar tests take?" is a very useful metric.
+The dependency between the time from making an edit to getting the test results and most other interesting metrics in software (performance, time to fix defects, security) is super-linear.
+Tests longer than attention span obliterate productivity.
+
+It's useful to take a closer look at what constitutes a performant test.
+One non-trivial observation here is that test speed is categorical, rather than numerical.
+Certain tests are order-of-magnitude slower than others.
+Consider the following list:
+
+1. Single-threaded pure computation
+2. Multi-threaded parallel computation
+3. Multi-threaded concurrent computation with time-based synchronization and access to disk
+4. Multi-process computation
+5. Distributed computation
+
+Each step of this ladder adds half-an-order of magnitude to test's runtime.
+
+Time is not the only thing affected --- the higher you go, the bigger is the fraction of flaky tests.
+It's nay impossible to make a test for a pure function flaky.
+If you add threads into the mix, keeping flakiness out requires some careful thinking about synchronization.
+And if the tests spans several processes, it is almost bound to fail under some more unusual circumstances.
+
+Yet another effect we observe along this axis is resilience to unrelated changes.
+The more of operating system and other processes is involved in the test, the higher is the probability that some upgrade somewhere breaks something.
+
+I think the "purity" concept from functional programming is a good way to generalize this axis of the differences between the tests.
+Pure test do little-to-no IO, they are independent of timings and environment.
+Less pure tests do more of the impure things.
+Purity is correlated with performance, repeatability and stability.
+Test purity is non-binary, but it is mostly discrete.
+Threads, time, file-system, network, processes are the notches to think about.
+
+## Extent
+
+_The second_ axis is the fraction of the code which gets exercised, potentially indirectly, by the test.
+Does the test exercise only the business logic module, or is the database API and the HTTP handling also required?
+This is _distinct_ from performance: running more code doesn't mean that the code will run slower.
+An infinite loop takes very little code.
+What affects performance is not whether tests for business logic touch persistence, but whether, in tests, persistence is backed by an in-memory hash-map or by an out-of-process database server.
+
+The "extent" of the tests is a good indicator of the overall architecture of the application, but usually it isn't a worthy metric to optimize by itself.
+On the contrary, artificially limiting the extent of tests by mocking your own code (as opposed to mocking impure IO) reduces fidelity of the tests, and makes the code more brittle in the face of refactors.
+
+One potential exception here is the impact on compilation time.
+In a layered application `A < B < C`, it's possible to test `A` either through its interface to `B` (small-extent test) or by driving `A` indirectly through `C`.
+The latter has a problem that, after changing `A`, running tests might require, depending on the language, rebuilding `B` and `C` as well.
+
+---
+
+Summing up:
+
+* Don't think about tests in terms of opposition between unit and integration, whatever that means. Instead,
+* Think in terms of test's **purity** and **extent**.
+* **Purity** corresponds to the amount of generalized IO the test is doing and is correlated with desirable metrics, namely performance and resilience.
+* **Extent** corresponds to the amount of code the test exercises. Extent somewhat correlates with impurity, but generally does not directly affect performance.
+
+And, the prescriptive part:
+
+* Ruthlessly optimize purity, moving one step down on the ladder of impurity gives huge impact.
+* Generally, just let the tests have their natural extent. Extent isn't worth optimizing by itself, but it can tell you something about your application's architecture.
+
+If you enjoyed this post, you might like ["How to Test"](https://matklad.github.io/2021/05/31/how-to-test.html) as well.
+It goes further in the prescriptive direction, but, when writing it, I didn't have the two dimensional purity-extent vocabulary yet.
+
+---
+
+As I've said, this framing is lifted from the SWE book.
+There are two differences, one small and one big.
+The small difference is that the book uses "size" terminology in place of "purity".
+The big difference is that the second axis is different: rather than looking at which fraction code gets exercised by the test, the book talks about test "scope": how large is the bit we are actually testing?
+
+I do find scope concept useful to think about!
+And, unlike extent, keeping most tests focused is a good active prescriptive advice.
+
+I however find the scope concept a bit too fuzzy for actual classification.
+
+Consider this test from rust-analyzer, which checks that we can complete a method from a trait if the trait is implemented:
+
+```rust
+#[test]
+fn completes_trait_method() {
+    check(
+        r"
+struct S {}
+pub trait T {
+    fn f(&self)
+}
+impl T for S {}
+
+fn main(s: S) {
+    s.$0
+}
+",
+        expect![[r#"
+            me f() (as T) fn(&self)
+        "#]],
+    );
+}
+```
+
+I struggle with determining the scope of this test.
+On the one hand, this clearly tests very narrow, very specific scenario.
+On the other hand, to make this work, all the layers of the system have to work just right.
+The lexer, the parser, name resolution and type checking all have to be prepared for incomplete code.
+This test tests not so much the completion logic itself, as all the underlying infrastructure for semantic analysis.
+
+The test is very easy to classify in the purity/extent framework.
+It's 100% pure --- no IO, just a single thread.
+It has maximal extent --- the tests exercises the bulk of the rust-analyzer codebase, the only thing that isn't touched here is the LSP itself.
+
+Also, as a pitch for the  ["How to Test"](https://matklad.github.io/2021/05/31/how-to-test.html) post, take a second to appreciate how simple the test is, considering that it tests an error-resilient, highly incremental compiler :)

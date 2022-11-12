@@ -1,0 +1,307 @@
+# Caches In Rust
+
+In this post I'll describe how to implement caches in Rust.
+It is inspired by two recent refactors I landed at nearcore ([nearcore#6549](https://github.com/near/nearcore/pull/6549), [nearcore#6811](https://github.com/near/nearcore/pull/6811)).
+Based on that experience, it seems that implementing caches wrong is rather easy, and making a mistake there risks "spilling over", and spoiling the overall architecture of the application a bit.
+
+Let's start with an imaginary setup with an application with some configuration and a database:
+
+```rust
+struct App {
+  config: Config,
+  db: Db,
+}
+```
+
+The database is an untyped key-value store:
+
+```rust
+impl Db {
+  pub fn load(&self, key: &[u8]) -> io::Result<Option<Vec<u8>>> {
+    ...
+  }
+}
+```
+
+And the `App` encapsulates database and provides typed access to domain-specific `Widget`:
+
+
+```rust
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Widget {
+  title: String,
+}
+
+impl App {
+  pub fn get_widget(
+    &self,
+    id: u32,
+  ) -> io::Result<Option<Widget>> {
+    let key = id.to_be_bytes();
+    let value = match self.db.load(&key)? {
+      None => return Ok(None),
+      Some(it) => it,
+    };
+
+    let widget: Widget =
+      bincode::deserialize(&value).map_err(|it| {
+        io::Error::new(io::ErrorKind::InvalidData, it)
+      })?;
+
+    Ok(Some(widget))
+  }
+}
+```
+
+Now, for the sake of argument let's assume that database access and subsequent deserialization are costly, and that we want to add a cache of Widgets in front of the database.
+Data-oriented thinking would compel us to get rid of deserialization step instead, but we will not pursue that idea this time.
+
+We'll use a simple `HashMap` for the cache:
+
+```rust
+struct App {
+  config: Config,
+  db: Db,
+  cache: HashMap<u32, Widget>,
+}
+```
+
+And we need to modify `get_widget` method to return the value from the cache, if there is one:
+
+{highlight="3,5,7-9,22-23"}
+```rust
+impl App {
+  pub fn get_widget(
+    &mut self,
+    id: u32,
+  ) -> io::Result<Option<&Widget>> {
+
+    if self.cache.contains_key(&id) {
+      let widget = self.cache.get(&id).unwrap();
+      return Ok(Some(widget));
+    }
+
+    let key = id.to_be_bytes();
+    let value = match self.db.load(&key)? {
+      None => return Ok(None),
+      Some(it) => it,
+    };
+    let widget: Widget =
+      bincode::deserialize(&value).map_err(|it| {
+        io::Error::new(io::ErrorKind::InvalidData, it)
+      })?;
+
+    self.cache.insert(id, widget);
+    let widget = self.cache.get(&id).unwrap();
+
+    Ok(Some(widget))
+  }
+}
+```
+
+The biggest change is the `&mut self`.
+Even when reading the widget, we need to modify the `cache`, and the easiest way to get that ability is to require an exclusive reference.
+
+I want to argue that this path of least resistance doesn't lead to a good place.
+There are _many_ problems with methods of the following-shape:
+
+```rust
+fn get(&mut self) -> &Widget
+```
+
+_First_, such methods conflict with each other.
+For example, the following code won't work, because we'll try to borrow the app exclusively twice.
+
+```rust
+let app: &mut App = ...;
+let w1 = app.get_widget(1)?;
+let w2 = app.get_widget(2)?;
+```
+
+_Second_, the `&mut` methods conflict even with `&` methods.
+Naively, it would seem that, as `get_widget` _returns_ a shared reference, we should be able to call `&` methods.
+So, one can expect something like this to work:
+
+```rust
+let w: &Widget = app.get_widget(1)?.unwrap();
+let c: &Color = &app.config.main_color;
+```
+
+Alas, it doesn't.
+Rust borrow checker doesn't distinguish between `mut` and non-`mut` lifetimes (for a good reason: doing that would be unsound).
+So, although `w` is just `&Widget`, the lifetime there is the same as on the `&mut self`, so the app remains mutably borrowed while the widget exists.
+
+_Third_, perhaps the most important point, the `&mut self` becomes viral --- most of functions in the program begin requiring `&mut`, and you lose type-system distinction between read-only and read-write operations.
+There's no distinction between "this function can only modify the cache" and "this function can modify literally everything".
+
+_Finally_, even implementing `get_widget` is not pleasant.
+Seasoned rustaceans among you might twitch at the needlessly-repeated hashmap lookups.
+But trying to get rid of those with the help of the entry-API runs into current borrow checker limitations.
+
+Let's look at how we can better tackle this!
+
+The general idea for this class of problems is to think what the ownership and borrowing situation _should_ be and try to achieve that, as opposed to merely following suggestions by the compiler.
+That is, _most_ of the time just using `&mut` and `&` as compiler guides you is a path to success, as, it turns out, majority of the code naturally follows simple aliasing rules.
+But there are exceptions, it's important to recognize them as such and make use of interior mutability to implement the aliasing structure which makes sense.
+
+Let's start with a simplified case.
+Suppose that there's only one `Widget` to deal with.
+In this case, we'd want something like this:
+
+{highlight="11"}
+```rust
+struct App {
+  ...
+  cache: Option<Widget>,
+}
+
+impl App {
+  fn get_widget(&self) -> &Widget {
+    if let Some(widget) = &self.cache {
+      return widget;
+    }
+    self.cache = Some(create_widget());
+    self.cache.as_ref().unwrap()
+  }
+}
+```
+
+This doesn't work as is --- modifying the `cache` needs `&mut` which we'd very much prefer to avoid.
+However, thinking about this pattern, it feels like it _should_ be valid --- we enforce at runtime that the contents of the `cache` is never overwritten.
+That is, we actually _do_ have exclusive access to cache on the highlighted line at runtime, we just can't explain that to the type system.
+But we can reach out for `unsafe` for that.
+What's more, Rust's type system is powerful enough to encapsulate that usage of unsafe into a safe and generally re-usable API.
+So let's pull [`once_cell`](https://docs.rs/once_cell) crate for this:
+
+```rust
+struct App {
+  ...
+  cache: once_cell::sync::OnceCell<Widget>,
+}
+
+impl App {
+  fn get_widget(&self) -> &Widget {
+    self.cache.get_or_init(create_widget)
+  }
+}
+```
+
+Coming back to the original hash-map example, we can apply the same logic here:
+as long as we never overwrite, delete or move values, we can safely return references to them.
+This is handled by the [`elsa`](https://docs.rs/elsa) crate:
+
+```rust
+struct App {
+  config: Config,
+  db: Db,
+  cache: elsa::map::FrozenMap<u32, Box<Widget>>,
+}
+
+impl App {
+  pub fn get_widget(
+    &self,
+    id: u32,
+  ) -> io::Result<Option<&Widget>> {
+    if let Some(widget) = self.cache.get(&id) {
+      return Ok(Some(widget));
+    }
+
+    let key = id.to_be_bytes();
+    let value = match self.db.load(&key)? {
+      None => return Ok(None),
+      Some(it) => it,
+    };
+    let widget: Widget =
+      bincode::deserialize(&value).map_err(|it| {
+        io::Error::new(io::ErrorKind::InvalidData, it)
+      })?;
+
+    let widget = self.cache.insert(id, Box::new(widget));
+
+    Ok(Some(widget))
+  }
+}
+```
+
+The third case is that of a bounded cache.
+If you need to evict values, than the above reasoning does not apply.
+If the user of a cache gets a `&T`, and than the corresponding entry is evicted, the reference would dangle.
+In this situations, we want the clients of the cache to co-own the value.
+This is easily handled by an `Rc`:
+
+```rust
+struct App {
+  config: Config,
+  db: Db,
+  cache: RefCell<lru::LruCache<u32, Rc<Widget>>>,
+}
+
+impl App {
+  pub fn get_widget(
+    &self,
+    id: u32,
+  ) -> io::Result<Option<Rc<Widget>>> {
+    {
+      let mut cache = self.cache.borrow_mut();
+      if let Some(widget) = cache.get(&id) {
+        return Ok(Some(Rc::clone(widget)));
+      }
+    }
+
+    let key = id.to_be_bytes();
+    let value = match self.db.load(&key)? {
+      None => return Ok(None),
+      Some(it) => it,
+    };
+    let widget: Widget =
+      bincode::deserialize(&value).map_err(|it| {
+        io::Error::new(io::ErrorKind::InvalidData, it)
+      })?;
+
+    let widget = Rc::new(widget);
+    {
+      let mut cache = self.cache.borrow_mut();
+      cache.put(id, Rc::clone(&widget));
+    }
+
+    Ok(Some(widget))
+  }
+}
+```
+
+To sum up: when implementing a cache, the path of the least resistance is to come up with a signature like this:
+
+```rust
+fn get(&mut self) -> &T
+```
+
+This often leads to problems down the line.
+It's usually better to employ some interior mutability and get either of these instead:
+
+```rust
+fn get(&self) -> &T
+fn get(&self) -> T
+```
+
+This is an instance of the more general effect: despite the "mutability" terminology, Rust references track not mutability, but aliasing.
+Mutability and exclusive access are correlated, but not perfectly.
+It's important to identify instances where you need to employ interior mutability, often they are architecturally interesting.
+
+To learn more about relationships between aliasing and mutability, I recommend the following two posts:
+
+: Rust: A unique perspective
+
+  <https://limpet.net/mbrubeck/2019/02/07/rust-a-unique-perspective.html>
+
+: Accurate mental model for Rust’s reference types
+
+  <https://docs.rs/dtolnay/latest/dtolnay/macro._02__reference_types.html>
+
+Finally, the "borrow checker" limitation is explained (with much skill and humor, I should add), in this document:
+
+: Polonius the Crab
+
+  <https://docs.rs/polonius-the-crab/0.2.1/polonius_the_crab/>
+
+
+That's all! Discussion on [/r/rust](https://old.reddit.com/r/rust/comments/v9xsnb/blog_post_caches_in_rust/).

@@ -1,0 +1,323 @@
+# Mutexes Are Faster Than Spinlocks
+
+[prev]: /2020/01/02/spinlocks-considered-harmful
+[futexes-are-tricky]: http://dept-info.labri.fr/~denis/Enseignement/2008-IR/Articles/01-futex.pdf
+[dance]: https://probablydance.com/2019/12/30/measuring-mutexes-spinlocks-and-how-bad-the-linux-scheduler-really-is/
+
+(at least on commodity desktop Linux with stock settings)
+
+This is a followup to the [previous post][prev] about spinlocks.
+The gist of the previous post was that spinlocks have some pretty bad worst-case behaviors, and, for that reason, one shouldn't blindly use a spinlock if using a sleeping mutex or avoiding blocking altogether is cumbersome.
+
+In the comments, I was pointed to [this interesting article][dance], which made me realize that there's another misconception:
+
+::: warn
+For short critical sections, spinlocks perform better
+:::
+
+Until today, I haven't benchmarked any mutexes, so I don't know for sure.
+However, what I know in theory about mutexes and spinlocks makes me doubt this claim, so let's find out.
+
+::: note
+In the following, I used the term **mutex** as a short-hand for a synchronization
+primitive which is guaranteed to eventually call into the kernel under
+contention. A more appropriate term is **sleeping mutex**.
+:::
+
+## Where Does The Misconception Come From?
+
+I do understand why people might think that way though.
+A simplest mutex just makes `lock` / `unlock` syscalls when entering and exiting a critical section, offloading all synchronization to the kernel.
+However, syscalls are slow and so, if the length of critical section is smaller than the length of two syscalls, spinning would be faster.
+
+It's easy to eliminate the syscall on entry in an uncontended state.
+We can try to optimistically `CAS` lock to the locked state, and call into kernel only if we failed and need to sleep.
+Eliminating syscall on exit is [tricky][futexes-are-tricky], and so I think historically many implementations did at least one syscall in practice.
+Thus, mutexes *were*, in fact, slower than spinlocks in some benchmarks.
+
+However, modern mutex implementations avoid all syscalls if there's no contention.
+The trick is to make the state of the mutex an enum: unlocked, locked with some waiting threads, locked without waiting threads.
+This way, we only need to call into the kernel if there are in fact waiters.
+
+Another historical benefit of spinlocks is that they are smaller in size.
+A state of a spinlock is just a single boolean variable, while for a mutex you also need a queue of waiting threads. But there's a [trick][futexes-are-tricky] to combat this inefficiency as well.
+We can use the *address* of the boolean flag as token to identify the mutex, and store non-empty queues in a side table.
+Note how this also reduces the (worst case) total number of queues from `number of mutexes` to `number of threads`!
+
+So a modern mutex, like the one in [WTF::ParkingLot](https://webkit.org/blog/6161/locking-in-webkit/), is a single boolean, which behaves more or less like a spinlock in an uncontended case but doesn't have pathological behaviors of the spinlock.
+
+## Benchmark
+
+So, let's check if the theory works in practice!
+The source code for the benchmark is here:
+
+<https://github.com/matklad/lock-bench>
+
+The interesting bit is reproduced below:
+
+```rust
+fn run_bench<M: Mutex>(options: &Options) -> time::Duration {
+  let locks = &(0..options.n_locks) <3>
+      .map(|_| CachePadded::new(M::default()))
+      .collect::<Vec<_>>();
+
+  let start_barrier =
+    &Barrier::new(options.n_threads as usize + 1);
+  let end_barrier =
+    &Barrier::new(options.n_threads as usize + 1);
+
+  scope(|scope| {
+    let thread_seeds = random_numbers(0x6F4A955E)
+      .scan(0x9BA2BF27, |state, n| {
+        *state ^= n;
+        Some(*state)
+      })
+      .take(options.n_threads as usize);
+
+    for thread_seed in thread_seeds {
+      scope.spawn(move |_| {
+        start_barrier.wait();
+        let indexes = random_numbers(thread_seed)
+          .map(|it| it % options.n_locks)
+          .map(|it| it as usize)
+          .take(options.n_ops as usize);
+        for idx in indexes {
+          locks[idx].with_lock(|cnt| *cnt += 1); <1>
+        }
+        end_barrier.wait();
+      });
+    }
+
+    std::thread::sleep(time::Duration::from_millis(100));
+    start_barrier.wait();
+    let start = time::Instant::now();
+    end_barrier.wait();
+    let elapsed = start.elapsed();
+
+    let mut total = 0;
+    for lock in locks.iter() {
+      lock.with_lock(|cnt| total += *cnt);
+    }
+    assert_eq!(total, options.n_threads * options.n_ops); <2>
+
+    elapsed
+  })
+  .unwrap()
+}
+
+fn random_numbers(seed: u32) -> impl Iterator<Item = u32> { <4>
+  let mut random = seed;
+  iter::repeat_with(move || {
+    random ^= random << 13;
+    random ^= random >> 17;
+    random ^= random << 5;
+    random
+  })
+}
+```
+
+Our hypothesis is that mutexes are faster, so we need to pick a workload which favors spinlocks.
+That is, we need to pick a very short critical section, and so we will just be incrementing a counter (**1**).
+
+This is better than doing a dummy lock/unlock.
+At the end of the benchmark, we will assert that the counter is indeed incremented the correct number of times (**2**).
+This has a number of benefits:
+
+* This is a nice smoke test which at least makes sure that we haven't done an off by one error anywhere.
+* As we will be benchmarking different implementations, it's important to verify that they indeed give the same answer! More than once I've made some piece of code ten times faster by accidentally eliminating some essential logic :D
+* We can be reasonably sure that compiler won't outsmart us and won't remove empty critical sections.
+
+Now, we can just make all the threads hammer a single global counter, but that would only test a situation of extreme contention.
+We need to structure a benchmark in a way that allow us to vary contention level.
+
+So instead of a single global counter, we will use an array of counters (**3**).
+Each thread will be incrementing random elements of this array.
+By varying the size of the array, we will be able to control the level of contention.
+To avoid false sharing between neighboring elements of the array we will use crossbeam's [`CachePadded`](https://docs.rs/crossbeam-utils/0.7.0/crossbeam_utils/struct.CachePadded.html).
+To make the benchmark more reproducible, we will vendor a simple PRNG (**4**), which we seed manually.
+
+## Results
+
+We are testing `std::sync::Mutex`, `parking_lot::Mutex`, `spin::Mutex` and a bespoke implementation of spinlock from [probablydance article][dance].
+We  use 32 threads (on 4 core/8 hyperthreads CPU), and each thread increments some counter 10 000 times.
+We run each benchmark 100 times and compute average, min and max times (we are primarily measuring throughput, so average makes more sense than median this time).
+Finally, we run the whole suite twice, to sanity check that the results are reproducible.
+
+{cap="Extreme Contention"}
+```console
+$ cargo run --release 32 2 10000 100
+    Finished release [optimized] target(s) in 0.01s
+     Running `target/release/lock-bench 32 2 10000 100`
+Options {
+    n_threads: 32,
+    n_locks: 2,
+    n_ops: 10000,
+    n_rounds: 100,
+}
+
+std::sync::Mutex     avg  97ms  min 38ms  max 103ms
+parking_lot::Mutex   avg  68ms  min 32ms  max  72ms
+spin::Mutex          avg 142ms  min 69ms  max 217ms
+AmdSpinlock          avg 127ms  min 50ms  max 219ms
+
+std::sync::Mutex     avg  98ms  min 68ms  max 125ms
+parking_lot::Mutex   avg  68ms  min 58ms  max  71ms
+spin::Mutex          avg 139ms  min 54ms  max 193ms
+AmdSpinlock          avg 127ms  min 50ms  max 210ms
+```
+
+{cap="Heavy contention"}
+```console
+$ cargo run --release 32 64 10000 100
+    Finished release [optimized] target(s) in 0.01s
+     Running `target/release/lock-bench 32 64 10000 100`
+Options {
+    n_threads: 32,
+    n_locks: 64,
+    n_ops: 10000,
+    n_rounds: 100,
+}
+
+std::sync::Mutex     avg 21ms  min 11ms  max  23ms
+parking_lot::Mutex   avg 10ms  min  6ms  max  11ms
+spin::Mutex          avg 55ms  min  7ms  max 161ms
+AmdSpinlock          avg 40ms  min  6ms  max 123ms
+
+std::sync::Mutex     avg 21ms  min 20ms  max  24ms
+parking_lot::Mutex   avg  9ms  min  6ms  max  12ms
+spin::Mutex          avg 48ms  min  7ms  max 138ms
+AmdSpinlock          avg 40ms  min  8ms  max 110ms
+```
+
+{cap="Light contention"}
+```console
+$ cargo run --release 32 1000 10000 100
+    Finished release [optimized] target(s) in 0.01s
+     Running `target/release/lock-bench 32 1000 10000 100`
+Options {
+    n_threads: 32,
+    n_locks: 1000,
+    n_ops: 10000,
+    n_rounds: 100,
+}
+
+std::sync::Mutex     avg 13ms  min 8ms   max  15ms
+parking_lot::Mutex   avg  6ms  min 3ms   max   8ms
+spin::Mutex          avg 37ms  min 4ms   max 115ms
+AmdSpinlock          avg 39ms  min 2ms   max 127ms
+
+std::sync::Mutex     avg 13ms  min 12ms  max  15ms
+parking_lot::Mutex   avg  6ms  min  5ms  max   8ms
+spin::Mutex          avg 39ms  min  4ms  max 102ms
+AmdSpinlock          avg 37ms  min  5ms  max 103ms
+```
+
+{cap="No contention"}
+```console
+$ cargo run --release 32 1000000 10000 100
+    Finished release [optimized] target(s) in 0.01s
+     Running `target/release/lock-bench 32 1000000 10000 100`
+Options {
+    n_threads: 32,
+    n_locks: 1000000,
+    n_ops: 10000,
+    n_rounds: 100,
+}
+
+std::sync::Mutex     avg 15ms  min 8ms   max 27ms
+parking_lot::Mutex   avg  7ms  min 4ms   max  9ms
+spin::Mutex          avg  5ms  min 4ms   max  8ms
+AmdSpinlock          avg  6ms  min 5ms   max 10ms
+
+std::sync::Mutex     avg 15ms  min 8ms   max 27ms
+parking_lot::Mutex   avg  6ms  min 4ms   max  9ms
+spin::Mutex          avg  5ms  min 4ms   max  7ms
+AmdSpinlock          avg  6ms  min 5ms   max  7ms
+```
+
+## Analysis
+
+There are several interesting observations here!
+
+_First_, we reproduce the result that the variance of spinlocks on Linux with default scheduling settings can be huge:
+
+```
+parking_lot::Mutex  min 6ms  max  11ms
+AmdSpinlock         min 6ms  max 123ms
+```
+
+Note that these are extreme results for 100 runs, where each run does `32 * 10_000` lock operations.
+That is, individual lock/unlock operations probably have an even higher spread.
+
+_Second_, the uncontended case looks like I have expected: mutexes and spinlocks are not that different, because they essentially use the same code
+
+```
+Parking_lot::Mutex   avg 6ms  min 4ms  max 9ms
+spin::Mutex          avg 5ms  min 4ms  max 7ms
+```
+
+_Third_, under heavy contention mutexes annihilate spinlocks:
+
+```
+parking_lot::Mutex   avg 10ms  max  11ms
+spin::Mutex          avg 55ms  max 161ms
+```
+
+Now, this is the opposite of what I would naively expect.
+Even in heavy contended state, the critical section is still extremely short, so for each thread, the most efficient strategy seems to spin for a couple of iterations.
+
+But I think I can explain why mutexes are so much better in this case.
+One reason is that with spinlocks a thread can get unlucky and be preempted in the critical section.
+The other more important reason is that, at any given moment in time, there are many threads trying to enter the same critical section.
+With spinlocks, all cores can be occupied by threads who compete for the same lock.
+With mutexes, there is a queue of sleeping threads for each lock, and the kernel generally tries to make sure that only one thread from the group is awake.
+
+This is a funny example of mechanical [race to the bottom](https://en.wikipedia.org/wiki/Race_to_the_bottom). Due to the short length of critical section, each individual thread would spend less CPU cycles in total if it were spinning, but it increases the overall cost.
+
+EDIT: simpler and more plausible [explanation](https://www.reddit.com/r/rust/comments/ejx7y8/blog_post_mutexes_are_faster_than_spinlocks/fd3u7rw) from the author of Rust's parking lot is that it does exponential backoff when spinning, unlike the two spinlock implementations.
+
+_Fourth_, even under heavy contention spin locks can luck out and finish almost as fast as mutexes:
+
+```
+parking_lot::Mutex   avg 10ms  min 6ms
+spin::Mutex          avg 55ms  min 7ms
+```
+
+This again shows that a good mutex is roughly equivalent to a spinlock in the best case.
+
+_Fifth_, the amount of contention required to disrupt spinlocks seems to be small. Even if 32 threads compete for 1 000 locks, spinlocks still are considerably slower:
+
+```
+parking_lot::Mutex   avg  6ms  min 3ms   max   8ms
+spin::Mutex          avg 37ms  min 4ms   max 115ms
+```
+
+EDIT: someone on Reddit [noticed](https://www.reddit.com/r/rust/comments/ejx7y8/blog_post_mutexes_are_faster_than_spinlocks/fd3u8vq) that the number of threads is significantly higher than the number of cores, which is an unfortunate situation for spinlocks.
+And, although the number of threads in the benchmark is configurable, it never occurred to me to actually vary it 😅!
+Lowering the number of threads to four gives a picture similar to the "no contention" situation above: spinlocks a slightly, but not massively, faster.
+Which makes total sense! as there are more cores than CPUs, there's no harm in spinning.
+And, if you can carefully architecture you application such that it runs a small fixed number of threads, ideally pinned to specific CPUs (like in the [seastar](http://seastar.io/shared-nothing/) architecture), using spinlocks might make sense!
+
+## Disclaimer
+
+As usual, each benchmark exercises only a narrow slice from the space of possible configurations, so it would be wrong to draw a sweeping conclusion that mutexes are **always** faster.
+For example, if you are in a situation where preemption is impossible (interrupts are disabled, cooperative multitasking, realtime scheduling, etc), spinlocks might be better (or even the only!) choice.
+And there's also a chance the benchmark doesn't measure what I think it measures :-)
+
+But I find this particular benchmark convincing enough to disprove that "spinlocks are faster then mutexes for short critical sections".
+In particular I find the qualitative observation that, under contention mutexes allow for better scheduling even if critical sections are short and not preempted in the middle, enlightening.
+
+## Reading List
+
+* [Futexes Are Tricky][futexes-are-tricky] -- a paper describing the `futex` syscall used to implement efficient sleeping on Linux.
+* [Locking in WebKit](https://webkit.org/blog/6161/locking-in-webkit/) -- a long post, describing a modern mutex implementation.
+* [Generic Mutex Subsystem](https://www.kernel.org/doc/Documentation/locking/mutex-design.txt) -- Linux kernel docs about sleeping mutexes.
+* [Spinlock](https://www.kernel.org/doc/Documentation/locking/spinlocks.txt) -- Linux kernel docs about spinlocks.
+* [Do not use spinlocks in user space](https://www.realworldtech.com/forum/?threadid=189711&curpostid=189723) -- Linus explains why user space spinlocks are usually bad.
+* [Almost all serious locking libraries try to do something exactly like that](https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755) -- Linus explains how good mutex might be implemented instead.
+* [Effcient Userspace Optimistic Spinning Locks](https://linuxplumbersconf.org/event/4/contributions/286/attachments/225/398/LPC-2019-OptSpin-Locks.pdf) -- a presentation about making fast-path spinlocking in futex-based locks even more efficient.
+  The main problem with optimistic spinning is how much of it do you want (that is, tweaking the number of iterations parameter).
+  The proposal solves this in an ingenious self-tweeking way (with the help of the kernel): we spin until the holder of the lock itself goes to sleep.
+
+
+Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/ejx7y8/blog_post_mutexes_are_faster_than_spinlocks/).

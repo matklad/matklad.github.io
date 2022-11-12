@@ -1,0 +1,1114 @@
+# From Pratt to Dijkstra
+
+[prev]: /2020/04/13/simple-but-powerful-pratt-parsing
+
+This is a sequel to the [previous post][prev] about Pratt parsing.
+Here, we'll study the relationship between top-down operator precedence (Pratt parsing) and the more famous shunting yard algorithm.
+Spoiler: they are the same algorithm, the difference is implementation style with recursion (Pratt) or a manual stack (Dijkstra).
+
+Unlike the previous educational post, this one is going to be an excruciatingly boring pile of technicalities --- we'll just slowly and mechanically refactor our way to victory.
+Specifically,
+
+1. We start with refactoring Pratt parser to minimize control flow variations.
+2. Then, having arrived at the code with only one `return` and only one recursive call, we replace recursion with an explicit stack.
+3. Finally, we streamline control in the iterative version.
+4. At this point, we have a bona fide shunting yard algorithm.
+
+To further reveal the connection, we further verify that the original recursive and the iterative formulation produce syntax nodes in the same order.
+
+Really, the most exciting bit about this post is the conclusion, and you already know it :)
+
+## Starting Point
+
+Last time, we've ended up with the following code:
+
+```rust
+enum S {
+    Atom(char),
+    Cons(char, Vec<S>),
+}
+
+impl fmt::Display for S {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            S::Atom(i) => write!(f, "{}", i),
+            S::Cons(head, rest) => {
+                write!(f, "({}", head)?;
+                for s in rest {
+                    write!(f, " {}", s)?
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Token {
+    Atom(char),
+    Op(char),
+    Eof,
+}
+
+struct Lexer {
+    tokens: Vec<Token>,
+}
+
+impl Lexer {
+    fn new(input: &str) -> Lexer {
+        let mut tokens = input
+            .chars()
+            .filter(|it| !it.is_ascii_whitespace())
+            .map(|c| match c {
+                '0'..='9'
+                | 'a'..='z' | 'A'..='Z' => Token::Atom(c),
+                _ => Token::Op(c),
+            })
+            .collect::<Vec<_>>();
+        tokens.reverse();
+        Lexer { tokens }
+    }
+
+    fn next(&mut self) -> Token {
+        self.tokens.pop().unwrap_or(Token::Eof)
+    }
+    fn peek(&mut self) -> Token {
+        self.tokens.last().copied().unwrap_or(Token::Eof)
+    }
+}
+
+fn expr(input: &str) -> S {
+    let mut lexer = Lexer::new(input);
+    expr_bp(&mut lexer, 0)
+}
+
+fn expr_bp(lexer: &mut Lexer, min_bp: u8) -> S {
+    let mut lhs = match lexer.next() {
+        Token::Atom(it) => S::Atom(it),
+        Token::Op('(') => {
+            let lhs = expr_bp(lexer, 0);
+            assert_eq!(lexer.next(), Token::Op(')'));
+            lhs
+        }
+        Token::Op(op) => {
+            let ((), r_bp) = prefix_binding_power(op);
+            let rhs = expr_bp(lexer, r_bp);
+            S::Cons(op, vec![rhs])
+        }
+        t => panic!("bad token: {:?}", t),
+    };
+
+    loop {
+        let op = match lexer.peek() {
+            Token::Eof => break,
+            Token::Op(op) => op,
+            t => panic!("bad token: {:?}", t),
+        };
+
+        if let Some((l_bp, ())) = postfix_binding_power(op) {
+            if l_bp < min_bp {
+                break;
+            }
+            lexer.next();
+
+            lhs = if op == '[' {
+                let rhs = expr_bp(lexer, 0);
+                assert_eq!(lexer.next(), Token::Op(']'));
+                S::Cons(op, vec![lhs, rhs])
+            } else {
+                S::Cons(op, vec![lhs])
+            };
+            continue;
+        }
+
+        if let Some((l_bp, r_bp)) = infix_binding_power(op) {
+            if l_bp < min_bp {
+                break;
+            }
+            lexer.next();
+
+            lhs = if op == '?' {
+                let mhs = expr_bp(lexer, 0);
+                assert_eq!(lexer.next(), Token::Op(':'));
+                let rhs = expr_bp(lexer, r_bp);
+                S::Cons(op, vec![lhs, mhs, rhs])
+            } else {
+                let rhs = expr_bp(lexer, r_bp);
+                S::Cons(op, vec![lhs, rhs])
+            };
+            continue;
+        }
+
+        break;
+    }
+
+    lhs
+}
+
+fn prefix_binding_power(op: char) -> ((), u8) {
+    match op {
+        '+' | '-' => ((), 9),
+        _ => panic!("bad op: {:?}", op),
+    }
+}
+
+fn postfix_binding_power(op: char) -> Option<(u8, ())> {
+    let res = match op {
+        '!' => (11, ()),
+        '[' => (11, ()),
+        _ => return None,
+    };
+    Some(res)
+}
+
+fn infix_binding_power(op: char) -> Option<(u8, u8)> {
+    let res = match op {
+        '=' => (2, 1),
+        '?' => (4, 3),
+        '+' | '-' => (5, 6),
+        '*' | '/' => (7, 8),
+        '.' => (14, 13),
+        _ => return None,
+    };
+    Some(res)
+}
+```
+
+First, to not completely drown in minutia, we'll simplify it by removing support for indexing operator `[]` and ternary operator `?:`.
+We will keep parenthesis, left and right associative operators, and the unary minus (which is somewhat tricky to handle in shunting yard).
+So this is our starting point:
+
+```rust
+fn expr_bp(lexer: &mut Lexer, min_bp: u8) -> S {
+    let mut lhs = match lexer.next() {
+        Token::Atom(it) => S::Atom(it),
+        Token::Op('(') => {
+            let lhs = expr_bp(lexer, 0);
+            assert_eq!(lexer.next(), Token::Op(')'));
+            lhs
+        }
+        Token::Op(op) => {
+            let ((), r_bp) = prefix_binding_power(op);
+            let rhs = expr_bp(lexer, r_bp);
+            S::Cons(op, vec![rhs])
+        }
+        t => panic!("bad token: {:?}", t),
+    };
+
+    loop {
+        let op = match lexer.peek() {
+            Token::Eof => break,
+            Token::Op(op) => op,
+            t => panic!("bad token: {:?}", t),
+        };
+
+        if let Some((l_bp, ())) = postfix_binding_power(op) {
+            if l_bp < min_bp {
+                break;
+            }
+            lexer.next();
+
+            lhs = S::Cons(op, vec![lhs]);
+            continue;
+        }
+
+        if let Some((l_bp, r_bp)) = infix_binding_power(op) {
+            if l_bp < min_bp {
+                break;
+            }
+            lexer.next();
+
+            let rhs = expr_bp(lexer, r_bp);
+            lhs = S::Cons(op, vec![lhs, rhs]);
+            continue;
+        }
+
+        break;
+    }
+
+    lhs
+}
+```
+
+What I like about this code is how up-front it is about all special cases and control flow.
+This is a "shameless green" code!
+However, it is clear that we have a bunch of duplication between prefix, infix and postfix operators.
+Our first step would be to simplify the control flow to its core.
+
+## Minimization
+
+First, let's merge postfix and infix cases, as they are almost the same.
+The idea is to change priorities for `!` from `(11, ())` to `(11, 100)`, where `100` is a special, very strong priority, which means that the right hand side of a "binary" operator is empty.
+We'll handle this in a pretty crude way right now, but all the hacks would go away once we refactor the rest.
+
+```rust
+fn expr_bp(lexer: &mut Lexer, min_bp: u8) -> Option<S> {
+    if min_bp == 100 {
+        return None;
+    }
+    let mut lhs = match lexer.next() {
+        Token::Atom(it) => S::Atom(it),
+        Token::Op('(') => {
+            let lhs = expr_bp(lexer, 0).unwrap();
+            assert_eq!(lexer.next(), Token::Op(')'));
+            lhs
+        }
+        Token::Op(op) => {
+            let ((), r_bp) = prefix_binding_power(op);
+            let rhs = expr_bp(lexer, r_bp).unwrap();
+            S::Cons(op, vec![rhs])
+        }
+        t => panic!("bad token: {:?}", t),
+    };
+
+    loop {
+        let op = match lexer.peek() {
+            Token::Eof => break,
+            Token::Op(op) => op,
+            t => panic!("bad token: {:?}", t),
+        };
+
+        if let Some((l_bp, r_bp)) = infix_binding_power(op) {
+            if l_bp < min_bp {
+                break;
+            }
+            lexer.next();
+
+            let rhs = expr_bp(lexer, r_bp);
+            let mut args = Vec::new();
+            args.push(lhs);
+            args.extend(rhs);
+            lhs = S::Cons(op, args);
+            continue;
+        }
+
+        break;
+    }
+
+    Some(lhs)
+}
+```
+
+Yup, we just check for hard-coded `100` constant and use a bunch of unwraps all over the place.
+But the code is already smaller.
+
+Let's apply the same treatment for prefix operators.
+We'll need to move their handing into the loop, and we also need to make `lhs` optional, which is now not a big deal, as the function as a whole returns an `Option`.
+On a happier note, this will allow us to remove the `if 100` wart.
+What's more problematic is handing priorities: minus has different binding powers depending on whether it is in an infix or a prefix position.
+We solve this problem by just adding an `prefix: bool` argument to the `binding_power` function.
+
+
+```rust
+fn expr_bp(lexer: &mut Lexer, min_bp: u8) -> Option<S> {
+    let mut lhs = match lexer.peek() {
+        Token::Atom(it) => {
+            lexer.next();
+            Some(S::Atom(it))
+        }
+        Token::Op('(') => {
+            lexer.next();
+            let lhs = expr_bp(lexer, 0).unwrap();
+            assert_eq!(lexer.next(), Token::Op(')'));
+            Some(lhs)
+        }
+        _ => None,
+    };
+
+    loop {
+        let op = match lexer.peek() {
+            Token::Eof => break,
+            Token::Op(op) => op,
+            t => panic!("bad token: {:?}", t),
+        };
+
+        if let Some((l_bp, r_bp)) =
+            binding_power(op, lhs.is_none())
+        {
+            if l_bp < min_bp {
+                break;
+            }
+            lexer.next();
+
+            let rhs = expr_bp(lexer, r_bp);
+            let mut args = Vec::new();
+            args.extend(lhs);
+            args.extend(rhs);
+            lhs = Some(S::Cons(op, args));
+            continue;
+        }
+
+        break;
+    }
+
+    lhs
+}
+
+fn binding_power(op: char, prefix: bool) -> Option<(u8, u8)> {
+    let res = match op {
+        '=' => (2, 1),
+        '+' | '-' if prefix => (99, 9),
+        '+' | '-' => (5, 6),
+        '*' | '/' => (7, 8),
+        '!' => (11, 100),
+        '.' => (14, 13),
+        _ => return None,
+    };
+    Some(res)
+}
+```
+
+Keen readers might have noticed that we use `99` and not `100` here for "no operand" case.
+This is not important yet, but will be during the next step.
+
+We've unified prefix, infix and postfix operators.
+The next logical step is to treat atoms as nullary operators!
+That is, we'll parse `92` into `(92)` S-expression, with `None` for both `lhs` and `rhs`.
+We get this by using `(99, 100)` binding power.
+At this stage, we can get rid of distinction between atom tokens and operator tokens, and make the lexer return underlying ``char``'s directly.
+We'll also get rid of `S::Atom`, which gives us this somewhat large change:
+
+```rust
+enum S {
+    Cons(char, Vec<S>),
+}
+
+impl fmt::Display for S {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            S::Cons(head, rest) => {
+                if rest.is_empty() {
+                    write!(f, "{}", head)
+                } else {
+                    write!(f, "({}", head)?;
+                    for s in rest {
+                        write!(f, " {}", s)?
+                    }
+                    write!(f, ")")
+                }
+            }
+        }
+    }
+}
+
+struct Lexer {
+    tokens: Vec<char>,
+}
+
+impl Lexer {
+    fn new(input: &str) -> Lexer {
+        let mut tokens = input
+            .chars()
+            .filter(|it| !it.is_ascii_whitespace())
+            .collect::<Vec<_>>();
+        tokens.reverse();
+        Lexer { tokens }
+    }
+
+    fn next(&mut self) -> Option<char> {
+        self.tokens.pop()
+    }
+    fn peek(&mut self) -> Option<char> {
+        self.tokens.last().copied()
+    }
+}
+
+fn expr(input: &str) -> S {
+    let mut lexer = Lexer::new(input);
+    expr_bp(&mut lexer, 0).unwrap()
+}
+
+fn expr_bp(lexer: &mut Lexer, min_bp: u8) -> Option<S> {
+    let mut lhs = match lexer.peek() {
+        Some('(') => {
+            lexer.next();
+            let lhs = expr_bp(lexer, 0).unwrap();
+            assert_eq!(lexer.next(), Some(')'));
+            Some(lhs)
+        }
+        _ => None,
+    };
+
+    loop {
+        let token = match lexer.peek() {
+            Some(token) => token,
+            None => break,
+        };
+
+        if let Some((l_bp, r_bp)) =
+            binding_power(token, lhs.is_none())
+        {
+            if l_bp < min_bp {
+                break;
+            }
+            lexer.next();
+
+            let rhs = expr_bp(lexer, r_bp);
+            let mut args = Vec::new();
+            args.extend(lhs);
+            args.extend(rhs);
+            lhs = Some(S::Cons(token, args));
+            continue;
+        }
+
+        break;
+    }
+
+    lhs
+}
+
+fn binding_power(op: char, prefix: bool) -> Option<(u8, u8)> {
+    let res = match op {
+        '0'..='9' | 'a'..='z' | 'A'..='Z' => (99, 100),
+        '=' => (2, 1),
+        '+' | '-' if prefix => (99, 9),
+        '+' | '-' => (5, 6),
+        '*' | '/' => (7, 8),
+        '!' => (11, 100),
+        '.' => (14, 13),
+        _ => return None,
+    };
+    Some(res)
+}
+```
+
+This is the stage where it becomes important that "fake" binding power of unary `-` is `99`.
+After parsing first constant in `1 - 2` the `r_bp` is `100`, and we need to avoid eating the following minus.
+
+The only thing left outside the main loop are parenthesis.
+We can deal with them using `(99, 0)` priority --- after `(` we enter a new context where all operators are allowed.
+
+```rust
+fn expr_bp(lexer: &mut Lexer, min_bp: u8) -> Option<S> {
+    let mut lhs = None;
+
+    loop {
+        let token = match lexer.peek() {
+            Some(token) => token,
+            None => break,
+        };
+
+        if let Some((l_bp, r_bp)) =
+            binding_power(token, lhs.is_none())
+        {
+            if l_bp < min_bp {
+                break;
+            }
+            lexer.next();
+
+            let rhs = expr_bp(lexer, r_bp);
+            if token == '(' {
+                assert_eq!(lexer.next(), Some(')'));
+                lhs = rhs;
+                continue;
+            }
+
+            let mut args = Vec::new();
+            args.extend(lhs);
+            args.extend(rhs);
+            lhs = Some(S::Cons(token, args));
+            continue;
+        }
+
+        break;
+    }
+
+    lhs
+}
+
+fn binding_power(op: char, prefix: bool) -> Option<(u8, u8)> {
+    let res = match op {
+        '0'..='9' | 'a'..='z' | 'A'..='Z' => (99, 100),
+        '(' => (99, 0),
+        '=' => (2, 1),
+        '+' | '-' if prefix => (99, 9),
+        '+' | '-' => (5, 6),
+        '*' | '/' => (7, 8),
+        '!' => (11, 100),
+        '.' => (14, 13),
+        _ => return None,
+    };
+    Some(res)
+}
+```
+
+Or, after some control flow cleanup:
+
+```rust
+fn expr_bp(lexer: &mut Lexer, min_bp: u8) -> Option<S> {
+    let mut lhs = None;
+
+    loop {
+        let token = match lexer.peek() {
+            Some(token) => token,
+            None => return lhs,
+        };
+
+        let r_bp = match binding_power(token, lhs.is_none()) {
+            Some((l_bp, r_bp)) if min_bp <= l_bp => r_bp,
+            _ => return lhs,
+        };
+
+        lexer.next();
+
+        let rhs = expr_bp(lexer, r_bp);
+        if token == '(' {
+            assert_eq!(lexer.next(), Some(')'));
+            lhs = rhs;
+            continue;
+        }
+
+        let mut args = Vec::new();
+        args.extend(lhs);
+        args.extend(rhs);
+        lhs = Some(S::Cons(token, args));
+    }
+}
+```
+
+This is still recognizably a Pratt parse, with its characteristic shape
+
+```rust
+fn parse_expr() {
+    loop {
+        ...
+        parse_expr()
+        ...
+    }
+}
+```
+
+What we'll do next is mechanical replacement of recursion with a manual stack.
+
+## From Recursion to Stack
+
+This is a general transformation and (I think) it can be done mechanically.
+The interesting bits during transformation are recursive calls themselves and returns.
+The underlying goal of the preceding refactorings was to reduce the number of recursive invocations to one.
+We still have two `return` statements there, so let's condense that to just one as well:
+
+```rust
+fn expr_bp(lexer: &mut Lexer, min_bp: u8) -> Option<S> {
+    let mut lhs = None;
+
+    loop {
+        let token = lexer.peek();
+        let (token, r_bp) =
+            match binding_power(token, lhs.is_none()) {
+                Some((t, (l_bp, r_bp))) if min_bp <= l_bp => {
+                    (t, r_bp)
+                }
+                _ => return lhs,
+            };
+
+        lexer.next();
+
+        let rhs = expr_bp(lexer, r_bp);
+        if token == '(' {
+            assert_eq!(lexer.next(), Some(')'));
+            lhs = rhs;
+            continue;
+        }
+
+        let mut args = Vec::new();
+        args.extend(lhs);
+        args.extend(rhs);
+        lhs = Some(S::Cons(token, args));
+    }
+}
+
+fn binding_power(
+    op: Option<char>,
+    prefix: bool,
+) -> Option<(char, (u8, u8))> {
+    let op = op?;
+    let res = match op {
+        '0'..='9' | 'a'..='z' | 'A'..='Z' => (99, 100),
+        '(' => (99, 0),
+        '=' => (2, 1),
+        '+' | '-' if prefix => (99, 9),
+        '+' | '-' => (5, 6),
+        '*' | '/' => (7, 8),
+        '!' => (11, 100),
+        '.' => (14, 13),
+        _ => return None,
+    };
+    Some((op, res))
+}
+```
+
+Next, we should reify locals which are live across the recursive call into a data structure.
+If there were more than one recursive call, we'd have to reify control-flow as enum as well, but we've prudently removed all but one recursive invocation.
+
+So let's start with introducing a `Frame` struct, without actually adding a stack just yet.
+
+```rust
+struct Frame {
+    min_bp: u8,
+    lhs: Option<S>,
+    token: Option<char>,
+}
+
+fn expr_bp(lexer: &mut Lexer, min_bp: u8) -> Option<S> {
+    let mut top = Frame {
+        min_bp,
+        lhs: None,
+        token: None,
+    };
+
+    loop {
+        let token = lexer.peek();
+        let (token, r_bp) =
+            match binding_power(token, top.lhs.is_none()) {
+                Some((t, (l_bp, r_bp))) if top.min_bp <= l_bp => {
+                    (t, r_bp)
+                }
+                _ => return top.lhs,
+            };
+        lexer.next();
+
+        top.token = Some(token);
+        let rhs = expr_bp(lexer, r_bp);
+        if token == '(' {
+            assert_eq!(lexer.next(), Some(')'));
+            top.lhs = rhs;
+            continue;
+        }
+
+        let mut args = Vec::new();
+        args.extend(top.lhs);
+        args.extend(rhs);
+        top.lhs = Some(S::Cons(token, args));
+    }
+}
+```
+
+And now, let's add a `stack: Vec<Frame>`.
+This is the point where the magic happens.
+We'll still keep the `top` local variable: representing a stack as `(T, Vec<T>)` and not as just `Vec<T>` gives us compile-time guarantee of non-emptiness.
+We replace the `expr_bp(lexer, r_bp)` recursive call with pushing to the stack.
+All operations after the call are moved after `return`.
+`return` itself is replaced with popping off the stack.
+
+```rust
+fn expr_bp(lexer: &mut Lexer) -> Option<S> {
+    let mut top = Frame {
+        min_bp: 0,
+        lhs: None,
+        token: None,
+    };
+    let mut stack = Vec::new();
+
+    loop {
+        let token = lexer.peek();
+        let (token, r_bp) =
+            match binding_power(token, top.lhs.is_none()) {
+                Some((t, (l_bp, r_bp))) if top.min_bp <= l_bp => {
+                    (t, r_bp)
+                }
+                _ => {
+                    let res = top;
+                    top = match stack.pop() {
+                        Some(it) => it,
+                        None => return res.lhs,
+                    };
+
+                    if res.token == Some('(') {
+                        assert_eq!(lexer.next(), Some(')'));
+                        top.lhs = res.lhs;
+                        continue;
+                    }
+
+                    let mut args = Vec::new();
+                    args.extend(top.lhs);
+                    args.extend(res.lhs);
+                    top.lhs =
+                        Some(S::Cons(res.token.unwrap(), args));
+                    continue;
+                }
+            };
+        lexer.next();
+
+        stack.push(top);
+        top = Frame {
+            min_bp: r_bp,
+            lhs: None,
+            token: Some(token),
+        };
+    }
+}
+```
+
+Tada! No recursion anymore, and still passes the tests!
+Let's cleanup this further though.
+First, let's treat `)` more like a usual operator.
+The correct binding powers here are the opposite of `(`: `(0, 100)`:
+
+```rust
+fn expr_bp(lexer: &mut Lexer) -> Option<S> {
+    let mut top = Frame {
+        min_bp: 0,
+        lhs: None,
+        token: None,
+    };
+    let mut stack = Vec::new();
+
+    loop {
+        let token = lexer.peek();
+        let (token, r_bp) =
+            match binding_power(token, top.lhs.is_none()) {
+                Some((t, (l_bp, r_bp))) if top.min_bp <= l_bp => {
+                    (t, r_bp)
+                }
+                _ => {
+                    let res = top;
+                    top = match stack.pop() {
+                        Some(it) => it,
+                        None => return res.lhs,
+                    };
+
+                    let mut args = Vec::new();
+                    args.extend(top.lhs);
+                    args.extend(res.lhs);
+                    top.lhs =
+                        Some(S::Cons(res.token.unwrap(), args));
+                    continue;
+                }
+            };
+        lexer.next();
+        if token == ')' {
+            assert_eq!(top.token, Some('('));
+            let res = top;
+            top = stack.pop().unwrap();
+            top.lhs = res.lhs;
+            continue;
+        }
+
+        stack.push(top);
+        top = Frame {
+            min_bp: r_bp,
+            lhs: None,
+            token: Some(token),
+        };
+    }
+}
+
+fn binding_power(
+    op: Option<char>,
+    prefix: bool,
+) -> Option<(char, (u8, u8))> {
+    let op = op?;
+    let res = match op {
+        '0'..='9' | 'a'..='z' | 'A'..='Z' => (99, 100),
+        '(' => (99, 0),
+        ')' => (0, 100),
+        '=' => (2, 1),
+        '+' | '-' if prefix => (99, 9),
+        '+' | '-' => (5, 6),
+        '*' | '/' => (7, 8),
+        '!' => (11, 100),
+        '.' => (14, 13),
+        _ => return None,
+    };
+    Some((op, res))
+}
+```
+
+Finally, let's note that `continue` inside the `match` is somewhat wasteful --- when we hit it, we'll re-`peek` the same token again.
+So let's repeat just the match until we know we can make progress.
+This also allows replacing `peek() / next()` pair with just `next()`.
+
+```rust
+fn expr_bp(lexer: &mut Lexer) -> Option<S> {
+    let mut top = Frame {
+        min_bp: 0,
+        lhs: None,
+        token: None,
+    };
+    let mut stack = Vec::new();
+
+    loop {
+        let token = lexer.next();
+        let (token, r_bp) = loop {
+            match binding_power(token, top.lhs.is_none()) {
+                Some((t, (l_bp, r_bp))) if top.min_bp <= l_bp => {
+                    break (t, r_bp)
+                }
+                _ => {
+                    let res = top;
+                    top = match stack.pop() {
+                        Some(it) => it,
+                        None => return res.lhs,
+                    };
+
+                    let mut args = Vec::new();
+                    args.extend(top.lhs);
+                    args.extend(res.lhs);
+                    top.lhs =
+                        Some(S::Cons(res.token.unwrap(), args));
+                }
+            };
+        };
+
+        if token == ')' {
+            assert_eq!(top.token, Some('('));
+            let res = top;
+            top = stack.pop().unwrap();
+            top.lhs = res.lhs;
+            continue;
+        }
+
+        stack.push(top);
+        top = Frame {
+            min_bp: r_bp,
+            lhs: None,
+            token: Some(token),
+        };
+    }
+}
+```
+
+And guess what? This is the shunting yard algorithm, with _its_ characteristic shape of
+
+```rust
+loop {
+    let token = next_token();
+    while stack.top.priority > token.priority {
+        stack.pop()
+    }
+}
+```
+
+To drive the point home, let's print the tokens we pop off the stack, to verify that we get reverse Polish notation without any kind of additional tree rearrangement, just like in the original algorithm description:
+
+```rust
+use std::{fmt, io::BufRead};
+
+enum S {
+    Cons(char, Vec<S>),
+}
+
+impl fmt::Display for S {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            S::Cons(head, rest) => {
+                if rest.is_empty() {
+                    write!(f, "{}", head)
+                } else {
+                    write!(f, "({}", head)?;
+                    for s in rest {
+                        write!(f, " {}", s)?
+                    }
+                    write!(f, ")")
+                }
+            }
+        }
+    }
+}
+
+struct Lexer {
+    tokens: Vec<char>,
+}
+
+impl Lexer {
+    fn new(input: &str) -> Lexer {
+        let mut tokens = input
+            .chars()
+            .filter(|it| !it.is_ascii_whitespace())
+            .collect::<Vec<_>>();
+        tokens.reverse();
+        Lexer { tokens }
+    }
+
+    fn next(&mut self) -> Option<char> {
+        self.tokens.pop()
+    }
+}
+
+fn expr(input: &str) -> S {
+    let mut lexer = Lexer::new(input);
+    eprintln!("{}", input);
+    let res = expr_bp(&mut lexer).unwrap();
+    eprintln!("{}\n", res);
+    res
+}
+
+struct Frame {
+    min_bp: u8,
+    lhs: Option<S>,
+    token: Option<char>,
+}
+
+fn expr_bp(lexer: &mut Lexer) -> Option<S> {
+    let mut top = Frame {
+        min_bp: 0,
+        lhs: None,
+        token: None,
+    };
+    let mut stack = Vec::new();
+
+    loop {
+        let token = lexer.next();
+        let (token, r_bp) = loop {
+            match binding_power(token, top.lhs.is_none()) {
+                Some((t, (l_bp, r_bp))) if top.min_bp <= l_bp =>{
+                    break (t, r_bp)
+                }
+                _ => {
+                    let res = top;
+                    top = match stack.pop() {
+                        Some(it) => it,
+                        None => {
+                            eprintln!();
+                            return res.lhs;
+                        }
+                    };
+
+                    let mut args = Vec::new();
+                    args.extend(top.lhs);
+                    args.extend(res.lhs);
+                    let token = res.token.unwrap();
+                    eprint!("{} ", token);
+                    top.lhs = Some(S::Cons(token, args));
+                }
+            };
+        };
+
+        if token == ')' {
+            assert_eq!(top.token, Some('('));
+            let res = top;
+            top = stack.pop().unwrap();
+            top.lhs = res.lhs;
+            continue;
+        }
+
+        stack.push(top);
+        top = Frame {
+            min_bp: r_bp,
+            lhs: None,
+            token: Some(token),
+        };
+    }
+}
+
+fn binding_power(
+    op: Option<char>,
+    prefix: bool,
+) -> Option<(char, (u8, u8))> {
+    let op = op?;
+    let res = match op {
+        '0'..='9' | 'a'..='z' | 'A'..='Z' => (99, 100),
+        '(' => (99, 0),
+        ')' => (0, 100),
+        '=' => (2, 1),
+        '+' | '-' if prefix => (99, 9),
+        '+' | '-' => (5, 6),
+        '*' | '/' => (7, 8),
+        '!' => (11, 100),
+        '.' => (14, 13),
+        _ => return None,
+    };
+    Some((op, res))
+}
+
+#[test]
+fn tests() {
+    let s = expr("1");
+    assert_eq!(s.to_string(), "1");
+
+    let s = expr("1 + 2 * 3");
+    assert_eq!(s.to_string(), "(+ 1 (* 2 3))");
+
+    let s = expr("a + b * c * d + e");
+    assert_eq!(s.to_string(), "(+ (+ a (* (* b c) d)) e)");
+
+    let s = expr("f . g . h");
+    assert_eq!(s.to_string(), "(. f (. g h))");
+
+    let s = expr(" 1 + 2 + f . g . h * 3 * 4");
+    assert_eq!(
+        s.to_string(),
+        "(+ (+ 1 2) (* (* (. f (. g h)) 3) 4))"
+    );
+
+    let s = expr("--1 * 2");
+    assert_eq!(s.to_string(), "(* (- (- 1)) 2)");
+
+    let s = expr("--f . g");
+    assert_eq!(s.to_string(), "(- (- (. f g)))");
+
+    let s = expr("-9!");
+    assert_eq!(s.to_string(), "(- (! 9))");
+
+    let s = expr("f . g !");
+    assert_eq!(s.to_string(), "(! (. f g))");
+
+    let s = expr("(((0)))");
+    assert_eq!(s.to_string(), "0");
+
+    let s = expr("(1 + 2) * 3");
+    assert_eq!(s.to_string(), "(* (+ 1 2) 3)");
+
+    let s = expr("1 + (2 * 3)");
+    assert_eq!(s.to_string(), "(+ 1 (* 2 3))");
+}
+```
+
+```
+1
+1
+1
+
+1 + 2 * 3
+1 2 3 * +
+(+ 1 (* 2 3))
+
+a + b * c * d + e
+a b c * d * + e +
+(+ (+ a (* (* b c) d)) e)
+
+f . g . h
+f g h . .
+(. f (. g h))
+
+ 1 + 2 + f . g . h * 3 * 4
+1 2 + f g h . . 3 * 4 * +
+(+ (+ 1 2) (* (* (. f (. g h)) 3) 4))
+
+--1 * 2
+1 - - 2 *
+(* (- (- 1)) 2)
+
+--f . g
+f g . - -
+(- (- (. f g)))
+
+-9!
+9 ! -
+(- (! 9))
+
+f . g !
+f g . !
+(! (. f g))
+
+(((0)))
+0
+0
+
+(1 + 2) * 3
+1 2 + 3 *
+(* (+ 1 2) 3)
+
+1 + (2 * 3)
+1 2 3 * +
+(+ 1 (* 2 3))
+```
+
+
+We actually could have done it with the original recursive formulation as well.
+Placing `print` statements at all points where we construct an `S` node prints expression in a reverse polish notation,
+proving that the recursive algorithm does the same steps and in the same order as the shunting yard.
+
+Q.E.D.
+
+The code from this and the previous article is available here: <https://github.com/matklad/minipratt>.

@@ -1,0 +1,49 @@
+# Another Generic Dilemma
+
+In ["The Generic Dilemma"](https://research.swtch.com/generic), Russ Cox observes that you can have only two of
+
+* separate compilation
+* unboxed values
+* parametric polymorphism
+
+(but see [1](https://www.youtube.com/watch?v=ctS8FzqcRug) and [2](https://gankra.github.io/blah/swift-abi/) for how you can achieve a middle ground with enough compiler wizardry)
+
+Now that [Go is getting generics](https://blog.golang.org/generics-proposal), I want to point out another dilemma:
+
+**Any language has parametric polymorphism, eventually**
+
+If you start with just dynamic dispatch, you'll end up adding generics down the road.
+This happened with C++ and Java, and is now happening with Go.
+The last one is interesting --- even if you don't carry accidental OOP baggage (inheritance), interfaces alone are not enough.
+
+Why does it happen?
+Well, because generics are useful for simple things.
+Even if the language special-cases several parametric data structures, like go does with slices, maps and channels, it is impossible to abstract over them.
+In particular, it's impossible to write `list_reverse` or `list_sort` functions without some awkward workarounds.
+
+Ok, but where's the dilemma?
+The dilemma is that adding parametric polymorphism to the language opens floodgates of complexity.
+At least in my experience, Rust traits, Haskell type classes, and Java generics are the main reason why some libraries in those languages are hard to use.
+
+It's not that generics are inherently hard, `fn reverse<T>(xs: [T]) -> [T]` is simple.
+It's that they allow creating complicated solutions, and this doesn't play well with our human bias for complexity.
+
+One thing I am wondering is whether a polymorphic language without bounded quantification would be practical?
+Again, in my anecdotal experience, cognitive complexity soars when there are bounds on type parameters: `T: This<S> + That`.
+But parametric polymorphism can be useful without them:
+
+```rust
+fn sort<T: Ord>(xs: &mut [T]) { ... }
+```
+
+is equivalent to
+
+```rust
+struct Ord<T> {
+  cmp: fn(&T, &T) -> Ordering
+}
+
+fn sort<T>(ord: Ord<T>, xs: &mut [T]) { ... }
+```
+
+Can we build an entire language out of this pattern?
