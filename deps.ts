@@ -2,6 +2,7 @@ import * as async from "https://deno.land/std@0.161.0/async/mod.ts";
 import * as fs from "https://deno.land/std@0.161.0/fs/mod.ts";
 import * as path from "https://deno.land/std@0.161.0/path/mod.ts";
 import * as streams from "https://deno.land/std@0.161.0/streams/mod.ts";
+import * as mod from "https://deno.land/std@0.163.0/uuid/mod.ts";
 
 export const std = {
   async,
