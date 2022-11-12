@@ -33,9 +33,10 @@ s = s.replace(/^\[source\]\n----\n((.|\n)*?)\n----/mg, (m, code) => {
 s = s.replace(
   /^\[source,(kotlin|cpp|rust|swift|c|toml|go|console|js|ts|nix)(,highlight=.*?)?\]\n----\n((.|\n)*?)\n----/mg,
   (m, lang, hl, code) => {
-    let highlight = ""
+    let highlight = "";
     if (hl) {
-      highlight = hl.substring(",highlight=".length).replaceAll('..', '-').replaceAll(';', ',').replaceAll('"', '')
+      highlight = hl.substring(",highlight=".length).replaceAll("..", "-")
+        .replaceAll(";", ",").replaceAll('"', "");
       highlight = `{highlight="${highlight}"}\n`;
     }
     return highlight + "```" + lang + "\n" + code + "\n```";
@@ -44,9 +45,10 @@ s = s.replace(
 s = s.replace(
   /^\[source(,highlight=.*?)\]\n----\n((.|\n)*?)\n----/mg,
   (m, hl, code) => {
-    let highlight = ""
+    let highlight = "";
     if (hl) {
-      highlight = hl.substring(",highlight=".length).replaceAll('..', '-').replaceAll(';', ',').replaceAll('"', '')
+      highlight = hl.substring(",highlight=".length).replaceAll("..", "-")
+        .replaceAll(";", ",").replaceAll('"', "");
       highlight = `{highlight="${highlight}"}\n`;
     }
     return highlight + "```\n" + code + "\n```";
@@ -68,23 +70,26 @@ s = s.replace(/(\n\. .*?$(\n\s\s.*?$)*){2,}/mg, (m, text) => {
     return `${i}. `;
   });
 });
-s = s.replace(/\[(NOTE|Note)\]\n====\n((.|\n)*?)\n====\n/mg, (m, note, content) => {
-  return `::: note\n${content}\n:::\n`
-})
+s = s.replace(
+  /\[(NOTE|Note)\]\n====\n((.|\n)*?)\n====\n/mg,
+  (m, note, content) => {
+    return `::: note\n${content}\n:::\n`;
+  },
+);
 s = s.replace(/^NOTE: (.*?)$/mg, (m, content) => {
-  return `::: note\n${content}\n:::\n`
-})
+  return `::: note\n${content}\n:::\n`;
+});
 s = s.replace(/^\*\*\*\*\n((.|\n)*?)\n\*\*\*\*\n/mg, (m, content) => {
-  return `::: snip\n${content}\n:::\n`
-})
+  return `::: snip\n${content}\n:::\n`;
+});
 s = s.replace(/"`(\w.*?(\w|\?))`"/mg, (m, w) => {
-  return `"${w}"`
-})
+  return `"${w}"`;
+});
 s = s.replace(/^(http(s)?:\/\/.*)$/mg, (m) => {
-  return `<${m}>`
-})
+  return `<${m}>`;
+});
 s = s.replace(/`\+(.*?)\+`/mg, (m, w) => {
-  return "`" + w + "`"
-})
+  return "`" + w + "`";
+});
 
 await Deno.writeTextFile(path, s);

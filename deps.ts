@@ -14,7 +14,7 @@ import hljs_ from "https://unpkg.com/@highlightjs/cdn-assets@11.6.0/es/highlight
 import latex from "https://unpkg.com/@highlightjs/cdn-assets@11.6.0/es/languages/latex.min.js";
 import nix from "https://unpkg.com/@highlightjs/cdn-assets@11.6.0/es/languages/nix.min.js";
 import x86asm from "https://unpkg.com/@highlightjs/cdn-assets@11.6.0/es/languages/x86asm.min.js";
-let hljs: any = hljs_
+let hljs: any = hljs_;
 hljs.configure({ classPrefix: "hl-" });
 hljs.registerLanguage("latex", latex);
 hljs.registerLanguage("nix", nix);

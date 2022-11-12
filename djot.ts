@@ -41,12 +41,14 @@ const visitor: { [key: string]: (node: Node) => HtmlString } = {
   list: (node) => {
     const list_style = node.ast.list_style;
     let tag = "ol";
-    if ("-+*".includes(list_style)) tag = "ul"
-    if (list_style === ":") tag = "dl"
+    if ("-+*".includes(list_style)) tag = "ul";
+    if (list_style === ":") tag = "dl";
     let type = "";
     if (list_style === "a.") type = ' type="a"';
     if (list_style === "i.") type = ' type="i"';
-    const cls = list_style === "1)" ? node.class_attr_extra("callout") : node.class_attr;
+    const cls = list_style === "1)"
+      ? node.class_attr_extra("callout")
+      : node.class_attr;
     return html`\n<${tag} ${cls}${type}>${node.content}</${tag}>\n`;
   },
   list_item: (node) => html`  <li>${node.content}</li>\n`,
@@ -111,7 +113,7 @@ ${cite}
 ${cap}
 ${node.content}
 </aside>
-`
+`;
     }
 
     if (node.cls.includes("details")) {
@@ -120,7 +122,7 @@ ${node.content}
 <summary>${node.ast.attr?.cap}</summary>
 ${node.content}
 </details>
-`
+`;
     }
 
     return html`<div${node.class_attr}>${node.content}</div>`;
@@ -226,7 +228,8 @@ export class Node {
   }
 
   public get children(): Node[] {
-    return this.ast.children?.map((it: any) => new Node(it, this, this.ctx)) ?? [];
+    return this.ast.children?.map((it: any) => new Node(it, this, this.ctx)) ??
+      [];
   }
 
   public get text(): string {
@@ -241,13 +244,13 @@ export class Node {
   }
 
   public get class_attr(): HtmlString {
-    return this.class_attr_extra()
+    return this.class_attr_extra();
   }
 
   public class_attr_extra(exra = ""): HtmlString {
-    let cls = this.cls ?? ""
-    if (exra) cls += ` ${exra}`
-    if (!cls.trim()) return new HtmlString("")
+    let cls = this.cls ?? "";
+    if (exra) cls += ` ${exra}`;
+    if (!cls.trim()) return new HtmlString("");
     return html` class = "${cls}"`;
   }
 
@@ -271,8 +274,10 @@ export class Node {
       if (!f) throw `unhandled node ${this.tag}`;
       return f(this);
     } catch (e) {
-      console.error(e)
-      return html`<strong>${e}</strong>:<br>can't render ${JSON.stringify(this.ast)}<br/>${e.stack}`
+      console.error(e);
+      return html`<strong>${e}</strong>:<br>can't render ${
+        JSON.stringify(this.ast)
+      }<br/>${e.stack}`;
     }
   }
 }

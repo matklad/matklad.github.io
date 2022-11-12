@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { Post } from "./build.ts";
 
-const site_url = "https://matklad.github.io"
+const site_url = "https://matklad.github.io";
 
 export const base = (
   { content, src = "templates.ts" }: { content: HtmlString; src?: string },
@@ -132,7 +132,7 @@ export function time(date: Date): HtmlString {
 }
 
 function yyyy_mm_dd(date: Date): string {
-  return date.toISOString().slice(0, 10)
+  return date.toISOString().slice(0, 10);
 }
 
 export const feed = (posts: Post[]): HtmlString => {
@@ -164,15 +164,15 @@ export const feed_entry = (post: Post): HtmlString => {
 <summary type="html"><![CDATA[${post.summary}]]></summary>
 <content type="html" xml:base="${site_url}${post.path}"><![CDATA[${post.content}]]></content>
 </entry>
-`
-}
+`;
+};
 
 export function html(
   strings: ArrayLike<string>,
   ...values: any[]
 ): HtmlString {
   function content(value: any): string[] {
-    if (value === undefined) return []
+    if (value === undefined) return [];
     if (value instanceof HtmlString) return [value.value];
     if (Array.isArray(value)) return value.flatMap(content);
     return [escapeHtml(value)];

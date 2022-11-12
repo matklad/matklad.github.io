@@ -124,7 +124,7 @@ async function collect_posts(): Promise<Post[]> {
     const ctx = { date };
     const html = djot.render(ast, ctx);
 
-    const title = ast.child("heading")?.content ?? "untitled";
+    const title = ast.child("heading")?.content ?? new HtmlString("untitled");
     return {
       year,
       month,
@@ -133,7 +133,8 @@ async function collect_posts(): Promise<Post[]> {
       date,
       title,
       content: html,
-      summary: ctx.summary,
+      // deno-lint-ignore no-explicit-any
+      summary: (ctx as any).summary,
       path: `/${y}/${m}/${d}/${slug}.html`,
       src: `/src/posts/${y}-${m}-${d}-${slug}.djot`,
     };
