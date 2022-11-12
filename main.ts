@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-write=./_site,./tmp --allow-read=/tmp,./ --allow-net --allow-run=./main.ts,lua
+#!/usr/bin/env -S deno run --lock --allow-write=./_site,./tmp --allow-read=./ --allow-run=./main.ts,lua
 import { commands } from "./build.ts";
 
 const sub = Deno.args[0];
