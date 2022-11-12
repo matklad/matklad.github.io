@@ -36,16 +36,25 @@ async function watch() {
   }
 }
 
-async function build() {
-  const start = performance.now();
+class Ctx {
+  constructor(
+    public parse_ms: number = 0,
+    public render_ms: number = 0,
+    public collect_ms: number = 0,
+    public total_ms: number = 0,
+  ) {}
+}
 
+async function build() {
+  const t = performance.now();
+  const ctx = new Ctx();
   if (Deno.args.includes("--update")) {
     await Deno.mkdir("_site", { recursive: true });
   } else {
     await std.fs.emptyDir("./_site");
   }
 
-  const posts = await collect_posts();
+  const posts = await collect_posts(ctx);
 
   await update_file("_site/index.html", templates.post_list(posts).value);
   await update_file("_site/feed.xml", templates.feed(posts).value);
@@ -63,8 +72,9 @@ async function build() {
     await update_path(path);
   }
 
-  const end = performance.now();
-  console.log(`${end - start}ms`);
+  ctx.total_ms = performance.now() - t;
+  console.log(`${ctx.total_ms}ms`);
+  if (Deno.args.includes("-p")) console.log(JSON.stringify(ctx));
 }
 
 async function update_file(path: string, contents: Uint8Array | string) {
@@ -109,7 +119,8 @@ export type Post = {
   summary: HtmlString;
 };
 
-async function collect_posts(): Promise<Post[]> {
+async function collect_posts(ctx: Ctx): Promise<Post[]> {
+  const start = performance.now();
   const post_walk = std.fs.walk("./src/posts", { includeDirs: false });
   const work = std.async.pooledMap(8, post_walk, async (entry) => {
     if (!entry.name.endsWith(".djot")) return undefined;
@@ -120,9 +131,15 @@ async function collect_posts(): Promise<Post[]> {
     const date = new Date(Date.UTC(year, month - 1, day));
 
     const text = await Deno.readTextFile(entry.path);
+
+    let t = performance.now();
     const ast = await djot.parse(text);
-    const ctx = { date };
-    const html = djot.render(ast, ctx);
+    ctx.parse_ms += performance.now() - t;
+
+    t = performance.now();
+    const render_ctx = { date };
+    const html = djot.render(ast, render_ctx);
+    ctx.render_ms += performance.now() - t;
 
     const title = ast.child("heading")?.content ?? new HtmlString("untitled");
     return {
@@ -134,7 +151,7 @@ async function collect_posts(): Promise<Post[]> {
       title,
       content: html,
       // deno-lint-ignore no-explicit-any
-      summary: (ctx as any).summary,
+      summary: (render_ctx as any).summary,
       path: `/${y}/${m}/${d}/${slug}.html`,
       src: `/src/posts/${y}-${m}-${d}-${slug}.djot`,
     };
@@ -143,6 +160,7 @@ async function collect_posts(): Promise<Post[]> {
   const posts = [];
   for await (const it of work) if (it) posts.push(it);
   posts.sort((l, r) => l.path < r.path ? 1 : -1);
+  ctx.collect_ms = performance.now() - start;
   return posts;
 }
 
