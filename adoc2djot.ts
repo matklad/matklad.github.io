@@ -75,7 +75,7 @@ s = s.replace(/^NOTE: (.*?)$/mg, (m, content) => {
   return `::: note\n${content}\n:::\n`;
 });
 s = s.replace(/^\*\*\*\*\n((.|\n)*?)\n\*\*\*\*\n/mg, (m, content) => {
-  return `::: snip\n${content}\n:::\n`;
+  return `::: block\n${content}\n:::\n`;
 });
 s = s.replace(/"`(\w.*?(\w|\?))`"/mg, (m, w) => {
   return `"${w}"`;

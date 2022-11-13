@@ -55,7 +55,7 @@ Kitchen sink errors pack dissimilar failure modes into one type.
 But, if failure modes vary widely, it probably isn't reasonable to handle them!
 This is an indication that the situation looks more like the case two.
 
-::: snip
+::: block
 An often-working cure for error kitchensinkosis is the pattern of pushing errors to the caller.
 
 Consider this example
@@ -304,7 +304,7 @@ where
 Then, `serde_json::Error` wouldn't have `Io` variant and would be stashed into `io::Error` with `InvalidData` kind.
 
 {cap="Addendum, 2021-01-25"}
-::: snip
+::: block
 Re-reading [this article](https://sled.rs/errors.html), I now think that the right return type would be:
 
 ```rust
@@ -327,7 +327,7 @@ The number one problem with `std::io::Error` is that, when a file-system operati
 This is understandable --- Rust is a systems language, so it shouldn't add much fat over what OS provides natively.
 OS returns an integer return code, and coupling that with a heap-allocated `PathBuf` could be an unacceptable overhead!
 
-::: snip
+::: block
 I was surprised to learn that std in fact
 [does](https://github.com/rust-lang/rust/blob/e160e5cb80652bc2afe74cb3affbe35b74243ea9/library/std/src/sys/unix/fs.rs#L867-L869)
 an allocation for every path-related syscall.
@@ -385,7 +385,7 @@ of `std::io::Error`, you might find something to steal!
 Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/jbdk5x/blog_post_study_of_stdioerror/).
 
 {cap="Bonus puzzler"}
-::: snip
+::: block
 Take a look at
 [this line](https://github.com/rust-lang/rust/blob/e160e5cb80652bc2afe74cb3affbe35b74243ea9/library/std/src/io/error.rs#L542) from the implementation:
 

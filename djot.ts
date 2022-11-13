@@ -104,12 +104,12 @@ ${cite}
 </aside>`;
     }
 
-    if (node.cls.includes("snip")) {
+    if (node.cls.includes("block")) {
       const cap = node.ast.attr?.cap
         ? html`<div class="title">${node.ast.attr.cap}</div>\n`
         : "\n";
       return html`
-<aside class="snip">
+<aside class="block">
 ${cap}
 ${node.content}
 </aside>
