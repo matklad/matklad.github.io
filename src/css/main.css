@@ -66,7 +66,11 @@ figcaption.title {
     color: #7a2518;
     margin-top: 0; margin-bottom: 0.25em;
 }
-figure.code-block > pre { counter-reset: line; overflow-x: auto; }
+figure.code-block > pre {
+    display: flex; flex-direction: column;
+    overflow-x: auto; overflow-y: clip;
+    counter-reset: line;
+}
 figure.code-block > pre > code { counter-increment: line; }
 figure.code-block > pre > code:before {
     content: counter(line);
