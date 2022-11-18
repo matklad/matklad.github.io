@@ -4,7 +4,7 @@ import { Post } from "./build.ts";
 const site_url = "https://matklad.github.io";
 
 export const base = (
-  { content, src = "templates.ts" }: { content: HtmlString; src?: string },
+  { content, src = "templates.ts", title = "matklad" }: { content: HtmlString; src?: string, title?: string },
 ): HtmlString =>
   html`
 <!DOCTYPE html>
@@ -13,7 +13,7 @@ export const base = (
 <head>
   <meta charset='utf-8'>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>matklad</title>
+  <title>${title}</title>
   <meta name="description" content="Yet another programming blog by Alex Kladov aka matklad.">
   <link rel="canonical" href="${site_url}">
   <link rel="alternate" type="application/rss+xml" title="matklad" href="${site_url}/feed.xml">
@@ -116,6 +116,7 @@ export const post_list = (posts: Post[]): HtmlString => {
 export function post(post: Post): HtmlString {
   return base({
     src: post.src,
+    title: post.title.value,
     content: html`<article>\n${post.content}</article>`,
   });
 }
