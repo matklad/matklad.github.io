@@ -131,6 +131,7 @@ impl<T> Drop for Node<T> {
           mem::swap(self, &mut *left);
           left.left = self.right.take();
           left.right = Some(right);
+          self.right = Some(left);
         }
       }
     }
