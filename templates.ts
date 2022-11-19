@@ -4,7 +4,13 @@ import { Post } from "./build.ts";
 const site_url = "https://matklad.github.io";
 
 export const base = (
-  { content, src = "templates.ts", title = "matklad" }: { content: HtmlString; src?: string, title?: string },
+  { content, src, title, path, description }: {
+    content: HtmlString;
+    src: string;
+    title: string;
+    description: string;
+    path: string;
+  },
 ): HtmlString =>
   html`
 <!DOCTYPE html>
@@ -14,8 +20,8 @@ export const base = (
   <meta charset='utf-8'>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title}</title>
-  <meta name="description" content="Yet another programming blog by Alex Kladov aka matklad.">
-  <link rel="canonical" href="${site_url}">
+  <meta name="description" content="${description}">
+  <link rel="canonical" href="${site_url}${path}">
   <link rel="alternate" type="application/rss+xml" title="matklad" href="${site_url}/feed.xml">
   <style>
   @font-face {
@@ -88,8 +94,14 @@ export const base = (
 </html>
 `;
 
+const blurb = "Yet another programming blog by Alex Kladov aka matklad.";
+
 export const about = () =>
   base({
+    path: "/about",
+    title: "matklad",
+    description: blurb,
+    src: "templates.ts",
     content: html`
 <h2>Hello!</h2>
 <p>
@@ -110,13 +122,21 @@ export const post_list = (posts: Post[]): HtmlString => {
 </li>`
   );
 
-  return base({ content: html`<ul class="post-list">${list_items}</ul>` });
+  return base({
+    path: "",
+    title: "matklad",
+    description: blurb,
+    src: "templates.ts",
+    content: html`<ul class="post-list">${list_items}</ul>`,
+  });
 };
 
 export function post(post: Post): HtmlString {
   return base({
     src: post.src,
     title: post.title.value,
+    description: post.summary.value,
+    path: post.path,
     content: html`<article>\n${post.content}</article>`,
   });
 }
