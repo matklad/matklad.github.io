@@ -43,7 +43,7 @@ const visitor: { [key: string]: (node: Node) => HtmlString } = {
     const date = node.ast.level == 1 && node.ctx.date
       ? time(node.ctx.date)
       : undefined;
-    const res = html`\n<${tag}>${node.content} ${date}</${tag}>\n`;
+    const res = html`\n<${tag}${node.class_attr}>${node.content} ${date}</${tag}>\n`;
     return res;
   },
   list: (node) => {

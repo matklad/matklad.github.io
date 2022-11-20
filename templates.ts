@@ -4,13 +4,13 @@ import { Post } from "./build.ts";
 const site_url = "https://matklad.github.io";
 
 export const base = (
-  { content, src, title, path, description, print_css }: {
+  { content, src, title, path, description, extra_css }: {
     content: HtmlString;
     src: string;
     title: string;
     description: string;
     path: string;
-    print_css?: string;
+    extra_css?: string;
   },
 ): HtmlString =>
   html`
@@ -57,7 +57,7 @@ export const base = (
   </style>
 
   <link rel="stylesheet" href="/css/main.css">
-  ${print_css ? html `<link rel="stylesheet" media="print" href="/css/${print_css}">` : ""}
+  ${extra_css ? html `<link rel="stylesheet" href="/css/${extra_css}">` : ""}
   <link rel="stylesheet"
         href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
@@ -122,7 +122,7 @@ export function resume(content: HtmlString): HtmlString {
     title: "matklad",
     description: blurb,
     src: "src/resume.djot",
-    print_css: "resume.css",
+    extra_css: "resume.css",
     content,
   });
 }
