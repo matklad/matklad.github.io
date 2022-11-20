@@ -63,19 +63,20 @@ async function build() {
     await update_file(`_site${post.path}`, templates.post(post).value);
   }
 
+  const text = await Deno.readTextFile("src/resume.djot");
+  const ast = await djot.parse(text);
+  const html = djot.render(ast, {});
+  await update_file(`_site/resume.html`, templates.resume(html).value);
+
   const paths = [
     "favicon.ico",
+    "resume.pdf",
     "css/*",
     "assets/*",
   ];
   for (const path of paths) {
     await update_path(path);
   }
-
-  const text = await Deno.readTextFile("src/resume.djot");
-  const ast = await djot.parse(text);
-  const html = djot.render(ast, {});
-  await update_file(`_site/resume.html`, templates.resume(html).value);
 
   ctx.total_ms = performance.now() - t;
   console.log(`${ctx.total_ms}ms`);
