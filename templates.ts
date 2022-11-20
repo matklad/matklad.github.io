@@ -66,7 +66,7 @@ export const base = (
     <nav>
       <a class="title" href="/">matklad</a>
       <a href="/about.html">About</a>
-      <a>Resume</a>
+      <a href="/resume.html">Resume</a>
     </nav>
   </header>
 
@@ -113,6 +113,16 @@ export const about = () =>
 <p>Code samples on this blog are dual licensed under MIT OR Apache-2.0.</p>
 `,
   });
+
+export function resume(content: HtmlString): HtmlString {
+  return base({
+    path: "/resume",
+    title: "matklad",
+    description: blurb,
+    src: "src/resume.djot",
+    content,
+  });
+}
 
 export const post_list = (posts: Post[]): HtmlString => {
   const list_items = posts.map((post) =>

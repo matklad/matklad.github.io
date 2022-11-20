@@ -72,20 +72,25 @@ async function build() {
     await update_path(path);
   }
 
+  const text = await Deno.readTextFile("src/resume.djot");
+  const ast = await djot.parse(text);
+  const html = djot.render(ast, {});
+  await update_file(`_site/resume.html`, templates.resume(html).value);
+
   ctx.total_ms = performance.now() - t;
   console.log(`${ctx.total_ms}ms`);
   if (Deno.args.includes("-p")) console.log(JSON.stringify(ctx));
 }
 
-async function update_file(path: string, contents: Uint8Array | string) {
-  if (!contents) return;
+async function update_file(path: string, content: Uint8Array | string) {
+  if (!content) return;
   await std.fs.ensureFile(path);
   await std.fs.ensureDir("./tmp");
   const temp = await Deno.makeTempFile({ dir: "./tmp" });
-  if (contents instanceof Uint8Array) {
-    await Deno.writeFile(temp, contents);
+  if (content instanceof Uint8Array) {
+    await Deno.writeFile(temp, content);
   } else {
-    await Deno.writeTextFile(temp, contents);
+    await Deno.writeTextFile(temp, content);
   }
   await Deno.rename(temp, path);
 }

@@ -34,7 +34,9 @@ const visitor: { [key: string]: (node: Node) => HtmlString } = {
   doc: (node) => node.content,
   heading: (node) => {
     const tag = `h${node.ast.level}`;
-    const date = node.ast.level == 1 ? time(node.ctx.date) : undefined;
+    const date = node.ast.level == 1 && node.ctx.date
+      ? time(node.ctx.date)
+      : undefined;
     const res = html`\n<${tag}>${node.content} ${date}</${tag}>\n`;
     return res;
   },
