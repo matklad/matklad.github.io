@@ -32,6 +32,12 @@ export function render(node: Node, ctx: any): HtmlString {
 
 const visitor: { [key: string]: (node: Node) => HtmlString } = {
   doc: (node) => node.content,
+  section: (node) => {
+    if (node.child("heading")?.ast?.level == 1) {
+      return node.content;
+    }
+    return html`<section>${node.content}</section>`;
+  },
   heading: (node) => {
     const tag = `h${node.ast.level}`;
     const date = node.ast.level == 1 && node.ctx.date
@@ -163,7 +169,7 @@ ${cap}${pre}
       return html`<img src="${href}" alt="${node.text}">`;
     }
   },
-  reference_definition: (node) => html``,
+  reference_definition: (_node) => html``,
   url: (node) =>
     html`<a class="url" href="${node.ast.destination}">${node.ast.destination}</a>`,
   double_quoted: (node) => html`“${node.content}”`,
@@ -194,8 +200,8 @@ ${cap}${pre}
   delete: (node) => html`<del>${node.content}</del>`,
   thematic_break: (_node) => html`<hr />`,
   str: (node) => html`${node.text}`,
-  nbsp: (node) => new HtmlString("&nbsp;"),
-  hardbreak: (node) => html`<br>\n`,
+  nbsp: (_node) => new HtmlString("&nbsp;"),
+  hardbreak: (_node) => html`<br>\n`,
 };
 
 const substs: Record<string, string> = {
