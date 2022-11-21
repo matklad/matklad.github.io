@@ -263,7 +263,7 @@ The value is chosen if the set of acceptors which voted for the value (`{a ∈ �
 In other words, if a majority of acceptors has voted for the value.
 
 {cap="Quiz"}
-::: block
+:::: block
 What would be the difference between
 
 ```
@@ -283,15 +283,15 @@ and
 ?
 
 {cap="Spoiler"}
-:::: details
+::: details
 Trick question!
 
 They are equivalent.
 The first formula allows `a` to vote for `v` only if `a` hasn't voted before.
 The second formula allows `a` to vote for `v` only if all previous votes of `a` were cast for `v`.
 That is, if `a` hasn't voted yet, or if it has already voted for `v` (in which case this would be a stuttering step).
-::::
 :::
+::::
 
 Let's prove consensus theorem for Majority Vote protocol.
 TYPE ERROR, DOES NOT COMPUTE.
@@ -645,7 +645,7 @@ This is the hardest part of the article.
 Take time to fully understand Ballot Vote.
 
 {cap="Quiz"}
-::: block
+:::: block
 What breaks if we don't advance `maxBall` in `Vote`?
 Ie, if we replace
 
@@ -656,7 +656,7 @@ maxBal' = λ a1 ∈ 𝔸: if a1 = a then b else maxBal(a1)
 with just `maxBal' = maxBal`?
 
 {cap="Spoiler"}
-:::: details
+::: details
 Trick question!
 
 I believe that nothing really changes.
@@ -665,8 +665,8 @@ However, by casting our own vote, we fix the outcome for the current ballot as w
 If we don't set `maxBal`, we can re-enter `Vote` and vote the second time, but we'll necessary vote for the same value!
 
 Voting the second time for the same value is wasteful, and upping `maxBall` here reduces the state space, but it doesn't affect safety.
-::::
 :::
+::::
 
 Rigorously proving that Ballot Voting satisfies Consensus would be tedious --- the specification is large, and the proof would necessary use every single piece of the spec!
 But let's add some hand-waving.
