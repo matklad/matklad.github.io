@@ -99,41 +99,13 @@ export const base = (
 
 const blurb = "Yet another programming blog by Alex Kladov aka matklad.";
 
-export const about = () =>
-  base({
-    path: "/about",
-    title: "matklad",
-    description: blurb,
-    src: "templates.ts",
-    content: html`
-<h2>Hello!</h2>
-<p>
-  <img class="about-ava" src="https://avatars.githubusercontent.com/u/1711539?v=4" alt="matklad" width="128">
-  I am Alex Kladov, a programmer who loves simple code and programming languages.
-  You can find me on <a href="https://github.com/matklad">GitHub</a>.
-  If you want to contact me, please write an e-mail (address is on the GitHub profile).
-</p>
-<p>Code samples on this blog are dual licensed under MIT OR Apache-2.0.</p>
-`,
-  });
-
-export function resume(content: HtmlString): HtmlString {
+export function page(name: string, content: HtmlString) {
   return base({
-    path: "/resume",
+    path: `/${name}`,
     title: "matklad",
     description: blurb,
-    src: "src/resume.djot",
-    extra_css: "resume.css",
-    content,
-  });
-}
-
-export function links(content: HtmlString): HtmlString {
-  return base({
-    path: "/links",
-    title: "matklad",
-    description: blurb,
-    src: "src/links.djot",
+    src: `src/${name}.djot`,
+    extra_css: name === "resume" ? "resume.css" : undefined,
     content,
   });
 }

@@ -55,26 +55,18 @@ async function build() {
   }
 
   const posts = await collect_posts(ctx);
-
   await update_file("_site/index.html", templates.post_list(posts).value);
   await update_file("_site/feed.xml", templates.feed(posts).value);
-  await update_file("_site/about.html", templates.about().value);
   for (const post of posts) {
     await update_file(`_site${post.path}`, templates.post(post).value);
   }
 
-  {
-    const text = await Deno.readTextFile("src/resume.djot");
+  const pages = ["about", "resume", "links"];
+  for (const page of pages) {
+    const text = await Deno.readTextFile(`src/${page}.djot`);
     const ast = await djot.parse(text);
     const html = djot.render(ast, {});
-    await update_file(`_site/resume.html`, templates.resume(html).value);
-  }
-
-  {
-    const text = await Deno.readTextFile("src/links.djot");
-    const ast = await djot.parse(text);
-    const html = djot.render(ast, {});
-    await update_file(`_site/links.html`, templates.links(html).value);
+    await update_file(`_site/${page}.html`, templates.page(page, html).value);
   }
 
   const paths = [

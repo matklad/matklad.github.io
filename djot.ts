@@ -43,13 +43,12 @@ const visitor: { [key: string]: (node: Node) => HtmlString } = {
     const date = node.ast.level == 1 && node.ctx.date
       ? time(node.ctx.date)
       : undefined;
-    const id = node.parent?.ast?.attr?.id
+    const id = node.parent?.ast?.attr?.id;
     if (id) {
       return html`
 <${tag} id="${id}"${node.class_attr}>
 <a href="#${id}">${node.content} ${date}</a>
 </${tag}>\n`;
-
     } else {
       return html`\n<${tag}${node.class_attr}>${node.content} ${date}</${tag}>\n`;
     }
@@ -174,7 +173,10 @@ ${cap}${pre}
     if (node.cls.includes("video")) {
       return html`<video src="${href}" controls=""></video>`;
     } else {
-      return html`<img src="${href}" alt="${node.text}">`;
+      const attrs = Object.entries(node.ast.attr ?? {}).map(([k, v]) =>
+        ` ${k}="${v}"`
+      ).join("");
+      return html`<img src="${href}" alt="${node.text}"${attrs}>`;
     }
   },
   reference_definition: (_node) => html``,
