@@ -57,7 +57,7 @@ export const base = (
   </style>
 
   <link rel="stylesheet" href="/css/main.css">
-  ${extra_css ? html `<link rel="stylesheet" href="/css/${extra_css}">` : ""}
+  ${extra_css ? html`<link rel="stylesheet" href="/css/${extra_css}">` : ""}
   <link rel="stylesheet"
         href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
@@ -69,6 +69,7 @@ export const base = (
       <a class="title" href="/">matklad</a>
       <a href="/about.html">About</a>
       <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
     </nav>
   </header>
 
@@ -123,6 +124,16 @@ export function resume(content: HtmlString): HtmlString {
     description: blurb,
     src: "src/resume.djot",
     extra_css: "resume.css",
+    content,
+  });
+}
+
+export function links(content: HtmlString): HtmlString {
+  return base({
+    path: "/links",
+    title: "matklad",
+    description: blurb,
+    src: "src/links.djot",
     content,
   });
 }

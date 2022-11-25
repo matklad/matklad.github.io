@@ -63,10 +63,19 @@ async function build() {
     await update_file(`_site${post.path}`, templates.post(post).value);
   }
 
-  const text = await Deno.readTextFile("src/resume.djot");
-  const ast = await djot.parse(text);
-  const html = djot.render(ast, {});
-  await update_file(`_site/resume.html`, templates.resume(html).value);
+  {
+    const text = await Deno.readTextFile("src/resume.djot");
+    const ast = await djot.parse(text);
+    const html = djot.render(ast, {});
+    await update_file(`_site/resume.html`, templates.resume(html).value);
+  }
+
+  {
+    const text = await Deno.readTextFile("src/links.djot");
+    const ast = await djot.parse(text);
+    const html = djot.render(ast, {});
+    await update_file(`_site/links.html`, templates.links(html).value);
+  }
 
   const paths = [
     "favicon.ico",
