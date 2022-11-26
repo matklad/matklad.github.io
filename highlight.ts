@@ -64,7 +64,7 @@ function add_spans_console(source: string): HtmlString {
         line.substring(2)
       }\n`;
     }
-    if (line.startsWith("# ")) {
+    if (line.startsWith("#")) {
       return html`<span class="hl-comment">${line}</span>\n`;
     }
     return html`<span class="hl-output">${line}</span>\n`;
