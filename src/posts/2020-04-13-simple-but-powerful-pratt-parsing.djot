@@ -258,7 +258,7 @@ impl Lexer {
 }
 ```
 
-To make sure that we got the {-precedence-} binding power correctly, we will be transforming infix expressions into a gold-standard (not so popular in Poland, for whatever reason) unambiguous notation --- S-expressions:
+To make sure that we got the {-precedence-} binding power correctly, we will be transforming infix expressions into a gold-standard (not so popular in Poland, for whatever reason) unambiguous notation --- S-expressions:\
 `1 + 2 * 3 == (+ 1 (* 2 3))`.
 
 ```rust
@@ -390,7 +390,7 @@ Our current right priority is `2`, and, to be able to fold the expression, we ne
 So let's recursively call `expr_bp` starting at `b`, but also tell it to stop as soon as `bp` drops below `2`.
 This necessitates the addition of `min_bp` argument to the main function.
 
-And so, we have a fully functioning minimal Prat parser:
+And lo, we have a fully functioning minimal Prat parser:
 
 ```rust
 fn expr(input: &str) -> S {
