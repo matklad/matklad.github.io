@@ -4,19 +4,18 @@ import * as templates from "./templates.ts";
 import * as djot from "./djot.ts";
 import { HtmlString } from "./templates.ts";
 
-let build_id = 0;
 async function watch() {
+  let build_id = 0;
   async function rebuild() {
     try {
       console.log(`rebuild #${build_id}`);
       build_id += 1;
-      await Deno.run({ cmd: ["./main.ts", "build", "--update"] }).status();
+      await build({ update: true });
     } catch {
       // ignore
     }
   }
 
-  await std.fs.emptyDir("./_site");
   await rebuild();
 
   const rebuild_debounced = std.async.debounce(
@@ -32,7 +31,7 @@ async function watch() {
       }
     }
     if (event.kind == "access") continue outer;
-    rebuild_debounced();
+    await rebuild_debounced();
   }
 }
 
@@ -45,10 +44,10 @@ class Ctx {
   ) {}
 }
 
-async function build() {
+async function build({ update } = { update: false }) {
   const t = performance.now();
   const ctx = new Ctx();
-  if (Deno.args.includes("--update")) {
+  if (update) {
     await Deno.mkdir("_site", { recursive: true });
   } else {
     await std.fs.emptyDir("./_site");
