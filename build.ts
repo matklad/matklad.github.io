@@ -5,26 +5,30 @@ import * as djot from "./djot.ts";
 import { HtmlString } from "./templates.ts";
 
 async function watch() {
-  let build_id = 0;
-  async function rebuild() {
-    try {
-      console.log(`rebuild #${build_id}`);
-      build_id += 1;
-      await build({ update: true });
-    } catch {
-      // ignore
+  let signal = std.async.deferred();
+  (async () => {
+    let build_id = 0;
+    while (await signal) {
+      signal = std.async.deferred();
+      try {
+        console.log(`rebuild #${build_id}`);
+        build_id += 1;
+        await build({ update: true });
+      } catch {
+        // ignore
+      }
     }
-  }
+  })();
 
-  await rebuild();
+  signal.resolve(true);
 
   const rebuild_debounced = std.async.debounce(
-    rebuild,
+    () => signal.resolve(true),
     16,
   );
 
   outer:
-  for await (const event of Deno.watchFs("./", { recursive: true })) {
+  for await (const event of Deno.watchFs("./src", { recursive: true })) {
     for (const path of event.paths) {
       if (path.match(/\.\/(tmp|_site)/)) {
         continue outer;
@@ -33,6 +37,7 @@ async function watch() {
     if (event.kind == "access") continue outer;
     await rebuild_debounced();
   }
+  signal.resolve(false);
 }
 
 class Ctx {
