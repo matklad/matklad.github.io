@@ -1,15 +1,16 @@
 #!/usr/bin/env -S deno run --allow-write=./_site,./tmp --allow-read=/tmp,./ --allow-net --allow-run=./main.ts,lua
-import { std } from "./deps.ts";
+import * as async from "std/async/mod.ts";
+import * as fs from "std/fs/mod.ts";
 import * as templates from "./templates.ts";
 import * as djot from "./djot.ts";
 import { HtmlString } from "./templates.ts";
 
 async function watch() {
-  let signal = std.async.deferred();
+  let signal = async.deferred();
   (async () => {
     let build_id = 0;
     while (await signal) {
-      signal = std.async.deferred();
+      signal = async.deferred();
       try {
         console.log(`rebuild #${build_id}`);
         build_id += 1;
@@ -22,7 +23,7 @@ async function watch() {
 
   signal.resolve(true);
 
-  const rebuild_debounced = std.async.debounce(
+  const rebuild_debounced = async.debounce(
     () => signal.resolve(true),
     16,
   );
@@ -55,7 +56,7 @@ async function build({ update } = { update: false }) {
   if (update) {
     await Deno.mkdir("_site", { recursive: true });
   } else {
-    await std.fs.emptyDir("./_site");
+    await fs.emptyDir("./_site");
   }
 
   const posts = await collect_posts(ctx);
@@ -90,8 +91,8 @@ async function build({ update } = { update: false }) {
 
 async function update_file(path: string, content: Uint8Array | string) {
   if (!content) return;
-  await std.fs.ensureFile(path);
-  await std.fs.ensureDir("./tmp");
+  await fs.ensureFile(path);
+  await fs.ensureDir("./tmp");
   const temp = await Deno.makeTempFile({ dir: "./tmp" });
   if (content instanceof Uint8Array) {
     await Deno.writeFile(temp, content);
@@ -132,8 +133,8 @@ export type Post = {
 
 async function collect_posts(ctx: Ctx): Promise<Post[]> {
   const start = performance.now();
-  const post_walk = std.fs.walk("./src/posts", { includeDirs: false });
-  const work = std.async.pooledMap(8, post_walk, async (entry) => {
+  const post_walk = fs.walk("./src/posts", { includeDirs: false });
+  const work = async.pooledMap(8, post_walk, async (entry) => {
     if (!entry.name.endsWith(".djot")) return undefined;
     const [, y, m, d, slug] = entry.name.match(
       /^(\d\d\d\d)-(\d\d)-(\d\d)-(.*)\.djot$/,

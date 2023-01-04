@@ -1,5 +1,14 @@
-import { hljs } from "./deps.ts";
 import { html, HtmlString } from "./templates.ts";
+
+import hljs_ from "highlightjs/highlight.min.js";
+import latex from "highlightjs/languages/latex.min.js";
+import nix from "highlightjs/languages/nix.min.js";
+import x86asm from "highlightjs/languages/x86asm.min.js";
+const hljs: any = hljs_;
+hljs.configure({ classPrefix: "hl-" });
+hljs.registerLanguage("latex", latex);
+hljs.registerLanguage("nix", nix);
+hljs.registerLanguage("x86asm", x86asm);
 
 export function highlight(
   source: string,

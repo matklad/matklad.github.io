@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import { std } from "./deps.ts";
+import * as streams from "std/streams/mod.ts";
 import { highlight } from "./highlight.ts";
 import { html, HtmlString, time } from "./templates.ts";
 
@@ -11,10 +11,10 @@ export async function parse(source: string): Promise<Node> {
     stdout: "piped",
   });
   const writer = async () => {
-    await std.streams.writeAll(proc.stdin, new TextEncoder().encode(source));
+    await streams.writeAll(proc.stdin, new TextEncoder().encode(source));
     proc.stdin.close();
   };
-  const reader = std.streams.readAll(proc.stdout);
+  const reader = streams.readAll(proc.stdout);
   const [_, bytes] = await Promise.all([writer(), reader]);
   await proc.status();
   const text = new TextDecoder().decode(bytes);
