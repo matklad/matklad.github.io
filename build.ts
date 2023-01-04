@@ -1,4 +1,3 @@
-#!/usr/bin/env -S deno run --allow-write=./_site,./tmp --allow-read=/tmp,./ --allow-net --allow-run=./main.ts,lua
 import * as async from "std/async/mod.ts";
 import * as fs from "std/fs/mod.ts";
 import * as templates from "./templates.ts";
@@ -24,14 +23,8 @@ async function watch() {
     16,
   );
 
-  outer:
   for await (const event of Deno.watchFs("./src", { recursive: true })) {
-    for (const path of event.paths) {
-      if (path.match(/\.\/(tmp|_site)/)) {
-        continue outer;
-      }
-    }
-    if (event.kind == "access") continue outer;
+    if (event.kind == "access") continue;
     await rebuild_debounced();
   }
   signal.resolve(false);
@@ -51,16 +44,16 @@ async function build({ update } = { update: false }) {
   const t = performance.now();
   const ctx = new Ctx();
   if (update) {
-    await Deno.mkdir("_site", { recursive: true });
+    await Deno.mkdir("./out/res", { recursive: true });
   } else {
-    await fs.emptyDir("./_site");
+    await fs.emptyDir("./out/res");
   }
 
   const posts = await collect_posts(ctx);
-  await update_file("_site/index.html", templates.post_list(posts).value);
-  await update_file("_site/feed.xml", templates.feed(posts).value);
+  await update_file("out/res/index.html", templates.post_list(posts).value);
+  await update_file("out/res/feed.xml", templates.feed(posts).value);
   for (const post of posts) {
-    await update_file(`_site${post.path}`, templates.post(post).value);
+    await update_file(`out/res${post.path}`, templates.post(post).value);
   }
 
   const pages = ["about", "resume", "links"];
@@ -68,7 +61,7 @@ async function build({ update } = { update: false }) {
     const text = await Deno.readTextFile(`src/${page}.djot`);
     const ast = await djot.parse(text);
     const html = djot.render(ast, {});
-    await update_file(`_site/${page}.html`, templates.page(page, html).value);
+    await update_file(`out/res/${page}.html`, templates.page(page, html).value);
   }
 
   const paths = [
@@ -89,8 +82,8 @@ async function build({ update } = { update: false }) {
 async function update_file(path: string, content: Uint8Array | string) {
   if (!content) return;
   await fs.ensureFile(path);
-  await fs.ensureDir("./tmp");
-  const temp = await Deno.makeTempFile({ dir: "./tmp" });
+  await fs.ensureDir("./out/tmp");
+  const temp = await Deno.makeTempFile({ dir: "./out/tmp" });
   if (content instanceof Uint8Array) {
     await Deno.writeFile(temp, content);
   } else {
@@ -109,7 +102,7 @@ async function update_path(path: string) {
     await Promise.all(futs);
   } else {
     await update_file(
-      `_site/${path}`,
+      `out/res/${path}`,
       await Deno.readFile(`src/${path}`),
     );
   }

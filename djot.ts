@@ -189,7 +189,7 @@ ${cap}${pre}
   },
   reference_definition: (_node) => html``,
   url: (node) =>
-    html`<a class="url" href="${node.ast.destination}">${node.ast.destination}</a>`,
+    html`<a class="url" href="${node.text}">${node.text}</a>`,
   double_quoted: (node) => html`“${node.content}”`,
   single_quoted: (node) => html`‘${node.content}’`,
   span: (node) => {
