@@ -1,28 +1,21 @@
 // deno-lint-ignore-file no-explicit-any
-import * as streams from "std/streams/mod.ts";
 import { highlight } from "./highlight.ts";
 import { html, HtmlString, time } from "./templates.ts";
 
-export async function parse(source: string): Promise<Node> {
-  const proc = Deno.run({
-    cmd: ["lua", "bin/main.lua", "-a", "-j"],
-    cwd: "./djot",
-    stdin: "piped",
-    stdout: "piped",
-  });
-  const writer = async () => {
-    await streams.writeAll(proc.stdin, new TextEncoder().encode(source));
-    proc.stdin.close();
-  };
-  const reader = streams.readAll(proc.stdout);
-  const [_, bytes] = await Promise.all([writer(), reader]);
-  await proc.status();
-  const text = new TextDecoder().decode(bytes);
-  const ast = JSON.parse(text);
-  return Node.new_root(ast);
+import * as djot from "djot/index.ts";
+import { Reference } from "djot/ast.ts";
+
+export function parse(source: string): Node {
+  const doc = djot.parse(source);
+  return Node.new_root(doc);
 }
 
-export function render(node: Node, ctx: any): HtmlString {
+type RenderCtx = {
+  date?: Date;
+  summary?: HtmlString;
+};
+
+export function render(node: Node, ctx: RenderCtx): HtmlString {
   try {
     return node.withContext(ctx).render();
   } catch (e) {
@@ -43,7 +36,7 @@ const visitor: { [key: string]: (node: Node) => HtmlString } = {
     const date = node.ast.level == 1 && node.ctx.date
       ? time(node.ctx.date)
       : undefined;
-    const id = node.parent?.ast?.attr?.id;
+    const id = node.parent?.ast?.attributes?.id;
     if (id) {
       return html`
 <${tag} id="${id}"${node.class_attr}>
@@ -76,8 +69,8 @@ const visitor: { [key: string]: (node: Node) => HtmlString } = {
     // }
     if (!node.ctx.summary) node.ctx.summary = node.content;
     if (node.children.length == 1 && node.children[0].tag == "image") {
-      const cap = node.ast.attr?.cap
-        ? html`<figcaption class="title">${node.ast.attr.cap}</figcaption>\n`
+      const cap = node.ast.attributes?.cap
+        ? html`<figcaption class="title">${node.ast.attributes.cap}</figcaption>\n`
         : "\n";
 
       return html`\n<figure${node.class_attr}>${cap}${node.content}</figure>\n`;
@@ -120,8 +113,8 @@ ${cite}
     }
 
     if (node.cls.includes("block")) {
-      const cap = node.ast.attr?.cap
-        ? html`<div class="title">${node.ast.attr.cap}</div>\n`
+      const cap = node.ast.attributes?.cap
+        ? html`<div class="title">${node.ast.attributes.cap}</div>\n`
         : "\n";
       return html`
 <aside class="block">
@@ -134,7 +127,7 @@ ${node.content}
     if (node.cls.includes("details")) {
       return html`
 <details>
-<summary>${node.ast.attr?.cap}</summary>
+<summary>${node.ast.attributes?.cap}</summary>
 ${node.content}
 </details>
 `;
@@ -143,10 +136,14 @@ ${node.content}
     return html`<div${node.class_attr}>${node.content}</div>`;
   },
   code_block: (node) => {
-    const cap = node.ast.attr?.cap
-      ? html`<figcaption class="title">${node.ast.attr.cap}</figcaption>\n`
+    const cap = node.ast.attributes?.cap
+      ? html`<figcaption class="title">${node.ast.attributes.cap}</figcaption>\n`
       : "\n";
-    const pre = highlight(node.text, node.ast.lang, node.ast.attr?.highlight);
+    const pre = highlight(
+      node.text,
+      node.ast.lang,
+      node.ast.attributes?.highlight,
+    );
     return html`
 <figure class="code-block">
 ${cap}${pre}
@@ -157,13 +154,24 @@ ${cap}${pre}
     return html``;
   },
   table: (node) => html`<table>${node.content}</table>`,
+  caption: (node) => {
+    if (node.children.length > 0) {
+      throw "unexpected caption";
+    }
+    return html``;
+  },
   row: (node) => html`<tr>${node.content}</tr>`,
   cell: (node) => html`<td>${node.content}</td>`,
   verbatim: (node) => html`<code>${node.text}</code>`,
   link: (node) => {
-    const href = node.ast.reference
-      ? node.references[node.ast.reference].destination
-      : node.ast.destination;
+    const ref = node.ast.reference;
+    if (ref) {
+      if (!node.references[ref]) {
+        console.log(ref);
+        console.log(node.references[ref]);
+      }
+    }
+    const href = ref ? node.references[ref].destination : node.ast.destination;
     return html`<a href="${href}">${node.content}</a>`;
   },
   image: (node) => {
@@ -173,7 +181,7 @@ ${cap}${pre}
     if (node.cls.includes("video")) {
       return html`<video src="${href}" controls=""></video>`;
     } else {
-      const attrs = Object.entries(node.ast.attr ?? {}).map(([k, v]) =>
+      const attrs = Object.entries(node.ast.attributes ?? {}).map(([k, v]) =>
         ` ${k}="${v}"`
       ).join("");
       return html`<img src="${href}" alt="${node.text}"${attrs}>`;
@@ -257,7 +265,7 @@ export class Node {
   }
 
   public get cls(): string {
-    const attrs = (this.ast.attr ?? {});
+    const attrs = (this.ast.attributes ?? {});
     return attrs["class"] ?? "";
   }
 
@@ -275,8 +283,9 @@ export class Node {
   get content(): HtmlString {
     return html`${this.children.map((it) => it.render())}`;
   }
-  get references(): Record<string, { destination: string }> {
+  get references(): Record<string, Reference> {
     if (this.parent) return this.parent.references;
+
     return this.ast.references;
   }
 

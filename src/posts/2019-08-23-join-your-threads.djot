@@ -187,8 +187,8 @@ worker = jod_thread::spawn(move || { ... });
 Beautiful, isn't it?
 And super cryptic: the [real code](https://github.com/rust-analyzer/ra_vfs/blob/af1a6ace3d0edf57d62a76321e3e52eeb99d6d4c/src/io.rs#L71-L83) has a sizable comment chunk!
 
-[exceptions]: link:{{ site.baseurl }}{% post_url 2018-07-24-exceptions-in-structured-concurrency %}
-[stopworker]: link:{{ site.baseurl }}{% post_url 2018-03-03-stopping-a-rust-worker %}
+[exceptions]: /2018/07/24/exceptions-in-structured-concurrency.html
+[stopworker]: /2018/03/03-stopping-a-rust-worker.html
 
 
 The second big issue with join by default is that, if you have many threads in the same scope, and one of them errors, you really want to not only _wait_ until others are finished, but to actually cancel them.

@@ -11,13 +11,9 @@ async function watch() {
     let build_id = 0;
     while (await signal) {
       signal = async.deferred();
-      try {
-        console.log(`rebuild #${build_id}`);
-        build_id += 1;
-        await build({ update: true });
-      } catch {
-        // ignore
-      }
+      console.log(`rebuild #${build_id}`);
+      build_id += 1;
+      await build({ update: true });
     }
   })();
 
@@ -43,6 +39,7 @@ async function watch() {
 
 class Ctx {
   constructor(
+    public read_ms: number = 0,
     public parse_ms: number = 0,
     public render_ms: number = 0,
     public collect_ms: number = 0,
@@ -142,10 +139,12 @@ async function collect_posts(ctx: Ctx): Promise<Post[]> {
     const [year, month, day] = [y, m, d].map((it) => parseInt(it, 10));
     const date = new Date(Date.UTC(year, month - 1, day));
 
-    const text = await Deno.readTextFile(entry.path);
-
     let t = performance.now();
-    const ast = await djot.parse(text);
+    const text = await Deno.readTextFile(entry.path);
+    ctx.read_ms += performance.now() - t;
+
+    t = performance.now();
+    const ast = djot.parse(text);
     ctx.parse_ms += performance.now() - t;
 
     t = performance.now();
