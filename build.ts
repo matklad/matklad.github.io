@@ -123,9 +123,9 @@ export type Post = {
 
 async function collect_posts(ctx: Ctx): Promise<Post[]> {
   const start = performance.now();
-  const post_walk = fs.walk("./src/posts", { includeDirs: false });
-  const work = async.pooledMap(8, post_walk, async (entry) => {
-    if (!entry.name.endsWith(".djot")) return undefined;
+  const posts = []
+  for await (const entry of fs.walk("./src/posts", { includeDirs: false })) {
+    if (!entry.name.endsWith(".djot")) continue;
     const [, y, m, d, slug] = entry.name.match(
       /^(\d\d\d\d)-(\d\d)-(\d\d)-(.*)\.djot$/,
     )!;
@@ -147,7 +147,7 @@ async function collect_posts(ctx: Ctx): Promise<Post[]> {
 
     const title = ast.child("section")?.child("heading")?.content ??
       new HtmlString("untitled");
-    return {
+    posts.push({
       year,
       month,
       day,
@@ -159,11 +159,8 @@ async function collect_posts(ctx: Ctx): Promise<Post[]> {
       summary: (render_ctx as any).summary,
       path: `/${y}/${m}/${d}/${slug}.html`,
       src: `/src/posts/${y}-${m}-${d}-${slug}.djot`,
-    };
-  });
-
-  const posts = [];
-  for await (const it of work) if (it) posts.push(it);
+    })
+  }
   posts.sort((l, r) => l.path < r.path ? 1 : -1);
   ctx.collect_ms = performance.now() - start;
   return posts;
