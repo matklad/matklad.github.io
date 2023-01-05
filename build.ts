@@ -123,7 +123,7 @@ export type Post = {
 
 async function collect_posts(ctx: Ctx): Promise<Post[]> {
   const start = performance.now();
-  const posts = []
+  const posts = [];
   for await (const entry of fs.walk("./src/posts", { includeDirs: false })) {
     if (!entry.name.endsWith(".djot")) continue;
     const [, y, m, d, slug] = entry.name.match(
@@ -141,25 +141,22 @@ async function collect_posts(ctx: Ctx): Promise<Post[]> {
     ctx.parse_ms += performance.now() - t;
 
     t = performance.now();
-    const render_ctx = { date };
+    const render_ctx = { date, summary: undefined, title: undefined };
     const html = djot.render(ast, render_ctx);
     ctx.render_ms += performance.now() - t;
 
-    const title = ast.child("section")?.child("heading")?.content ??
-      new HtmlString("untitled");
     posts.push({
       year,
       month,
       day,
       slug,
       date,
-      title,
+      title: render_ctx.title!,
       content: html,
-      // deno-lint-ignore no-explicit-any
-      summary: (render_ctx as any).summary,
+      summary: render_ctx.summary!,
       path: `/${y}/${m}/${d}/${slug}.html`,
       src: `/src/posts/${y}-${m}-${d}-${slug}.djot`,
-    })
+    });
   }
   posts.sort((l, r) => l.path < r.path ? 1 : -1);
   ctx.collect_ms = performance.now() - start;
