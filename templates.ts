@@ -208,11 +208,8 @@ export class HtmlString {
 }
 
 function escapeHtml(data: any): string {
-  const s = `${data}`;
-  return s.replace(/[<>&]/g, (match) => {
-    if (match === "<") return "&lt;";
-    if (match === ">") return "&gt;";
-    if (match === "&") return "&amp;";
-    throw "unreachable";
-  });
+  return `${data}`
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/&/g, "&amp;");
 }

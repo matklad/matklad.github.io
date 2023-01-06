@@ -52,12 +52,8 @@ export function highlight(
 function add_spans(source: string, language?: string): HtmlString {
   if (!language || language === "adoc") return html`${source}`;
   if (language == "console") return add_spans_console(source);
-  try {
-    const res = hljs.highlight(source, { language, ignoreIllegals: true });
-    return new HtmlString(res.value);
-  } catch {
-    return html`${source}`;
-  }
+  const res = hljs.highlight(source, { language, ignoreIllegals: true });
+  return new HtmlString(res.value);
 }
 
 function add_spans_console(source: string): HtmlString {

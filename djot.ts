@@ -1,5 +1,5 @@
 import { highlight } from "./highlight.ts";
-import { html, HtmlString, time } from "./templates.ts";
+import { HtmlString, time } from "./templates.ts";
 
 import * as djot from "djot";
 import {
@@ -10,7 +10,7 @@ import {
   Doc,
   Heading,
   Image,
-  List,
+  OrderedList,
   Para,
   Section,
   Span,
@@ -56,7 +56,7 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
         }>${children} ${date}</${tag}>\n`;
       }
     },
-    list: (node: List, r: djot.HTMLRenderer): string => {
+    ordered_list: (node: OrderedList, r: djot.HTMLRenderer): string => {
       if (node.style === "1)") add_class(node, "callout");
       return r.renderAstNodeDefault(node);
     },
@@ -191,14 +191,10 @@ ${pre}
     },
   };
 
-  try {
-    ctx.title = new HtmlString("todo");
-    ctx.summary = new HtmlString("todo");
-    const result = djot.renderHTML(doc, { overrides });
-    return new HtmlString(result);
-  } catch (e) {
-    return html`Error: ${e}`;
-  }
+  ctx.title = new HtmlString("todo");
+  ctx.summary = new HtmlString("todo");
+  const result = djot.renderHTML(doc, { overrides });
+  return new HtmlString(result);
 }
 
 type AstTag = AstNode["tag"];
