@@ -58,7 +58,7 @@ async function build({ update } = { update: false }) {
 
   const pages = ["about", "resume", "links"];
   for (const page of pages) {
-    const text = await Deno.readTextFile(`src/${page}.djot`);
+    const text = await Deno.readTextFile(`src/${page}.dj`);
     const ast = await djot.parse(text);
     const html = djot.render(ast, {});
     await update_file(`out/res/${page}.html`, templates.page(page, html).value);
@@ -125,9 +125,9 @@ async function collect_posts(ctx: Ctx): Promise<Post[]> {
   const start = performance.now();
   const posts = [];
   for await (const entry of fs.walk("./src/posts", { includeDirs: false })) {
-    if (!entry.name.endsWith(".djot")) continue;
+    if (!entry.name.endsWith(".dj")) continue;
     const [, y, m, d, slug] = entry.name.match(
-      /^(\d\d\d\d)-(\d\d)-(\d\d)-(.*)\.djot$/,
+      /^(\d\d\d\d)-(\d\d)-(\d\d)-(.*)\.dj$/,
     )!;
     const [year, month, day] = [y, m, d].map((it) => parseInt(it, 10));
     const date = new Date(Date.UTC(year, month - 1, day));
@@ -155,7 +155,7 @@ async function collect_posts(ctx: Ctx): Promise<Post[]> {
       content: html,
       summary: render_ctx.summary!,
       path: `/${y}/${m}/${d}/${slug}.html`,
-      src: `/src/posts/${y}-${m}-${d}-${slug}.djot`,
+      src: `/src/posts/${y}-${m}-${d}-${slug}.dj`,
     });
   }
   posts.sort((l, r) => l.path < r.path ? 1 : -1);
