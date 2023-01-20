@@ -191,8 +191,6 @@ ${pre}
     },
   };
 
-  ctx.title = new HtmlString("todo");
-  ctx.summary = new HtmlString("todo");
   const result = djot.renderHTML(doc, { overrides });
   return new HtmlString(result);
 }
