@@ -131,7 +131,7 @@ export function post(post: Post, spellcheck: boolean): HtmlString {
   return base({
     src: post.src,
     title: post.title.value,
-    description: post.summary.value,
+    description: post.summary,
     path: post.path,
     content: html`<article ${spellcheck ? 'contentEditable="true"' : ""}>\n${post.content}</article>`,
   });

@@ -121,7 +121,7 @@ export type Post = {
   path: string;
   src: string;
   content: HtmlString;
-  summary: HtmlString;
+  summary: string;
 };
 
 async function collect_posts(ctx: Ctx): Promise<Post[]> {

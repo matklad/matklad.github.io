@@ -23,7 +23,7 @@ export function parse(source: string): Doc {
 
 type RenderCtx = {
   date?: Date;
-  summary?: HtmlString;
+  summary?: string;
   title?: HtmlString;
 };
 
@@ -79,7 +79,7 @@ ${r.renderChildren(node)}
 `;
       }
       const result = r.renderAstNodeDefault(node);
-      if (!ctx.summary) ctx.summary = new HtmlString(result);
+      if (!ctx.summary) ctx.summary = get_string_content(node);
       return result;
     },
     block_quote: (node: BlockQuote, r: djot.HTMLRenderer) => {
@@ -226,3 +226,27 @@ function extract_cap(node: AstNode): string | undefined {
     return result;
   }
 }
+
+const get_string_content = function (node: AstNode): string {
+  const buffer: string[] = [];
+  add_string_content(node, buffer);
+  return buffer.join("");
+};
+
+const add_string_content = function (
+  node: AstNode,
+  buffer: string[],
+): void {
+  if ("text" in node) {
+    buffer.push(node.text);
+  } else if (
+    "tag" in node &&
+    (node.tag === "soft_break" || node.tag === "hard_break")
+  ) {
+    buffer.push("\n");
+  } else if ("children" in node) {
+    for (const child of node.children) {
+      add_string_content(child, buffer);
+    }
+  }
+};
