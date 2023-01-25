@@ -127,13 +127,13 @@ export const post_list = (posts: Post[]): HtmlString => {
   });
 };
 
-export function post(post: Post): HtmlString {
+export function post(post: Post, spellcheck: boolean): HtmlString {
   return base({
     src: post.src,
     title: post.title.value,
     description: post.summary.value,
     path: post.path,
-    content: html`<article>\n${post.content}</article>`,
+    content: html`<article ${spellcheck ? 'contentEditable="true"' : ""}>\n${post.content}</article>`,
   });
 }
 

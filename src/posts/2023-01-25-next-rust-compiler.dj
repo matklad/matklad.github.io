@@ -1,0 +1,86 @@
+# Next Rust Compiler
+
+In [Rust in 2023](https://www.ncameron.org/blog/rust-in-2023/), [@nrc](http://github.com/nrc) floated an idea of a Rust compiler rewrite.
+As my hobby is writing Rust compiler frontends ([1](https://github.com/intellij-rust/intellij-rust), [2](https://github.com/rust-lang/rust-analyzer)), I have some (but not very many) thoughts here!
+The post consists of two parts, covering organizational and technical aspects.
+
+## Organization
+
+Writing a production-grade compiler is not a small endeavor.
+The questions of who writes the code, who pays the people writing the code, and what's the economic incentive to fund the work in the first place are quite important.
+
+My naive guesstimate is that Rust is currently at that stage of its life where it's clear that the language won't die, and would be deployed quite widely, but where, at the same time, the said deployment didn't quite happen to the full extent yet.
+From within the Rust community, it seems like Rust is everywhere.
+My guess is that from the outside it looks like there's Rust in at least some places.
+
+In other words, it's high time to invest substantially into Rust ecosystem, as the risk that the investment sinks completely is relatively low, but the expected growth is still quite high.
+This makes me think that a next-gen rust compiler isn't too unlikely: I feel that rustc is stuck in a local optimum, and that, with some boldness, it is possible to deliver something more awesome.
+
+## Technicalities
+
+Here's what I think an awesome rust compiler would do:
+
+: rust-native compilation model
+
+  Like C++, Rust (ab)uses C compilation model --- compilation units are separately compiled into object files, which are then linked into a single executable by the linker.
+  This model is at odds with how the language work.
+  In particular, compiling a generic function isn't actually possible until you know specific type parameters at the call-site.
+  Rust and C++ hack around that by compiling a separate copy for every call-site (C++ even re-type-checks every call-site), and deduplicating instantiations during the link step.
+  This creates a lot of wasted work, which is only there because we try to follow "compile to object files then link" model of operation.
+  It would be significantly more efficient to merge compiler and liker, such that only the minimal amount of code is compiled, compiled code is fully aware about surrounding context and can be inlined across crates, and where the compilation makes the optimal use of all available CPU and RAM.
+
+: intra-crate parallelism
+
+  C compilation model is not stupid --- it is the way it is to enable separate compilation.
+  Back in the day, compiling whole programs was simply not possible due to the limitations of the hardware.
+  Rather, a program had to be compiled in separate parts, and then the parts linked together into the final artifact.
+  With bigger computers today, we don't think about separate compilation as much.
+  It is still important though --- not only our computers are more powerful, our programs are much bigger.
+  Moreover, computing power comes not from increasing clock speeds, but from a larger number of cores.
+
+  Rust's DAG of anonymous crates with well-defined declaration-site checked interfaces is actually quite great for compiling Rust in parallel (especially if we get rid of completely accidental interactions between monomorphization and existing linkers).
+  However, even a single crate can be quite large, and is compiled sequentially.
+  For example, in the [recent compile time benchmark](https://quick-lint-js.com/blog/cpp-vs-rust-build-times), a significant chunk of time was spent compiling just this [file](https://github.com/quick-lint/cpp-vs-rust/blob/master/rust/libs/fe/tests/test_lex.rs) with a bunch of functions.
+  Intuitively, as all these functions are completely independent, compiler should be able to process them in parallel.
+  In reality, Rust doesn't actually make that as easy as it seems, but it definitely is possible to do better than the current compiler.
+
+: open-world compiling; stable MIR
+
+  Today, Rust tooling is a black-box -- you feed it with source text and an executable binary for the output.
+  This solves the problem of producing executable binaries quite well!
+
+  However, for more complex projects you want to have more direct relationship with the code.
+  You want tools other than compiler to understand the meaning of the code, and to act on it.
+  For example automated large scale refactors and code analysis, project-specific linting rules or formal profs of correctness all could benefit from having an access to semantically rich model of the language.
+
+  Providing such semantic  model, where AST is annotated with resolved names, inferred types, and bodies are converted to a simple and precise IR, is a huge ask.
+  Not because it is technically hard to implement, but because this adds an entirely new stable API to the language.
+  Nonetheless, such an API would unlock quite a few use cases, so the tradeoff is worth it.
+
+: hermetic deterministic compilation
+
+  It is increasingly common to want reproducible builds.
+  With NixOS and Guix, whole Linux distros are build in a deterministic fashion.
+  It is possible to achieve reproducibility by carefully freezing whatever mess you are currently in, the docker way.
+  But a better approach is to start with inherently pure and hermetic components, and assemble them into a larger system.
+
+  Today, Rust has some amount of determinism in its compilation, but it is achieved by plugging loopholes, rather than by not admitting impurities into the system in the first place.
+  For example, the [`env!`](https://github.com/rust-lang/rust/blob/027c8507b4265dcf285b0b503e2a49214b929f7b/compiler/rustc_builtin_macros/src/env.rs#L81) macro literally looks up a value in compiler's environment, without any attempt at restricting or at least enumerating available inputs.
+  Procedural macros are an unrestricted RCE.
+
+  It feels like we can do better, and that we should do better, if the goal is still [less mess](http://venge.net/graydon/talks/intro-talk-2.pdf).
+
+: lazy and error-resilient compilation
+
+  For the task of providing immediate feedback right in the editor when the user types the code, compilation "pipeline" needs to be changed significantly.
+  It should be lazy (so that only the minimal amount of code is inspected and re-analyzed on typing) and resilient and robust to errors (IDE job mostly ends when the code is error free).
+  [rust-analyzer](https://rust-analyzer.github.io) shows one possible way to do that, with the only drawback of being a completely separate tool for IDE, and only IDE.
+  There's no technical limitation why the full compiler can't be like that, just the organizational limitation of it being very hard to re-architecture existing entrenched code, perfected for its local optimum.
+
+: `cargo install rust-compiler`
+
+  Finally, for the benefit of compiler writers themselves, a compiler should be a simple rust crate, which builds with stable Rust and is otherwise a very boring text processing utility.
+  Again, rust-analyzer shows that it is possible, and that the benefits for development velocity are enormous.
+  I am glad to see [a recent movement](https://jyn.dev/2023/01/12/Bootstrapping-Rust-in-2023.html) in that direction!
+
+Discussion on [/r/rust](https://old.reddit.com/r/rust/comments/10ld2vn/blog_post_next_rust_compiler/)

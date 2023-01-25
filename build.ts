@@ -42,6 +42,9 @@ class Ctx {
 
 async function build({ update } = { update: false }) {
   const t = performance.now();
+
+  const spellcheck = Deno.args.includes("--spell");
+
   const ctx = new Ctx();
   if (update) {
     await Deno.mkdir("./out/res", { recursive: true });
@@ -53,7 +56,7 @@ async function build({ update } = { update: false }) {
   await update_file("out/res/index.html", templates.post_list(posts).value);
   await update_file("out/res/feed.xml", templates.feed(posts).value);
   for (const post of posts) {
-    await update_file(`out/res${post.path}`, templates.post(post).value);
+    await update_file(`out/res${post.path}`, templates.post(post, spellcheck).value);
   }
 
   const pages = ["about", "resume", "links"];
