@@ -27,7 +27,7 @@ Here's what I think an awesome rust compiler would do:
   In particular, compiling a generic function isn't actually possible until you know specific type parameters at the call-site.
   Rust and C++ hack around that by compiling a separate copy for every call-site (C++ even re-type-checks every call-site), and deduplicating instantiations during the link step.
   This creates a lot of wasted work, which is only there because we try to follow "compile to object files then link" model of operation.
-  It would be significantly more efficient to merge compiler and liker, such that only the minimal amount of code is compiled, compiled code is fully aware about surrounding context and can be inlined across crates, and where the compilation makes the optimal use of all available CPU and RAM.
+  It would be significantly more efficient to merge compiler and linker, such that only the minimal amount of code is compiled, compiled code is fully aware about surrounding context and can be inlined across crates, and where the compilation makes the optimal use of all available CPU and RAM.
 
 : intra-crate parallelism
 
