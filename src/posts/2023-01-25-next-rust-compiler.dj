@@ -22,7 +22,7 @@ Here's what I think an awesome rust compiler would do:
 
 : rust-native compilation model
 
-  Like C++, Rust (ab)uses C compilation model --- compilation units are separately compiled into object files, which are then linked into a single executable by the linker.
+  Like C++, Rust (ab)uses the C compilation model --- compilation units are separately compiled into object files, which are then linked into a single executable by the linker.
   This model is at odds with how the language work.
   In particular, compiling a generic function isn't actually possible until you know specific type parameters at the call-site.
   Rust and C++ hack around that by compiling a separate copy for every call-site (C++ even re-type-checks every call-site), and deduplicating instantiations during the link step.
@@ -51,7 +51,7 @@ Here's what I think an awesome rust compiler would do:
 
   However, for more complex projects you want to have more direct relationship with the code.
   You want tools other than compiler to understand the meaning of the code, and to act on it.
-  For example automated large scale refactors and code analysis, project-specific linting rules or formal profs of correctness all could benefit from having an access to semantically rich model of the language.
+  For example automated large scale refactors and code analysis, project-specific linting rules or formal proofs of correctness all could benefit from having an access to semantically rich model of the language.
 
   Providing such semantic  model, where AST is annotated with resolved names, inferred types, and bodies are converted to a simple and precise IR, is a huge ask.
   Not because it is technically hard to implement, but because this adds an entirely new stable API to the language.
