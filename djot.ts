@@ -24,7 +24,7 @@ export function parse(source: string): Doc {
 type RenderCtx = {
   date?: Date;
   summary?: string;
-  title?: HtmlString;
+  title?: string;
 };
 
 export function render(doc: Doc, ctx: RenderCtx): HtmlString {
@@ -43,7 +43,7 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
       const tag = `h${node.level}`;
       const date = node.level == 1 && ctx.date ? time(ctx.date).value : "";
       const children = r.renderChildren(node);
-      if (node.level == 1) ctx.title = new HtmlString(children);
+      if (node.level == 1) ctx.title = get_string_content(node);
       const id = section?.attributes?.id;
       if (id) {
         return `

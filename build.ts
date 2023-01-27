@@ -117,7 +117,7 @@ export type Post = {
   day: number;
   slug: string;
   date: Date;
-  title: HtmlString;
+  title: string;
   path: string;
   src: string;
   content: HtmlString;

@@ -1,0 +1,201 @@
+# Rust's Ugly Syntax
+
+People complain about Rust syntax.
+I think that most of the time when people think they have an issue with Rust's syntax, they actually object to Rust's semantics.
+In this slightly whimsical post, I'll try to disentangle the two.
+
+Let's start with an example of an ugly Rust syntax:
+
+```rust
+pub fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
+  fn inner(path: &Path) -> io::Result<Vec<u8>> {
+    let mut file = File::open(path)?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    Ok(bytes)
+  }
+  inner(path.as_ref())
+}
+```
+
+This function reads contents of a given binary file.
+This is lifted straight from the standard library, so it is very much not a strawman example.
+And, at least to me, it's definitely not a pretty one!
+
+Let's try to imagine what this same function would look like if Rust had a better syntax.
+Any resemblance to real programming languages, living or dead, is purely coincidental!
+
+Let's start with Rs++:
+
+```cpp
+template<std::HasConstReference<std::Path> P>
+std::io::outcome<std::vector<uint8_t>>
+std::read(P path) {
+    return read_(path.as_reference());
+}
+
+static
+std::io::outcome<std::vector<uint8_t>>
+read_(&auto const std::Path path) {
+    auto file = try std::File::open(path);
+    std::vector bytes;
+    try file.read_to_end(&bytes);
+    return okey(bytes);
+}
+```
+
+A Rhodes variant:
+
+```java
+public io.Result<ArrayList<Byte>> read<P extends ReferencingFinal<Path>>(
+        P path) {
+    return myRead(path.get_final_reference());
+}
+
+private io.Result<ArrayList<Byte>> myRead(
+        final reference lifetime var Path path) {
+    var file = try File.open(path);
+    ArrayList<Byte> bytes = ArrayList.new();
+    try file.readToEnd(borrow bytes);
+    return Success(bytes);
+}
+```
+
+Typical RhodesScript:
+
+```javascript
+public function read<P extends IncludingRef<Path>>(
+    path: P,
+): io.Result<Array<byte>> {
+    return myRead(path.included_ref());
+}
+
+private function myRead(
+    path: &const Path,
+): io.Result<Array<byte>> {
+    let file = try File.open(path);
+    Array<byte> bytes = Array.new()
+    try file.readToEnd(&bytes)
+    return Ok(bytes);
+}
+```
+
+Rattlesnake:
+
+```python
+def read[P: Refing[Path]](path: P): io.Result[List[byte]]:
+    def inner(path: @Path): io.Result[List[byte]]:
+        file := try File.open(path)
+        bytes := List.new()
+        try file.read_to_end(@: bytes)
+        return Ok(bytes)
+    return inner(path.ref)
+```
+
+And, to conclude, CrabML:
+
+```
+read :: 'p  ref_of => 'p -> u8 vec io.either.t
+let read p =
+  let
+    inner :: &path -> u8 vec.t io.either.t
+    inner p =
+      let mut file = try (File.open p) in
+      let mut bytes = vec.new () in
+      try (file.read_to_end (&mut bytes)); Right bytes
+  in
+    ref_op p |> inner
+;;
+```
+
+As a slightly more serious and useful exercise, let's do the opposite -- keep the Rust syntax, but try to simplify semantics until the end result looks presentable.
+
+Here's our starting point:
+
+```rust
+pub fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
+  fn inner(path: &Path) -> io::Result<Vec<u8>> {
+    let mut file = File::open(path)?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    Ok(bytes)
+  }
+  inner(path.as_ref())
+}
+```
+
+The biggest source of noise here is the nested function.
+The motivation for it is somewhat esoteric.
+The outer function is generic, while the inner function isn't.
+With the current compilation model, that means that the outer function is compiled together with the user's code, gets inlined and is optimized down to nothing.
+In contrast, the inner function is compiled when the std itself is being compiled, saving time when compiling user's code.
+One way to simplify this (loosing a bit of performance) is to say that generic functions are always separately compiled, but accept an extra runtime argument under the hood which describes the physical dimension of input parameters.
+
+With that, we get
+
+```rust
+pub fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
+  let mut file = File::open(path.as_ref())?;
+  let mut bytes = Vec::new();
+  file.read_to_end(&mut bytes)?;
+  Ok(bytes)
+}
+```
+
+The next noisy element is the `<P: AsRef<Path>>` constraint.
+It is needed because Rust loves exposing physical layout of bytes in memory as an interface, specifically for cases where that brings performance.
+In particular, the meaning of `Path` is not that it is some abstract representation of a file path, but that it is just literally a bunch of contiguous bytes in memory.
+So we need `AsRef` to make this work with _any_ abstraction which is capable of representing such a slice of bytes.
+But if we don't care about performance, we can require that all interfaces are fairly abstract and mediated via virtual function calls, rather than direct memory access.
+Then we won't need `AsRef`at all:
+
+```rust
+pub fn read(path: &Path) -> io::Result<Vec<u8>> {
+  let mut file = File::open(path)?;
+  let mut bytes = Vec::new();
+  file.read_to_end(&mut bytes)?;
+  Ok(bytes)
+}
+```
+
+Having done this, we can actually get rid of `Vec<u8>` as well --- we can no longer use generics to express efficient growable array of bytes in the language itself.
+We'd have to use some opaque `Bytes` type provided by the runtime:
+
+```rust
+pub fn read(path: &Path) -> io::Result<Bytes> {
+  let mut file = File::open(path)?;
+  let mut bytes = Bytes::new();
+  file.read_to_end(&mut bytes)?;
+  Ok(bytes)
+}
+```
+
+Technically, we are still carrying ownership and borrowing system with us, but, without direct control over memory layout of types, it no longer brings massive performance benefits.
+It still helps to avoid GC, prevent iterator invalidation, and statically check that non-thread-safe code isn't actually used across threads.
+Still, we can easily get rid of those &-pretzels if we just switch to GC.
+We don't even need to worry about concurrency much --- as our objects are separately allocated and always behind a pointer, we can hand-wave data races away by noticing that operations with pointer-sized things are atomic on x86 anyway.
+
+```rust
+pub fn read(path: Path) -> io::Result<Bytes> {
+  let file = File::open(path)?;
+  let bytes = Bytes::new();
+  file.read_to_end(bytes)?;
+  Ok(bytes)
+}
+```
+
+Finally, we are being overly pedantic with error handling here --- not only we mention a possibility of failure in the return type, we even use `?` to highlight any specific expression that might fail.
+It would be much simpler to not think about error handling at all, and let some top-level\
+`try { } catch (...) { /* intentionally empty */ }`\
+handler deal with it:
+
+```rust
+pub fn read(path: Path) -> Bytes {
+  let file = File::open(path);
+  let bytes = Bytes::new();
+  file.read_to_end(bytes);
+  bytes
+}
+```
+
+**Much** better now!

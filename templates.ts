@@ -130,7 +130,7 @@ export const post_list = (posts: Post[]): HtmlString => {
 export function post(post: Post, spellcheck: boolean): HtmlString {
   return base({
     src: post.src,
-    title: post.title.value,
+    title: post.title,
     description: post.summary,
     path: post.path,
     content: html`<article ${spellcheck ? 'contentEditable="true"' : ""}>\n${post.content}</article>`,
