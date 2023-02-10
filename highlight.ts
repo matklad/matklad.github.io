@@ -1,11 +1,13 @@
 import { html, HtmlString } from "./templates.ts";
 
 import hljs_ from "highlightjs/highlight.min.js";
+const hljs: any = hljs_;
+hljs.configure({ classPrefix: "hl-" });
+
 import latex from "highlightjs/languages/latex.min.js";
 import nix from "highlightjs/languages/nix.min.js";
 import x86asm from "highlightjs/languages/x86asm.min.js";
-const hljs: any = hljs_;
-hljs.configure({ classPrefix: "hl-" });
+
 hljs.registerLanguage("latex", latex);
 hljs.registerLanguage("nix", nix);
 hljs.registerLanguage("x86asm", x86asm);
@@ -50,7 +52,7 @@ export function highlight(
 }
 
 function add_spans(source: string, language?: string): HtmlString {
-  if (!language || language === "adoc") return html`${source}`;
+  if (!language || language === "adoc" || language === "zig") return html`${source}`;
   if (language == "console") return add_spans_console(source);
   const res = hljs.highlight(source, { language, ignoreIllegals: true });
   return new HtmlString(res.value);
