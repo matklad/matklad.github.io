@@ -74,7 +74,7 @@ This is usually achieved using some smart, language-specific combination of
 
 - Incrementality: although changes are frequent and plentiful, they are local, and it is often possible to re-use large chunks of previous analysis.
 
-- Laziness: unlike a compiler, and IDE does not need full analysis results for the entirety of the codebase.
+- Laziness: unlike a compiler, an IDE does not need full analysis results for the entirety of the codebase.
   Usually, analysis of the function which is currently being edited is the only time-critical part, everything else can be done asynchronously, later.
 
 This post gives an overview of some specific fruitful combinations of the two ideas:
@@ -121,7 +121,7 @@ Specifically, you can imagine a compiler that maintains fully type-checked and r
 If a user edits something, the compiler just incrementally changes what needs to be changed.
 So the trick for IDE-grade interactive performance is just to implement sufficiently advanced incremental compilation.
 
-The problem with sufficiently incremental compiler is that even the perfect incrementality, which does the minimal required amount of work, will be slow in an non-insignificant amount of cases.
+The problem with sufficiently incremental compiler is that even the perfect incrementality, which does the minimal required amount of work, will be slow in a non-insignificant amount of cases.
 The nature of code is that a small change to the source in a single place might lead to a large change to resolved types all over the project.
 For examples, changing the name of some popular type invalidates all the code that uses this type.
 That's the fundamental reason why IDE try hard to maintain an ability to _not_ analyze everything.
@@ -134,7 +134,7 @@ Usually, there's a lot more atomic small edits for a single test run.
 The _third_ problem with the approach of collection all monomorphisations is that it simply does not work if the function isn't actually called, yet.
 Which is common in incomplete code that is being written, exactly the use-case where the IDE is most useful!
 
-## Compile Ony What We Need
+## Compile Only What We Need
 
 Thinking about the "full" approach more, it feels like it could be, at least in theory, optimized somewhat.
 Recall that in this approach we have a graph of function instantiations, which starts at the root (`main`), and contains various monomorphisations of `guinea_pig` on paths reachable from the root.
