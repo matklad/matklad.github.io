@@ -46,10 +46,10 @@ const T = u8;
 const x = generic_add(T, a, b);
 ```
 
-the compiler monomoprhises the generic call.
+the compiler monomorphises the generic call.
 It checks that all comptime arguments (`T`) are fully evaluated, and starts partial evaluation of the called function, with comptime parameters fixed to particular values (this of course is memoized).
 
-The whole process is lazy --- only things transitivelly used from main are analyzed.
+The whole process is lazy --- only things transitively used from main are analyzed.
 Compiler won't complain about something like
 
 ```zig
