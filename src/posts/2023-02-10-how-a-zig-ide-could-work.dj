@@ -5,7 +5,7 @@ Some aspects of it are friendly to IDEs, like a very minimal and simple-to-parse
 (Zig can even be _correctly_ lexed line-by-line, very cool!),
 the absence of syntactic macros, and ability to do a great deal of semantic analysis on a file-by-file basis, in parallel.
 On the other hand, `comptime`.
-I accidentally spent sometime yesterday thinking about how to build an IDE for that, this post is a result.
+I accidentally spent some time yesterday thinking about how to build an IDE for that, this post is a result.
 
 ## How Does the Zig Compiler Work?
 
@@ -150,12 +150,12 @@ fn helper() i32 {
 
 and the `helper` does not (transitively) call `guinea_pig`, we can avoid looking into its body, as the signature is enough to analyze everything else.
 
-More precisely, given the graph of monomorphizations, we can select minimal subgraph which includes all paths from `main` to `guinea_pig` instantiations, as well as all the functions whose bodies we need to process to understand their signatures.
+More precisely, given the graph of monomorphisations, we can select minimal subgraph which includes all paths from `main` to `guinea_pig` instantiations, as well as all the functions whose bodies we need to process to understand their signatures.
 My intuition is that the size of that subgraph is going to be much smaller than the whole thing, and, in principle, an algorithm which would analyze only that subgraph should be speedy enough in practice.
 
 The problem though is that, as far as I know, it's not possible to understand what belongs to the subgraph without analysing the whole thing!
 In particular, using compile-time reflection our `guinea_pig` can be called through something like `comptime "guinea" ++ "_pig"`.
-Its impossible to infere call graph just from Zir.
+It's impossible to infer the call graph just from Zir.
 
 And of course this does not help the case where the function isn't called at all.
 
@@ -192,15 +192,15 @@ Ast and Zir infra is good.
 It is per-file, so it naturally just works in an IDE.
 
 [Multibuilds](https://github.com/ziglang/zig/issues/3028) are important.
-I am somewhat skeptical that they'll actually fly, and its not a complete game over if they don't
+I am somewhat skeptical that they'll actually fly, and it's not a complete game over if they don't
 (Rust has the same problem with conditional compilation, and it does create fundamental problems for both the users and authors of IDEs, but the end result is still pretty useful).
 Still, if Zig does ship multibuilds, that'd be awesome.
 
-Given the unused function problem, I think its impossible to avoid at least some amount of abstract interpretation, so `Sema` has to learn to deal with opaque values.
+Given the unused function problem, I think it's impossible to avoid at least some amount of abstract interpretation, so `Sema` has to learn to deal with opaque values.
 
 With abstract interpretation machinery in place, it can be used as a first, responsive layer of IDE support.
 
-Computing the full set of monomoprizations in background can be used to augment these limited synchronous features with precise results asynchronously.
+Computing the full set of monomoprisations in background can be used to augment these limited synchronous features with precise results asynchronously.
 Though, this might be tough to express in existing editor UIs.
 Eg, the goto definition result is now an asynchronous stream of values.
 
