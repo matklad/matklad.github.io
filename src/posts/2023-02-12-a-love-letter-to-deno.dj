@@ -1,0 +1,110 @@
+# <3 Deno
+
+[Deno](https://deno.land/manual@v1.30.3/introduction) is a relatively new JavaScript runtime.
+I find quite interesting and aesthetically appealing, in-line with the recent trend to rein in the worse-is-better law of software evolution.
+This post explains why.
+
+The way I see it, the primary goal of Deno is to simplify development of software, relative to the status quo.
+Simplifying means removing the accidental complexity.
+To me, a big source of accidental complexity in today's software are implicit dependencies.
+Software is built of many components, and while some components are relatively well-defined (Linux syscall interface, amd64 ISA), others are much less so.
+Example: upgrading OpenSSL for your Rust project from 1.1.1 to 3.0.0 works on your machine, but breaks on CI, because 3.0.0 now needs some new perl module, which is _expected_ to usually be there together with the perl installation, but that is not universally so.
+One way to solve this kinds of problems is by putting {-an abstraction boundary-} a docker container around them.
+But a different approach is to very carefully avoid creating the issues.
+Deno, in the general sense, picks this second noble hard path.
+
+One of the first problems in this area is bootstrapping.
+In general, you can paper over quite a bit of complexity by writing some custom script to do all the grunt work.
+But how do you run it?
+
+On answer is to use a shell script, as the shell is already installed.
+Which shell? Bash, sh, powershell?
+Probably POSIX sh is a sane choice, Windows users can just run {-a docker container-} a Linux in their subsystem.
+You'll also want to install shellcheck to make sure you don't accidentally use bashisms.
+At some point your script grows to large, and you rewrite it in Python.
+You now have to install Python, I've heard it's much easier these days on Windows.
+Of course, you'll run that inside {-a docker container-} a virtual environment.
+And you would be careful to use `python3 -m pip3` rather than `pip3` to make sure you use the right thing.
+
+Although scripting and plumbing should be a way to combat complexity, just getting to the point where every contributor to your software can run scripts requires {-a docker container-} a great deal of futzing with the environment!
+
+Deno doesn't solve the problem of just being already there on every imaginable machine.
+However, it strives very hard to not create additional problem once you get the `deno` binary onto the machine.
+Some manifestations of that:
+
+Deno comes with a code formatter (`deno fmt`) and an LSP server (`deno lsp`) out of the box.
+The high order bit here is not that these are high-value features which drive productivity (though that is so), but that you don't need to pull extra deps to get these features.
+Similarly, Deno is a TypeScript runtime --- there's no transpilation step involved, you just `deno main.ts`.
+
+Deno does not rely on system's shell.
+Most scripting environments, including node, python, and ruby, make a grave mistake of adding an API to spawn a process intermediated by the shell.
+This is slow, insecure, and brittle (_which_ shell was that, again?).
+I have a  [longer post](https://matklad.github.io/2021/07/30/shell-injection.html) about the issue.
+Deno doesn't have this vulnerable API.
+Not that "not having an API" is a particularly challenging technical achievement, but it _is_ better than the current default.
+
+Deno has a correctly designed tasks system.
+Whenever you do a non-trivial software project, there inevitably comes a point where you need to write some software to orchestrate your software.
+Accidental complexity creeps in the form of a `Makefile` (_which_ `make` is that?) or a `./scripts/*.sh` directory.
+Node (as far as I know) pioneered a great idea to treat these as a first-class concern of the project, by including a `scripts` field in the `package.json`.
+It then botched the execution by running the scripts through system's shell, which downgrade it to `./scripts` directory with more indirection.
+In contrast, Deno runs the scripts in [`deno_task_shell`](https://github.com/denoland/deno_task_shell) --- a purpose-built small cross-platform shell.
+You no longer need to worry that `rm` might behave differently depending on `which rm` it is, because it's a shell's built-in now.
+
+These are all engineering nice-to-haves.
+They don't necessary matter as much in isolation, but together they point at project values which align very well with my own ones.
+But there are a couple of innovative, bigger features as well.
+
+The first big feature is the capabilities system.
+When you run a Deno program, you need to specify explicitly which OS resources it can access.
+Pinging `google.com` would require an explicit opt-in.
+You can safely run
+
+```console
+$ deno run https://shady.website.eu/caesar-cipher.ts < in.txt > out.txt
+```
+
+and be sure that this won't steal your secrets.
+Of course, it can still burn the CPU indefinitely or fill `out.txt` with garbage, but it won't be able to read anything beyond explicitly passed input.
+For many, if not most, scripting tasks this is a nice extra protection from supply chain attacks.
+
+The second big feature is Deno's interesting, minimal, while still practical, take on dependency management.
+First, it goes without saying that there are no global dependencies.
+Everything is scoped to the current project.
+Naturally, there are also lockfiles with checksums.
+
+However, there's no package registry or even a separate package manager.
+In Deno, dependency is always an URL.
+The runtime itself understands URLs, downloads their contents and loads the resulting TypeScript or JavaScript.
+Surprisingly, it feels like this is enough to express various dependency patterns.
+For example, if you need a centralized registry, like <https://deno.land/x>, you can use URLs pointing to that!
+URLs can also express semver, with `foo@1` redirecting to `foo@1.2.3`.
+[Import maps](https://deno.land/manual@v1.30.3/basics/import_maps) are a standard, flexible way to remap dependencies, for when you need to tweak something deep in the tree.
+Crucially, in addition to lockfiles Deno comes with a built in `deno vendor` command, which fetches all of the dependencies of the current project and puts them into a subfolder, making production deployments immune to dependencies' hosting failures.
+
+Deno's approach to built-in APIs beautifully bootstraps from its url-based dependency management.
+First, Deno provides a set of runtime APIs.
+These APIs are absolutely stable, follow existing standards (eg, `fetch` for doing networking), and play the role of providing cross-platform interface for the underlying OS.
+Then there's the standard library.
+There's an ambition to provide a comprehensive batteries included standard library, which is vetted by core developers, a-la Go.
+At the same time, _huge_ stdlib requires a lot of work over many years.
+So, as a companion to a stable 1.30.3 runtime APIs, which is a part of `deno` binary, there's 0.177.0 version of stdlib, which is downloaded just like any other dependency.
+I am fairly certain that in time this will culminate in actually stable, comprehensive, and high quality stdlib.
+
+All these together mean that you can be sure that, if you got `deno --version` working, than `deno run your-script.ts` will always work, as the surface area for things to go wrong due to differences in the environment is drastically cut.
+
+The only big drawback of Deno is the language --- all this runtime awesomeness is tied to TypeScript.
+JavaScript is a curious beast --- post ES6, it is actually quite pleasant to use, and has some really good parts, like injection-proof template literal semantics.
+But all the old WATs like
+
+```JavaScript
+["10", "10", "10"].map(parseInt)
+```
+
+are still there.
+TypeScript does an admirable job with typing JavaScript, as it exists in the wild, but the resulting type system is not simple.
+It seems that, linguistically, something substantially better than TypeScript is possible in theory.
+But among the actually existing languages, TypeScript seems like a solid choice.
+
+To sum up, historically the domain of "scripting" and "glue code" was plagued by the problem of accidentally supergluing oneself to a particular UNIX flavor at hand.
+Deno finally seems like a technology that tries to solve this issue of implicit dependencies by not having the said dependencies {-instead of putting everything in a docker container-}.
