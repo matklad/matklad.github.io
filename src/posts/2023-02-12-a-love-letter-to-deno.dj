@@ -9,7 +9,7 @@ Simplifying means removing the accidental complexity.
 To me, a big source of accidental complexity in today's software are implicit dependencies.
 Software is built of many components, and while some components are relatively well-defined (Linux syscall interface, amd64 ISA), others are much less so.
 Example: upgrading OpenSSL for your Rust project from 1.1.1 to 3.0.0 works on your machine, but breaks on CI, because 3.0.0 now needs some new perl module, which is _expected_ to usually be there together with the perl installation, but that is not universally so.
-One way to solve this kinds of problems is by putting {-an abstraction boundary-} a docker container around them.
+One way to solve these kinds of problems is by putting {-an abstraction boundary-} a docker container around them.
 But a different approach is to very carefully avoid creating the issues.
 Deno, in the general sense, picks this second noble hard path.
 
@@ -29,7 +29,7 @@ And you would be careful to use `python3 -m pip` rather than `pip3` to make sure
 Although scripting and plumbing should be a way to combat complexity, just getting to the point where every contributor to your software can run scripts requires {-a docker container-} a great deal of futzing with the environment!
 
 Deno doesn't solve the problem of just being already there on every imaginable machine.
-However, it strives very hard to not create additional problem once you get the `deno` binary onto the machine.
+However, it strives very hard to not create additional problems once you get the `deno` binary onto the machine.
 Some manifestations of that:
 
 Deno comes with a code formatter (`deno fmt`) and an LSP server (`deno lsp`) out of the box.
@@ -47,7 +47,7 @@ Deno has a correctly designed tasks system.
 Whenever you do a non-trivial software project, there inevitably comes a point where you need to write some software to orchestrate your software.
 Accidental complexity creeps in the form of a `Makefile` (_which_ `make` is that?) or a `./scripts/*.sh` directory.
 Node (as far as I know) pioneered a great idea to treat these as a first-class concern of the project, by including a `scripts` field in the `package.json`.
-It then botched the execution by running the scripts through system's shell, which downgrade it to `./scripts` directory with more indirection.
+It then botched the execution by running the scripts through system's shell, which downgrades it to `./scripts` directory with more indirection.
 In contrast, Deno runs the scripts in [`deno_task_shell`](https://github.com/denoland/deno_task_shell) --- a purpose-built small cross-platform shell.
 You no longer need to worry that `rm` might behave differently depending on `which rm` it is, because it's a shell's built-in now.
 
