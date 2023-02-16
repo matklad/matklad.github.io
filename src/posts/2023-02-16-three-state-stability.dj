@@ -1,0 +1,50 @@
+# Three-State Stability
+
+Usually, when discussing stability of the APIs (in a broad sense; databases and programming languages are also APIs), only two states are mentioned:
+
+- an API is stable if there's a promise that all future changes would be backwards compatible
+- otherwise, it is unstable
+
+This is reflected in, e.g, SemVer: before 1.0, anything goes, after 1.0 you only allow to break API if you bump major version.
+
+I think the _actual_ situation in the real world is a bit more nuanced than that.
+In addition to clearly stable or clearly unstable, there's often a poorly defined third category.
+It often manifests as either:
+
+- some technically non-stable version of the project (e.g., `0.2`) becoming widely used and de facto stable
+- some minor but technically breaking quietly slipping in shortly after 1.0
+
+Here's what I think happens over a lifetime of a typical API:
+
+In the first phase, the API is actively evolving.
+There is a promise of anti-stability --- there's constant change and a lot of experimentation.
+Almost no one is using the project seriously:
+
+- the API is simply incomplete, there are large gaps in functionality
+- chasing upstream requires continuous, large effort
+- there's no certainty that the project will, in fact, ship a stable version, rather than die
+
+In the second phase, the API is _mostly_ settled.
+It does everything it needs to do, and the shape feels mostly right.
+Transition to this state happens when the API maintainers feel like they nailed down everything.
+However, no wide deployment had happened, so there might still be minor, but backwards incompatible adjustments wanting to be made.
+It makes sense to use the API for all _active_ projects (though it costs you an innovation token).
+The thing basically works, you _might_ need to adjust your code from time to time, occasionally an adjustment is not trivial, but the overall expected effort is low.
+The API is fully production ready, and has everything except stability.
+If you write a program on top of the API today, and try to run it ten years later, it will fail.
+But if you are making your own releases a couple of times a year, you should be fine.
+
+In the third phase, the API is fully stable, and no backwards-incompatible changes are expected.
+Otherwise, it is identical to the second phase.
+Transition to this phase happens after:
+
+- early adopters empirically stop uncovering deficiencies in the API
+- API maintainers make a commitment to maintain stability.
+
+In other words, it is not unstable -> stable, it is rather:
+
+- experimental (unstable, not fit for production)
+- production ready (still unstable, but you can budget-in a bounded amount of upgrade work)
+- stable (no maintenance work is required)
+
+We don't have great, catchy terms to describe the second bullet, so it gets lumped together with the first or the last one.
