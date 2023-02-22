@@ -16,12 +16,13 @@ export const base = (
   html`
 <!DOCTYPE html>
 <html lang='en-US'>
-
 <head>
   <meta charset='utf-8'>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title}</title>
   <meta name="description" content="${description}">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="canonical" href="${site_url}${path}">
   <link rel="alternate" type="application/rss+xml" title="matklad" href="${site_url}/feed.xml">
   <style>
@@ -133,7 +134,9 @@ export function post(post: Post, spellcheck: boolean): HtmlString {
     title: post.title,
     description: post.summary,
     path: post.path,
-    content: html`<article ${spellcheck ? 'contentEditable="true"' : ""}>\n${post.content}</article>`,
+    content: html`<article ${
+      spellcheck ? 'contentEditable="true"' : ""
+    }>\n${post.content}</article>`,
   });
 }
 

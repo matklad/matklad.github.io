@@ -68,7 +68,8 @@ async function build({ update } = { update: false }) {
   }
 
   const paths = [
-    "favicon.ico",
+    "favicon.svg",
+    "favicon.png",
     "resume.pdf",
     "css/*",
     "assets/*",
