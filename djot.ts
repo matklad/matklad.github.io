@@ -174,6 +174,10 @@ ${pre}
       return r.renderAstNodeDefault(node);
     },
     span: (node: Span, r: djot.HTMLRenderer) => {
+      if (has_class(node, "def")) {
+        const children = r.renderChildren(node);
+        return `<dfn>${children}</dfn>`;
+      }
       if (has_class(node, "kbd")) {
         const children = r.renderChildren(node)
           .split("+")

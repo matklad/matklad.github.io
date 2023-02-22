@@ -1,0 +1,138 @@
+# Why SAT Is Hard
+
+An introductory post about complexity theory today!
+It is relatively well-known that there exist so-called NP-complete problems --- particularly hard problems, such that, if you solve one of them efficiently, you can solve _all_ of them efficiently.
+I think I've learned relatively early that, e.g., SAT is such a hard problem.
+I've similarly learned a bunch of specific examples of equally hard problems, where solving one solves the other.
+However, why SAT is harder than _any_ NP problem remained a mystery for a rather long time to me.
+It is a shame --- this fact is rather intuitive and easy to understand.
+This post is my attempt at an explanation.
+It assumes _some_ familiarity with the space, but it's not going to be too technical or thorough.
+
+## Summary
+
+Let's say you are solving some search problem, like "find a path that visits every vertex in a graph once".
+It is often possible to write a naive algorithm for it, where we exhaustively check every possible prospective solution:
+
+```
+for every possible path:
+    if path visits every vertex once:
+        return path
+else:
+    return "no solution"
+```
+
+Although _checking_ each specific candidate is pretty fast, the whole algorithm is exponential, because there are too many (exponent of) candidates.
+Turns out, it is possible to write "check if solution fits" part as a SAT formula!
+And, if you have a magic algorithm which solves SAT, you can use that to find a candidate solution which would work, instead of enumerating all solutions!
+
+That's more or less everything I wanted to say today, but let's make this a tiny bit more formal.
+
+## Background
+
+We will be discussing algorithms and their runtime.
+Big-O notation is a standard instrument for describing performance of algorithms, as it erases small differences which depend on a particular implementation of the algorithm.
+Both 2N + 1000 and 100N are O(N), linear.
+
+In this post we will be even _less_ precise.
+We will talk about [polynomial time]{.def} --- an algorithm is polynomial if it is O(N^k^) for some k.
+For example, N^100^ is polynomial, while 2^N^ is not.
+
+We will also be thinking about Turing machines ([TM]{.def}s) as our implementation device.
+Programming algorithms directly on Turing machines is cumbersome, but TMs have two advantages for our use case:
+
+- it's natural to define runtime of TM
+- it's easy to simulate a TM as a part of some larger algorithm (an interpreter for a TM is a small program)
+
+Finally, we will only think about problems with binary answers ([decision problem]{.def}).
+"Is there a solution to this formula?" rather than "what is the solution to this formula?".
+"Is there a path in the graph of length at least N?" rather than "what is the longest path in this graph?".
+
+## Definitions
+
+Intuitively, a problem is NP if it's easy to check that a solution is valid (even if _finding_ the solution might be hard).
+This intuition doesn't exactly work for yes/no problems we are considering.
+To fix this, we will also provide a "hint" for the checker.
+For example, if the problem is "is there a path of length N in a given graph?" the hint will be a path.
+
+A decision problem is [NP]{.def}, if there's an algorithm that can verify a "yes" answer in polynomial time, given a suitable hint.
+
+That is, for every input where the answer is "yes" (and only for those inputs) there should be a hint that makes our verifying algorithm answer "yes".
+
+Boolean satisfiability, or [SAT]{.def} is a decision problem where an input is a boolean formula like
+
+```
+(A and B and !C) or
+(C and D) or
+!B
+```
+
+and the answer is "yes" if the formula evaluates to true for some variable assignment.
+
+It's easy to see that SAT is NP: the hint is variable assignment which satisfies the formula, and verifier evaluates the formula.
+
+## Sketch of a Proof
+
+Turns out, there is the "hardest" problem in NP --- solving just that single problem in polynomial time automatically solves every other NP problem in polynomial time (we call such problems [NP-complete]{.def}).
+Moreover, there's actually a bunch of such problems, and SAT is one of them.
+Let's see why!
+
+First, let's define a (somewhat artificial) problem which is trivially NP-complete.
+
+Let's start with this one: "Given a Turing machine and an input for it of length N, will the machine output {"yes"} after N^k^ steps?"
+(here k is a fixed parameter; pedantically, I describe a family of problems, one for each k)
+
+This is _very_ similar to a halting problem, but also much easier.
+We explicitly bound the runtime of the Turing machine by a polynomial, so we don't need to worry about "looping forever" case --- that would be a "no" for us.
+The naive algorithm here works: we just run the given machine on a given input for a given amount of steps and look at the answer.
+
+Now, if we formulate the problem as "_Is_ there an input **I** for a given Turing machine **M** such that **M(I)** answers {"yes"} after N^k^ steps?" we get our NP-complete problem.
+It's trivially NP --- the hint is the input that makes the machine answer "yes", and the verifier just runs our TM with this input for N^k^ steps.
+It can also be used to efficiently solve any other NP problem (e.g. SAT).
+Indeed, we can use the verifying TM as **M**, and that way find if there's any hint that makes it answer "yes".
+
+This is a bit circular and hard to wrap ones head around, but, at the same time, trivial.
+We essentially just carefully stare at the definition of an NP problem, specifically produce an algorithm that can solve any NP problem by directly using the definition, and notice that the resulting algorithm is also NP.
+Now there's no surprise that there exists the hardest NP problem --- we essentially _defined_ NP such that this is the case.
+
+What is still a bit mysterious is why non-weird problems like SAT also turn out too be NP-complete?
+This is because SAT is powerful enough to encode a Turing machine!
+
+_First_, note that we can encode a state of a Turing machine as a set of boolean variables.
+We'll need a boolean variable T~i~ for each position on a tape.
+The tape is in general infinite, but all our Turing machines run for polynomial (finite) time, so they use only a finite amount of cells, and it's enough to create variables only for those cells.
+Position of the head can also be described by a set of booleans variables.
+For example, we can have a P~i~ "is the head at a cell `i`" variable for each cell.
+Similarly, we can encode finite number of states our machine can be in as set of S~i~ variables (is the machine in state `i`?).
+
+_Second_, we can write a set of boolean equations which describe a single transition of our Turing machine.
+For example value of cell i at the second step T2~i~ will depend on the value on the previous step T1~i~, whether the head was at `i` (P1~i~) and the rules of our specific states.
+For example, if machine flips bits in state `0` and keeps then in state `1`, the formula we get for each sell is
+
+```
+T2_i <=>
+  (!P1_i and T1_i) # head is not on our cell, it can't change
+or (P1_i and (
+    S1_0 and !T1_i # flip case
+or  S1_1 and T1_i  # keep case
+))
+```
+
+We can write similar formulas for changes of P and S families of variables.
+
+_Third_, after we wrote transition formula for a single step, we can stack several such formulas on top of each other to get a formula for N steps.
+
+Now let's come back to our universal problem: "is there an input which makes a given Turing machine answer {"yes"} in N^k^ steps?".
+At this point, it's clear that we can replace a "Turing machine with N^k^ steps" with our transition formula duplicated N^k^ times.
+So, the question of existence of an input for a Turing machine reduces to the question of existence of a solution to a (big, but still polynomial) SAT formula.
+
+And this concludes the sketch!
+
+## Summary, Again
+
+SAT is hard, because it allows encoding a Turing machine transitions.
+We can't encode loops in SAT, but we can encode "N steps of a Turing machine" by repeating the same formula N times with small variations.
+So, if we know that a particular Turing machine runs in polynomial time, we _can_ encode it by a polynomially-sized schema.
+(see also [pure meson ray-tracer](https://mochiro.moe/posts/09-meson-raytracer/) for a significantly more practical application of a similar idea).
+
+And that means every problem that can be solved by a brute-force search over all solutions can be reduced to a SAT instance, by encoding the body of the search loop as a SAT formula!
