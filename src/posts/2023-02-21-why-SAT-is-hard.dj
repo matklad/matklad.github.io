@@ -24,7 +24,9 @@ else:
 
 Although _checking_ each specific candidate is pretty fast, the whole algorithm is exponential, because there are too many (exponent of) candidates.
 Turns out, it is possible to write "check if solution fits" part as a SAT formula!
-And, if you have a magic algorithm which solves SAT, you can use that to find a candidate solution which would work, instead of enumerating all solutions!
+And, if you have a magic algorithm which solves SAT, you can use that to find a candidate solution which would work instead of enumerating all solutions!
+
+In other words, solving SAT removes "search" from "search and check".
 
 That's more or less everything I wanted to say today, but let's make this a tiny bit more formal.
 
@@ -95,7 +97,7 @@ This is a bit circular and hard to wrap ones head around, but, at the same time,
 We essentially just carefully stare at the definition of an NP problem, specifically produce an algorithm that can solve any NP problem by directly using the definition, and notice that the resulting algorithm is also NP.
 Now there's no surprise that there exists the hardest NP problem --- we essentially _defined_ NP such that this is the case.
 
-What is still a bit mysterious is why non-weird problems like SAT also turn out too be NP-complete?
+What is still a bit mysterious is why non-weird problems like SAT also turn out to be NP-complete?
 This is because SAT is powerful enough to encode a Turing machine!
 
 _First_, note that we can encode a state of a Turing machine as a set of boolean variables.
@@ -132,7 +134,7 @@ And this concludes the sketch!
 
 SAT is hard, because it allows encoding a Turing machine transitions.
 We can't encode loops in SAT, but we can encode "N steps of a Turing machine" by repeating the same formula N times with small variations.
-So, if we know that a particular Turing machine runs in polynomial time, we _can_ encode it by a polynomially-sized schema.
+So, if we know that a particular Turing machine runs in polynomial time, we _can_ encode it by a polynomially-sized formula.
 (see also [pure meson ray-tracer](https://mochiro.moe/posts/09-meson-raytracer/) for a significantly more practical application of a similar idea).
 
 And that means every problem that can be solved by a brute-force search over all solutions can be reduced to a SAT instance, by encoding the body of the search loop as a SAT formula!
