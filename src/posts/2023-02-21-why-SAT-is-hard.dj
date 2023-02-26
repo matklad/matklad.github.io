@@ -105,11 +105,11 @@ We'll need a boolean variable T~i~ for each position on a tape.
 The tape is in general infinite, but all our Turing machines run for polynomial (finite) time, so they use only a finite amount of cells, and it's enough to create variables only for those cells.
 Position of the head can also be described by a set of booleans variables.
 For example, we can have a P~i~ "is the head at a cell `i`" variable for each cell.
-Similarly, we can encode finite number of states our machine can be in as set of S~i~ variables (is the machine in state `i`?).
+Similarly, we can encode the finite number of states our machine can be in as a set of S~i~ variables (is the machine in state `i`?).
 
 _Second_, we can write a set of boolean equations which describe a single transition of our Turing machine.
-For example value of cell i at the second step T2~i~ will depend on the value on the previous step T1~i~, whether the head was at `i` (P1~i~) and the rules of our specific states.
-For example, if machine flips bits in state `0` and keeps then in state `1`, the formula we get for each sell is
+For example  the value of cell i at the second step T2~i~ will depend on its value on the previous step T1~i~, whether the head was at `i` (P1~i~) and the rules of our specific states.
+For example, if our machine flips bits in state `0` and keeps them in state `1`, then the formula we get for each cell is
 
 ```
 T2_i <=>
@@ -122,7 +122,7 @@ or  S1_1 and T1_i  # keep case
 
 We can write similar formulas for changes of P and S families of variables.
 
-_Third_, after we wrote transition formula for a single step, we can stack several such formulas on top of each other to get a formula for N steps.
+_Third_, after we wrote the transition formula for a single step, we can stack several such formulas on top of each other to get a formula for N steps.
 
 Now let's come back to our universal problem: "is there an input which makes a given Turing machine answer {"yes"} in N^k^ steps?".
 At this point, it's clear that we can replace a "Turing machine with N^k^ steps" with our transition formula duplicated N^k^ times.
@@ -137,4 +137,4 @@ We can't encode loops in SAT, but we can encode "N steps of a Turing machine" by
 So, if we know that a particular Turing machine runs in polynomial time, we _can_ encode it by a polynomially-sized formula.
 (see also [pure meson ray-tracer](https://mochiro.moe/posts/09-meson-raytracer/) for a significantly more practical application of a similar idea).
 
-And that means every problem that can be solved by a brute-force search over all solutions can be reduced to a SAT instance, by encoding the body of the search loop as a SAT formula!
+And that means that every problem that can be solved by a brute-force search over all solutions can be reduced to a SAT instance, by encoding the body of the search loop as a SAT formula!
