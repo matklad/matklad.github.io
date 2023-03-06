@@ -38,23 +38,6 @@ export const base = (
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
-
-  h1, h2, h3 { font-weight: 300; }
-
-  body { display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-  main { display: flex; flex-direction: column; width: 100%; max-width: 80ch; padding-left: 2ch; padding-right: 2ch; }
-
-  header { width: 100%; max-width: 80ch; margin-bottom: 1.5rem; }
-  header > nav { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; }
-  header a { font-style: normal; margin-left: 1ch; margin-right: 1ch; line-height: 1.5rem; color: rgba(0, 0, 0, .8); text-decoration: none; }
-  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
-  header .title { font-size: 1.25em; flex-grow: 2; }
-
-  footer { display: flex; justify-content: center; align-items: baseline; width: 100%; max-width: 80ch; margin-top: 1rem; height: 2rem; padding-left: 1ch; padding-right: 1ch; }
-  footer > p { margin-bottom: 0; }
-  footer a { padding-left: 2ch; font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
-  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
-
   </style>
 
   <link rel="stylesheet" href="/css/main.css">
