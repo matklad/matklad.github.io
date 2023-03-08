@@ -14,6 +14,7 @@ import {
   Para,
   Section,
   Span,
+  Url,
   Visitor,
 } from "djot/ast.ts";
 
@@ -191,6 +192,10 @@ ${pre}
           '<i class="fa fa-angle-right"></i>',
         );
       }
+      return r.renderAstNodeDefault(node);
+    },
+    url: (node: Url, r: djot.HTMLRenderer) => {
+      add_class(node, "url");
       return r.renderAstNodeDefault(node);
     },
   };
