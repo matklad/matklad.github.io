@@ -27,13 +27,14 @@ export const base = (
   <link rel="alternate" type="application/rss+xml" title="matklad" href="${site_url}/feed.xml">
   <style>
   @font-face {
-    font-family: 'JetBrains Mono';
-    src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    font-family: 'Open Sans'; src: url('/css/OpenSans.woff2') format('woff2');
+    font-weight: 300;
   }
-
   @font-face {
-    font-family: 'JetBrains Mono';
-    src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
     font-weight: bold;
   }
 
@@ -62,7 +63,7 @@ export const base = (
   <link rel="stylesheet" href="/css/main.css">
   ${extra_css ? html`<link rel="stylesheet" href="/css/${extra_css}">` : ""}
   <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic%7COpen+Sans:300">
+        href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
 </head>
 
