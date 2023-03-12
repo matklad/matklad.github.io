@@ -28,14 +28,15 @@ export const base = (
   <style>
   @font-face {
     font-family: 'Open Sans'; src: url('/css/OpenSans.woff2') format('woff2');
-    font-weight: 300;
+    font-style: italic; font-weight: 300;
   }
   @font-face {
     font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
+    font-style: normal; font-weight: 400;
   }
   @font-face {
     font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
-    font-weight: bold;
+    font-style: normal; font-weight: 700;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
