@@ -27,16 +27,32 @@ export const base = (
   <link rel="alternate" type="application/rss+xml" title="matklad" href="${site_url}/feed.xml">
   <style>
   @font-face {
-    font-family: 'Open Sans'; src: url('/css/OpenSans.woff2') format('woff2');
-    font-style: italic; font-weight: 300;
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
   }
   @font-face {
-    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-Regular.woff2') format('woff2');
-    font-style: normal; font-weight: 400;
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
   }
   @font-face {
-    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-Bold.woff2') format('woff2');
-    font-style: normal; font-weight: 700;
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
@@ -63,8 +79,6 @@ export const base = (
 
   <link rel="stylesheet" href="/css/main.css">
   ${extra_css ? html`<link rel="stylesheet" href="/css/${extra_css}">` : ""}
-  <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css?family=EB+Garamond:400,400italic,700,700italic">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
 </head>
 
