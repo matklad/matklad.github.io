@@ -64,7 +64,7 @@ export const base = (
     margin-right: auto;
   }
 
-  header { margin-bottom: 3rem; }
+  header { margin-bottom: 2rem; }
   header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
   header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
   header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
