@@ -194,7 +194,7 @@ export const feed_entry = (post: Post): HtmlString => {
   return html`
 <entry>
 <title type="text">${post.title}</title>
-<link href="${site_url}${post.path}" rel="alternate" type="text/html" title="Self Modifying Code" />
+<link href="${site_url}${post.path}" rel="alternate" type="text/html" title="${post.title}" />
 <published>${yyyy_mm_dd(post.date)}T00:00:00+00:00</published>
 <updated>${yyyy_mm_dd(post.date)}T00:00:00+00:00</updated>
 <id>${site_url}${post.path.replace(".html", "")}</id>
