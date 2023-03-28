@@ -1,0 +1,41 @@
+# Rust Is a Scalable Language
+
+In my last post about [_Zig and Rust_](https://matklad.github.io/2023/03/26/zig-and-rust.html), I mentioned that Rust is a "scalable language".
+Let me expand on this a bit.
+
+## Vertical Scalability
+
+Rust is vertically scalable, in that you can write all kinds of software in it.
+You can write an advanced zero-alloc image compression library, build a web server exposing the library to the world as an HTTP SAAS, and cobble together a "script" for building, testing, and deploying it to wherever people deploy software these days.
+And you would only need Rust --- while it excels in the lowest half of the stack, it's pretty ok everywhere else too.
+
+## Horizontal Scalability
+
+Rust is horizontally scalable, in that you can easily parallelize development of large software artifacts across many people and teams.
+Rust itself moves with a breakneck speed, which is surprising for such a loosely coordinated and chronically understaffed open source project of this scale.
+Relatively small community  managed to put together a comprehensive ecosystem of composable high-quality crates on a short notice.
+Rust is so easy to compose reliably that even the stdlib itself does not shy from pulling dependencies from crates.io.
+
+Steve Klabnik wrote about [_Rust's Golden Rule_](https://steveklabnik.com/writing/rusts-golden-rule),
+how function signatures are mandatory and authoritative and explicitly define the interface both for the callers of the function and for the function's body.
+This thinking extends to other parts of the language.
+
+My second most favorite feature of Rust (after safety) is its module system.
+It has first-class support for the concept of a library.
+Library is called a crate and is a tree of modules, a unit of compilation, and a principle visibility boundary.
+Modules can contain circular dependencies, but libraries always form a directed acyclic graph.
+There's no global namespace of symbols --- libraries are anonymous, names only appear on dependency edges between two libraries, and are local to the downstream crate.
+
+The benefits of this core compilation model are then greatly amplified by Cargo, which is not a generalized task runner, but rather a rigid specification for what is a package of Rust code:
+
+* a (library) crate,
+* a manifest, which defines dependencies between packages in a declarative way, using semver,
+* an ecosystem-wide agreement on the semantics of dependency specification, and accompanied dependency resolution algorithm.
+
+Crucially, there's absolutely no way in Cargo to control the actual build process.
+The `build.rs` file can be used to provide extra runtime inputs, but it's `cargo` who calls `rustc`.
+
+Again, Cargo defines a rigid interface for a reusable piece of Rust code.
+Both producers and consumers must abide by these rules, there is no way around them.
+As a reward, they get a super-power of working together by working apart.
+I don't need to ping dtolnay in Slack when I want to use serde-json because we implicitly pre-agreed to a shared golden rule.
