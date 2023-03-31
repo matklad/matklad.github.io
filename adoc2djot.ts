@@ -3,7 +3,7 @@
 /*
 TODO:
 - footnotes (unsafe is a human-assited type system)
-- stripes in highligted lines
+- stripes in highlighted lines
 */
 
 const path = Deno.args[0];
