@@ -6,7 +6,7 @@ The number of Pratt parsing articles is so large that there exists a [survey pos
 The goals of this particular article are:
 
 * Raising an issue that the so-called left-recursion problem is overstated.
-* Complaining about inadequacy of BNF for represeting infix expressions.
+* Complaining about inadequacy of BNF for representing infix expressions.
 * Providing a description and implementation of Pratt parsing algorithm which sticks to the core and doesn't introduce a DSL-y abstraction.
 * Understanding the algorithm myself for hopefully the last time. I've
   [implemented](https://github.com/rust-analyzer/rust-analyzer/blob/c388130f5ffbcbe7d3131213a24d12d02f769b87/crates/ra_parser/src/grammar/expressions.rs#L280-L281)
@@ -452,7 +452,7 @@ fn tests() {
    So, you can think about `min_bp` as the binding power of the operator to the left of the current expressions.
 4) Finally, after parsing the correct right hand side, we assemble the new current expression.
 5) To start the recursion, we use binding power of zero.
-   Remember, at the begining the binding power of the operator to the left is the lowest possible, zero, as there's no actual operator there.
+   Remember, at the beginning the binding power of the operator to the left is the lowest possible, zero, as there's no actual operator there.
 
 So, yup, these 40 lines _are_ the Pratt parsing algorithm.
 They are tricky, but, if you understand them, everything else is straightforward additions.
