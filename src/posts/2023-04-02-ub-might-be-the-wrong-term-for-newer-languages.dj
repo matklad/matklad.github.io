@@ -5,15 +5,15 @@ The TL;DR is that I think that carrying the wording from the C standard into new
 This is strictly the word choice, the "lexical syntax of the comments" argument.
 
 The C standard leaves many behaviors undefined.
-However, it allows any particular implementation to fill in the gaps and define some of undefined in the standard--behaviors.
+However, it allows any particular implementation to fill in the gaps and define some of undefined-in-the-standard behaviors.
 For example, C23 makes `realloc(ptr, 0)` into an undefined behavior, so that POSIX can further refine it without interfering with the standard ([source](https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2464.pdf)).
 
 It's also valid for an implementation to leave UB undefined.
 If a program compiled with this implementation hits this UB path, the behavior of the program _as a whole_ is undefined
-(or rather, bounded by the execution environment. It is not _actually_ possible to summon nasal daemons, because a user-space process can not escape its memory space other than by calling syscalls, and there are no nasal daemons summoning--syscalls).
+(or rather, bounded by the execution environment. It is not _actually_ possible to summon nasal daemons, because a user-space process can not escape its memory space other than by calling syscalls, and there are no nasal daemons summoning syscalls).
 
 C implementations are _not required to_ but _may_ define behaviors left undefined by the standard.
-A C program written for a specific implementation may rely on undefined in the standard but defined in the implementation--behavior.
+A C program written for a specific implementation may rely on undefined-in-the-standard but defined-in-the-implementation behavior.
 
 Modern languages like [Rust](https://doc.rust-lang.org/reference/behavior-considered-undefined.html) and [Zig](https://ziglang.org/documentation/0.10.1/#Undefined-Behavior) re-use the "undefined behavior" term.
 However, the intended semantics is subtly different.
