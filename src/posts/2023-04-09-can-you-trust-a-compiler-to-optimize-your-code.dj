@@ -1,0 +1,415 @@
+# Can You Trust a Compiler to Optimize Your Code?
+
+More or less the title this time, but first, a story about SIMD. There are three
+levels of understanding how SIMD works (well, at least I am level 3 at the moment):
+
+1. Compilers are smart! They will auto-vectorize all the code!
+
+2. Compilers are dumb, auto-vectorization is fragile, it's very easy to break it
+   by unrelated changes to the code. It's always better to manually write
+   explicit SIMD instructions.
+
+3. Writing SIMD by hand is really hard --- you'll need to re-do the work for
+   every different CPU architecture. Also, you probably think that, for scalar
+   code, a compiler writes better assembly than you. What makes you think that
+   you'd beat the compiler at SIMD, where there are more funky instructions and
+   constraints? Compilers are tools. They can reliably vectorize code if it is
+   written in an amenable-to-vectorization form.
+
+I've recently moved from the second level to the third one, and that made me aware of the moment when the model used by a compiler for optimization clicked in my head.
+In this post, I want to explain the general framework for reasoning about compiler optimizations for static languages such as Rust or C++.
+After that, I'll apply that framework to auto-vectorization.
+
+I haven't worked on backends of production optimizing compilers, so the following will not be academically correct, but these models are definitely helpful at least to me!
+
+## Seeing Like a Compiler
+
+The first bit of a puzzle is understanding how a compiler views code. Some useful references here include
+[_The SSA Book_](https://link.springer.com/book/10.1007/978-3-030-80515-9) or LLVM's
+[_Language Reference_](https://llvm.org/docs/LangRef.html).
+
+Another interesting choice would be [_WebAssembly Specification_](https://webassembly.github.io/spec/core/).
+While WASM would be a poor IR for an optimizing compiler, it has a lot of structural similarities, and the core spec is exceptionally readable.
+
+A unit of optimization is a function.
+Let's take a simple function like the following:
+
+```rust
+fn sum(xs: &[i32]) -> i32 {
+  let mut total = 0;
+  for i in 0..xs.len() {
+    total = total.wrapping_add(xs[i]);
+  }
+  total
+}
+```
+
+In some pseudo-IR, it would look like this:
+
+```
+fn sum return i32 {
+  param xs_ptr: ptr
+  param xs_len: size
+
+  local total: i32
+  local i: size = 0
+  local x: i32
+  local total: i32 = 0
+
+loop:
+  branch_if i >= xs_len :ret
+  load x base=xs_ptr offset=i
+  add total x
+  add i 1
+  goto :loop
+
+ret:
+  return total
+}
+```
+
+The most important characteristic here is that there are two kinds of entities:
+
+_First_, there is program memory, very roughly an array of bytes.
+Compilers generally can not reason about the contents of the memory very well, because it is shared by all the functions, and different functions might interpret the contents of the memory differently.
+
+_Second_, there are local variables.
+Local variables are not bytes --- they are integers, they obey mathematical properties which a compiler can reason about.
+
+For example, if a compiler sees a loop like
+
+```
+param n: u32
+local i: u32 = 0
+local total: u32
+local tmp
+
+loop:
+  branch_if i >= n :ret
+  set tmp i
+  mul tmp 4
+  add t tmp
+  goto :loop
+
+ret:
+  return total
+```
+
+It can _reason_ that on each iteration `tmp` holds `i * 4` and optimize the code to
+
+```
+param n: u32
+local i: u32 = 0
+local total: u32
+local tmp = 0
+
+loop:
+  branch_if i >= n :ret
+  add t tmp
+  add tmp 4  # replace multiplication with addition
+  goto :loop
+
+ret:
+  return total
+```
+
+This works, because all locals are just numbers.
+If we did the same computation, but all numbers were located in memory, it would be significantly harder for a compiler to reason that the transformation is actually correct.
+What if the storage for `n` and `total` actually overlaps?
+What if `tmp` overlaps with something which isn't even in the current function?
+
+However, there's a bridge between the worlds of mathematical local variables and the world of memory bytes --- `load` and `store` instructions.
+The `load` instruction takes a range of bytes in memory, interprets the bytes as an integer, and stores that integer into a local variable.
+The `store` instruction does the opposite.
+By loading something from memory into a local, a compiler gains the ability to reason about it precisely.
+Thus, the compiler doesn't need to track the general contents of memory.
+It only needs to check that it would be correct to load from memory at a specific point in time.
+
+So, a compiler really doesn't see all that well --- it can only really reason about a single function at a time, and only about the local variables in that function.
+
+## Bringing Code Closer to Compiler's Nose
+
+Compilers are myopic.
+This can be fixed by giving more context to the compiler, which is the task of two core optimizations.
+
+_The first_ core optimization is [inlining]{.def}.
+It substitutes callee's body for a specific call.
+The benefit here is not that we eliminate function call overhead, that's relatively minor.
+The big thing is that locals of both the caller and the callee are now in the same frame, and a compiler can optimize them together.
+
+Let's look again at that Rust code:
+
+```rust
+fn sum(xs: &[i32]) -> i32 {
+  let mut total = 0;
+  for i in 0..xs.len() {
+    total = total.wrapping_add(xs[i]);
+  }
+  total
+}
+```
+
+The `x[i]` expression there is actually a function call.
+The indexing function does a bounds check before accessing the element of an array.
+After inlining it into the `sum`, compiler can see that it is dead code and eliminate it.
+
+If you look at various standard optimizations, they often look like getting rid of dumb things, which no one would actually write in the first place, so its not clear immediately if it is worth it to implement such optimizations.
+But the thing is, after inlining a lot of dumb things appear, because functions tend to handle the general case, and, at a specific call-site, there are usually enough constraints to dismiss many edge cases.
+
+_The second_ core optimization is [scalar replacement of aggregates]{.def}.
+It is a generalization of the "let's use `load` to avoid reasoning about memory and reason about a local instead" idea we've already seen.
+
+If you have a function like
+
+```rust
+fn permute(xs: &mut Vec<i32>) {
+  ...
+}
+```
+
+it's pretty difficult for the compiler to reason about it.
+It receives a pointer to some memory which holds a complex struct (ptr, len, capacity triple), so reasoning about evolution of this struct is hard.
+What the compiler can do is to load this struct from memory, replacing the aggregate with a bunch of scalar local variables:
+
+```
+fn permute(xs: &mut Vec<i32>) {
+  local ptr: ptr
+  local len: usize
+  local cap: usize
+
+  load ptr xs.ptr
+  load len xs.len
+  load cap xs.cap
+
+  ...
+
+  store xs.ptr ptr
+  store xs.len len
+  store xs.cap cap
+}
+```
+
+This way, a compiler again gains reasoning power.
+SROA is like inlining, but for memory rather than code.
+
+## Impossible and Possible
+
+Using this mental model of a compiler which:
+
+* optimizes on a per-function basis,
+* can inline function calls,
+* is great at noticing relations between local variables and rearranging the code based on that,
+* is capable of _limited_ reasoning about the memory (namely, deciding when it's safe to `load` or `store`)
+
+we can describe which code is reliably optimizable, and which code prevents optimizations, explaining zero cost abstractions.
+
+To enable inlining, a compiler needs to know which function is actually called.
+If a function is called directly, it's pretty much guaranteed that a compiler would try to inline it.
+If the call is indirect (via function pointer, or via a table of virtual functions), in the general case a compiler won't be able to inline that.
+Even for indirect calls, sometimes the compiler can reason about the value of the pointer and de-virtualize the call, but that relies on successful optimization elsewhere.
+
+This is the reason why, in Rust, every function has a unique, zero-sized type with no runtime representation.
+It statically guarantees that the compiler could always inline the code, and makes this abstraction zero cost, because any decent optimizing compiler will melt it to nothing.
+
+A higher level language might choose to _always_ represent functions with function pointers.
+In practice, in many cases the resulting code would be equivalently optimizable.
+But there won't be any indication in the source whether this is an optimizable case (the actual pointer is knowable at compile time) or a genuinely dynamic call.
+With Rust, the difference between guaranteed to be optimizable and potentially optimizable is reflected in the source language:
+
+```rust
+// Compiler is guaranteed to be able to inline call to `f`.
+fn call1<F: Fn()>(f: F) {
+  f()
+}
+
+// Compiler _might_ be able to inline call to `f`.
+fn call2(f: fn()) {
+  f()
+}
+```
+
+So, the first rule is to make most of the calls statically resolvable, to allow inlining.
+Function pointers and dynamic dispatch prevent inlining.
+Separate compilation might also get in a way of inlining, see this [separate essay](https://matklad.github.io/2021/07/09/inline-in-rust.html) on the topic.
+
+Similarly, indirection in _memory_ can cause troubles for the compiler.
+
+For something like this
+
+```rust
+struct Foo {
+  bar: Bar,
+  baz: Baz,
+}
+```
+
+the `Foo` struct is completely transparent for the compiler.
+
+While here:
+
+```rust
+struct Foo {
+  bar: Box<Bar>,
+  baz: Baz,
+}
+```
+
+it is not clear cut.
+Proving something about the memory occupied by `Foo` does not in general transfer to the memory occupied by `Bar`.
+Again, in many cases a compiler _can_ reason through boxes thanks to uniqueness, but this is not guaranteed.
+
+A good homework at this point is to look at Rust's iterators and understand why they look the way they do.
+
+Why the signature and definition of [`map`](https://doc.rust-lang.org/stable/core/iter/trait.Iterator.html#method.map) is
+
+```rust
+#[inline]
+fn map<B, F>(self, f: F) -> Map<Self, F>
+where
+  Self: Sized,
+  F: FnMut(Self::Item) -> B,
+{
+  Map::new(self, f)
+}
+```
+
+Another important point about memory is that, in general, a compiler can't change the overall layout of stuff.
+SROA can load some data structure into a bunch of local variables, which then can, eg, replace "a pointer and an index" representation with "a pair of pointers".
+But at the end of the day SROA would have to materialize "a pointer and an index" back and store that representation back into the memory.
+This is because memory layout is shared across all functions, so a function can not unilaterally dictate a more optimal representation.
+
+Together, these observations give a basic rule for the baseline of performant code.
+
+:::: note
+Think about data layout in memory.
+A compiler is of very little help here and would mostly put the bytes where you tell it to.
+Make data structures more compact, reduce indirection, exploit common access patterns for improving cache efficiency.
+
+Compilers are much better at reasoning about the code, as long as they can see it.
+Make sure that most calls are known at compile time and can be inlined, trust the compiler to do the rest.
+::::
+
+## SIMD
+
+Let's apply this general framework of giving a compiler optimizable code to work with to auto-vectorization.
+We will be optimizing the function which computes the longest common prefix between two slices of bytes (thanks [@nkkarpov](https://github.com/nkkarpov) for the example).
+
+A  direct implementation would look like this:
+
+```rust
+use std::iter::zip;
+
+// 650 milliseconds
+fn common_prefix(xs: &[u8], ys: &[u8]) -> usize {
+  let mut result = 0;
+  for (x, y) in zip(xs, ys) {
+    if x != y { break; }
+    result += 1
+  }
+  result
+}
+```
+
+If you already have a mental model for auto-vectorization, or if you look at the assembly output, you can realize that the function as written works one byte at a time, which is much slower than it needs to be.
+Let's fix that!
+
+SIMD works on many values simultaneously.
+Intuitively, we want the compiler to compare a bunch of bytes at the same time, but our current code does not express that.
+Let's make the structure explicit, by processing 16 bytes at a time, and then handling remainder separately:
+
+```rust
+// 450 milliseconds
+fn common_prefix(xs: &[u8], ys: &[u8]) -> usize {
+  let chunk_size = 16;
+
+  let mut result = 0;
+
+  'outer: for (xs_chunk, ys_chunk) in
+    zip(xs.chunks_exact(chunk_size), ys.chunks_exact(chunk_size))
+  {
+    for (x, y) in zip(xs_chunk, ys_chunk) {
+      if x != y { break 'outer; }
+      result += 1
+    }
+  }
+
+  for (x, y) in zip(&xs[result..], &ys[result..]) {
+    if x != y { break; }
+    result += 1
+  }
+
+  result
+}
+```
+
+Amusingly, this is already a bit faster, but not quite there yet.
+Specifically, SIMD needs to process all values in the chunk in parallel in the same way.
+In our code above, we have a `break`, which means that processing of the nth pair of bytes depends on the n-1st pair.
+Let's fix _that_ by disabling short-circuiting.
+We will check if the whole chunk of bytes matches or not, but we won't care which specific byte is a mismatch:
+
+```rust
+// 80 milliseconds
+fn common_prefix3(xs: &[u8], ys: &[u8]) -> usize {
+  let chunk_size = 16;
+
+  let mut result = 0;
+  for (xs_chunk, ys_chunk) in
+    zip(xs.chunks_exact(chunk_size), ys.chunks_exact(chunk_size))
+  {
+    let mut chunk_equal: bool = true;
+    for (x, y) in zip(xs_chunk, ys_chunk) {
+      // NB: &, unlike &&, doesn't short-circuit.
+      chunk_equal = chunk_equal & (x == y);
+    }
+
+    if !chunk_equal { break; }
+    result += chunk_size;
+  }
+
+  for (x, y) in zip(&xs[result..], &ys[result..]) {
+    if x != y { break; }
+    result += 1
+  }
+
+  result
+}
+```
+
+And this version finally lets vectorization kick in, reducing the runtime almost by an order of magnitude.
+We can now compress this version using iterators.
+
+```rust
+// 80 milliseconds
+fn common_prefix5(xs: &[u8], ys: &[u8]) -> usize {
+  let chunk_size = 16;
+
+  let off =
+    zip(xs.chunks_exact(chunk_size), ys.chunks_exact(chunk_size))
+      .take_while(|(xs_chunk, ys_chunk)| xs_chunk == ys_chunk)
+      .count() * chunk_size;
+
+  off + zip(&xs[off..], &ys[off..])
+    .take_while(|(x, y)| x == y)
+    .count()
+}
+```
+
+Note how the code is meaningfully different from our starting point.
+We do not blindly rely on the compiler's optimization.
+Rather, we are aware about specific optimizations we need in this case, and write the code in a way that triggers them.
+
+Specifically, for SIMD:
+
+* we express the algorithm in terms of processing _chunks_ of elements,
+* within each chunk, we make sure that there's no branching and all elements are processed in the same way.
+
+## Conclusion
+
+Compilers are tools.
+While there's a fair share of "optimistic" transformations which sometimes kick in, the bulk of the impact of an optimizing compiler comes from guaranteed optimizations with specific preconditions.
+Compilers are myopic --- they have a hard time reasoning about code outside of the current function and values not held in the local variables.
+Inlining and scalar replacement of aggregates are two optimizations to remedy the situation.
+Zero cost abstractions work by expressing opportunities for guaranteed optimizations in the language's type system.
+
+If you like this post, I highly recommend [_A Catalogue of Optimizing Transformations_](https://www.clear.rice.edu/comp512/Lectures/Papers/1971-allen-catalog.pdf) by Barbara Allen.
