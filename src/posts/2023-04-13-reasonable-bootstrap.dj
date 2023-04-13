@@ -1,0 +1,68 @@
+# Reasonable Bootstrap
+
+Compilers for systems programming languages (C, C++, Rust, Zig) tend to be implemented in the languages themselves.
+The idea being that the current version of the compiler is built using some previous version.
+But how can you get a working compiler if you start out from nothing?
+
+The traditional answer has been "via bootstrap chain".
+You start with the first version of the compiler implemented in assembly, use that to compile the latest version of the compiler it is capable of compiling, then repeat.
+This historically worked OK because older versions of GCC were implemented in C (and C is easy to provide a compiler for) and, even today, GCC itself is very conservative in using language features.
+I believe GCC 10.4 released in 2022 can be built with just a C++98 compiler.
+So, if you start with a C compiler, it's not too many hops to get to the latest GCC.
+
+This doesn't feel entirely satisfactory, as this approach requires artificially constraining the compiler itself to be very conservative.
+Rust does the opposite of that.
+Rust requires that rustc 1.x.0 is built by rustc 1.x-1.0, and there's a new rustc version every six weeks.
+This seems like a very reasonable way to build compilers, _but_ it also is incompatible with chain bootstrapping.
+In the limit, one would need infinite time to compile modern rustc ex nihilo!
+
+I _think_ there's a better way if the goal is to compile the world from nothing.
+To cut to the chase, the minimal bootstrap seed for Rust could be:
+
+- source code for current version of the compiler
+- this source code compiled to core WebAssembly
+
+Bootstrapping from this should be easy.
+WebAssembly is a very small language, so a runtime for it can be built out of nothing.
+Using this runtime, and rustc-compiled-to-wasm we can re-compile rustc itself.
+Then, we can either cross-compile it to the architecture we need, if that architecture is supported by rustc.
+If the architecture is _not_ supported, we can implement a new backend for that arch in Rust, compile our modified compiler to wasm, and then cross-compile to the desired target.
+
+More complete bootstrap seed would include:
+
+* Informal specification of the Rust language, to make sense of the source code.
+* Rust source code for the compiler, which also doubles as a formal specification of the language.
+* Informal specification of WebAssembly, to make sense of .wasm parts of the bootstrap seed.
+* .wasm code for the rust compiler, which triple-checks the Rust specification.
+* Rust implementation of a WebAssembly interpreter, which doubles as a formal spec for WebAssembly.
+
+And this seed is provided for every version of a language.
+This way, it is possible to bootstrap, in constant time, any version of Rust.
+
+Specific properties we use for this setup:
+
+* Compilation is deterministic.
+  Compiling bootstrap sources with bootstrap .wasm blob should result in a byte-for-byte identical wasm blob.
+* WebAssembly is target-agnostic.
+  It describes abstract computation, which is completely independent from the host architecture.
+* WebAssembly is simple.
+  Implementing a WebAssembly interpreter is easy in whatever computation substrate you have.
+* Compiler is a cross compiler.
+  We don't want to bootstrap _just_ the WebAssembly backend, we want to bootstrap everything.
+  This requires that the WebAssembly version of the compiler can generate the code for arbitrary architectures.
+
+This setup does not prevent the trusting trust attack.
+However, it is possible to rebuild the bootstrap seed using a different compiler.
+Using that compiler to compiler rustc to .wasm will produce a different blob.
+But using that .wasm to recompile rustc again should produce the blob from the seed (unless, of course, there's a trojan in the seed).
+
+This setup does not minimize the size of opaque binary blobs in the seed.
+The size of the .wasm would be substantial.
+This setup, however, does minimize the total size of the seed.
+In the traditional bootstrap, source code for rustc 1.0.0, rustc 1.1.0, rustc 1.2.0, etc would also have to be part of the seed.
+For the suggested approach, you need only one version, at the cost of a bigger binary blob.
+
+This idea is not new.
+I _think_ it was popularized by Pascal with p-code.
+OCaml uses a similar strategy.
+Finally, [Zig](https://ziglang.org/news/goodbye-cpp/) makes an important observation that we no longer need to implement language-specific virtual machines, because WebAssembly is a good fit for the job.
