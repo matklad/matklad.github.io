@@ -7,10 +7,12 @@ hljs.configure({ classPrefix: "hl-" });
 import latex from "highlightjs/languages/latex.min.js";
 import nix from "highlightjs/languages/nix.min.js";
 import x86asm from "highlightjs/languages/x86asm.min.js";
+import zig from "./highlightjs-zig.js";
 
 hljs.registerLanguage("latex", latex);
 hljs.registerLanguage("nix", nix);
 hljs.registerLanguage("x86asm", x86asm);
+hljs.registerLanguage("Zig", zig);
 
 export function highlight(
   source: string,
@@ -52,7 +54,7 @@ export function highlight(
 }
 
 function add_spans(source: string, language?: string): HtmlString {
-  if (!language || language === "adoc" || language === "zig") return html`${source}`;
+  if (!language || language === "adoc") return html`${source}`;
   if (language == "console") return add_spans_console(source);
   const res = hljs.highlight(source, { language, ignoreIllegals: true });
   return new HtmlString(res.value);
