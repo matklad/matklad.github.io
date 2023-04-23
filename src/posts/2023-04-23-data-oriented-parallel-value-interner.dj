@@ -5,7 +5,7 @@ It should be fast, but there will be no benchmarks as I haven't implemented the 
 So it might actually be completely broken or super slow for one reason or another.
 Still, I think there are a couple of neat ideas, which I would love to call out.
 
-The context for the post is this talk by Andrew Kelley, which notices that its hard to reconcile interning and parallel compilation.
+The context for the post is [this talk](https://www.youtube.com/watch?v=AqDdWEiSwMM) by Andrew Kelley, which notices that it's hard to reconcile interning and parallel compilation.
 This is something I have been thinking about a lot in the context of rust-analyzer, which relies heavily on pointers, atomic reference counting and indirection to make incremental and parallel computation possible.
 
 And yes, interning (or, more generally, assigning unique identities to things) is a big part of that.
@@ -32,7 +32,7 @@ const Value = union(enum) {
     bytes: []u8,
 
     // The interesting case which makes it a tree.
-    // This is how struct instancies are represented.
+    // This is how struct instances are represented.
     aggregate: []Value,
 };
 
@@ -50,10 +50,10 @@ const Value = struct {
 
 // Payload is an "abstract" type:
 // There's some data following the `tag`,
-// whose type and size is deterimned by
+// whose type and size is determined by
 // this `tag`.
 const Payload = struct {
-    tag: ValueTag,
+    tag: Tag,
 
     pub const U64 = struct {
         base: Payload,
@@ -79,7 +79,7 @@ Let's start with concurrent `SegmentedList`:
 ```zig
 fn SegmentList(comptime T: type) type {
     return struct {
-        items: [31]?[*]T,
+        echelons: [31]?[*]T,
     };
 }
 ```
@@ -123,7 +123,7 @@ fn get_echelons(
 }
 ```
 
-Indexing into such echeloned array is still O(1).
+Indexing into such an echeloned array is still O(1).
 Here's how echelons look in terms of indexes
 
 ```
@@ -133,7 +133,7 @@ Here's how echelons look in terms of indexes
 7 8 9 10 11 12 13 14   = 15 total
 ```
 The first `n` echelons hold `2**n - 1` elements.
-So, if we want to find the `i`th item, we first find the echelon it is in, by computing the nearest smaller power of two of `i + 1`, and then index into the echelon with `i - (2**n - 1)`, give or take a `+1` somewhere.
+So, if we want to find the `i`th item, we first find the echelon it is in, by computing the nearest smaller power of two of `i + 1`, and then index into the echelon with `i - (2**n - 1)`, give or take a `+1` here or there.
 
 ```zig
 // Warning: untested, probably has a couple of bugs.
@@ -149,19 +149,19 @@ fn get_echelon(index: u32) u5 {
 }
 ```
 
-Note that we pre-allocate array of pointers to segments, but not the segments themselves.
+Note that we pre-allocate an array of pointers to segments, but not the segments themselves.
 Pointers are nullable, and we allocate new segments lazily, when we actually write to the corresponding indexes.
 This structure is very friendly to parallel code.
 Reading items works because items are never reallocated.
 Lazily allocating new echelons is easy, because the position of the pointer is fixed.
-That is, we can do something like this to insert item at position `i`:
+That is, we can do something like this to insert an item at position `i`:
 
 1. compute the echelon index
 2. `@atomicLoad(.Acquire)` the pointer
 3. if the pointer is null
 
    - allocate the echelon
-   - `@cmpxchgStrong` the pointer
+   - `@cmpxchgStrong(.Acquire, .Release)` the pointer
    - free the redundant echelon if exchange failed
 4. insert the item
 
@@ -198,7 +198,7 @@ const Value = union(enum) {
     bytes: []u8,
 
     // The interesting case which makes it a tree.
-    // This is how struct instancies are represented.
+    // This is how struct instances are represented.
     aggregate: []Value,
 };
 
@@ -226,12 +226,12 @@ const ValueTable = struct {
 };
 ```
 
-A `Value` now is an index.
+A `Value` is now an index.
 This index works for two fields of `ValueTable`, `tag` and `data`.
-That is, the index address five bytes of payload, which is all that is needed for small values.
-For large tags like `aggregate`, the `data` field store an index into the corresponding payload `SegmentList`.
+That is, the index addresses five bytes of payload, which is all that is needed for small values.
+For large tags like `aggregate`, the `data` field stores an index into the corresponding payload `SegmentList`.
 
-That is, every value allocates a `tag` and `data` elements, but only actual `u64`s occupy a slot in `f64` `SegmentList`.
+That is, every value allocates a `tag` and `data` elements, but only actual `u64`s occupy a slot in `u64` `SegmentList`.
 
 So now we can write a `lookup` function which takes a value index and reconstructs a value from pieces:
 
@@ -259,9 +259,9 @@ fn lookup(self: Self, value: Value) ValueFull {
 Note that here `ValueFull` is non-owning type, it is a _reference_ into the actual data.
 Note as well that aggregates now store a slice of indexes, rather than a slice of pointers.
 
-Now lets deal with creating an interning values.
+Now let's deal with creating and interning values.
 We start by creating a `ValueFull` using data owned by us
-(eg, if we are creating an aggregate, we may use a stack-allocated array as a backing store for `[]Value` slice).
+(e.g. if we are creating an aggregate, we may use a stack-allocated array as a backing store for `[]Value` slice).
 Then we ask `ValueTable` to intern the data:
 
 ```zig
@@ -297,9 +297,9 @@ const ValueTable = struct {
 };
 ```
 
-Pay attention to `_count` fields --- we have `value_count` guarding the `tag` and `index`, and separate counts for specific kinds of values, as we don't want to allocate, eg an `u64` for _every_ value.
+Pay attention to `_count` fields --- we have `value_count` guarding the `tag` and `index`, and separate counts for specific kinds of values, as we don't want to allocate, e.g. an `u64` for _every_ value.
 
-Our hashmap is actually a set which stores `u32` integers, but uses `ValueFull` to do a lookup: when we consider interning a new `ValueFull`, we don't know it's index yet.
+Our hashmap is actually a set which stores `u32` integers, but uses `ValueFull` to do a lookup: when we consider interning a new `ValueFull`, we don't know its index yet.
 Luckily, `getOrPutAdapted` API provides the required flexibility.
 We can use it to compare a `Value` (index) and a `ValueFull` by hashing a `ValueFull` and doing component-wise comparisons in the case of a collision.
 
@@ -307,12 +307,12 @@ Note that, because of interning, we can also hash `ValueFull` efficiently!
 As any subvalues in `ValueFull` are guaranteed to be already interned, we can rely on shallow hash and hash only child value's indexes, rather than their data.
 
 This is a nice design for a single thread, but how do we make it thread safe?
-The straightforward solution would be to slap a mutex around logic in `intern`.
+The straightforward solution would be to slap a mutex around the logic in `intern`.
 
 This actually is not as bad as it seems, as we'd need a lock only in `intern`, and `lookup` would work without any synchronization whatsoever.
-Recall that obtaining an index of a value is proof that the value was properly published.
+Recall that obtaining an index of a value is a proof that the value was properly published.
 Still, we expect to intern a lot of values, and that mutex is all but guaranteed to become a point of contention.
-And some amount of contention is inevitable here --- if two threads try to intern two identical values, we _want_ them to clash, communicate, and end up with a single, shard value.
+And some amount of contention is inevitable here --- if two threads try to intern two identical values, we _want_ them to clash, communicate, and end up with a single, shared value.
 
 There's a rather universal recipe for dealing with contention --- you can shard the data.
 In our case, rather than using something like
@@ -329,7 +329,7 @@ mutex: [16]Mutex,
 value_set: [16]AutoHashMapUnmanaged(Value, void),
 ```
 
-That is, we create not one, but sixteen hashmaps, and use, eg, lower 4 bits of the hash to decide which mutex to lock.
+That is, we create not one, but sixteen hashmaps, and use, e.g., lower 4 bits of the hash to decide which mutex to lock.
 Depending on the structure of the hashmap, such locks could even be pushed as far as individual buckets.
 
 This doesn't solve all our contention problems --- now that several threads can simultaneously intern values (as long as they are hashed into different shards) we have to make all `count` variables atomic.
@@ -360,7 +360,7 @@ An attentive reader would notice a bonus here: in this setup, a thread allocates
 It is reasonable to assume that values allocated together would also be used together, so we potentially increase future spatial locality here.
 
 And that's all I have for today!
-Again, I haven't implemented that, so I have no idea how fast or slow it actually is.
+Again, I haven't implemented this, so I have no idea how fast or slow it actually is.
 But the end result looks rather beautiful, and builds upon many interesting ideas:
 
 * `SegmentList` allows to maintain index stability despite insertions.
@@ -374,14 +374,14 @@ But the end result looks rather beautiful, and builds upon many interesting idea
 
 * In a struct-of-arrays setup for enums, you can save space by requiring that an array for a specific variant is just as long as it needs to be.
 
-* One benefit of interning trees is that hash functions becomes a shallow operation.
+* One benefit of interning trees is that hash function becomes a shallow operation.
 
-* Optimal interners use hash maps in a fancy way, where the key is not what you actually store in the hash map.
+* Optimal interners use hashmaps in a fancy way, where the key is not what you actually store in the hashmap.
   I have two related posts about that,
   ["Fast and Simple Rust Interner"](https://matklad.github.io/2020/03/22/fast-simple-rust-interner.html) and
   ["Call Site Dependency Injection"](https://matklad.github.io/2020/12/28/csdi.html).
 
-* Sharding is an effective way to reduce contention if you are dealing with something like a shared hash map.
+* Sharding is an effective way to reduce contention if you are dealing with something like a shared hashmap.
 
 * For counters, one alternative to shading is batching up the increments.
 
