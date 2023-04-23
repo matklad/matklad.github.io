@@ -329,7 +329,7 @@ mutex: [16]Mutex,
 value_set: [16]AutoHashMapUnmanaged(Value, void),
 ```
 
-That is, we create not one, but sixteen hashmaps, and use, e.g., lower 4 bits of the hash to decide which mutex to lock.
+That is, we create not one, but sixteen hashmaps, and use, e.g., lower 4 bits of the hash to decide which mutex and hashmap to use.
 Depending on the structure of the hashmap, such locks could even be pushed as far as individual buckets.
 
 This doesn't solve all our contention problems --- now that several threads can simultaneously intern values (as long as they are hashed into different shards) we have to make all `count` variables atomic.
@@ -344,12 +344,12 @@ In addition to `ValueTable`, each thread now gets its own distinct `LocalTable`:
 
 ```zig
 const LocalTable = struct {
-    value_table: *ValueTable,
+    global: *ValueTable,
 
     // Invariant: if any `index % 1024 == 0`,
-    // it's time to visit `value_table` to
+    // it's time to visit `global` to
     // refill our budget via atomic fetchAndAdd.
-    tag_index: u32,
+    value_index: u32,
     u64_index: u32,
     aggregate_index: u32,
     bytes_index: u32,
@@ -358,6 +358,114 @@ const LocalTable = struct {
 
 An attentive reader would notice a bonus here: in this setup, a thread allocates a contiguous chunk of values.
 It is reasonable to assume that values allocated together would also be used together, so we potentially increase future spatial locality here.
+
+Putting everything together, the pseudo-code for interning would look like this:
+
+```zig
+fn intern(table: *LocalTable, value_full: ValueFull) Value {
+    const hash = shallow_hash(value_full);
+
+    // Find & lock the shard.
+    const shard = hash & 0xF;
+    let mutex = &table.global.mutex[shard];
+    let value_set = &table.global.value_set[shard]
+
+    mutex.lock();
+    defer mutex.unlock();
+
+    // Either find that this value has been interned already...
+    const gop = value_set.get_or_put(hash, value_full, ...);
+    if (gop.found_existing) return got.key_ptr.*;
+
+    // ... or proceed to allocate a new index for it
+
+    if (table.tag_index & 0xFF == 0) {
+        // Run out of indexes, refill our budget!
+        table.tag_index = @atomicRmw(
+            u32, &table.global.value_count,
+            .Add, 0xFF,
+            .Relaxed,
+        );
+    }
+
+    // Assign the index to the new value
+    // and put it into the hash map.
+    const value = table.tag_index;
+    table.tag_index += 1;
+    gop.key_ptr.* = value;
+
+    // Now initialize the value.
+    // Note that we still hold shard's mutex at this point.
+
+    switch (value_full) {
+        .aggregate => |fields| {
+            // Initialize the tag, common for all values.
+            table.global.tag.set(value, .aggregate);
+
+            // Allocate tag-specific data using
+            // the same atomic add trick.
+            if (table.aggregate_index & 0xFF == 0) {
+                table.aggregate_index = @atomicRmw(
+                    u32, &table.global.aggregate_count,
+                    .Add, 0xFF,
+                    .Relaxed,
+                );
+            }
+            const index = table.aggregate_index;
+            table.aggregate_index += 1;
+
+            // Make it possible to find tag-specific data
+            // from the value index.
+            table.global.index.set(value, index);
+
+            // `value_full` is borrowed, so we must
+            // create a copy that we own.
+            const fields_owned = allocator.dup(fields)
+                catch unreachable;
+
+            table.global.aggregate.set(index, fields_owned);
+        }
+    }
+
+    return value;
+}
+
+// Code for assigning an index of a SegmentList.
+// Shard's mutex guarantees exclusive access to the index.
+// Accesses to the echelon might race though.
+fn set(list: SegmentList(T), index: u32, value: T) {
+    const e = list.get_echelon(index);
+    const i = index - ((1 << e) - 1);
+
+    var echelon = @atomicLoad(?[*]T, &list.echelons[e], .Acquire);
+    if (echelon == null) {
+        // Race with other threads to allocate the echelon.
+        const echelon_new = allocator.alloc(T, 1 << e)
+            catch unreachable;
+
+        const modified = @cmpxchgStrong(
+            ?[*]T, &list.echelons[e],
+            null, echelon_new,
+            .Release, .Acquire,
+        );
+
+        if (modified) |echelon_modified| {
+            // Another thread won, free our useless allocation.
+            echelon = echelon_modified
+            allocator.free(echelon_new);
+        } else {
+            echelon = echelon_new;
+        }
+    }
+
+    echelon.?[i] = value;
+}
+```
+
+Note that it is important that we _don't_ release the mutex immediately after assigning the index for a value, but rather keep it locked all the way until we fully copied thee value into the `ValueTable`.
+If we release the lock earlier, a different thread which tries to intern the same value would get the correct index, but would risk accessing partially-initialized data.
+This can be optimized a bit by adding value-specific lock (or rather, a [`Once`](https://github.com/ziglang/zig/blob/b95cdf0aeb4d4d31c0b6a54302ef61baec8f6773/lib/std/once.zig)).
+So we use the shard lock to assign an index, then release the shard lock, and use value-specific lock to do the actual (potentially slow) initialization.
 
 And that's all I have for today!
 Again, I haven't implemented this, so I have no idea how fast or slow it actually is.
@@ -383,6 +491,6 @@ But the end result looks rather beautiful, and builds upon many interesting idea
 
 * Sharding is an effective way to reduce contention if you are dealing with something like a shared hashmap.
 
-* For counters, one alternative to shading is batching up the increments.
+* For counters, one alternative to sharding is batching up the increments.
 
 Discussion on [/r/Zig](https://old.reddit.com/r/Zig/).
