@@ -78,7 +78,7 @@ With at most 256 children per node, it shouldn't be _that_ bad.
 Additionally, we pre-allocate 256 nodes and use array indexing for the first transition.
 
 Links are organized in layers.
-The layer `n` stores a number of `[Link]` chunks of length `2^n^` (in a single contiguous array).
+The layer `n` stores a number of `[Link]` chunks of length [2^n^]{.code} (in a single contiguous array).
 Each chunk represents the links for a single node (with possibly some extra capacity).
 Node can find its chunk because it knows the number of links (which gives the number of layers) and the first link in the layer.
 A new link for the node is added to the current chunk if there's space.
