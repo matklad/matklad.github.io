@@ -26,7 +26,7 @@ const Value = union(enum) {
 
     // A declaration.
     // Declarations and types are also values in Zig.
-    decl: Decl,
+    decl: DeclIndex,
 
     // Just some bytes for a string.
     bytes: []u8,
@@ -36,8 +36,7 @@ const Value = union(enum) {
     aggregate: []Value,
 };
 
-// Index of a declaration.
-const Decl = u32;
+const DeclIndex = u32;
 ```
 
 Such values are individually heap-allocated and in general are held behind pointers.
@@ -62,7 +61,7 @@ const Payload = struct {
 
     pub const Decl = struct {
         base: Payload,
-        decl: Decl,
+        decl: DeclIndex,
     };
 }
 ```
