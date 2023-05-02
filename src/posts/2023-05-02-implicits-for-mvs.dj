@@ -1,0 +1,159 @@
+# Value Oriented Programming Needs Implicits?
+
+An amateur note on language design which explores two important questions:
+
+- How to do polymorphism?
+- How to do anything at all?
+
+Let's start with the second question.
+What is the basic stuff that everything else is made of?
+
+Not so long ago, the most popular answer to that question was "objects" --- blobs of mutable state with references to other blobs.
+This turned out to be problematic --- local mutation of an object might accidentally cause unwanted changes elsewhere.
+Defensive copying of collections at the API boundary was a common pattern.
+
+Another answer to the question of basic stuff  is "immutable values", as exemplified by functional programming.
+This fixes the ability to reason about programs locally at the cost of developer ergonomics and expressiveness.
+A lot of code is naturally formulated in terms of "let's mutate this little thing", and functionally threading the update through all the layers is tiresome.
+
+The C answer is that everything is made of "memory (*)".
+It is almost as if memory is an array of bytes.
+Almost, but not quite --- to write portable programs amenable to optimization, certain restrictions must be placed on the ways memory is accessed and manipulated, hence (*).
+These restrictions not being checked by the compiler (and not even visible in the source code) create a fertile ground for subtle bugs.
+
+Rust takes this basic C model and:
+
+- Makes the (*) explicit:
+
+    - pointers always carry the size of addressed memory, possibly at runtime (slices),
+    - pointers carry lifetime, accessing the data past the end of the lifetime is forbidden.
+
+- Adds aliasing information to the type system, such that it becomes possible to tell if there are _other_ pointers pointing at a particular piece of memory.
+
+Curiously, this approach allows rust to have an "immutable values" feel, without requiring the user to thread updates manually,
+["In Rust, Ordinary Vectors are Values"](http://smallcultfollowing.com/babysteps/blog/2018/02/01/in-rust-ordinary-vectors-are-values/).
+But the cognitive cost for this approach is pretty high, as the universe of values is now forked by different flavors of owning/referencing.
+
+Let's go back to the pure FP model.
+Can we just locally fix it?
+Let's take a look at an example:
+
+```
+let xs1 = get_items() in
+let xs2  = modify_items(xs1) in
+let xs3 = sort_items(xs2) in
+...
+```
+
+It is pretty clear that we can allow mutation of local variables via a simple rewrite, as that won't compromise local reasoning:
+
+```
+var xs = get_items()
+xs = modify_items(xs)
+xs = sort_items(xs)
+```
+
+Similarly, we can introduce a rewrite rule for the ubiquitous `x = f(x)` pattern, such that the code looks like this:
+
+```
+var xs = get_items()
+modify_items(xs)
+sort_items(xs)
+```
+
+Does this actually work?
+Yes, it does, as popularized by Swift and distilled in its pure form by [Val](https://www.val-lang.dev).
+
+Formalizing the rewriting reasoning, we introduce second-class references, which can _only_ appear in function arguments (`inout` parameters), but, eg, can't be stored as fields.
+With these restrictions, "borrow checking" becomes fairly simple --- at each function call it suffices to check that no two `inout` arguments overlap.
+
+Now, let's switch gears and explore the second question --- polymorphism.
+
+Starting again with OOP, you can use subtyping with it's familiar [`class Dog extends Triangle`,]{.display} but that is not very flexible.
+In particular, expressing something like "sorting a list of items" with pure subtyping is not too natural.
+What works better is parametric polymorphism, where you add type parameters to your data structures:
+
+```rust
+fn sort<T>(items: &mut Vec<T>)
+```
+
+Except that it doesn't quite work as, as we also need to specify how to sort the `T`s.
+One approach here would be to introduce some sort of type-of-types, to group types with similar traits into a class:
+
+```rust
+fn sort<T: Comparable>(items: &mut Vec<T>)
+```
+
+A somewhat simpler approach is to just explicitly pass in a comparison function:
+
+```rust
+fn sort<T>(
+    compare: fn(T, T) -> bool,
+    items: &mut Vec<T>,
+)
+```
+
+How does this relate to value oriented programming?
+It happens that, when programming with values, a very common pattern is to use indexes to express relationships.
+For example, to model parent-child relations (or arbitrary graphs), the following setup works:
+
+```rust
+type Tree = Vec<Node>;
+struct Node {
+    parent: usize,
+    children: Vec<usize>,
+}
+```
+
+Using direct references hits language limitations:
+
+```rust
+struct Node {
+    parent: Node, // Who owns that?
+    children: Vec<Node>,
+}
+```
+
+Another good use-case is interning, where you have something like this:
+
+```rust
+struct NameTable {
+    strings: Vec<String>,
+}
+
+struct Name(u32);
+```
+
+How do we sort a `Vec<Name>`?
+We can't use the type class approach here, as knowing the _type_ of `Name` isn't enough to sort names lexicographically, an instance of `NameTable` is also required to fetch the actual string data.
+The approach with just passing in comparison function works, as it can close over the correct `NameTable` in scope.
+
+The problem with "just pass a function" is that it gets tedious quickly.
+Rather than [`xs.print()`]{.display} you now need to say [`xs.print(Int::print)`.]{.display}
+Luckily, similarly to how the compiler infers the type parameter `T` by default, we can allow limited inference of value parameters, which should remove most of the boilerplate.
+So, something which looks like [`names.print()`]{.display} would desugar to [`Vec::print_vec(self.name_table.print, names)`.]{.display}
+
+This could also synergize well with compile-time evaluation.
+If (as is the common case), the value of the implicit function table is known at compile time, no table needs to be passed in at runtime (and we don't have to repeatedly evaluate the table itself).
+We can even compile-time partially evaluate things within the compilation unit, and use runtime parameters at the module boundaries, just like Swift does.
+
+And that's basically it!
+TL;DR: value oriented programming / mutable value semantics is an interesting "everything is X" approach to get the benefits of functional purity without giving up on mutable hash tables.
+This style of programming doesn't work with cyclic data structures (values are always trees), so indexes are often used to express auxiliary relations.
+This, however, gets in a way of type-based generic programming --- a `T` is no longer `Comparable`, only `T + Context` is.
+A potential fix for that is to base generic programming on explicit dictionary passing combined with implicit value parameter inference.
+
+Is there a language like this already?
+
+Links:
+
+- [Val](https://www.val-lang.dev)
+- [Modular implicits](https://arxiv.org/pdf/1512.01895.pdf)
+- [With clauses](https://rust-lang.github.io/async-fundamentals-initiative/evaluation/design/with_clauses.html)
+- [Implementing Swift generics](https://www.youtube.com/watch?v=ctS8FzqcRug)
+
+```=html
+<style>
+.display { display: block; margin: 1em 0; text-align: center }
+</style>
+```
