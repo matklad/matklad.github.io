@@ -140,7 +140,7 @@ One important flow where non-determinism would get in a way is refactoring.
 When you rename something, you should be 100% sure that you've found all usages.
 So, any refactor would have to be a blocking operation where we first wait for the current `working` to complete, then update `working` with the `pending` accumulated so far, and wait for _that_ to complete, to, finally, apply the refactor using only up-to-date `ready`.
 Luckily, refactoring is almost always a two-phase flow, reminiscent of a GET/POST flow for HTTP form ([more about that](https://rust-analyzer.github.io/blog/2020/09/28/how-to-make-a-light-bulb.html)).
-Any reactor starts with read-only analysis to inform the user about available options and to gather input.
+Any refactor starts with read-only analysis to inform the user about available options and to gather input.
 For "rename", you wait for the user to type the new name, for "change signature" the user needs to rearrange params.
 This brief interactive window should give enough headroom to flush all `pending` changes, masking the latency.
 
