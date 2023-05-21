@@ -495,7 +495,7 @@ fn file(p: &mut Parser) {
    Importantly, the entirety of the file is parsed; we break out of the loop only when the eof is reached.
 
 3) To not get stuck in this loop, it's crucial that every iteration consumes at least one token.
-   If the token is `fun`, we'll parse at least a part of a function.
+   If the token is `fn`, we'll parse at least a part of a function.
    Otherwise, we consume the token and wrap it into an error node.
 
 Lets parse functions now:
@@ -1096,8 +1096,8 @@ File
 
 What is a reasonable `RECOVERY` set in a general case?
 I don't know the answer to this question, but follow{.def} sets from formal grammar theory give a good intuition.
-We don't want _exactly_ the follow{.def} set: for `ParamList`, `{` is in follow{.def}, and we do want it to be a part of the recovery set, but `fun` is _not_ in follow{.def}, and yet it is important to recover on it.
-`fun` is included because it's in the follow{.def} for `Fun`, and `ParamList` is a child of `Fun`: we also want to recursively include ancestor follow{.def} sets into the recovery set.
+We don't want _exactly_ the follow{.def} set: for `ParamList`, `{` is in follow{.def}, and we do want it to be a part of the recovery set, but `fn` is _not_ in follow{.def}, and yet it is important to recover on it.
+`fn` is included because it's in the follow{.def} for `Fn`, and `ParamList` is a child of `Fn`: we also want to recursively include ancestor follow{.def} sets into the recovery set.
 
 For expressions and statements, we have the opposite problem --- `block` and `arg_list` loops eagerly consume erroneous tokens, but sometimes it would be wise to break out of the loop instead.
 
