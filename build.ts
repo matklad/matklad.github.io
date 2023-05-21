@@ -73,6 +73,7 @@ async function build({ update } = { update: false }) {
     "resume.pdf",
     "css/*",
     "assets/*",
+    "assets/resilient-parsing/*",
   ];
   for (const path of paths) {
     await update_path(path);
@@ -101,7 +102,9 @@ async function update_path(path: string) {
     const dir = path.replace("*", "");
     const futs = [];
     for await (const entry of Deno.readDir(`src/${dir}`)) {
-      futs.push(update_path(`${dir}/${entry.name}`));
+      if (entry.isFile) {
+        futs.push(update_path(`${dir}/${entry.name}`));
+      }
     }
     await Promise.all(futs);
   } else {

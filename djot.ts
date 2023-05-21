@@ -16,6 +16,7 @@ import {
   Span,
   Url,
   Visitor,
+  Str,
 } from "djot/ast.ts";
 
 export function parse(source: string): Doc {
@@ -197,6 +198,12 @@ ${pre}
         );
       }
       return r.renderAstNodeDefault(node);
+    },
+    str: (node: Str, r: djot.HTMLRenderer) => {
+      if (has_class(node, "def")) {
+        return `<dfn>${node.text}</dfn>`;
+      }
+      return r.renderAstNodeDefault(node)
     },
     url: (node: Url, r: djot.HTMLRenderer) => {
       add_class(node, "url");

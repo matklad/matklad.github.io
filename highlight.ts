@@ -13,6 +13,20 @@ hljs.registerLanguage("latex", latex);
 hljs.registerLanguage("nix", nix);
 hljs.registerLanguage("x86asm", x86asm);
 hljs.registerLanguage("Zig", zig);
+hljs.registerLanguage("ungrammar", (t) => ({
+  name: "ungrammar",
+  contains: [
+    {
+      className: "string",
+      begin: "\\'",
+      end: "\\'",
+    },
+    {
+      scope: "literal",
+      match:"[A-Z][_a-zA-Z0-9]*(?= =)"
+    }
+  ],
+}));
 
 export function highlight(
   source: string,

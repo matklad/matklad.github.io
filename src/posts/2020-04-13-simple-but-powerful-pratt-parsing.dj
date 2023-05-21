@@ -603,7 +603,7 @@ After we've parsed the prefix expression, we can see either a postfix or an infi
 But we bail on unrecognized operators, which is not going to work...
 So, let's make `postfix_binding_power` to return an option, for the case where the operator is not postfix:
 
-{highlight="19-27;50..56"}
+{highlight="19-27,50-56"}
 ```rust
 fn expr_bp(lexer: &mut Lexer, min_bp: u8) -> S {
     let mut lhs = match lexer.next() {
