@@ -176,7 +176,7 @@ And at runtime loader (also known as dynamic linker (its binary name is somethin
 Normally, the loader looks for libraries in well-known locations, like the aforementioned `/usr/lib` or `LD_LIBRARY_PATH`.
 So we need _something_ which would tell the loader that `libevdev` lives at `/nix/store/$HASH/lib`.
 
-That something is rpath (also known as RUNPATH) -- this is more or less `LD_LIBRARY_PATH`, just hard-coded into the executable.
+That something is rpath (also known as RUNPATH) --- this is more or less `LD_LIBRARY_PATH`, just hard-coded into the executable.
 We can use `readelf` to inspect program's rpath.
 
 When the binary is linked with the default linker, the result is as follows (lightly edited for clarity):

@@ -372,7 +372,7 @@ votes ≡
 
 In the above, I've also removed phases `1a` and `2a`, as byzantine acceptors are allowed to send arbitrary messages as well (we'll need explicit `1a`/`2a` for liveness, but we won't discuss that here).
 
-The most important conceptual addition is `Phase2ac` -- if an acceptor receives a new `2a` message for some ballot with a safe value, it sends out the confirmation provided that it hadn't done that already.
+The most important conceptual addition is `Phase2ac` --- if an acceptor receives a new `2a` message for some ballot with a safe value, it sends out the confirmation provided that it hadn't done that already.
 In `Phase2b` then we can vote for confirmed values: confirmation by a quorum guarantees both that the value is safe at this ballot, and that this is a single value that can be voted for in this ballot (two different values can'd be confirmed in the same ballot, because quorums have an honest acceptor in common).
 This _almost_ works, but there's still a problem.
 Can you spot it?

@@ -100,7 +100,7 @@ fn binary_search_singleton() {
 }
 ```
 
-Now, when the API of the `binary_search` function changes, we only need to adjust the single place -- `check` function:
+Now, when the API of the `binary_search` function changes, we only need to adjust the single place --- `check` function:
 
 {highlight="8"}
 ```rust
@@ -543,7 +543,7 @@ Not exactly.
 
 The problem with `L1 <- L2 <- L3 <- L4 <- Tests` is that working on `L1` becomes slower, especially in compiled languages.
 If you make a change to `L1`, then, before you get to the tests, you need to recompile the whole chain of reverse dependencies.
-My "favorite" example here is `rustc` -- when I worked on the lexer (`T1`), I spent a lot of time waiting for the rest of the compiler to be rebuild to check my small change.
+My "favorite" example here is `rustc` --- when I worked on the lexer (`T1`), I spent a lot of time waiting for the rest of the compiler to be rebuild to check my small change.
 
 The right setup here is to write integrated tests for each layer:
 

@@ -69,7 +69,7 @@ LOCKED.store(false, Ordering::Release);
 unpark_some_thread(&LOCKED);
 ```
 
-The main difference is `park_this_thread` -- a **blocking** system call.
+The main difference is `park_this_thread` --- a **blocking** system call.
 It instructs the OS to take current thread off the CPU until it is woken up by an `unpark_some_thread` call.
 The kernel maintains a *queue* of threads waiting for a mutex.
 The `park` call enqueues current thread onto this queue, while `unpark` dequeues some thread. The `park` system call returns when the thread is dequeued.
@@ -173,7 +173,7 @@ There's a `static` instance of `LazyUsize` which caches file descriptor for `/de
 
 <https://github.com/rust-random/getrandom/blob/v0.1.13/src/use_file.rs#L26>
 
-This descriptor is used when calling `getrandom` -- the only function that is exported by the crate.
+This descriptor is used when calling `getrandom` --- the only function that is exported by the crate.
 
 To trigger priority inversion, we will create `1 + N` threads, each of which will call `getrandom::getrandom`.
 We arrange it so that the first thread has a low priority, and the rest are high priority.

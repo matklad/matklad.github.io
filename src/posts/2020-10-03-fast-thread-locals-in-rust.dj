@@ -77,7 +77,7 @@ int main(void) {
 
 In this test, we declare an integer thread-local variable, and use it as an accumulator for the summation.
 
-We use non-trivial summation term: `(step * step) ^ step` -- this is to prevent LLVM from evaluating the sum at compile time.
+We use non-trivial summation term: `(step * step) ^ step` --- this is to prevent LLVM from evaluating the sum at compile time.
 If a term of a summation is a polynomial (like `1`, `step` or `step * step`), then the sum itself is a one degree higher polynomial, and LLVM can figure this out!
 We rely on wrapping overflow of _unsigned_ integers in C, and use `wrapping_mul` and `wrapping_add` in Rust.
 To make sure that both programs are equivalent, we also print the result.

@@ -6,7 +6,7 @@ It assumes a fair bit of familiarity with the language.
 ## Hard Mode Rust
 
 The back story here is a particular criticism of Rust and C++ from hard-core C programmers.
-This criticism is aimed at [RAII](https://en.cppreference.com/w/cpp/language/raii) -- the language-defining feature of C++, which was wholesale imported to Rust as well.
+This criticism is aimed at [RAII](https://en.cppreference.com/w/cpp/language/raii) --- the language-defining feature of C++, which was wholesale imported to Rust as well.
 RAII makes using various resources requiring cleanups (file descriptors, memory, locks) easy --- any place in the program can create a resource, and the cleanup code will be invoked automatically when needed.
 And herein lies the problem --- because allocating resources becomes easy, RAII encourages a sloppy attitude to resources, where they are allocated and destroyed all over the place.
 In particular, this leads to:
@@ -439,7 +439,7 @@ To make this fully kosher we need to handle alignment as well, but I cut that bi
 For allocating arrays, it's useful if all-zeros bitpattern is a valid default instance of type, as that allows to skip element-wise initialization.
 This condition isn't easily expressible in today's Rust though, so we require initializing every array member.
 
-The result of an allocation is `&'m T` -- this is how we spell `Box<T>` on hard mode.
+The result of an allocation is `&'m T` --- this is how we spell `Box<T>` on hard mode.
 
 ## Parsing
 
