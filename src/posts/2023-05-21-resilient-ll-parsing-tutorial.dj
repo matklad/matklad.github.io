@@ -348,8 +348,8 @@ impl Parser {
       panic!("parser is stuck")
     }
     self.fuel.set(self.fuel.get() - 1);
-    self.tokens.get(self.index + lookahead)
-      .map_or(TokenKind::default, |it| it.kind)
+    self.tokens.get(self.pos + lookahead)
+      .map_or(TokenKind::Eof, |it| it.kind)
   }
 
   fn at(&self, kind: TokenKind) -> bool { <3>
