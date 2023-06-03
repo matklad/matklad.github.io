@@ -79,7 +79,6 @@ export const base = (
 
   <link rel="stylesheet" href="/css/main.css">
   ${extra_css ? html`<link rel="stylesheet" href="/css/${extra_css}">` : ""}
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
 </head>
 
 <body>
@@ -99,15 +98,18 @@ export const base = (
   <footer class="site-footer">
     <p>
       <a href="https://github.com/matklad/matklad.github.io/edit/master${src}">
-        <i class="fa fa-edit"></i> fix typo
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        fix typo
       </a>
 
       <a href="/feed.xml">
-        <i class="fa fa-rss"></i> rss
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        rss
       </a>
 
       <a href="https://github.com/matklad">
-        <i class="fa fa-github"></i> matklad
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
       </a>
     </p>
   </footer>

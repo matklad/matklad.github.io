@@ -111,13 +111,13 @@ ${cite}
     },
     div: (node: Div, r: djot.HTMLRenderer): string => {
       let admon_icon = "";
-      if (has_class(node, "note")) admon_icon = "info-circle";
-      if (has_class(node, "quiz")) admon_icon = "question-circle";
-      if (has_class(node, "warn")) admon_icon = "exclamation-circle";
+      if (has_class(node, "note")) admon_icon = "info";
+      if (has_class(node, "quiz")) admon_icon = "question";
+      if (has_class(node, "warn")) admon_icon = "exclamation";
       if (admon_icon) {
         return `
 <aside${r.renderAttributes(node, { "class": "admn" })}>
-<i class="fa fa-${admon_icon}"></i>
+<svg class="icon"><use href="/assets/icons.svg#${admon_icon}"/></svg>
 <div>${r.renderChildren(node)}</div>
 </aside>`;
       }
@@ -194,7 +194,7 @@ ${pre}
       if (has_class(node, "menu")) {
         return r.renderAstNodeDefault(node).replaceAll(
           "&gt;",
-          '<i class="fa fa-angle-right"></i>',
+          "›"
         );
       }
       return r.renderAstNodeDefault(node);
