@@ -1,0 +1,126 @@
+# The Worst Zig Version Manager
+
+{cap="./getzig.ps1"}
+```
+#!/bin/sh
+echo `# <#`
+
+mkdir -p ./zig
+
+wget https://ziglang.org/download/0.10.1/zig-linux-x86_64-0.10.1.tar.xz -O ./zig/zig-linux-x86_64-0.10.1.tar.xz
+tar -xf ./zig/zig-linux-x86_64-0.10.1.tar.xz -C ./zig --strip-components=1
+rm ./zig/zig-linux-x86_64-0.10.1.tar.xz
+
+echo "Zig installed."
+./zig/zig version
+
+exit
+#> > $null
+
+Invoke-WebRequest -Uri "https://ziglang.org/download/0.10.1/zig-windows-x86_64-0.10.1.zip" -OutFile ".\zig-windows-x86_64-0.10.1.zip"
+Expand-Archive -Path ".\zig-windows-x86_64-0.10.1.zip" -DestinationPath ".\" -Force
+Remove-Item -Path " .\zig-windows-x86_64-0.10.1.zip"
+Rename-Item -Path ".\zig-windows-x86_64-0.10.1" -NewName ".\zig"
+
+Write-Host "Zig installed."
+./zig/zig.exe version
+```
+
+{.display}
+<https://github.com/matklad/hello-getzig>
+
+Longer version:
+
+One of the values of Zig which resonates with me deeply is a mindful approach to dependencies.
+Zig tries hard not to ask too much from the environment, such that, if you get `zig version` running, you can be reasonably sure that everything else works.
+That's one of the main motivations for adding an HTTP client to the Zig distribution recently.
+Building software today involves downloading various components from the Internet, and, if Zig wants for software built with Zig to be hermetic and self-sufficient, it needs to provide ability to download files from HTTP servers.
+
+There's one hurdle for self-sufficiency: how do you get Zig in the first place?
+One answer to this question is "from your distribution's package manager".
+This is not a very satisfying answer, at least until the language is both post 1.0 and semi-frozen in development.
+And even then, what if your distribution is Windows?
+How many distributions should be covered by "Installing Zig" section of your `CONTRIBUTING.md`?
+
+Another answer would be a version manager, a-la `rustup`, `nvm`, or `asdf`.
+These tools work well, but they are quite complex, and rely on various subtle properties of the environment, like `PATH`, shell activation scripts and busybox-style multipurpose executable.
+And, well, this also kicks the can down the road --- you can use `zvm` to get Zig, but how do you get `zvm`?
+
+I like how we do this in [TigerBeetle](https://github.com/tigerbeetledb/tigerbeetle/blob/56d14e82769deb6817809f866253220ae0f499d1/scripts/install_zig.sh).
+We don't use `zig` from `PATH`.
+Instead, we just put the correct version of Zig into `./zig` folder in the root of the repository, and run it like this:
+
+```console
+$ ./zig/zig build test
+```
+
+Suddenly, whole swaths of complexity go away.
+Quiz time: if you need to add a directory to `PATH`, which script should be edited so that both the graphical environment and the terminal are affected?
+
+Finally, another interesting case study is Gradle.
+Usually Gradle is a negative example, but they do have a good approach for installing Gradle itself.
+The standard pattern is to store two scripts, `gradlew.sh` and `gradlew.bat`, which bootstrap the right version of Gradle by downloading a jar file (java itself is not bootstrapped this way though).
+
+What all these approaches struggle to overcome is the problem of bootstrapping.
+Generally, if you need to automate anything, you can write a program to do that.
+But you need some pre-existing program runner!
+And there's just no good options out of the box --- bash and powershell are passable, but barely, and they are different.
+And "bash" and the set of coreutils also differs depending on the Unix in question.
+But there's just no good solution here --- if you want to bootstrap automatically, you must start with universally available tools.
+
+But is there perhaps some scripting language which is shared between Windows and Unix?
+[@cspotcode](https://github.com/cspotcode) suggests [a horrible workaround](https://cspotcode.com/posts/polyglot-powershell-and-bash-script).
+You can write a script which is _both_ a bash script and a powershell script.
+And it even isn't too too ugly!
+
+```
+!/bin/bash
+echo `# <#`
+
+echo "Bash!"
+
+exit
+#> > $null
+
+Write-Host "PowerShell!"
+```
+
+So, here's an idea for a hermetic Zig version management workflow.
+There's a canonical, short `getzig.ps1` PowerShell/sh script which is vendored verbatim by various projects.
+Running this script downloads an appropriate version of Zig, and puts it into `./zig/zig` inside the repository (`.gitignore` contains `/zig`).
+Building, testing, and other workflows use `./zig/zig` instead of relying on global system state (`$PATH`).
+
+A proof-of-concept `getzig.ps1` is at the start of this article.
+Note that I don't know bash, powershell, and how to download files from the Internet securely, so the above PoC was mostly written by Chat GPT.
+But it seems to work on my machine.
+I clone <https://github.com/matklad/hello-getzig> and run
+
+```console
+$ ./getzig.ps1
+$ ./zig/zig run ./hello.zig
+```
+
+on both NixOS and Windows 10, and it prints hello.
+
+If anyone wants to make an actual thing out of this idea, here's possible desiderata:
+
+- A single polyglot `getzig.sh.ps1` is cute, but using a couple of different scripts wouldn't be a big problem.
+
+- Size of the scripts _could_ be a problem, as they are supposed to be vendored into each repository.
+  I'd say 512 lines for combined `getzig.sh.ps1` would be a reasonable complexity limit.
+
+- The script must "just work" on all four major desktop operating systems: Linux, Mac, Windows, and WSL.
+
+- The script should be polymorphic in `curl` / `wget` and `bash` / `sh`.
+
+- It's ok if it doesn't work absolutely everywhere --- downloading/building Zig manually for an odd platform is also an acceptable workflow.
+
+- The script should auto-detect appropriate host platform and architecture.
+
+- Zig version should be specified in a separate `zig-version.txt` file.
+
+- After downloading the file, its integrity should be verified.
+  For this reason, `zig-version.txt` should include a hash alongside the version.
+  As downloads are different depending on the platform, I think we'll need some help from Zig upstream here.
+  In particular, each published Zig version should include a cross-platform manifest file, which lists hashes and urls of per-platform binaries.
+  The hash included into `zig-version.txt` should be the manifest's hash.
