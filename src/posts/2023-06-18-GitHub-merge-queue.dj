@@ -1,0 +1,31 @@
+# GitHub Merge Queue
+
+Short, unedited note on [GitHub merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue).
+
+TL;DR, <https://bors.tech> delivers a meaningfully better experience, although it suffers from being a third-party integration.
+
+Specific grievances:
+
+_Complexity_. This is a vague feeling, but merge queue feels like it is built by complexity merchants --- there are a lot of unclear settings and voluminous and byzantine docs.
+Good for allocating extra budget towards build engineering, bad for actual build engineering.
+
+_GUI-only configuration_. Bors is setup using bors.toml in the repository, merge queue is setup by clicking through web GUI.
+To share config with other maintainers, I resorted to a zoomed-out screenshot of the page.
+
+_Unclear set of checks_. The purpose of the merge queue is to enforce not rocket science rule of software engineering --- making sure that the code in the main branch satisfies certain quality invariants (all tests are passing).
+It is impossible to tell what merge queue actually enforces.
+Typically, when you enable merge queue, you subsequently find out that it actually merges anything, without any checks whatsoever.
+
+_Double latency_. One of the biggest benefits of a merge queue for a high velocity project is its _asynchrony_.
+After submitting a PR, you can do a review and schedule PR to be merged _without_ waiting for CI to finish.
+This is massive: it is 2X reduction to human attention required.
+Without queue, you need to look at a PR twice: once to do a review, and once to click merge after the green checkmark is in.
+With the queue, you only need a review, and the green checkmark comes in asynchronously.
+Except that with GitHub merge queue, you can't actually add a PR to the queue until you get a green checkmark.
+In effect, that's still 2X attention, and then a PR runs through the same CI checks twice (yes, you can have separate checks for merge queue and PR. No, this is not a good idea, this is complexity and busywork).
+
+_Lack of delegation_. With bors, you can use `bors delegate+` to delegate merging of a single, specific pull request to its author.
+This is helpful to drive contributor engagement, and to formalize "LGTM with the nits fixed" approval (which again reduces number of human round trips).
+
+You still should use GitHub merge queue, rather than bors-ng, as that's now a first-party feature.
+Still, its important to understand how things _should_ work, to be able to improve state of the art some other time.
