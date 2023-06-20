@@ -14,8 +14,8 @@ fn main() {
 }
 ```
 
-This program creates a vector of 32-bit integers (`std::vector<int32_t>`), takes a reference to the first element, `x`, pushs one more number onto the vector and then uses `x`.
-The program is wrong: extending the vector may invalidate references to element, and `*x` might dereference a danging pointer.
+This program creates a vector of 32-bit integers (`std::vector<int32_t>`), takes a reference to the first element, `x`, pushes one more number onto the vector and then uses `x`.
+The program is wrong: extending the vector may invalidate references to element, and `*x` might dereference a dangling pointer.
 
 The beauty of this program is that it doesn't compile:
 
@@ -74,7 +74,7 @@ The beauty of this program is that it relies on several bits of subtle reasoning
 2. Child threads only access `counter` through the mutex.
 3. Child threads will have terminated by the time we read `total` out of `counter` without mutex.
 
-If any of these constraints is broken, the compiler rejects the code.
+If any of these constraints are broken, the compiler rejects the code.
 There's no need for `std::shared_ptr` just to defensively make sure that the memory isn't freed under your feet.
 
 Rust allows doing dangerous, clever, and fast things without fear of introducing undefined behavior.
