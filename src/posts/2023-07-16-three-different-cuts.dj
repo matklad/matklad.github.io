@@ -1,0 +1,131 @@
+# Three Different Cuts
+
+In this post, we'll look at how Rust, Go, and Zig express the signature of function `cut` --- the power tool of string mainpulation.
+Cut takes a string and a pattern, and splits the string around the first occurrence of the pattern:
+[`cut("life", "if") = ("l", "e")`.]{.display}
+
+At a glance, it seems like a non-orthogonal jumbling together of searching and slicing.
+However, in practice a lot of ad-hoc string processing can be elegantly expressed via `cut`.
+
+A lot of things are `key=value` pairs, and cut fits perfectly there.
+What's more, many more complex sequencies, like
+[`--arg=key=value`,]{.display}
+can be viewed as nested pairs.
+You can cut around `=` once to get `--arg` and `key=value`, and then cut the second time to separate `key` from `value`.
+
+In Rust, this function looks like this:
+
+```rust
+fn split_once<'a, P>(
+  &'a self,
+  delimiter: P,
+) -> Option<(&'a str, &'a str)>
+where
+  P: Pattern<'a>,
+{
+}
+```
+
+Rust's `Option` is a good fit for the result type, it clearnly describes the behavior of the function when the pattern isn't found in the string at all.
+Lifetime `'a` expresses the relationship between the result and the input --- both pieces of result are substrings of `&'a self`, so, as long as they are used, the original string must be kept alive as well.
+Finally, the separator isn't another string, but a generic `P: Pattern`.
+This gives a somewhat crowded signature, but allows using strings, single characters, and even `fn(c: char) -> bool`{.display} functions as predicates.
+
+When using the function, there are is a multitude of ways to access the result:
+
+```rust
+// Propagate `None` upwards:
+let (prefix, suffix) = line.split_once("=")?;
+
+// Handle `None` in an ad-hoc way:
+let Some((prefix, suffix)) = line.split_once("=") else {
+    return
+};
+
+// Ignore `None`:
+if let Some((prefix, suffix)) = line.split_once("=") {
+    ...
+};
+
+// Handle `Some` and `None` in a symmetric way:
+let result = match line.split_once("=") {
+    Some((prefix, suffix)) => { ... }
+    None => { ... }
+};
+
+// Access only one component of the result:
+let suffix = line.split_once("=")?.1;
+
+// Use high-order functions to extract key with a default:
+let key = line.split_once("=")
+    .map(|(key, _value)| key)
+    .unwrap_or(line);
+```
+
+
+Here's a Go equivalent:
+
+```go
+func Cut(s, sep string) (before, after string, found bool) {
+    ...
+}
+```
+
+It has a better name!
+It's important that frequently used building-block functions have short, memorable names, and "cut" is just perfect for what the function does.
+Go doesn't have an `Option`, but it allows multiple return values, and any type in Go has a zero value, so a boolean flag can be used to signal `None`.
+Curiously if the `sep` is not found in `s`, `after` is set to `""`, but `before` is set to `s` (that is, the whole string).
+This is occasionally useful, and corresponds to the last Rust example.
+But it also isn't something immediately obvious from the signature, it's an extra detail to keep in mind.
+Which might be fine for a foundational function!
+Similarly to Rust, the resulting strings point to the same memory as `s`.
+There are no lifetimes, but a potential performance gotcha --- if one of the resulting strings is alive, then the entire `s` can't be garbage collected.
+
+There isn't much in way of using the function in Go:
+
+```go
+prefix, suffix, ok = strings.Cut(line, "=")
+if !ok {
+    ...
+}
+```
+
+Zig doesn't yet have an equivalent function in its standard library, but it probably will at some point, and the signature might look like this:
+
+```zig
+pub fn cut(
+    s: []const u8,
+    sep: []const u8
+) ?struct { prefix: []const u8, suffix: []const u8 } {
+    ...
+}
+```
+
+Similarly to Rust, Zig can express optional values.
+Unlike Rust, the option is a built-in, rather than a user-defined type (Zig _can_ express a generic user-defined option, but chooses not to).
+All types in Zig are strictly prefix, so leading `?` concisely signals optionality.
+Zig doesn't have first-class tuple types, but uses very concise and flexible type declaration syntax, so we can return a named tuple.
+Curiously, this anonymous struct is still a nominal, rather than a structural, type!
+Similarly to Rust, `prefix` and `suffix` borrow the same memory that `s` does.
+Unlike Rust, this isn't expressed in the signature --- while in this case it is obvious that the lifetime would be bound to `s`, rather than `sep`, there are no type system guardrails here.
+
+Because `?` is a built-in type, we need some amount of special syntax to handle the result, but it curiously feels less special-case and more versatile than the Rust version.
+
+```zig
+// Propagate `null` upwards / handle `null` in an ad-hoc way.
+const cut = mem.cut(line, "=") orelse return null;
+const cut = mem.cut(line, "=") orelse return;
+
+// Ignore or handle `null`.
+if (mem.cut(line, "=")) |cut| {
+
+} else {
+
+}
+
+// Go semantics: extract key with a default
+let key = if (mem.cut(line, "=")) |cut| cut.first else line;
+```
+
+Moral of the story?
+Work with the gain of the language --- expressing the same concept in different languages usually requires slightly different vocabulary.
