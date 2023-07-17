@@ -29,7 +29,7 @@ where
 Rust's `Option` is a good fit for the result type, it clearnly describes the behavior of the function when the pattern isn't found in the string at all.
 Lifetime `'a` expresses the relationship between the result and the input --- both pieces of result are substrings of `&'a self`, so, as long as they are used, the original string must be kept alive as well.
 Finally, the separator isn't another string, but a generic `P: Pattern`.
-This gives a somewhat crowded signature, but allows using strings, single characters, and even `fn(c: char) -> bool`{.display} functions as predicates.
+This gives a somewhat crowded signature, but allows using strings, single characters, and even `fn(c: char) -> bool`{.display} functions as patterns.
 
 When using the function, there are is a multitude of ways to access the result:
 
