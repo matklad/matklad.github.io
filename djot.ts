@@ -68,7 +68,7 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
         let cap = extract_cap(node);
         if (cap) {
           cap =
-            `<figcaption class="title">${node.attributes.cap}</figcaption>\n`;
+            `<figcaption class="title">${cap}</figcaption>\n`;
         } else {
           cap = "";
         }
