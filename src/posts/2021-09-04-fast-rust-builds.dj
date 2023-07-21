@@ -206,7 +206,7 @@ There's also connection between parallelism and incrementality.
 In the wide graph, changing `B` doesn't entail recompiling `C` and `D`.
 
 The first advice you get when complaining about compile times in Rust is: "split the code into crates".
-It is not _that_ easy --- if you ended up with a graph like the first one, you are not wining much.
+It is not _that_ easy --- if you ended up with a graph like the first one, you are not winning much.
 It is important to architect the applications to look like the second picture --- a common vocabulary crate, a number of independent features, and a leaf crate to tie everything together.
 The most important property of a crate is which crates it doesn't (transitively) depend on.
 
@@ -264,7 +264,7 @@ serde = { version = "1", features = [ "derive" ] }
 The problem here is that `json-api` enables the `derive` feature of `serde`, and that means that `small-string` and all of its reverse-dependencies now need to wait for `syn` to compile!
 Similarly, if a crate depends on a subset of `syn`'s features, but something else in the crate graph enables all features, the original crate gets them as a bonus as well!
 
-It's not necessary the end of the world, but it shows that dependency graph can get tricky with the presence of features.
+It's not necessarily the end of the world, but it shows that dependency graph can get tricky with the presence of features.
 Luckily, `cargo -Z timings` makes it easy to notice that something strange is happening, even if it might not be always obvious what _exactly_ went wrong.
 
 There's also a much more direct way for procedural macros to slow down compilation --- if the macro generates a lot of code, the result would take some time to compile.
