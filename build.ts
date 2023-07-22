@@ -4,7 +4,7 @@ import * as templates from "./templates.ts";
 import * as djot from "./djot.ts";
 import { HtmlString } from "./templates.ts";
 
-export async function watch() {
+export async function watch(params: { filter: string }) {
   let signal = async.deferred();
   (async () => {
     let build_id = 0;
@@ -12,7 +12,12 @@ export async function watch() {
       signal = async.deferred();
       console.log(`rebuild #${build_id}`);
       build_id += 1;
-      await build({ update: true, spell: false, profile: false });
+      await build({
+        update: true,
+        spell: false,
+        profile: false,
+        filter: params.filter,
+      });
     }
   })();
 

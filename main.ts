@@ -37,7 +37,7 @@ for (; i < Deno.args.length; i++) {
 if (subcommand === "build") {
   await build(params);
 } else if (subcommand === "watch") {
-  await watch();
+  await watch(params);
 } else {
   fatal("subcommand required");
 }
