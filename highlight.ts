@@ -13,7 +13,7 @@ hljs.registerLanguage("latex", latex);
 hljs.registerLanguage("nix", nix);
 hljs.registerLanguage("x86asm", x86asm);
 hljs.registerLanguage("Zig", zig);
-hljs.registerLanguage("ungrammar", (t) => ({
+hljs.registerLanguage("ungrammar", () => ({
   name: "ungrammar",
   contains: [
     {

@@ -4,7 +4,7 @@ import * as templates from "./templates.ts";
 import * as djot from "./djot.ts";
 import { HtmlString } from "./templates.ts";
 
-async function watch() {
+export async function watch() {
   let signal = async.deferred();
   (async () => {
     let build_id = 0;
@@ -12,7 +12,7 @@ async function watch() {
       signal = async.deferred();
       console.log(`rebuild #${build_id}`);
       build_id += 1;
-      await build({ update: true });
+      await build({ update: true, spell: false, profile: false });
     }
   })();
 
@@ -40,13 +40,15 @@ class Ctx {
   ) {}
 }
 
-async function build({ update } = { update: false }) {
+export async function build(params: {
+  update: boolean;
+  spell: boolean;
+  profile: boolean;
+}) {
   const t = performance.now();
 
-  const spellcheck = Deno.args.includes("--spell");
-
   const ctx = new Ctx();
-  if (update) {
+  if (params.update) {
     await Deno.mkdir("./out/res", { recursive: true });
   } else {
     await fs.emptyDir("./out/res");
@@ -56,7 +58,10 @@ async function build({ update } = { update: false }) {
   await update_file("out/res/index.html", templates.post_list(posts).value);
   await update_file("out/res/feed.xml", templates.feed(posts).value);
   for (const post of posts) {
-    await update_file(`out/res${post.path}`, templates.post(post, spellcheck).value);
+    await update_file(
+      `out/res${post.path}`,
+      templates.post(post, params.spell).value,
+    );
   }
 
   const pages = ["about", "resume", "links"];
@@ -81,7 +86,7 @@ async function build({ update } = { update: false }) {
 
   ctx.total_ms = performance.now() - t;
   console.log(`${ctx.total_ms}ms`);
-  if (Deno.args.includes("-p")) console.log(JSON.stringify(ctx));
+  if (params.profile) console.log(JSON.stringify(ctx));
 }
 
 async function update_file(path: string, content: Uint8Array | string) {
@@ -169,8 +174,3 @@ async function collect_posts(ctx: Ctx): Promise<Post[]> {
   ctx.collect_ms = performance.now() - start;
   return posts;
 }
-
-export const commands: { [key: string]: () => Promise<void> } = {
-  watch,
-  build,
-};
