@@ -1,21 +1,48 @@
 import { build, watch } from "./build.ts";
 
-const sub = Deno.args[0];
-if (sub === "build") {
-  const params = {
-    update: false,
-    spell: false,
-    profile: true,
-  };
-  for (const arg of Deno.args.slice(1)) {
-    if (arg == "--update") params.update = true;
-    if (arg == "--spell") params.spell = true;
-    if (arg == "--profile") params.profile = true;
+const params = {
+  update: false,
+  spell: false,
+  profile: false,
+  filter: "",
+};
+
+const subcommand = Deno.args[0];
+
+var i = 1;
+for (; i < Deno.args.length; i++) {
+  switch (Deno.args[i]) {
+    case "--update": {
+      params.update = true;
+      break;
+    }
+    case "--spell": {
+      params.spell = true;
+      break;
+    }
+    case "--profile": {
+      params.profile = true;
+      break;
+    }
+    case "--filter": {
+      params.filter = Deno.args[i + 1] ?? "";
+      i++;
+      break;
+    }
+    default:
+      fatal(`unexpected argument: ${Deno.args[i]}`);
   }
+}
+
+if (subcommand === "build") {
   await build(params);
-} else if (sub === "watch") {
+} else if (subcommand === "watch") {
   await watch();
 } else {
-  console.error("subcommand required");
-  Deno.exit(-1);
+  fatal("subcommand required");
+}
+
+function fatal(message: string) {
+  console.error(message);
+  Deno.exit(1);
 }

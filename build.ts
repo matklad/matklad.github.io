@@ -44,6 +44,7 @@ export async function build(params: {
   update: boolean;
   spell: boolean;
   profile: boolean;
+  filter: string;
 }) {
   const t = performance.now();
 
@@ -54,7 +55,7 @@ export async function build(params: {
     await fs.emptyDir("./out/res");
   }
 
-  const posts = await collect_posts(ctx);
+  const posts = await collect_posts(ctx, params.filter);
   await update_file("out/res/index.html", templates.post_list(posts).value);
   await update_file("out/res/feed.xml", templates.feed(posts).value);
   for (const post of posts) {
@@ -133,11 +134,14 @@ export type Post = {
   summary: string;
 };
 
-async function collect_posts(ctx: Ctx): Promise<Post[]> {
+async function collect_posts(ctx: Ctx, filter: string): Promise<Post[]> {
   const start = performance.now();
   const posts = [];
   for await (const entry of fs.walk("./src/posts", { includeDirs: false })) {
     if (!entry.name.endsWith(".dj")) continue;
+    if (filter !== "") {
+      if (entry.name.indexOf(filter) === -1) continue;
+    }
     const [, y, m, d, slug] = entry.name.match(
       /^(\d\d\d\d)-(\d\d)-(\d\d)-(.*)\.dj$/,
     )!;
