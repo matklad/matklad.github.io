@@ -1,0 +1,97 @@
+# On Modularity of Lexical Analysis
+
+I was going to write a long post about designing an IDE-friendly language. I wrote an intro and
+figured that it would make a better, shorter post on its own. Enjoy!
+
+The big idea of language server construction is that language servers are not magic --- capabilities
+and performance of tooling are constrained by the syntax and semantics of the underlying language.
+If a language is not designed with toolability in mind, some capabilities (e.g, fully automated
+refactors) are impossible to implement correctly. What's more, an IDE-friendly language turns out to
+be a fast-to-compile language with easy-to-compose libraries!
+
+More abstractly, there's this cluster of unrelated at a first sight, but intimately intertwined and
+mutually supportive properties:
+
+- parallel, separate compilation,
+- incremental compilation,
+- resilience to errors.
+
+Separate compilation measures how fast we can compile codebase from scratch if we have unlimited
+number of CPU cores. For a language server, it solves the cold start problem --- time to
+code-completion when the user opens the project for the first time or switches branches. Incremental
+compilation is the steady state of the language server --- user types code and expects to see
+immediate effects throughout the project. Resilience to errors is important for two different
+sub-reasons. First, when the user edits the code it is by definition incomplete and erroneous, but a
+language server still must analyze the surrounding context correctly. But the killer feature of
+resilience is that, if you are absolutely immune to some errors, you don't even have to look at the
+code. If a language server can ignore errors in function bodies, it doesn't have to look at the
+bodies of functions from dependencies.
+
+All three properties, parallelism, incrementality, and resilience, boil down to modularity ---
+partitioning the code into disjoint components with well-defined interfaces, such that each
+particular component is aware only about the interfaces of other components.
+
+## Minimized Example: Lexical Analysis
+
+Lets do a short drill and observe how the three properties interact at a small scale. Let's
+minimize the problem of separate compilation to just ... lexical analysis. How can we build a
+language that is easier to tokenize for an language server?
+
+An unclosed quote is a nasty little problem! Practically, it is rare enough that it doesn't really
+matter how you handle it, but qualitatively it is illuminating. In a language like Rust, where
+strings can span multiple lines, inserting a `"` in the middle of a file changes the lexical structure
+of the following text completely (`/*`, start of a block comment, has the same effect). When tokens
+change, so does the syntax tree and the set of symbols defined by the file. A tiny edit, just one
+symbol, unhinges semantic structure of the entire compilation unit.
+
+Zig solves this problem. In Zig, no token can span several lines. That is, it would be correct to
+first split Zig source file by `\n`, and then tokenize each line separately. This is achieved by
+solving underlying problems requiring multi-line tokens better. Specifically:
+
+- there's a single syntax for comments, `//`,
+- double-quoted strings can't contain a `\n`,
+- but there's a really nice syntax for multiline strings:
+
+  ```zig
+  const greeting =
+      \\This is
+      \\a multiline string
+      \\   <- with a leading whitespace here.
+      \\
+  ```
+
+Do you see modules here? Disjoint-partitioning into interface-connected components? From the
+perspective of lexical analysis, each _line_ is a module. And a line always has a trivial, empty
+interface --- different lines are completely independent. As a result:
+
+_First_, we can do lexical analysis in parallel. If you have N CPU cores, you can split file into N
+equal chunks, then in parallel locally adjust chunk boundaries such that they fall on newlines, and
+then tokenize each chunk separately.
+
+_Second_, we have quick incremental tokenization --- given a source edit, you determine the set of
+lines affected, and re-tokenize only those. The work is proportional to the size of the edit plus at
+most two boundary lines.
+
+_Third_, any lexical error in a line is isolated just to this line. There's no unclosed quote
+problem, mistakes are contained.
+
+I am by no means saying that line-by-line lexing is a requirement for an IDE-friendly language
+(though it would be nice)! Rather, I want you to marvel how the same underlying structure of the
+problem can be exploited for quarantining errors, reacting to changes quickly, and parallelizing the
+processing.
+
+The three properties are just three different faces of modularity in the end!
+
+----
+
+I do want to write that "IDE-friendly language" post at some point, but, as a hedge (after all, I
+still owe you "[Why LSP](https://matklad.github.io/2022/04/25/why-lsp.html) Sucks?" one...), here are two comments where I explored the idea somewhat:
+[1](https://todo.sr.ht/~icefox/garnet/52#event-242650),
+[2](https://lobste.rs/s/u7y4lk/modules_matter_most_for_masses#c_i6a8n9).
+
+I also recommend these posts, which explore the same underlying phenomenon from the software
+architecture perspective:
+
+- <https://www.tedinski.com/2018/01/30/the-one-ring-problem-abstraction-and-power.html>
+- <https://www.tedinski.com/2018/02/06/system-boundaries.html>
+- <https://www.pathsensitive.com/2023/03/modules-matter-most-for-masses.html>
