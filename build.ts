@@ -70,7 +70,7 @@ export async function build(params: {
     );
   }
 
-  const pages = ["about", "resume", "links"];
+  const pages = ["about", "resume", "links", "style"];
   for (const page of pages) {
     const text = await Deno.readTextFile(`src/${page}.dj`);
     const ast = await djot.parse(text);

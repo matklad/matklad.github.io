@@ -1,0 +1,149 @@
+# Programming Style
+
+Congratulations, you've found a secret level!
+
+This is a super work-in-progress page which collects various rules-of-thumb I use.
+The primary goal so far is to collect the rules for myself, that's why I don't link to this page from anywhere yet.
+
+## General
+
+### Standard Names
+
+In general, prefer full names except for extremely common cases (`ctx` for
+context), or equal-length pairs (`next/prev`).
+
+: `ctx`
+
+  "context" of an operation. Typically holds something mutable. Read-only
+  context is named `params`.
+
+: `params`
+
+  A bag of named arguments. Unlike `config`, might hold not only pod types.
+
+: `config`
+
+  Generally user-specified POD parameters.
+
+: `sink`
+
+  "output" of an internal iterator, typically `sink: &mut FnMut(T)` or `sink: &mut Vec<T>`.
+
+: `lhs`, `rhs`
+
+   operands of a binary operator.
+
+: `fuel`
+
+   Recursion and infinite loop guards
+
+: `result`
+
+   A "return" variable.
+
+
+### Name Pairs
+
+- add/sub, mul/div
+- s/e
+- next/prev
+- source/target
+- src/dst
+
+
+
+### Explicit Data Tables
+
+Remove code duplication by extracting commonalities into tabular data
+
+```
+// GOOD
+const cases = ["foo", "bar", "baz"];
+for case in cases {
+    if x == case {
+
+    }
+}
+
+// BAD
+if x == "foo" {
+
+} else if x == "bar" {
+
+} else if x == "baz" {
+
+}
+```
+
+## Rust
+
+### No Self Types
+
+Write types out explicitly, avoid `Self` alias if possible:
+
+```rust
+// Good
+pub struct Diagnostic {
+    pub code: DiagnosticCode,
+    pub text: String,
+}
+
+impl Diagnostic {
+    pub fn new(code: DiagnosticCode, text: String) -> Diagnostic {
+        Diagnostic { code, text }
+    }
+}
+
+// Bad
+impl Diagnostic {
+    pub fn new(code: DiagnosticCode, text: String) -> Self {
+        Self { code, text }
+    }
+}
+```
+
+*Rationale:* reducing cognitive load, optimizing for the reader.
+Resolving `Self` is a small mental effort, it can be avoided.
+
+### Prefer new Over default
+
+Use `new` over `default` to construct instances.
+
+*Rationale:* new is too ingrained.
+
+### Blank Line Between Declarations
+
+Leave blank line between top-level declarations:
+
+```rust
+// Good
+impl Foo {
+    pub fn foo() {
+    }
+
+    pub fn bar() {
+    }
+}
+
+// Bad
+impl Foo {
+    pub fn foo() {
+    }
+    pub fn bar() {
+    }
+}
+```
+
+*Rationale:* consistency.
+Omitting blank line leads to somewhat terser code, but is very hard to do consistently.
+
+### Derive Order
+
+Use the following order of derives:
+
+```rust
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+```
+
+*Rationale:* consistency.
+Debug comes last because it is the most often added item.o
