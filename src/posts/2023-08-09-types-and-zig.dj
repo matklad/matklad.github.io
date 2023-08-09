@@ -153,7 +153,7 @@ repercussions for all of:
 I always assumed that Zig with its crazy `comptime` requires autopsy.
 But that's not actually the case! Zig doesn't have `decltype(auto)`, signatures are always explicit!
 
-Let's look at, eg, `std.mem.bytesAsSlice`:
+Let's look at, e.g., `std.mem.bytesAsSlice`:
 
 ```zig
 fn bytesAsSlice(
@@ -177,7 +177,7 @@ fn sneaky() -> impl Sized {
 ```
 
 Although it feels like you are stating the interface, it's not really the case. Auto traits like
-`Send` and `Sync` leak, and that can be detected by downstream code and lead to, eg, different
+`Send` and `Sync` leak, and that can be detected by downstream code and lead to, e.g., different
 methods being called via `Deref`-based specialization depending on `: Send` being implemented:
 
 ```rust
@@ -228,7 +228,7 @@ pub fn main() void {
 }
 ```
 
-Here, to check `main`, we actually do to dissect `f`'s body, we can't treat the error union
+Here, to check `main`, we actually do need to dissect `f`'s body, we can't treat the error union
 abstractly. I am wondering if this really is the single exception though. Are there any other cases
 where function's signature is not enough to check the callers? I am also wondering if we can perhaps
 forbid comptime reflecting on inferred error unions? If we do, this'll make it much easier to
