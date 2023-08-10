@@ -7,10 +7,13 @@ The primary goal so far is to collect the rules for myself, that's why I don't l
 
 ## General
 
-### Standard Names
+### Naming
 
-In general, prefer full names except for extremely common cases (`ctx` for
-context), or equal-length pairs (`next/prev`).
+Prefer full names except for extremely common cases (`ctx` for context), or equal-length pairs
+(`next/prev`). Use consistent names. Naming variables after types (`let thing: Thing`) is a way
+to achieve global consistency with little coordination.
+
+ Build  a vocabulary of standard names and re-use it:
 
 : `ctx`
 
@@ -42,15 +45,14 @@ context), or equal-length pairs (`next/prev`).
    A "return" variable.
 
 
-### Name Pairs
+Equisized pairs;
 
 - add/sub, mul/div
+- lhs/rhs
 - s/e
 - next/prev
 - source/target
 - src/dst
-
-
 
 ### Explicit Data Tables
 
@@ -74,6 +76,14 @@ if x == "foo" {
 
 }
 ```
+
+### Bulk IO
+
+Avoid opening file descriptors in favor of bulk operations. To write data to a file, you need to
+follow a lifecycle: open file descriptor, issue write syscalls, close file descriptor. Lifecycle
+handling requires complicated type-system machinery and is bettre avoided. Usually, standard library
+provides something like `std::fs::read_to_string` which encapsulates lifecycle management.
+
 
 ## Rust
 
