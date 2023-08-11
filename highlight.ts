@@ -57,14 +57,14 @@ export function highlight(
     },
   );
   const lines = highlighted.split("\n").map((it, idx) => {
-    const cls = spec.includes(idx + 1) ? ' class="hl-line"' : "";
+    const cls = spec.includes(idx + 1) ? ' hl-line' : '';
     const calls = (callouts.get(idx) ?? [])
       .map((it) => `<i class="callout" data-value="${it}"></i>`)
       .join(" ");
-    return `<code${cls}>${it}${calls}</code>`;
+    return `<span class="line${cls}">${it}${calls}</span>`;
   })
     .join("\n");
-  return html`\n<pre>${new HtmlString(lines)}</pre>\n`;
+  return html`\n<pre><code>${new HtmlString(lines)}</code></pre>\n`;
 }
 
 function add_spans(source: string, language?: string): HtmlString {
