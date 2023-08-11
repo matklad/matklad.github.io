@@ -214,26 +214,26 @@ pretty, take a second look at `bytesAsSlice`). But its not perfect, a genuine le
 inferred error types (`!T` syntax). A bad example would look like this:
 
 ```zig
-fn f() !void { ...  }
+fn f() !void {
+   // Mystery!
+}
 
-pub fn main() void {
-  var x = f();
-  const ErrorUnion = @typeInfo(@TypeOf(x)).ErrorUnion;
-  const ErrorSet = @typeInfo(ErrorUnion.error_set).ErrorSet;
-  comptime if (ErrorSet) |error_set| {
-    for (error_set) |err| {
-      @compileLog(err);
-    }
+pub fn main() !void {
+  f() catch |err| {
+    comptime assert(
+      @typeInfo(@TypeOf(err)).ErrorSet.?.len == 1,
+    );
   };
 }
 ```
 
 Here, to check `main`, we actually do need to dissect `f`'s body, we can't treat the error union
-abstractly. I am wondering if this really is the single exception though. Are there any other cases
-where function's signature is not enough to check the callers? I am also wondering if we can perhaps
-forbid comptime reflecting on inferred error unions? If we do, this'll make it much easier to
-incrementally compile Zig, as only function signatures would have to be evaluated sequentially by
-`Sema`, while all bodies could be map-reduced...
+abstractly. When the compiler analyzes `main`, it needs to stop to process `f` signature (which is
+very fast, as it is very short) and then `f`’s body (this part could be quite slow, there might be a
+lot of code behind that `Mystery`! It's interesting to ponder alternative semantics, where, during
+type checking, inferred types are treated abstractly, and error exhastiveness is a separate late
+pass in the compiler. That way, complier only needs `f`'s signature to check `main`. And that means
+that bodies of `main` and `f` could be checked in parallel.
 
 That's all for today! The type system surprising I've found so far are:
 
