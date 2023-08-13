@@ -1,0 +1,286 @@
+# Role Of Algorithms
+
+This is lobste.rs comment as an article, so expect even more abysmal editing than usual.
+
+Let me expand on something I mentioned in the
+<https://matklad.github.io/2023/08/06/fantastic-learning-resources.html>{.display}
+post:
+
+"Algorithms" are a useful skill not because you use it at work every day, but because they train you
+to be better at particular aspects of software engineering.
+
+Specifically:
+
+_First_, algorithms drill the skill of bug-free coding. Algorithms are hard and frustrating! Subtle
+off-by-one might not matter for simple tests, but breaks corner cases. But if you practice
+algorithms, you get better at this particular skill of writing correct small programs, and I think
+this probably generalizes.
+
+To give an array of analogies:
+
+* People do cardio or strength exercises not because they need to lift heavy weights in real life.
+  Quite the opposite --- there's _too little_ physical exertion in our usual lives, so we need extra
+  exercises for our bodies to gain generalized health (which _is_ helpful in day-to-day life).
+
+* You don't practice complex skill by mere repetition. You first break it down into atomic trainable
+  sub skills, and drill each sub skill separately in unrealistic condition. Writing correct
+  algorithmy code is a sub skill of software engineering.
+
+* When you optimize system, you don't just repeatedly run end-to-end test until things go fast. You
+  first identify the problematic area, then write a targeted micro benchmark to isolate this
+  particular effect, and then you optimize that using much shorter event loop.
+
+I still remember two specific lessons I learned when I started doing algorithms many years ago:
+
+: Debugging complex code is hard, _first_ simplify, _then_ debug
+
+  Originally, when I was getting a failed test, I sort of tried to add more code to my program to
+  make it pass. At some point I realized that this is going nowhere, and then I changed my workflow
+  to first try to _remove_ as much code as I can, and only then investigate the problematic test
+  case (which with time morphed into a skill of not writing more code then necessary in the first
+  place).
+
+: Single source of truth is good
+
+  A lot of my early bugs was due to me duplicating the same piece of information in two places and
+  then getting them out of sync. Internalizing that as a single source of truth fixed the issues.
+
+Meta note: if you already know this, my lessons are useless. If you don't yet know them, they are
+_still_ useless and most likely will bounce off you. This is tacit knowledge --- it's very hard to
+convey it verbally, it is much more efficient to learn these things yourself by doing.
+
+Somewhat related, I noticed a surprised correlation between programming skills in the small, and
+programming skills in the large. You can solve a problem in five lines of code, or, if you try hard,
+in ten lines of code. If you consistently come up with concise solutions in the small, chances are
+large scale design will be simple as well.
+
+I don't know how true is that, as I never tried to look at a proper study, but it looks very
+plausible from what I've seen. _If_ this is true, the next interesting question is: "if you train
+programming-in-the-small skills, do they transfer to programming in the large?". Again, I don't
+know, but I'd take this Pascal's wager.
+
+_Second_, algorithms teach about properties and invariants. Some lucky people get those skills from
+a hard math background, but algorithms are a much more accessible way to learn them, as everything
+is very visual, immediately testable, and has very short and clear feedback loop.
+
+And properties and invariants is what underlines most big and successful systems. Like 90% of the
+code is just fluff and glue, and if you have the skill to see the 10% that is architecturally
+salient properties, you could comprehend the system much faster.
+
+_Third_, algorithms occasionally _are_ useful at the job! Just last week on our design walk&talk we
+were brainstorming one particular problem, and I was like
+
+> Wait, so the problem here is that our solution is O(1) amortized, but really that means O(N)
+occasionally and that creates problem. I wonder if we could shift amortized work to when we do the
+real work, sort of how there are helper threads in concurrent programming. Ohh, this actually sounds
+like range query problem! Yeah, I think that cryptic trick that is called "дерево отрезков" in
+Russian and doesn't have a meme name in English ("monoid tree" is a good, but unknown, name) could
+help here. Yup, that actually does solve amortization issue, this will be O(log N) non-amortized.
+
+We probably won't go with that solution as that's too complex algorithmically for what ultimately is
+a corner case, _but_ it's important that we understand problem space in detail before we pick a
+solution.
+
+Note also how algorithms _vocabulary_ helps me to think about the problem. In math (including
+algorithms), there's just like a handful of ideas which are applied again and again under different
+guises. You need some amount of insight of course, but, for most simple problems, what you actually
+need is just an ability to recognize the structure you've seen somewhere already.
+
+_Fourth_, connecting to the previous ones, the ideas really do form interconnected web which, on a
+deep level, underpins a whole lot of stuff. So, if you do have non-zero amount of pure curiosity
+when it comes to learning programming, algorithms cut pretty deep to the foundation. Let me repeat
+the list from the last post, but with explicit connections to other things:
+
+: linear search
+
+  assoc lists in most old functional languages work that way
+
+: binary search
+
+  It is literally everywhere. Also, binary search got a cute name, but actually it isn't the
+  primitive operation. The primitive operation is `partition_point`, a predicate version of binary
+  search. This is what you should add to your language's stdlib as a primitive, and base everything
+  else in terms of it. Also, it is one of the few cases where we know lower bound of complexity. If
+  an algorithm does k binary comparisons, it can give at most 2^k^ distinct answers. So, to find
+  insertion point among n items, you need at least k questions such that 2^k^ > n.
+
+: quadratic sorting
+
+  We use it at work! Some collections are statically bound by a small constant, and quadratically
+  sorting them just needs less machine code. We are also a bit paranoid that production sort
+  algorithms are very complex and _might_ have subtle bugs, esp in newer languages.
+
+: merge sort
+
+  This is how you sort things on disk. This is also how LSM-trees, the most practically important
+  data structure you haven't learned about in school, works! And k-way merge also is occasionally
+  useful (this is from work from three weeks ago).
+
+: heap sort
+
+  Well, this one is only actually useful for the heap, _but_ I think maybe the kernel uses it when
+  it needs to sort something in place, without extra memory, and in guaranteed O(log N)?
+
+: binary heap
+
+  Binary heaps are everywhere! Notably, simple timers are a binary heap of things in the order of
+  expiration. This is also a part of Dijkstra and k-way-merge.
+
+: growable array
+
+  That's the mostly widely used collection of them all! Did you know that grow factor 2 has a
+  problem that the size after `n` reallocations is larger then the sum total of all previous sizes,
+  so the allocator can't re-use the space? Anecdotally, growth factors less than two are preferable
+  for this reason.
+
+: doubly-linked list
+
+  At the heart of rust-analyzer is a [two-dimensional doubly-linked
+  list](https://github.com/rust-analyzer/rowan/blob/87909d03dfe78d07ae932151e105dfde7ae87536/src/sll.rs).
+
+: binary search tree
+
+  Again, rust-analyzer green tree are binary search trees using offset as an implicit key.
+  Monoid trees are also binary search trees.
+
+: AVL tree
+
+  Ok, this one I actually don't know a direct application of! _But_ I remember two
+  programming-in-the-small lessons AVL could have taught me, but didn't. I struggled a lot
+  implementing all of "small left rotation", "small right rotation", "big left rotation", "big right
+  rotation". Some years later, I've learned that you don't do
+
+  ```
+  left: Tree,
+  right: Tree,
+  ```
+
+  as that forces code duplication. Rather, you do `children: [Tree; 2]`{.display} and then you could
+  use `child_index` and `child_index ^ 1` to abstract over left-right.
+
+  And then some years later still I read in wikipedia that big rotations are actually a composition
+  of two small rotations.
+
+  Actually, I've lied that I don't know connections here. You use the same rotations for the splay
+  tree.
+
+: Red Black Tree
+
+  red-black tree is a 2-3 tree is a B-tree. Also, you probably use jemalloc, and it has a red-black
+  tree [implemented as a C
+  macro](https://github.com/aerospike/jemalloc/blob/05108b5010a511226fb7586543f4162dd2d31d2b/include/jemalloc/internal/rb.h#L338).
+  Left-leaning red-black tree are an interesting variation, which is claimed to be simpler, but is
+  also claimed to not actually be simpler, because it is not symmetric and neuters the `children`
+  trick.
+
+: B-tree
+
+  If you use Rust, you probably use B-tree. Also, if you use a database, it stores data either in
+  LSM or in a B-tree. Both of these are because B-trees play nice with memory hierarchy.
+
+: Splay Tree
+
+  Worth knowing just to have a laugh at <https://www.link.cs.cmu.edu/splay/tree5.jpg>.
+
+: HashTable
+
+  Literally everywhere, both chaining and open-addressing versions are widely used.
+
+: Depth First Search
+
+  This is something I have to code, explicitly or implicitly, fairly often. Every time where you
+  have a DAG, when things depend on other things, you'd have a DFS somewhere. In rust-analyzer,
+  there are at least a couple --- one in borrow checker for something (have no idea what that does,
+  just grepped for `fn dfs`) and one in crate graph to detect cycles.
+
+: Breadth First Search
+
+  Ditto, any kind of exploration problem is usually solved with bfs. Eg, rust-analyzer uses `dfs`
+  for directory traversal.
+
+  Which is better, `bfs` or `dfs`? Why not both?! Take a look at bdfs from rust-analyzer:
+
+  <https://github.com/rust-lang/rust-analyzer/blob/2fbe69d117ff8e3ffb9b21c4a564f835158eb67b/crates/hir-expand/src/ast_id_map.rs#L195-L222>
+
+: Topological Sort
+
+  Again, comes up every time you deal with things which depend on each other. rust-analyzer has
+  `crates_in_topological_order`
+
+: Strongly Connected Components
+
+  This is needed every time things depend on each other, but you also allow cyclic dependencies. I
+  don't think I've needed this one in real life. But, given that SCC is how you solve 2-SAT in
+  polynomial time, seems important to know to understand the 3 in 3-SAT
+
+: Minimal Spanning Tree
+
+  Ok, really drawing a blank here! Connects to sorting, disjoint set union (which is needed for
+  unification in type-checkers), and binary heap. Seems practically important algorithm though! Ah,
+  MST also gives an approximation for planar traveling salseman I think, another border between hard
+  & easy problems.
+
+: Dijkstra
+
+  Dijkstra is what I think about when I imagine a Platonic [algorithm]{.def}, though
+  I don't think I've used it in practice? Connects to heap.
+
+  Do you know why we use `i`, `j`, `k` for loop indices? Because `D ijk stra`!
+
+: Floyd-Warshall
+
+  This one is cool! Everybody knows why any regular expression can be complied to an equivalent
+  finite state machine. Few people know the reverse, why each automaton has an equivalent reges
+  (many people know this fact, but few understand why). Well, because Floyd-Warshall! To convert an
+  automaton to regex use the same algorithm you use to find pairwise distances in a graph.
+
+  Also, this is a final boss of dynamic programming. If you understand why this algorithm works, you
+  understand dynamic programming. Despite being tricky to understand, it's very easy to implement! I
+  randomly stumbled into Floyd-Warshall, when I tried to implement a different, wrong approach, and
+  made a bug which turned my broken algo into a correct Floyd-Warshall.
+
+: Bellman-Ford
+
+  Again, not much practical applicaions here, but the theory is well connected. All shortest path
+  algorithms are actually fixed-point iterations! But with Bellman-Ford and its explicit edge
+  relaxation operator that's most obvious. Next time you open static analysis textbook and learn
+  about fixed point iteration, map that onto the problem of finding shortest paths!
+
+: Quadratic Substring Search
+
+  This is what you language standard library does
+
+: Rabin-Karp
+
+  An excellent application of hashes. The same idea, [`hash(composite) =
+  compbine(hash(component)*)`,]{.display} is used in rust-analyzer to [intern syntax
+  trees](https://github.com/rust-analyzer/rowan/blob/87909d03dfe78d07ae932151e105dfde7ae87536/src/green/node_cache.rs#L86-L97).
+
+: Boyer-Moore
+
+  This is beautiful and practical algorithm which probably handles the bulk of real-world searches
+  (that is, it's probably the hottest bit of `ripgrep` as used by an average person). Delightfully,
+  this algorithm is faster than theoretically possible --- it doesn't even look at every byte of
+  input data!
+
+: Knuth-Morris-Pratt
+
+  Another "this is how you do string search in the real world" algorithm. It also is the platonic
+  ideal of a finite state machine, and almost everything is an FSM. It also is Aho-Corasick.
+
+: Aho-Corasick
+
+  This is the same as Knuth-Morris-Pratt, but also teaches you about tries. Again, super-useful for
+  string searches. As it is an FSM, and a regex is an FSM, and there's a general construct for
+  building a product of two FSMs, you can use it to implement fuzzy search. "Workspace symbol"
+  feature in rust-analyzer works like this. Here's [a part
+  of](https://github.com/BurntSushi/fst/pull/64) implementation.
+
+: Edit Distance
+
+  Everywhere in Bioinformatics (not the actual edit distance, but this problem shape). The first
+  post on this blog is about this problem:
+
+  <https://matklad.github.io/2017/03/12/min-of-three.html>
+
+  It's not about algorithms though, its about CPU-level parallelism.
