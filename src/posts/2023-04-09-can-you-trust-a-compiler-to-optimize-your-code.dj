@@ -131,7 +131,7 @@ So, a compiler really doesn't see all that well --- it can only really reason ab
 Compilers are myopic.
 This can be fixed by giving more context to the compiler, which is the task of two core optimizations.
 
-_The first_ core optimization is [inlining]{.def}.
+_The first_ core optimization is [inlining]{.dfn}.
 It substitutes callee's body for a specific call.
 The benefit here is not that we eliminate function call overhead, that's relatively minor.
 The big thing is that locals of both the caller and the callee are now in the same frame, and a compiler can optimize them together.
@@ -155,7 +155,7 @@ After inlining it into the `sum`, compiler can see that it is dead code and elim
 If you look at various standard optimizations, they often look like getting rid of dumb things, which no one would actually write in the first place, so its not clear immediately if it is worth it to implement such optimizations.
 But the thing is, after inlining a lot of dumb things appear, because functions tend to handle the general case, and, at a specific call-site, there are usually enough constraints to dismiss many edge cases.
 
-_The second_ core optimization is [scalar replacement of aggregates]{.def}.
+_The second_ core optimization is [scalar replacement of aggregates]{.dfn}.
 It is a generalization of the "let's use `load` to avoid reasoning about memory and reason about a local instead" idea we've already seen.
 
 If you have a function like

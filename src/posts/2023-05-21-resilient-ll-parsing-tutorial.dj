@@ -1095,9 +1095,9 @@ File
 ```
 
 What is a reasonable `RECOVERY` set in a general case?
-I don't know the answer to this question, but follow{.def} sets from formal grammar theory give a good intuition.
-We don't want _exactly_ the follow{.def} set: for `ParamList`, `{` is in follow{.def}, and we do want it to be a part of the recovery set, but `fn` is _not_ in follow{.def}, and yet it is important to recover on it.
-`fn` is included because it's in the follow{.def} for `Fn`, and `ParamList` is a child of `Fn`: we also want to recursively include ancestor follow{.def} sets into the recovery set.
+I don't know the answer to this question, but follow{.dfn} sets from formal grammar theory give a good intuition.
+We don't want _exactly_ the follow{.dfn} set: for `ParamList`, `{` is in follow{.dfn}, and we do want it to be a part of the recovery set, but `fn` is _not_ in follow{.dfn}, and yet it is important to recover on it.
+`fn` is included because it's in the follow{.dfn} for `Fn`, and `ParamList` is a child of `Fn`: we also want to recursively include ancestor follow{.dfn} sets into the recovery set.
 
 For expressions and statements, we have the opposite problem --- `block` and `arg_list` loops eagerly consume erroneous tokens, but sometimes it would be wise to break out of the loop instead.
 
@@ -1142,7 +1142,7 @@ File
 ```
 
 Recall that the root cause here is that we require `expr` to consume at least one token, because it's not immediately obvious which tokens can start an expression.
-It's not immediately obvious, but easy to compute --- that's exactly first{.def} set from formal grammars.
+It's not immediately obvious, but easy to compute --- that's exactly first{.dfn} set from formal grammars.
 
 Using it, we get:
 
@@ -1332,7 +1332,7 @@ Summarizing:
   - skipping over an unexpected token,
   - breaking out of the nested loop and delegating recovery to the parent loop.
 
-- first{.def}, follow{.def} and recovery sets help making a specific decision.
+- first{.dfn}, follow{.dfn} and recovery sets help making a specific decision.
 
 - In any case, if a loop tries to parse an item, item parsing _must_ consume at least one token (if only to report an error).
 

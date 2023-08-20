@@ -180,7 +180,7 @@ ${pre}
         const children = r.renderChildren(node);
         return `<code>${children}</code>`;
       }
-      if (has_class(node, "def")) {
+      if (has_class(node, "dfn")) {
         const children = r.renderChildren(node);
         return `<dfn>${children}</dfn>`;
       }
@@ -200,7 +200,7 @@ ${pre}
       return r.renderAstNodeDefault(node);
     },
     str: (node: Str, r: djot.HTMLRenderer) => {
-      if (has_class(node, "def")) {
+      if (has_class(node, "dfn")) {
         return `<dfn>${node.text}</dfn>`;
       }
       return r.renderAstNodeDefault(node)

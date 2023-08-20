@@ -37,16 +37,16 @@ Big-O notation is a standard instrument for describing performance of algorithms
 Both 2N + 1000 and 100N are O(N), linear.
 
 In this post we will be even _less_ precise.
-We will talk about [polynomial time]{.def} --- an algorithm is polynomial if it is O(N^k^) for some k.
+We will talk about [polynomial time]{.dfn} --- an algorithm is polynomial if it is O(N^k^) for some k.
 For example, N^100^ is polynomial, while 2^N^ is not.
 
-We will also be thinking about Turing machines ([TM]{.def}s) as our implementation device.
+We will also be thinking about Turing machines ([TM]{.dfn}s) as our implementation device.
 Programming algorithms directly on Turing machines is cumbersome, but TMs have two advantages for our use case:
 
 - it's natural to define runtime of TM
 - it's easy to simulate a TM as a part of some larger algorithm (an interpreter for a TM is a small program)
 
-Finally, we will only think about problems with binary answers ([decision problem]{.def}).
+Finally, we will only think about problems with binary answers ([decision problem]{.dfn}).
 "Is there a solution to this formula?" rather than "what is the solution to this formula?".
 "Is there a path in the graph of length at least N?" rather than "what is the longest path in this graph?".
 
@@ -57,11 +57,11 @@ This intuition doesn't exactly work for yes/no problems we are considering.
 To fix this, we will also provide a "hint" for the checker.
 For example, if the problem is "is there a path of length N in a given graph?" the hint will be a path.
 
-A decision problem is [NP]{.def}, if there's an algorithm that can verify a "yes" answer in polynomial time, given a suitable hint.
+A decision problem is [NP]{.dfn}, if there's an algorithm that can verify a "yes" answer in polynomial time, given a suitable hint.
 
 That is, for every input where the answer is "yes" (and only for those inputs) there should be a hint that makes our verifying algorithm answer "yes".
 
-Boolean satisfiability, or [SAT]{.def} is a decision problem where an input is a boolean formula like
+Boolean satisfiability, or [SAT]{.dfn} is a decision problem where an input is a boolean formula like
 
 ```
 (A and B and !C) or
