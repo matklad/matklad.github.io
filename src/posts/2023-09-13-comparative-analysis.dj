@@ -1,0 +1,82 @@
+# Comparative Analysis
+
+Most languages provide 6 comparison operators:
+
+```
+<
+<=
+>
+>=
+=
+!=
+```
+
+That's too damn many of them! Some time ago I've noticed that my code involving comparisons is often
+hard to understand, and hides bugs. I've figured some rules of thumb to reduce complexity, which I
+want to share.
+
+The core idea is to canonicalize things. Both `x < y` and `y > x` mean the same, and, if you use
+them with roughly equal frequency, you need to spend extra mental capacity to fold the two versions
+into the single "x tiny, y HUGE" concept in your head.
+
+The [number line](https://en.wikipedia.org/wiki/Number_line) is a great intuition and visualization
+for comparisons. If you order things from small to big,
+[`A B C D`,]{.display}
+you get intuitive concept of ordering without using comparison operators. You also plug into your
+existing intuition that the sort function arranges arrays in the ascending order.
+
+So, as a first order rule-of-thumb:
+[*Strongly prefer `<` and `<=` over `>` and `>=`*]{.display}
+And, when using comparisons, use number line intuition.
+
+Some snippets:
+
+Checking if a point is inside the interval:
+
+```zig
+lo <= x and x <= hi
+```
+
+Checking if a point is outside of the interval:
+
+```zig
+x < lo or hi < x
+```
+
+Segment `a` is inside segment `b`:
+
+```zig
+b.start <= a.start and a.end <= b.start
+```
+
+Segments `a` and `b` are disjoint (either `a` is to the left of `b` or `a` is to the right of `b`):
+
+```zig
+a.end < b.start or b.end < a.start
+```
+
+A particular common case for ordered comparisons is checking that an index is in bounds for an
+array. Here, the rule about number line works together with another important rule: [*State
+invariants positively*]{.display}
+
+The indexing invariant is spelled as [`index < xs.len()`,]{.display}
+
+and you should prefer to see it exactly that way in the source code. Concretely,
+
+```zig
+if (index >= xs.len) {
+
+}
+```
+
+is hard to get right, because is spells the converse of the invariant, and involves an extra mental
+negation (this is subtle --- although there isn't a literal negation operator, you absolutely do
+think about this as a negation of the invariant). If possible, the code should be reshaped to
+
+```zig
+if (index < xs.len) {
+
+} else {
+
+}
+```
