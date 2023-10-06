@@ -1,0 +1,262 @@
+# What is an Invariant?
+
+I extolled the benefits of programming with invariants in a couple of recent posts.
+Naturally, I didn't explain what I think when I write "invariant". This post fixes that.
+
+There are at least three different concepts I label with "invariant":
+
+- a general "math" mode of thinking, where you distinguish between fuzzy, imprecise thoughts and
+  precise statements with logical meaning.
+- a specific technique for writing correct code when programming in the small.
+- when programming in the large, compact, viral, descriptive properties of the systems.
+
+I wouldn't discuss the first point here --- I don't know how to describe this better than "that
+thing that you do when you solve non-trivial math puzzler". The bulk of the post describes the
+second bullet point, for which I think I have a perfect litmus test to explain exactly what I am
+thinking here. I also touch a bit on the last point in the end.
+
+So let's start with a [litmus test program](https://research.swtch.com/hwmm) to show invariants in
+the small in action:
+
+::: block
+Write a binary search variation which computes insertion point --- the smallest index such that, if
+the new element is inserted at this index, the array remains sorted:
+
+```rust
+fn insertion_point(xs: &[i32], x: i32) -> usize
+```
+:::
+
+
+You might want to write one yourself before proceeding. Here's an [exhaustive
+test](https://matklad.github.io/2021/11/07/generate-all-the-things.html) for this functionality,
+using [exhaustigen crate](https://crates.io/crates/exhaustigen):
+
+```rust
+fn main() {
+  let N = 5;
+  let M = 5;
+
+  let mut g = exhaustigen::Gen::new();
+  while !g.done() {
+    // Generate an arbitrary sorted array of length at most M.
+    let mut xs =
+      (0..g.gen(N)).map(|_| g.gen(M) as i32).collect::<Vec<_>>();
+    xs.sort();
+
+    let x = g.gen(M) as i32;
+
+    let i = insertion_point(&xs, x);
+    if i > 0        { assert!(xs[i - 1] < x) }
+    if i < xs.len() { assert!(x <= xs[i]) }
+  }
+}
+```
+
+Here's how I would naively write this function. First, I start with defining the boundaries for the
+binary search:
+
+```rust
+fn insertion_point(xs: &[i32], x: i32) -> usize {
+    let mut lo = 0;
+    let mut hi = xs.len();
+    ...
+}
+```
+
+Then, repeatedly cut the interval in half until it vanishes
+
+```rust
+    while hi > lo {
+        let mid = lo + (hi - lo) / 2;
+        ...
+    }
+```
+
+and recur into the left or the right half accordingly:
+
+```rust
+        if x < xs[mid] {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+```
+
+Altogether:
+
+```rust
+fn insertion_point(xs: &[i32], x: i32) -> usize {
+  let mut lo = 0;
+  let mut hi = xs.len();
+
+  while lo < hi {
+    let mid = lo + (hi - lo) / 2;
+    if x < xs[mid] {
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+
+  lo
+}
+```
+
+I love this code! It has so many details right!
+
+- The `insertion_point` interface compactly compresses usually messy result of a binary search to
+  just one index.
+- `xs / x` pair of names for the sequence and its element crisply describes abstract algorithm on
+  sequencies.
+- Similarly, `lo / hi` name pair is symmetric, expressing the relation between the two indexes.
+- Half-open intervals are used for indexing.
+- There are no special casing anywhere, the natural `lo < hi` condition handles empty slice.
+- We even dodge Java's binary search bug by computing midpoint without overflow.
+
+There's only one problem with this code --- it doesn't work. Just blindly following rules-of-thumb
+gives you working code surprisingly often, but this particular algorithm is an exception.
+
+The question is, how do we fix this overwise great code? And here's where thinking invariants helps.
+Before I internalized invariants, my approach would be to find a failing example, and to fumble with
+some plus or minus ones here and there and other special casing to make it work. That is, find a
+concrete problem, solve it. This works, but is slow, and doesn't allow discovering the problem
+before running the code.
+
+The alternative is to actually make an effort and spell out, explicitly, what the code is supposed
+to do. In this case, we want `lo` and `hi` to bound the result. That is,
+`lo <= insertion_point <= hi`{.display}
+should hold on every iteration. It clearly holds before we enter the loop. On each iteration, we
+would like to shorten this interval, cutting away the part that definitely does not contain
+insertion point.
+
+Elaborating the invariant, all elements to the left of `lo` should be less than the target.
+Conversely, all elements to the right of `hi` should be at least as large as the target.
+
+```rust
+for i in 0..lo: xs[i] < x
+for i in hi..:  x <= xs[i]
+```
+
+Let's now take a second look at the branching condition:
+
+```rust
+x < xs[mid]
+```
+
+It matches neither invariant prong exactly: `x` is on the left, but inequality is strict. We can
+rearrange the code to follow the invariant more closely:
+
+```rust
+if xs[mid] < x {
+    lo = mid + 1;
+} else {
+    hi = mid;
+}
+```
+
+* we flip the condition and if-branches, so that `xs[mid] < x` matches `xs[i] < x` from the
+  invariant for `lo`
+* to make the invariant tight, we add `mid + 1` (if `xs[mid]` is less than `x`, we know that the
+  insertion point is at least `mid + 1`)
+
+The code now works. So what went wrong with the original version with `x < xs[mid]`? In the else
+case, when `x >= xs[mid]` we set `lo = mid`, but that's wrong! It might be the case that `x ==
+xs[mid]` and `x == xs[mid - 1]`, which would break the invariant for `lo`.
+
+The point isn't in this _particular_ invariant or this particular algorithm. It's the general
+pattern that  it's easy to write the code which implements the right algorithm, and sort-of works,
+but is wrong in details. To get the details right for the right reason, you need to understand
+_precisely_ what the result should be, and formulating this as a (loop or recursion) invariant
+helps.
+
+---
+
+Perhaps its time to answer the title question: invariant is some property which holds at all times
+during dynamic evolution of the system. In the above example, the evolution is the program
+progressing through subsequent loop iterations. The invariant, the condition binding `lo` and `hi`,
+holds on every iteration. Invariants are powerful, because they are a _compressed_ descriptions of
+the system, they collapse away the time dimension, which is a huge simplification. Reasoning about
+each particular path the program could take is hard, because there are so many different paths.
+Reasoning about invariants is easy, because they capture properties shared by _all_ execution paths.
+
+The same idea applies when programming in the large. In the small, we looked at how state the of a
+running program evolves over time. In the large, we will look at how the source code of the program
+itself evolves, as it is being refactored and extended to support new features. Here are some
+systems invariants from the systems I've worked with:
+
+*Cargo:*
+
+File system paths entered by users are preserved exactly. If the user types
+[`cargo frob ../some/dir`,]{.display}
+Cargo doesn't attempt to resolve `../some/dir` to an absolute path and passes the path
+to the underlying OS as is. The reason for that is that file systems are very finicky. Although it
+might look as if two paths are equivalent, there are bound to be cases where they are not. If the
+user typed a particular form of a path, they believe that it'll work, and any changes can mess
+things up easily.
+
+This is a relatively compact invariant --- basically, code is just forbidden from calling
+`fs::canonicalize`.
+
+*rust-analyzer:*
+
+Syntax trees are identity-less value types. That is, if you take an object representing an `if`
+expression, that object doesn't have any knowledge of where in the larger program the `if`
+expression is. The thinking about this invariant was that it simplifies refactors --- while in the
+static program its natural to talk about "`if` on the line X in file Y", when you start modifying
+code, identity becomes much more fluid.
+
+This is an invariant with far reaching consequences --- that means that literally everything in
+rust-analyzer needs to track identities of things explicitly. You don't just pass around syntax
+nodes, you pass nodes with extra breadcrumbs describing their origin. I think this might have been a
+mistake --- while it does make refactoring APIs more principled, refactoring is not the common case!
+Most of the work of a language server consists of read-only analysis of existing code, and the
+actual refactor is just a cherry on top. So perhaps it's better to try to bind identity mode tightly
+into the core data structure, and just use fake identities for temporary trees that arise during
+refactors.
+
+A more successful invariant from rust-analyzer is that the IDE has a full, frozen view of a snapshot
+of the world. There's no API for inferring the types, rather, the API looks as if all the types are
+computed at all times. Similarly, there's no explicit API for changing the code or talking about
+different historical versions of the code --- the IDE sees a single "current" snapshot with all
+derived data computed. Underneath, there's a smart system to secretly compute the information on
+demand and re-use previous results, but this is all hidden from the API.
+
+This is a great, simple mental model, and it provides for a nice boundary between the compiler
+proper and IDE fluff like refactors and code completion. Long term, I'd love to see several
+implementations of the "compiler parts".
+
+*TigerBeetle:*
+
+A _lot_ of thoughtful invariants here! To touch only a few:
+
+TigerBeetle doesn't allocate memory after startup. This simple invariant affects every bit of code
+--- whatever you do, you must manage with existing, pre-allocated data structures. You can't just
+`memcpy` stuff around, there's no ambient available space to `memcpy` to! As a consequence (and,
+historically, as a motivation for the design)
+[everything](https://github.com/tigerbeetle/tigerbeetle/blob/cfb46eff4e001bb6b33f5e48924a2de44db20e8f/src/constants.zig#L417-L418)
+has a specific numeric limit.
+
+Another fun one is that transaction logic can't read from disk. Every object which could be touched
+by a transaction needs to be explicitly prefetched into memory before transaction begins. Because
+disk IO happens separately from the execution, it is possible to parallelize IO for a whole batch of
+transactions. The actual transaction execution is then a very tight serial CPU loop without any
+locks.
+
+Speaking of disk IO, in TigerBeetle "reading from disk" can't fail. The central API for reading
+takes a data block address, a checksum, and invokes the callback with data with a matching checksum.
+Everything built on top doesn't need to worry about error handling. The way this works internally is
+that reads that fail on a local disk are repaired through other replicas in the cluster. It's just
+that the repair happens transparently to the caller. If the block of data of interest isn't found on
+the set of reachable replicas, the cluster correctly gets stuck until it is found.
+
+---
+
+Summing up: invariants are helpful for describing systems that evolve over time. There's a
+combinatorial explosion of trajectories that a system _could_ take. Invariants compactly describe
+properties shared by an infinite amount of trajectories.
+
+In the small, formulating invariants about program state helps to wire correct code.
+
+In the large, formulating invariants about the code itself helps to go from a small, simple system
+that works to a large system which is used in production.
