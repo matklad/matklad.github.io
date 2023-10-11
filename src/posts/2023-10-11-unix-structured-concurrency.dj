@@ -1,0 +1,93 @@
+# UNIX Structured Concurrency
+
+A short note on a particular structured concurrency pattern for UNIX systems programming.
+
+## The pattern
+
+::: block
+If you have a parent process and a child process, and want to ensure that, when the parent
+stops, the child is stopped as well, consider using "stdin is closed" as an exit condition in the child.
+:::
+
+That is, in the child process (which you control), do a blocking read on `stdin`, and exit promptly
+if the read returned zero bytes.
+
+Example of the pattern from one of the side hacks:
+
+
+```rust
+fn main() -> anyhow::Result<()> {
+  let args = Args::parse()?;
+
+  let token = CancellationToken::new();
+  let _guard = token.clone().drop_guard();
+  let _watchdog_thread = std::thread::spawn({
+    let token = token.clone();
+    move || run_watchdog(token)
+  });
+
+  let tcp_socket = TcpListener::bind(args.addr.sock)?;
+  let udp_socket = UdpSocket::bind(args.addr.sock)?;
+  println!("listening on {}", args.addr.sock);
+  run(args, &token, tcp_socket, udp_socket)
+}
+
+fn run_watchdog(token: CancellationToken) {
+  let _guard = token.drop_guard();
+  let stdin = std::io::stdin();
+  let mut stdin = stdin.lock();
+  let mut buf = [0];
+  let n = stdin.read(&mut buf).unwrap();
+  if n != 0 {
+    panic!("unexpected input");
+  }
+}
+```
+
+## Context
+
+Two bits of background reading here:
+
+A famous {-novel by Leo Tolstoy-} blog post by njs:
+
+<https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/>
+
+A less famous, but no less classic, gotchas.md from duct.py:
+
+<https://github.com/oconnor663/duct.py/blob/master/gotchas.md#killing-grandchild-processes>
+
+It is often desirable to spawn a process, and make sure that, when the parent process exits, the
+child process is also killed. This can _not_ be achieved using a pattern equivalent to
+
+```
+try {
+    process = spawn(...)
+} finally {
+    _ = process.kill()
+}
+```
+
+The parent process itself might be abruptly killed, and the finally blocks / destructors / atexit
+hooks are not run in this case.
+
+The natural habitat for this pattern are integration tests, where you often spawn external processes
+in large amounts, and expect occasional abrupt crashes.
+
+Sadly, as far as I know, UNIX doesn't provide an easy mechanism to bind the lifetimes of two
+processes thusly. There's process group mechanism, but it is one-level deep and is mostly reserved
+for the shell. There's {-docker-} cgroups, but that's a Linux-specific mechanism which isn't usually
+exposed by cross-platform standard libraries of various languages.
+
+The trick is using closed stdin as the signal for exit, as that is evenly supported by all platforms,
+doesn't require much code, and will do nearly the right thing most of the time.
+
+The drawbacks of this pattern:
+
+* It's cooperative in the child (you must control the code of the child process to inject the exit
+  logic)
+* It's somewhat cooperative in the parent: while exiting on standard input EOF will do the right
+  thing most of the time, there are exceptions. For example, reading from `/dev/null` returns 0 (as
+  opposed to blocking), and daemon processes often have their stdin set to `/dev/null`. Sadly,
+  there's no `/dev/reads-and-writes-block-forever`{.display}
+* It is not actually structured. Ideally, parent's exit should block on all descendants exiting, but
+  that's not the case in this pattern. Still, it's good enough for cleaning up in tests!
