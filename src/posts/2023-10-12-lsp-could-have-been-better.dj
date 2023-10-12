@@ -1,0 +1,352 @@
+# LSP could have been better
+
+> We talk about programming like it is about writing code, but the code ends up being less important
+> than the architecture, and the architecture ends up being less important than social issues.
+>
+> [The Success and Failure of Ninja](https://neugierig.org/software/blog/2020/05/ninja.html)
+
+The  [_Why LSP_](https://matklad.github.io/2022/04/25/why-lsp.html) post discusses the "social
+issues" solved by LSP. LSP (as a part of overarching Microsoft strategy) is brilliant, because it
+moved the world to a new equilibrium where not having basic IDE support is frowned upon. This post
+instead discusses architectural aspects of LSP, which I personally find not as brilliant(especially given that
+[Dart Analysis Protocol](https://htmlpreview.github.io/?https://github.com/dart-lang/sdk/blob/8e6a02d899ef62ef5b8405518b36340e609198e2/pkg/analysis_server/doc/api.html)
+predates LSP and is technically superior in some aspects). Perhaps it
+could be useful for someone designing other LSP-shaped protocols! Note that it's been couple of
+years since I was actively involved in LSP, probably the grass is greener these days!
+
+Let's get to the list of properties, good and bad, in no particular order.
+
+## Focus on Presentation
+
+And let's start with an aspect of the architecture which is genius, and which, I think, is
+responsible for a big share of LSP success on the technical side. If you build a tool for working
+with _multiple_ programming languages, one of the biggest questions is how to find common ground
+among different, but ultimately similar, languages. A first attempt is to uncover essential
+commonality: after all, all languages have files, variables, functions, classes, right? This is ...
+maybe not necessary a dead end, but definitely a thorny and treacherous path --- languages are
+different, each language is weird in at least some of its aspects, and common ground risks to level
+away meaningful distinctions.
+
+So, what does LSP do here? It just doesn't provide a semantic model of the code base. Instead, it is
+focused squarely on the presentation. No matter how different each programming language is, they
+all, in the end, use the same completion widget. So LSP is formulated in terms of what's shown in
+the completion widget, not in terms of the underlying semantic language entities. That means that
+each language has an internal semantic model which is full fidelity _for this particular language_,
+and uses it to provide the best completion experience which is possible for a given completion
+widget. This is how rust-analyzer is structured internally as well:
+
+1. Compiler layer deals with the messy language analysis tasks, it derives more structured
+   information (types) from less structured information (source text), explicitly tracking analysis
+   layers and phases.
+2. The HIR (high-level intermediate representation) is a façade around the compiler, which provides
+   a rich graph-based object model of code which looks as if all derived information, like types, is
+   pre-computed.
+3. The IDE layer uses HIR to compute things like completions, and presents them as Rust-specific,
+   but semantics-less POD structures to be shown to the user in GUI more or less as is.
+
+One consequence of this architecture is that LSP requests map to editor widgets, and not to the
+underlying language concepts, even when several different widgets are powered by the same underlying
+data. For example, LSP has separate requests for:
+
+- hierarchical outline of a file displayed in the side bar,
+- "breadcrumbs" shown in the header,
+- syntax-aware selection ranges,
+- code folding.
+
+Although all four features are just different views into an AST, there's no "get AST" request in the
+LSP. Different requests allow to fine-tune presentation for the  different use-cases, and the
+details do differ! Semantic selection might contain some sub-syntax ranges inside string literals
+and comments, breadcrumb need to include things like conditionals of `if` expressions, while the
+outline might want to get rid of less important nodes. Attentive reader will notice that breadcrumbs
+and the outline actually use the same LSP request. Even LSP doesn't follow LSP philosophy fully!
+
+## Transport
+
+After a big thing that LSP did right, let's look at a small thing that it got wrong. Let's look at
+how information is transmitted over the wire.
+
+JSON is actually OK! Many people complain that JSON is slow, but that's not actually the case
+generally. There are some edge cases, where particular client libraries can be slow as was the case
+at least at some point with Swift and Emacs, but JSON is definitely fast enough for Rust, Java and
+JavaScript. Of course, something substantially better than JSON is possible in _theory_.
+
+I think ideally we need "WebAssembly for IPC", a format that:
+
+- has dual text and binary encoding,
+- is stupidly simple,
+- is thoroughly, readably, and precisely specified,
+- and, in general, is principled and a joy to use.
+
+There's no such format yet, so JSON it is. Good enough.
+
+HTTP framing is not OK. On the wire, the messages framed like this:
+
+```txt
+Content-Length: 92 \r\n
+\r\n
+Actual message
+```
+
+That is:
+
+- case-insensitive "content-length" header,
+- followed by length of the following message, formatted as a decimal number in ASCII,
+- followed by double `\r\n`,
+- followed by the actual message.
+
+This resembles HTTP, but is not actual HTTP, so you need to write a bit of custom code to deal
+with the framing. That's not hard:
+
+```rust
+  let mut size = None;
+  let mut buf = String::new();
+  loop {
+    buf.clear();
+    if inp.read_line(&mut buf)? == 0 {
+      return Ok(None);
+    }
+    if !buf.ends_with("\r\n") {
+      return Err(invalid_data!("malformed header: {:?}", buf));
+    }
+    let buf = &buf[..buf.len() - 2];
+    if buf.is_empty() {
+      break;
+    }
+    let mut parts = buf.splitn(2, ": ");
+    let header_name = parts.next().unwrap();
+    let header_value = parts.next().ok_or_else(|| {
+      invalid_data!("malformed header: {:?}", buf)
+    })?;
+    if header_name.eq_ignore_ascii_case("Content-Length") {
+      size = Some(
+        header_value.parse::<usize>().map_err(invalid_data)?,
+      );
+    }
+  }
+  let size: usize =
+    size.ok_or_else(|| invalid_data!("no Content-Length"))?;
+  let mut buf = buf.into_bytes();
+  buf.resize(size, 0);
+  inp.read_exact(&mut buf)?;
+  let buf = String::from_utf8(buf).map_err(invalid_data)?;
+```
+
+But, still, decoding ASCII message length from variable-length header? That's accidental complexity.
+Just separate json objects with newlines instead:
+
+<https://jsonlines.org>
+
+Framing using `\n` as a separator is almost certainly available out of the box in the programming
+language of choice.
+
+Wiping away the tears and peeling one more layer from the onion, we see json-rpc:
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "id": 1,
+    "params": { ... }
+}
+```
+
+This again is a bit of needless accidental complexity. Again, not hard to handle:
+
+```rust
+fn _write(self, w: &mut dyn Write) -> io::Result<()> {
+  #[derive(Serialize)]
+  struct JsonRpc {
+    jsonrpc: &'static str,
+    #[serde(flatten)]
+    msg: Message,
+  }
+  let text = serde_json::to_string(&JsonRpc {
+    jsonrpc: "2.0",
+    msg: self,
+  })?;
+  write_msg_text(w, &text)
+}
+```
+
+But:
+
+- Prone to complexity amplification, invites jsonrpc framework with all the latest patterns.
+- `"jsonrpc": "2.0"` is meaningless noise which you have to look at during debugging.
+- Error codes like `-32601` (ah, that comes from xml-rpc!).
+- Includes notifications. Notification are a big anti-pattern in RPC, for a somewhat subtle reason.
+  More on this later.
+
+What to do instead? Do what Dart does, some excerpts from [the specification](https://htmlpreview.github.io/?https://github.com/dart-lang/sdk/blob/8e6a02d899ef62ef5b8405518b36340e609198e2/pkg/analysis_server/doc/api.html):
+
+> Messages are delineated by newlines. This means,
+> in particular, that the JSON encoding process must not introduce newlines within a message. Note
+> however that newlines are used in this document for readability.
+>
+> To ease interoperability with Lisp-based clients (which may not be able to easily distinguish
+> between empty lists, empty maps, and null), client-to-server communication is allowed to replace any
+> instance of "`{}`" or "`[]`" with null. The server will always properly represent empty lists as "`[]`"
+> and empty maps as "`{}`".
+>
+> Clients can make a request of the server and the server will provide a response for each request
+> that it receives. *While many of the requests that can be made by a client are informational in
+> nature, we have chosen to always return a response so that clients can know whether the request was
+> received and was correct.*
+>
+> Example request:
+>
+> ```
+> request: {
+>   "id": String
+>   "method": "server.getVersion"
+> }
+>
+> response: {
+>   "id": String
+>   "error": optional RequestError
+>   "result": {
+>     "version": String
+>   }
+> }
+> ```
+
+That's basically jsonrpc, the good parts, including using `"UNKNOWN_REQUEST"` instead of `-32601`.
+
+## Coordinates
+
+LSP uses `(line, column)` pairs for coordinates. The neat thing here is that this solves significant
+chunk of `\n` vs `\r\n` problems --- client and server may represent line endings differently, but
+this doesn't matter, because coordinates are the same.
+
+Focus on the presentation provides another motivation, because location information received by the
+client can be directly presented to the user, without the need to parse the underlying file. I have
+mixed feelings about this.
+
+The problem, `column` is counted using UTF-16 code units. This is, like, "no". For many reasons,
+but in particular, UTF-16 is definitely the wrong number to show to the user as a "column".
+
+There's no entirely obvious answer what should be used instead. My personal favorite would be
+counting utf-8 code units (so, just bytes). You need _some_ coordinate space. Any reasonable
+coordinate space won't be useful for presentation, so you might as well use the space that matches
+the underlying utf-8 encoding, so that accessing substrings is O(1).
+
+Using unicode codepoints would perhaps be the most agreeable solution. Codepoints are useless ---
+you'll need to convert to grapheme clusters for presentation, and to utf-8 code units to do anything
+with the string. Still, codepoints are a common denominator, they are more often correct if
+incorrectly used for presentation, and they have a nice property that any index less then length is
+valid irrespective of the actual string.
+
+## Causality Casualty
+
+As mentioned above, one drawback of one-way notifications from jsonrpc is that they don't allow
+signaling errors. But there's a more subtle problem here: because you don't receive response to a
+notification, it might be hard to order it relative to other events. The Dart protocol is pretty
+strict about the ordering of events:
+
+> There is no guarantee concerning the order in which responses will be returned, but there is a
+> guarantee that the server will process requests in the order in which they are sent as long as the
+> transport mechanism also makes this guarantee.
+
+This guarantee ensures that the client and the server mutually understand each other's state. For
+every request the client knows which file modifications happened before it, and which came afterwards.
+
+In LSP, when the client wants to modify the state of a file on the server, it sends a notification.
+LSP also supports server-initiated edits. Now, if the client sends a `didChangeTextDocument`
+notification, and then receives a `workspace/applyEdit` request from the server, there's no way for
+the client to know whether the edit takes the latest change into the account or not. Were
+`didChangeTextDocument` a request instead, the client could have looked at the relative order of the
+corresponding response and `workspace/applyEdit`.
+
+LSP papers over this fundamental loss of causality by including numeric versions of the documents
+with every edit, but this is a best effort solution. Edits might be invalidated by changes to
+unrelated documents. For example, for a rename refactor, if a new usage was introduced in a new file
+after the refactor was computed, version numbers of the changed files would wrongly tell you that
+the edit is still correct, while it will miss this new usage.
+
+Practically, this is a small problem --- it works most of the  time (I _think_ I have seen zero
+actual bugs caused by causality loss), and even the proper solution can't order events originating
+from the client relative to the events originating from the file system. But the fix is also very
+simple --- just don't voluntarily lose causality links!
+
+## Remote Procedural State Synchronization
+
+And this touches what I think is the biggest architectural issue with LSP. LSP is an RPC protocol
+--- it is formed by "edge triggered" requests that make something happen on the other side. But this
+is not how most of IDE features work. What actually is needed is "level triggered" *state
+synchronization*. The client and the server need to agree what something _is_, deciding the course
+of action is secondary. It is "to be or not to be" rather than "what is to be done".
+
+At the bottom is synchronization of text documents --- the server and the client need to agree which
+files there are, and what is there content.
+
+Above is synchronization of derived data. For example, there's a set of errors in the project. This
+set changes when the underlying text files change. Errors change with some lag, as it takes time to
+compute them (and sometimes files changes faster than the errors could be re-computed).
+
+Things like file outline, syntax highlighting, cross-reference information, e.t.c, all follow the
+same pattern.
+
+Crucially, predicting which changes to the source invalidate which derived data requires language
+specific knowledge. Changing the text of `foo.rs` might affect syntax highlighting in `bar.rs` (as
+syntax highlighting is affected by types).
+
+In LSP, highlighting and such are requests. This means that either the client is incorrect and shows
+stale highlighting results, or it conservatively re-queries all highlighting results after every
+change, wasting the CPU, and _still_ showing stale results sometimes, when an update happens outside
+of the client (eg, when `cargo` finished downloading external crates).
+
+The Dart model is more flexible, performant and elegant. Instead of highlighting being a request, it
+is a _subscription_. The client subscribes to syntax highlighting of particular files, the server
+notifies the client whenever highlights for the selected files change. That is, two pieces of state
+are synchronized between the client and the server:
+
+* The set of file the client is subscribed to
+* The actual state of syntax highlighting for these files.
+
+The former is synchronized by sending the whole "current set" of files in a request, whenever the
+set changes. The latter is synchronized by sending incremental updates.
+
+Subscriptions are granular both in terms of the file set, as well as in terms of features. The
+client might subscribe for errors in the whole project, and for highlights in the currently opened
+documents only.
+
+Subscriptions are implemented in terms of RPC, but they are an overarching organizational pattern
+followed by the majority of the requests. LSP doesn't have an equivalent, and has real bugs with
+outdated information shown to the user.
+
+I don't think Dart goes as far as possible here. JetBrains Rider, if I understand correctly, does
+something smarter:
+
+<https://www.codemag.com/Article/1811091/Building-a-.NET-IDE-with-JetBrains-Rider>
+
+I think the idea behind the rider protocol is that you directly define the state you want to
+synchronize between the client and the server as state. The protocol then manages "magic"
+synchronization of the state by sending minimal diffs.
+
+## Simplistic Refactorings
+
+Let's unwind to something more down to earth, like refactorings. Not the simple ones, like rename,
+but complex ones, like "change signature":
+
+<https://www.jetbrains.com/idea/guide/tips/change-signature/>
+
+In this refactoring, the user selects a function declaration, then rearranges
+parameters in some way (reorders, removes, adds, renames, changes types, whatever), and then the IDE
+fixes all call-sites.
+
+The thing that makes this refactor complex is that it is interactive --- it's not an atomic request
+"rename `foo` to `bar`", it's a dialog between the IDE and the user. There are many parameters that
+the user tweaks based on the analysis of the original code and the already specified aspects of the
+refactoring.
+
+LSP doesn't support this workflows. Dart somewhat supports them, though each refactoring gets to use
+custom messages (that is, there's quite good overall protocol for multistep refactorings, but each
+refactoring essentially sends `any` over the wire, and the IDE on the other side hard-codes specific
+GUIs for specific refactorings). This per-refactoring work is not nice, but it is much better than
+not having these complex refactorings at all.
+
+## Dynamic Registration
+
+A small one to conclude. Significant chunk of conceptual LSP complexity comes from support for
+dynamic registration of capabilities. I don't understand why that features is there, rust-analyzer
+uses dynamic registration only for specifying which files should be watched. And that would be much
+simpler if it used a plain request (or a subscription mechanism).
