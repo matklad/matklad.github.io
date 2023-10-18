@@ -1,0 +1,59 @@
+# Unless Explicitly Specified Otherwise, Open Source Software With Users Carries Moral Obligations
+
+My thoughts on the topic of whether maintainers owe you anything. Speaking as an author, a maintainer,
+a contributor, and a user of open source software.
+
+Let's start with a thing which I find obvious and non-negotiable: I can't lie in my README.md.
+
+I can't write "this software is reliable, fast, and secure" if in fact my software is slow,
+crashes, and comes with a backdoor pre-installed. More generally, if I promise something in the
+readme, I'd better to follow up on the promise and be ready to apologize if I fail.
+
+If I create expectations between me and my users, I am on the hook for conforming to them.
+
+The subtle point here is, if I make an Open Source Project, push it to some forge, write a nice
+readme explaining why one would want to use it, provide one-liner for installation, and publish
+builds to some package registries, I am already creating some expectations. The act of inviting
+users (and writing usage instructions aimed at a general audience _is_ an act of inviting users)
+forms an agreement between me as a maintainer and the user.
+
+Expectations, but how much? Let's say that tomorrow at this place I am run over by an automobile.
+That would be a tragedy for many reasons! But should I worry, on top of all that, that I can no
+longer swiftly react to vulnerabilities reported against my open soft software? Obviously not! And
+that's the bound on expectations here: it is absolutely ok for a maintainer to do absolutely
+nothing.
+
+At the same time, if I publish a project, write a nice readme, provide installation instructions,
+etc, and then add a backdoor to my software, I am wrong. Yes, I didn't explicitly mention in the
+readme that I am not going to add a backdoor. Still, there is a basic, implicit, expectation about
+software security, and it is wrong for me to violate it without an explicit mention.
+
+So I think the default expectations for a published open source project boil down to:
+
+* As a maintainer, I can do absolutely nothing, and that's OK.
+* At the same time, I can not be actively hostile to my users.
+* I can spell out any extra carve-outs in either direction in my README.md.
+  E.g., if I promise that releases follow SemVer, I should try to make it so! Conversely, if I am
+  implementing my own crypto for fun for credentials-handling software, it's ok for me to just
+  prominently mention that in the documentation.
+
+What about the license? Doesn't it say that THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED?
+
+It does, but that's a statement about legality, not ethicality. If my readme says that my software
+is fit for a particular purpose, while it actually (and subtly) isn't in a big way, my users have
+the moral right to be mad at me. They don't have the legal right to sue me though.
+
+So, if you, as an open-source maintainer, publish your software and gain users, you should ask
+yourself: "do I actually want to have users?". It is totally fine if the answer is "no"! It is a
+safe default answer and what governs most of the git repositories out there.
+
+Never the less, if the answer to the users question is "no", you should make it clear in your Readme
+that it is a hobby, non-production-ready project which isn't intended to be used by anyone but you.
+Usually, it's enough to just not have a readme at all, or have a very short readme which makes it
+obvious that the project isn't supported.
+
+However, if you do have a nice README with installation instructions and such, that constitutes a
+"yes" answer. And then you, as a maintainer, is responsible for a tiny bit of life of your
+explicitly invited users. It's not expected that you do much (in fact, doing nothing is totally OK),
+but the amount of expectation is greater than zero.
