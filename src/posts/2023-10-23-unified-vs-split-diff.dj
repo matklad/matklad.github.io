@@ -1,0 +1,61 @@
+# Unified Versus Split Diff
+
+Which is better for code reviews, a unified diff or a split diff?
+
+A split diff looks like this for me:
+
+![](https://user-images.githubusercontent.com/1711539/277481233-026508cf-47ed-4897-934a-fee18b708553.png)
+
+And this is a unified one:
+
+![](https://user-images.githubusercontent.com/1711539/277481510-12ee62af-0305-412b-9f37-57a37744751b.png)
+
+If the changes are simple and small, both views are good. But for larger, more complex changes
+neither works for me.
+
+For a large change, I don't want to do a "diff review", I want to do a proper code review of a
+codebase at a particular instant in time, paying specific attention to the recently changed areas,
+but mostly just doing general review, as if I am writing the code. I need to run tests, use goto
+definition and other editor navigation features, apply local changes to check if some things could
+have been written differently, look at the wider context to notice things that _should_ have been
+changed, and in general notice anything that might be not quite right with the codebase,
+irrespective of the historical path to the current state of the code.
+
+So, for me, the ideal diff view would look rather like this:
+
+![](https://user-images.githubusercontent.com/1711539/277485436-5e9ff9d5-325b-4e2c-8285-4acb6a8c088b.png)
+
+On the left, the current state of the code (which is also the on-disk state), with changes subtly
+highlighted in the margins. On the right, the unified diff for the portion of the codebase currently
+visible on the left.
+
+Sadly, this format of review isn't well supported by the tools --- everyone seems to be happy
+reviewing diffs, rather than the actual code?
+
+I have a low-tech and pretty inefficient workflow for this style of review. A [`gpr`
+script](https://github.com/matklad/config/blob/master/xtool/src/gpr.rs) for checking out a pull
+request locally:
+
+```console
+$ gpr 1234 --review
+```
+
+Internally, it does roughly
+
+```console
+$ git fetch unstream refs/pull/1234/head
+$ git switch --detach FETCH_HEAD
+$ git reset $(git merge-base HEAD main)
+```
+
+The last line is the key --- it erases all the commits from the pull request, but keeps all of the
+changes. This lets me abuse my workflow for staging&committing to do a code review ---
+[edamagit](https://github.com/kahole/edamagit) shows the list of changed files, I get "go to
+next/previous change" shortcuts in the editor, I can even use the staging area to mark hunks I have
+reviewed.
+
+The only thing I _don't_ get is automatic synchronization between magit status buffer, and the file
+that's currently open in the editor. That is, to view the current file and the diff on the side, I
+have to manually open the diff and scroll it to the point I am currently looking at.
+
+I wish it was easier to get this close to the code without building custom ad-hoc tools!
