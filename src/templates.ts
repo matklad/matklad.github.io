@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import { Post } from "./build.ts";
+import { Post } from "./main.ts";
 
 const site_url = "https://matklad.github.io";
 
