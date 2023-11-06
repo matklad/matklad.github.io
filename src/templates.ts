@@ -125,7 +125,7 @@ export function page(name: string, content: HtmlString) {
     path: `/${name}`,
     title: "matklad",
     description: blurb,
-    src: `/src/${name}.dj`,
+    src: `/content/${name}.dj`,
     extra_css: name === "resume" ? "resume.css" : undefined,
     content,
   });
@@ -143,7 +143,7 @@ export const post_list = (posts: Post[]): HtmlString => {
     path: "",
     title: "matklad",
     description: blurb,
-    src: "/templates.ts",
+    src: "/src/templates.ts",
     content: html`<ul class="post-list">${list_items}</ul>`,
   });
 };

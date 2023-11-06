@@ -28,7 +28,7 @@ export async function watch(params: { filter: string }) {
     16,
   );
 
-  for await (const event of Deno.watchFs("./src", { recursive: true })) {
+  for await (const event of Deno.watchFs("./content", { recursive: true })) {
     if (event.kind == "access") continue;
     await rebuild_debounced();
   }
@@ -72,7 +72,7 @@ export async function build(params: {
 
   const pages = ["about", "resume", "links", "style"];
   for (const page of pages) {
-    const text = await Deno.readTextFile(`src/${page}.dj`);
+    const text = await Deno.readTextFile(`content/${page}.dj`);
     const ast = await djot.parse(text);
     const html = djot.render(ast, {});
     await update_file(`out/res/${page}.html`, templates.page(page, html).value);
@@ -112,7 +112,7 @@ async function update_path(path: string) {
   if (path.endsWith("*")) {
     const dir = path.replace("*", "");
     const futs = [];
-    for await (const entry of Deno.readDir(`src/${dir}`)) {
+    for await (const entry of Deno.readDir(`content/${dir}`)) {
       if (entry.isFile) {
         futs.push(update_path(`${dir}/${entry.name}`));
       }
@@ -121,7 +121,7 @@ async function update_path(path: string) {
   } else {
     await update_file(
       `out/res/${path}`,
-      await Deno.readFile(`src/${path}`),
+      await Deno.readFile(`content/${path}`),
     );
   }
 }
@@ -142,7 +142,7 @@ export type Post = {
 async function collect_posts(ctx: Ctx, filter: string): Promise<Post[]> {
   const start = performance.now();
   const posts = [];
-  for await (const entry of fs.walk("./src/posts", { includeDirs: false })) {
+  for await (const entry of fs.walk("./content/posts", { includeDirs: false })) {
     if (!entry.name.endsWith(".dj")) continue;
     if (filter !== "") {
       if (entry.name.indexOf(filter) === -1) continue;
@@ -176,7 +176,7 @@ async function collect_posts(ctx: Ctx, filter: string): Promise<Post[]> {
       content: html,
       summary: render_ctx.summary!,
       path: `/${y}/${m}/${d}/${slug}.html`,
-      src: `/src/posts/${y}-${m}-${d}-${slug}.dj`,
+      src: `/content/posts/${y}-${m}-${d}-${slug}.dj`,
     });
   }
   posts.sort((l, r) => l.path < r.path ? 1 : -1);
