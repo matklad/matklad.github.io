@@ -171,7 +171,11 @@ ${pre}
     image: (node: Image, r: djot.HTMLRenderer): string => {
       if (has_class(node, "video")) {
         if (!node.destination) throw "missing destination";
-        return `<video src="${node.destination}" controls=""></video>`;
+        if (has_class(node, "loop")) {
+          return `<video src="${node.destination}" autoplay muted=true loop=true></video>`;
+        } else {
+          return `<video src="${node.destination}" controls muted=true></video>`;
+        }
       }
       return r.renderAstNodeDefault(node);
     },
