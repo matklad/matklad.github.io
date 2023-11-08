@@ -99,14 +99,16 @@ export const base = (
     <p>
       <a href="https://github.com/matklad/matklad.github.io/edit/master${src}">
         <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
-        fix typo
+        Fix typo
       </a>
-
       <a href="/feed.xml">
         <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
-        rss
+        Subscribe
       </a>
-
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
       <a href="https://github.com/matklad">
         <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
         matklad
