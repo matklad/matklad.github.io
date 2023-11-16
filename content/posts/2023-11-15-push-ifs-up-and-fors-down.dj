@@ -162,7 +162,7 @@ for walrus in walruses {
 }
 ```
 
-The `GOOD` version is good, because it avoid repeatedly re-evaluation `condition`, removes a branch
+The `GOOD` version is good, because it avoids repeatedly re-evaluating `condition`, removes a branch
 from the hot loop, and potentially unlocks vectorization. This pattern works on a micro level and on
 a macro level --- the good version is the architecture of TigerBeetle, where in the data plane we
 operate on batches of objects at the same time, to amortize the cost of decision making in the
