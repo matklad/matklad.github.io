@@ -1,0 +1,280 @@
+# Non-Send Futures When?
+
+Ever since reading
+[_What If We Pretended That a Task = Thread?_](https://blaz.is/blog/post/lets-pretend-that-task-equals-thread/){.display}
+I can't stop thinking about borrowing non-`Sync` data across `.await`.
+In this post, I'd love to take one more look at the problem.
+
+## Send And Sync
+
+To warm up, a refresher on
+[`Send`](https://doc.rust-lang.org/stable/std/marker/trait.Send.html) and
+[`Sync`](https://doc.rust-lang.org/stable/std/marker/trait.Sync.html) auto-traits.
+These traits are a _library_ feature that enable fearless concurrency --- a statically checked
+guarantee that non-thread-safe data structures don't escape from their original thread.
+
+Why do we need two traits, rather than just a single `ThreadSafe`? Because there are two degrees of
+thread-unsafety.
+
+Some types are fine to use from multiple threads, as long as only a single thread at a time uses a
+particular value. An example here would be a `Cell<i32>`. If two threads have a reference to a cell
+at the same time, a `&Cell<i32>`, we are in trouble --- `Cell`'s loads and stores are not atomic
+and are UB by definition if used concurrently. However, if two different threads have exclusive
+access to a `Cell`, that's fine --- because the access is exclusive, it necessary means that it is
+not simultaneous. That is, it's OK for thread A to _send_ a `Cell<i32>` to a different thread B,
+as long as A itself looses access to the cell.
+
+But there are also types which are unsafe to use from multiple threads even if only a single thread
+at a time has access to a value. An example here would be an `Arc<Cell<i32>>`. It's not possible
+to safety send such an `Arc` to a different thread, because a `.clone` call can be used to get an
+independent copy of an `Arc`, effectively creating a _share_ operation out of a _send_ one.
+
+But turns out both cases are covered by just a single trait, `Send`. The thing is, to _share_ a
+`Cell<i32>` across two threads, it is necessary to _send_ an `&Cell<i32>`. So we get the following
+table:
+
+| `Send`    |   `!Send`       |
+|:----------|:----------------|
+|`Cell<i32>`|`&Cell<i32>`     |
+| `i32`     |`Arc<Cell<i32>>` |
+|`&i32`     |`&Arc<Cell<i32>>`|
+
+If `T` is `Send`, `&T` might or might not be `Send`. And that's where the `Sync` traits
+comes from: `&T: Send` if and only if (iff) `T: Sync`. Which gives the following table:
+
+|          | *`Send`*    | *`!Send`*       |
+| *`Sync`* | `i32`       |                 |
+|*`!Sync`* | `Cell<i32>` | `Arc<Cell<i32>>`|
+
+What about that last empty cell? Types which are `Sync` and `!Send` are indeed quite rare, and I
+don't know examples which don't boil down to "underlying API mandates that a type doesn't leave a
+thread". One example here would be `MutexGuard` from the standard library --- pthreads _require_
+that only the thread that originally locked a mutex can unlock it. This isn't a fundamental
+requirement for a mutex --- a `MutexGuard` from parking lot
+[can be `Send`](https://github.com/Amanieu/parking_lot/tree/adbad82729d4843a051defb9e9eff38c83e7f289?tab=readme-ov-file#usage).
+
+## Thread Safety And Async
+
+As you see, the `Send` & `Sync` infrastructure is quite intricate. Is it worth it? Absolutely, as it
+leads to simpler code. In Rust, you can explicitly designate certain parts of a code base as
+non-thread-safe, and then avoid worrying about threads, because compiler will catch your hand if you
+_accidentally_ violate this constraint.
+
+The power of Rust is not defensively making everything thread safe, its the ability to use
+thread-unsafe code fearlessly.
+
+And it seems like `async` doesn't quite have this power. Let's build an example, a litmus test!
+
+Let's start with a `Context` pattern,  where a bunch of stuff is grouped into a single struct, so
+that they can be threaded through the program as one parameter. Such `Context` object is usually
+scoped to a particular operation --- the ultimate owner of `Context` is a local variable in some
+top-level "main" function, it is threaded as `&Context` or `&mut Context` everywhere, and usually
+isn't stored anywhere. For the `&Context` variant, it is also customary to add some interior
+mutability for things like caches. One real-life example would be a `Config` type from Cargo:
+[config/mod.rs#L168](https://github.com/rust-lang/cargo/blob/a092469d46c0d7e8d899dbaebfcddf052f8f435d/src/cargo/util/config/mod.rs#L168).
+
+Distilling the pattern down, we get something like this:
+
+```rust
+#[derive(Default)]
+pub struct Context {
+  counter: Cell<i32>
+}
+
+impl Context {
+  fn increment(&self) {
+    self.counter.set(self.counter.get() + 1);
+  }
+}
+```
+
+Here, a `counter` is a interior-mutable value which could, e.g., track cache hit rate. And here how
+this type could be used:
+
+```rust
+fn f(context: &Context) {
+  g(context);
+  context.increment();
+}
+
+fn g(_context: &Context) {
+}
+```
+
+However, the async version of the code doesn't really work, and in a subtle way:
+
+```rust
+async fn f(context: &Context) {
+  g(context).await;
+  context.increment();
+}
+
+async fn g(_context: &Context) {
+}
+```
+
+Do you se the problem? Surprisingly, even `rustc` doesn't see it, the code above compiles in
+isolation. However, when we start _using_ it with Tokio's work-stealing runtime,
+
+```rust
+async fn task_main() {
+  let context = Context::default();
+  f(&context).await;
+}
+
+#[tokio::main]
+async fn main() {
+  tokio::spawn(task_main());
+}
+```
+
+we'll hit an error:
+
+```
+error: future cannot be sent between threads safely
+
+--> src/main.rs:29:18
+ |
+ | tokio::spawn(task_main());
+ |              ^^^^^^^^^^^ future returned by `task_main` is not `Send`
+ |
+
+within `Context`, the trait `Sync` is not implemented for `Cell<i32>`.
+
+if you want to do aliasing and mutation between multiple threads,
+use `std::sync::RwLock` or `std::sync::atomic::AtomicI32` instead.
+```
+
+What happened here? When compiling `async fn f`, compiler reifies its stack frame as a Rust struct:
+
+```rust
+struct FStackFrame<'a> {
+  context: &'a Context,
+  await_state: usize
+}
+```
+
+This struct contains a reference to our `Context` type, and then `Context: !Sync` implies `&Context:
+!Send` implies `FStackFrame<'_>: !Send `. And that finally clashes with the signature of
+`tokio::spawn`:
+
+```
+pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+where
+    F: Future + Send + 'static, // <- note this Send
+    F::Output: Send + 'static,
+```
+
+Tokio executor is work-stealing. It's going to poll the future from different threads, and that's
+why it is required that the future is `Send`.
+
+In my eyes this is a rather significant limitation, and a big difference with synchronous Rust.
+Async Rust has to be defensively thread-safe, while sync Rust is free to use non-thread-safe data
+structures when convenient.
+
+## A Better Spawn
+
+One solution here is to avoid work-stealing executors:
+
+[_Local Async Executors and Why They Should be the Default_](https://maciej.codes/2022-06-09-local-async.html){.display}
+
+That post correctly identifies the culprit:
+
+> I suggest to you, dear reader, that this function signature:
+>
+> ```rust
+> pub fn spawn<T>(future: T) -> JoinHandle<T::Output> where
+>     T: Future + Send + 'static,
+>     T::Output: Send + 'static,
+> ```
+>
+> is a gun.
+
+But as for the fix, I think Auri ([blaz.is](https://blaz.is)) got it right. The fix is _not_ to
+remove `+ Send` bound, but rather to mirror `std::thread::spawn` more closely:
+
+
+```rust
+// std::thread::spawn
+pub fn spawn<F, T>(f: F) -> JoinHandle<T>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+
+// A hypothetical better async spawn
+pub fn spawn<F, Fut>(f: F) -> JoinHandle<Fut::Output>
+where
+    F: FnOnce() -> Fut + Send + 'static,
+    Fut: Future,
+    Fut::Output: Send + 'static,
+```
+
+Let me explain first why this works, and then why this can't work.
+
+A `Future` is essentially a stack-frame of an asynchronous function. Original tokio version requires
+that all such stack frames are thread safe. This is not what happens in synchronous code --- there,
+functions are free to put cells on their stacks. The `Send`ness is only guarded when data are
+actually send to a different thread, in `Chanel::send` and `thread::spawn`. The `spawn` function in
+particular says nothing about the _stack_ of a new thread. It only requires that the data used to
+create the first stack frame is `Send`.
+
+And that's what we do in the async version: instead of spawning a future directly, it, just like the
+sync version, takes a closure. The closure is moved to a different execution context, so it must be
+`: Send`. The actual future created by the closure in the new context can be whatever. An async
+runtime is free to poll this future from different threads regardless of its `Sync` status.
+
+Async work-stealing still works for the same reason that blocking work stealing works. Logical
+threads of execution can migrate between physical CPU cores because OS restores execution context
+when switching threads. Task can migrate between threads because async runtime restores execution
+context when switching tasks. Go is a proof that this is possible --- goroutines migrate between
+different threads but they are free to use on-stack non-thread safe state. The pattern is clearly
+sound, the question is, can we express this fundamental soundness in Rust's type system, like we
+managed to do for OS threads?
+
+This is going to be tricky, because `Send` _today_ absolutely means "same thread", not "same
+execution context". Here's one example that would break:
+
+```rust
+async fn sneaky() {
+  thread_local! { static TL: Rc<()> = Rc::new(()); }
+  let rc = TL.with(|it| it.clone());
+  async {}.await;
+  rc.clone();
+}
+```
+
+If the `.await` migrates to a different thread, we are in trouble: two tasks can start on the same
+thread, then diverge, but continue to hammer the same non-atomic reference count.
+
+Another breakage example is various OS APIs that just mandate that things happen on a particular
+execution thread, like `pthread_mutex_unlock`. Though I think that the turtle those APIs stand on
+are thread locals again?
+
+Can we fix it? As an absolute starwman proposal, let's redefine `Send` & `Sync` in terms of abstract
+"execution contexts", add `OsThreadSend` and `OsThreadSync`, and change API which involve thread
+locals to use the `OsThread` variants. It seems that everything else works?
+
+## Four Questions
+
+I would like to posit four questions to the wider async Rust community.
+
+1. Does this work in theory? As far as I can tell, this does indeed works, but I am not an async
+   export. Am I missing something?
+
+   Ideally, I'd love to see small, self-contained litmus test  examples that break `OsThreadSend`
+   Rust.
+
+2. Is this an important problem in practice to look into? On the one hand, people are quite
+   successful with async Rust as it is. On the other hand, the expressivity gap here is real, and
+   Rust, as a systems programming language, strives to minimize such gaps. And then there's the fact
+   that failure mode today is rather nasty --- although the actual type error is inside the `f`
+   function, we learn about it only at the call site in `main`.
+
+3. Assuming that this idea does work, and we decide that we care enough to try to fix it, is there a
+   backwards-compatible path we could take to make this a reality?
+
+4. Is this new? For me, that
+   [22.05.2023 post](https://blaz.is/blog/post/lets-pretend-that-task-equals-thread/) was the first
+   time I've learned about this aspect of async design space. But there's nothing particularly new
+   there, the relevant APIs were stabilized years ago. Was this issue articulated and discussed
+   back when the async Rust was designed, or is it a genuinely new finding?
