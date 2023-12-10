@@ -250,7 +250,7 @@ Another breakage example is various OS APIs that just mandate that things happen
 execution thread, like `pthread_mutex_unlock`. Though I think that the turtle those APIs stand on
 are thread locals again?
 
-Can we fix it? As an absolute starwman proposal, let's redefine `Send` & `Sync` in terms of abstract
+Can we fix it? As an absolute strawman proposal, let's redefine `Send` & `Sync` in terms of abstract
 "execution contexts", add `OsThreadSend` and `OsThreadSync`, and change API which involve thread
 locals to use the `OsThread` variants. It seems that everything else works?
 
