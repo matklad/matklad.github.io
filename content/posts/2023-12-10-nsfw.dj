@@ -22,7 +22,7 @@ at the same time, a `&Cell<i32>`, we are in trouble --- `Cell`'s loads and store
 and are UB by definition if used concurrently. However, if two different threads have exclusive
 access to a `Cell`, that's fine --- because the access is exclusive, it necessary means that it is
 not simultaneous. That is, it's OK for thread A to _send_ a `Cell<i32>` to a different thread B,
-as long as A itself looses access to the cell.
+as long as A itself loses access to the cell.
 
 But there are also types which are unsafe to use from multiple threads even if only a single thread
 at a time has access to a value. An example here would be an `Arc<Cell<i32>>`. It's not possible
