@@ -270,11 +270,20 @@ I would like to posit four questions to the wider async Rust community.
    that failure mode today is rather nasty --- although the actual type error is inside the `f`
    function, we learn about it only at the call site in `main`.
 
+   EDIT: I am also wondering --- if we stop caring whether futures are `: Send`, does that mean we
+   no longer need an explicit syntax for `Send` bounds in async traits?
+
 3. Assuming that this idea does work, and we decide that we care enough to try to fix it, is there a
    backwards-compatible path we could take to make this a reality?
 
-4. Is this new? For me, that
-   [22.05.2023 post](https://blaz.is/blog/post/lets-pretend-that-task-equals-thread/) was the first
-   time I've learned about this aspect of async design space. But there's nothing particularly new
-   there, the relevant APIs were stabilized years ago. Was this issue articulated and discussed
-   back when the async Rust was designed, or is it a genuinely new finding?
+   EDIT: to clarify, no way we are really adding a new auto-trait like `OsThreadSend`. But there
+   could be some less invasive change to get the desired result. For example, a more promising
+   approach is to expose some runtime hook for async runtimes to switch TLS, such that each task
+   gets an independent copy of thread-local storage, as if task=thread.
+
+4. Is it a new idea that `!Send` futures and work-stealing don't conflict with each other? For me,
+   that [22.05.2023 post](https://blaz.is/blog/post/lets-pretend-that-task-equals-thread/)
+   was the first time I've learned that having a `&Cell<i32>` in a future's state machine does not
+   preclude polling it from different OS threads. But there's nothing particularly new there, the
+   relevant APIs were stabilized years ago. Was this issue articulated and discussed back when the
+   async Rust was designed, or is it a genuinely new finding?
