@@ -158,14 +158,14 @@ This struct contains a reference to our `Context` type, and then `Context: !Sync
 !Send` implies `FStackFrame<'_>: !Send `. And that finally clashes with the signature of
 `tokio::spawn`:
 
-```
+```rust
 pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
 where
     F: Future + Send + 'static, // <- note this Send
     F::Output: Send + 'static,
 ```
 
-Tokio executor is work-stealing. It's going to poll the future from different threads, and that's
+Tokio's default executor is work-stealing. It's going to poll the future from different threads, and that's
 why it is required that the future is `Send`.
 
 In my eyes this is a rather significant limitation, and a big difference with synchronous Rust.
