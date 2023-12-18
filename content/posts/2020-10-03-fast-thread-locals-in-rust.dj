@@ -1,7 +1,7 @@
 # Fast Thread Locals In Rust
 
 Rust thread-locals are slower than they could be.
-This is because they violate zero-cost abstraction principle, specifically the "you don't pay for what you don't use bit".
+This is because they violate zero-cost abstraction principle, specifically the "you don't pay for what you don't use" part.
 
 Rust's thread-local implementation(
 [1](https://github.com/rust-lang/rust/blob/6f56fbdc1c58992a9db630f5cd2ba9882d32e84b/library/std/src/thread/local.rs#L156-L188),
@@ -220,3 +220,16 @@ Even on a single OS, there are be differences depending on compilation flags (dy
 Looking at the generated assembly could also be illuminating (code on [Compiler Explorer](https://godbolt.org/z/zMqdn4)).
 
 Discussion on [/r/rust](https://www.reddit.com/r/rust/comments/j4iy50/blog_post_fast_thread_locals_in_rust/).
+
+UPDATE(2023-12-18): since writing this post, Rust gained an ability to opt-out of lazy
+initialization semantics by using a const block in the `thread_local` macro:
+
+```rust
+thread_local! {
+  static COUNTER: Cell<u32> = const { Cell::new(0) };
+}
+```
+
+This remove the overhead measured in this article. Note that in this case `const {` is a feature of
+`thread_local` _macro_. That is, `const {` is parsed specifically by the declarative macro
+machinery, it is _not_ a part of a more general (currently unstable) "const block" syntax.
