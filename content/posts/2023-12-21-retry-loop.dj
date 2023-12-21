@@ -1,0 +1,83 @@
+# Retry Loop
+
+A post about writing a retry loop. Not a smart post about avoiding thundering heards and resonance.
+A simpleton kind of post about wrangling ifs and fors together to minimize bugs.
+
+_Stage:_ you are writing a script for some build automation or some such.
+
+_Example problem:_ you want to get a freshly deployed package from Maven Central. As you learn after
+a CI failure, packages in Maven don't become available immediately after a deploy, there could be a
+delay. This is a poor API which breaks causality and makes it impossible to code correctly against,
+but what over alternative do you have? You just need to go and write a retry loop.
+
+You want to retry some `action`. The action either succeeds or fails. Some, but not all, failures
+are transient and can be retried after a timeout. If a failure persists after a bounded number
+of retries, it should be propagated.
+
+The _runtime_ sequence of event we want to see is:
+
+```
+action()
+sleep()
+action()
+sleep()
+action()
+```
+
+It has that mightily annoying a-loop-and-a-half shape.
+
+Here's the set of properties I would like to see in a solution:
+
+1. No useless sleep. A naive loop would sleep one extra time before reporting a retry failure, but
+   we don't want to do that.
+2. In the event of a retry failure, the underlying error is reported. I don't want to see _just_
+   that all attempts failed, I want to see an actual error from the last attempt.
+3. Obvious upper bound: I don't want to write a `while (true)` loop with a break in the middle. If I
+   am to do at most 5 attempts, I want to see a `for (0..5)` loop. Don't ask me
+   [why](https://github.com/tigerbeetle/tigerbeetle/pull/1367).
+4. No syntactic redundancy --- there should be a single call to action and a single sleep in the
+   source code.
+
+I don't know how to achieve all four. That's the best I can do:
+
+
+```zig
+fn action() !enum { ok, retry: anyerror } {
+
+}
+
+fn retry_loop() !void {
+    for (0..5) {
+        if (try action() == .ok) break;
+        sleep();
+    } else {
+        switch (try action()) {
+            .ok => {},
+            .retry => |err| return err
+        }
+    }
+}
+```
+
+This solution achieves 1-3, fails at 4, and relies on a somewhat esoteric language feature ---
+`for/else`.
+
+Salient points:
+
+- Because there is a syntactic repetition in call to action, it is imperative to extract it into a
+  function.
+
+- The return type of `action` has to be elaborate. There are tree possibilities:
+
+  - an action succeeds,
+  - an action fails fatally, error must be propagated,
+  - an action fails with a transient error, a retry can be attempted.
+
+  For the transient failure case, it is important to return an error object itself, so that the real
+  error can be propagated if a retry fails.
+
+- The core is a bounded `for (0..5)` loop. Can't mess that up!
+
+- For "and a half" aspect, an `else` is used. Here we incur syntactic repetition, but that feels
+  some what justified, as the last call _is_ actually special, as it rethrows the error, rather than
+  just swallowing it.
