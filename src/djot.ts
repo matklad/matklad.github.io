@@ -14,9 +14,9 @@ import {
   Para,
   Section,
   Span,
+  Str,
   Url,
   Visitor,
-  Str,
 } from "djot/ast.ts";
 
 export function parse(source: string): Doc {
@@ -67,8 +67,7 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
         node.attributes = node.attributes || {};
         let cap = extract_cap(node);
         if (cap) {
-          cap =
-            `<figcaption class="title">${cap}</figcaption>\n`;
+          cap = `<figcaption class="title">${cap}</figcaption>\n`;
         } else {
           cap = "";
         }
@@ -189,16 +188,16 @@ ${pre}
         return `<dfn>${children}</dfn>`;
       }
       if (has_class(node, "kbd")) {
-        const children = r.renderChildren(node)
+        const children = get_string_content(node)
           .split("+")
           .map((it) => `<kbd>${it}</kbd>`)
-          .join("+");
+          .join(" + ");
         return `<kbd>${children}</kbd>`;
       }
       if (has_class(node, "menu")) {
         return r.renderAstNodeDefault(node).replaceAll(
           "&gt;",
-          "›"
+          "›",
         );
       }
       return r.renderAstNodeDefault(node);
@@ -207,7 +206,7 @@ ${pre}
       if (has_class(node, "dfn")) {
         return `<dfn>${node.text}</dfn>`;
       }
-      return r.renderAstNodeDefault(node)
+      return r.renderAstNodeDefault(node);
     },
     url: (node: Url, r: djot.HTMLRenderer) => {
       add_class(node, "url");
