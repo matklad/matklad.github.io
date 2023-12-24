@@ -1,0 +1,43 @@
+# CI Dream
+
+This is more of an android dream (that one with a unicorn) than a coherent post, but please indulge me.
+It's a short one at least!
+
+Several years ago, it made sense for things like Travis CI or GitHub Actions to exist as technical products as well as businesses.
+Back in the day, maintaining a fleet of machines was hard.
+So you could take that shepherd job onto yourself, and provide your users and customers with an API to run their tests.
+
+Is it true today though?
+I am not well-versed in cloud things, but my impression is that today one can rent machines as a commodity.
+Cloud providers give you a distributed computer which you pay for as you go.
+
+In this world, CI as a SaaS feels like accidental complexity of [midlayer mistake](https://lwn.net/Articles/336262/) variety.
+Can we make it simpler?
+Can we say that CI is just a "program" for a distributed computer?
+So, in your project's repo, there's a `./ci` folder with a such program ---
+a bunch of Docker files, or .yamls, or whatever is the "programming language of the cloud".
+You then point, say, AWS to it, tell it "run this, here are my credentials", and you get your entire CI infra,
+with not rocket science rule, continuous fuzzing, releases, and what not.
+And, crucially, whatever project specific logic you need --- AWS doesn't care what it runs, everything is under your control.
+
+Of course, there's a hefty amount of logic required ---
+interacting with your forge webhooks,
+UI through @magic comments and maybe a web server with an HTML GUI,
+the management of storage to ensure that cross-build caches stay close,
+the management of compute and idempotence, to allow running on cheap spot instances,
+and perhaps a thousands of other CI concerns.
+
+But it feels like all that could conceivably be a library (an ecosystem of competing projects even)?
+
+If I want to have a merge queue, why are these my choices?:
+
+- GitHub Merge Queue, which is [not good](https://matklad.github.io/2023/06/18/GitHub-merge-queue.html).
+- [Mergify](https://mergify.com), which I am reluctant even to try due to strength of "this is a product" vibes.
+- Self-hosting [bors-ng](https://github.com/bors-ng/bors-ng), managing an individual server as a pet.
+
+Why this isn't the world we live in?:
+
+```console
+$ cd ci
+$ cargo add protection-agency
+```
