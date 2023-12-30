@@ -287,3 +287,38 @@ I would like to posit four questions to the wider async Rust community.
    preclude polling it from different OS threads. But there's nothing particularly new there, the
    relevant APIs were stabilized years ago. Was this issue articulated and discussed back when the
    async Rust was designed, or is it a genuinely new finding?
+
+---
+
+UPDATE(2023-12-30): there was some discussion of the ideas on
+[Zulip](https://rust-lang.zulipchat.com/#narrow/stream/187312-wg-async/topic/Non-.60Sync.60.20borrow.20across.20.60.2Eawait.60.3F).
+It looks this isn't completely broken and that, indeed, thread-locals are the main principled obstacle.
+
+I think I also got a clear picture of a solution for ideal world, where we are not bound by
+backwards compatibility requirements: make thread local access unsafe. Specifically:
+
+_First_, remove any references to OS threads from the definition of `Send` and `Sync`. Instead,
+define them in terms of abstract concurrency. I am not well-versed enough in formal side of things
+to understand precisely what that should entail, but I have a litmus test. The new definition should
+work for interrupt handlers in embedded. In OS and embedded programming, one needs to deal with
+interrupt handlers --- code that is run by a CPU as a response to a hardware interrupt. When CPU is
+interrupted, it saves the current execution context, runs the interrupt, and then restores the
+original context. Although it all happens on a single core and there are no OS-threads in sight, the
+restrictions are similar to those of threads: an interrupt can arrive in the middle of reference
+counter upgrade. To rephrase: `Sync` should be a `core` trait. Right now it is defined in `core`,
+but its definition references OS threads --- a concept `no_std` is agnostic about!
+
+_Second_, replace `thread_local!` macro with a `#[thread_local]` attribute on (unsafe) statics.
+There are two reasons why people reach for thread locals:
+
+- to implement really fast concurrent data structures (eg, a global allocator or an async runtime),
+- as a programming shortcut, to avoid passing a `Context` argument everywhere.
+
+The `thread_local!` macro mostly addresses the second use-case --- for a very long time, it even was
+a non-zero cost abstraction, so that implementing a fast allocator in Rust was impossible! But,
+given that this pattern is rare in software (and, where it is used, it then takes years to refactor
+it away, like it was the case with rustc's usage of thread locals for parsing session), I think it's
+OK to say that Rust flat-out doesn't support it safely, like it doesn't support mutable statics.
+
+The safety contract for `#[thread_local]` statics would be more strict then the contract on `static
+mut`: the user must also ensure that the value isn't used past the corresponding thread's lifetime.
