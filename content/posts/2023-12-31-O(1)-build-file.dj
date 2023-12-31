@@ -1,0 +1,51 @@
+# O(1) Build File
+
+Rule of thumb: the size of build or CI configuration should be mostly independent of the project size.
+In other words, adding, say, a new test should not require adding a new line to the build file to build the test, and a new line to `.yml` to run it on CI.
+
+Lines in CI config are costly --- each line is typically a new entry point,
+and a bit of required knowledge to be able to run the project locally.
+That is, every time _you_ add something to CI, you need to explain that to your colleagues,
+so that they know that they need to run more things locally.
+
+Lines in build config are usually a little cheaper, but are still far from free.
+Often a new build config also implies a new entry point.
+At other times, it's just a new build artifact tied to an existing entry point, for example, a new integration test binary.
+Build artifacts are costly in terms of compile time --- as your project is linked with every build artifact, the total linking time is quadratic.
+
+What to do instead?
+
+_Minimize_ the number of entry points and artifacts.
+Enumerate `O(1)` of project entry points explicitly.
+You probably need:
+
+- `run`, to get the local built-from-source copy of software running,
+- `test`, to run bounded-in-time automated checks that the current version of software is
+   self-consistent,
+- `fuzz`, to run unbounded-in-time checks,
+- `deploy` to publish a given version of software for wider use
+
+This is a point of contention, but consider if you can avoid separate `lint` and `fmt` entry points, as those are a form of automated tests.
+
+Of course, an entry point can allow filters to run a subset of things: [`run --test-filter=tidy`.]{.display}
+It's much easier to discover how to filter out things you don't need,
+than to realize that there's something you need to opt into.
+
+_Minimize_ the number of build artifacts, [_Delete Cargo Integration Tests_](https://matklad.github.io/2021/02/27/delete-cargo-integration-tests.html).
+You probably need separate production and test builds, to avoid linking in test code with the production binaries.
+But chances are, these two binaries are all you need.
+Avoid building a set of related binaries, use subcommands or BusyBox-style multicall binaries instead.
+Not only does this improve compile times, it also helps with putting out fires in the field, as the binary you have in production also contains all the debug tools.
+
+---
+
+On rules of thumb in general: for me, the term _doesn't_ mean that what follows is the correct way to do things, better than alternatives.
+Rather:
+
+- First and foremost, a rule focuses attention, it makes me _notice_ things I'd otherwise autopilot through.
+  The main value of today's rule is to make me pause whenever I add to `build.zig` and think for a second.
+- Second, a rule is a concise summary of the arguments that motivate the rule.
+  The bad thing is slow builds and multiple entry points.
+  But that's a fuzzy concept that is hard to keep at the forefront of the mind.
+  I am not going to ask myself constantly "Hey, am I adding a new entry point here?".
+  In contrast, "don't change .yml" is simple and mechanical, and it reliably triggers the cluster of ideas about entry points.
