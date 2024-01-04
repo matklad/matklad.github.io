@@ -1,0 +1,64 @@
+# Of Rats and Ratchets
+
+This is going to be related to software engineering, pinky promise!
+
+I was re-reading Doctor Zhivago by Boris Pasternak recently. It is a beautiful novel set in Russia
+during the revolutionary years before World War II. It focuses on the life of Yuri Zhivago, a doctor
+and a poet, while the Russian revolutions roar in the background. It is a poignant and topical tale
+of a country descending into blood-thirsty madness.
+
+Being a doctor, a literati, and a descendant of once wealthy family, Zhivago is not exactly welcomed
+in the new Russia. That's why a significant part of the novel takes place far away from Moscow and
+St. Petersburg, in Siberia, where it is easier for undesirables to exist in a fragile truce with the
+state.
+
+What's your first problem, if you are going to live in someone else's abandoned house in Siberia,
+eking out a living off whatever supplies had been left? The rats, who are also very keen on the said
+supplies. Clearly, rats are a big problem, and require immediate attention.
+
+It's easy to exert effort and get rid of the rats --- take a broom, some light source, and just
+chase away the rascals from the house. However observably effective the method is, it is not a
+solution --- the rats will come back as soon as you are asleep. The proper solution starts with
+identifying all the holes through which the pest gets in, and thoroughly plugging those! Only then
+can you hope that the house _stays_ rat free.
+
+I feel the dynamics plays out in software projects. There's lots of rats, everything's broken and in
+need of fixing, all the time. And there's usually plenty of desire and energy to fix things. The
+problem is, often times the fixes are not durable --- an immediate problem is resolved promptly, but
+then it returns back two years down the line. This is most apparent in benchmarks --- everyone loves
+adding a microbenchmark to motivate a particular change, and then the benchmark bitrots with no one
+to run it.
+
+It's important not only to fix things, but to fix them in a durable way; to seal up the holes, not
+just to wave the broom vigorously.
+
+The best way to do this is to setup a not rocket science rule, and then to use it as a ratchet to
+monotonically increase the set of properties the codebase possesses, one small check at a time.
+Crucially, the ratchet should be set up up front, _before_ any of the problems are actually fixed,
+and it must allow for incremental steps.
+
+Let's say you lack documentation, and want to ensure that every file in the code-base has a
+top-level comment explaining  the relevant context. A good way to approach this problem is to write
+a test that reads every file in the project, computes the set of poorly documented files, and xors
+that against the hard-coded naughty list. This test is then committed to the project with the
+naughty list encompassing all the existing files. Although no new docs are added, the ratchet is in
+place --- all new files are guaranteed to be documented. And its easier to move a notch up the
+ratchet by documenting a single file and crossing it out from the naughty list.
+
+More generally, widen your view of tests --- a test is a program that checks a property of a
+repository of code at a particular commit. Any property --- code style, absence of warnings,
+licenses of dependencies, the maximum size of any binary file committed into the repository,
+presence of unwanted merge commits, average assertion density.
+
+Not everything can be automated though. For things which can't be, the best trick I've found is
+writing them down. _Just_ agreeing that _X_ is a team practice is not enough, even if it _might_
+work for the first six months. Only when _X_ is written down in a markdown document inside a
+repository it might becomes a durable practice. But beware --- document what _is_, rather than what
+_should_ be. If there's a clear disagreement between what the docs say the world is, and the actual
+world, the ratcheting effect of the written word disappears. If there's a large diff between reality
+and documentation, don't hesitate to remove conflicting parts of the documentation. Having a ratchet
+that enforces a tiny set of properties is much more valuable than aspirations to enforce everything.
+
+Coming back to Doctor Zhivago, it is worth noting that the novel is arranged into a myriad of
+self-contained small chapters --- a blessing for a modern attention-deprived world, as it creates a
+clear sense of progression even when you don't have enough focus to get lost in a book for hours.
