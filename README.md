@@ -5,5 +5,5 @@ Source code for the blog. The `./src` directory contains a deno script that read
 
 ```console
 $ deno task build
-$ deno task watch
+$ deno task serve
 ```
