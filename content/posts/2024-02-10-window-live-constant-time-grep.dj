@@ -1,0 +1,179 @@
+# Window: Live, Constant Time Grep
+
+In this post, I describe the design of [window](https://github.com/matklad/window/) --- a small
+grep-like utility I implemented in 500 lines of Rust. The utility itself is likely not that
+interesting --- I bet someone greybeared can implement an equivalent in 5 lines of bash. But the
+design principles behind it might be interesting --- this small utility manages to combine core
+ideas of rust-analyzer and TigerBeetle!
+
+## Problem Statement
+
+TigerBeetle is tested primarily through a deterministic simulator: a cluster of replicas runs in a
+single process (in a single thread even), replicas are connected to a virtual network and a virtual
+hard drive. Both the net and the disk are extra nasty, and regularly drop, reorder, and corrupt IO
+requests. The cluster has to correctly process randomly generated load in spite of this radioactive
+environment. You can play with visualization of the simulator here:
+<https://sim.tigerbeetle.com>{.display}
+
+Of course, sometimes we have bugs, and need to debug crashes found by the simulator. Because
+everything is perfectly deterministic, a crash is a pair of commit hash and a seed for a random
+number generator. We don't yet have any minimization infrastructure, so some crashes tend to be
+rather large: a debug log from a crash can easily reach 50 gigabytes!
+
+So that's my problem: given multi-gigabyte log of a crash, find a dozen or so of log-lines which
+explain the crash.
+
+I think you are supposed to use `coreutils` to solve this problem, but I am not good enough with
+grep to make that efficient: my experience that grepping anything in this large file takes seconds,
+and still produces gigabytes of output which is hard to make heads or tails of.
+
+I had relatively more success with [lnav.org](https://lnav.org), but:
+
+- it is still slower than I would like,
+- it comes with its own unique TUI interface, shortcuts, and workflow, which is at odds with my
+  standard editing environment.
+
+## Window
+
+So, I made `window`. You run it as
+
+```console
+$ window huge-file.log &
+```
+
+It then creates two files:
+
+- `window.toml` --- the file with the input query,
+- `huge-file.log.window` --- the result of the query.
+
+You open both files side-by-side in your editor of choice. Edits to the query file are immediately
+reflected in the results file (assuming the editor has auto-save and automatically reloads files
+changed on disk):
+
+
+Here's a demo in Emacs (you might want to full-screen that video):
+
+``` =html
+<script async id="asciicast-637434" src="https://asciinema.org/a/637434.js"></script>
+```
+
+In the demo, I have to manually save the `window.toml` file with `C-x C-s`, but in my
+actual usage in VS Code the file is saved automatically after 100ms.
+
+As you can see, `window` is pretty much instant. How is this possible?
+
+## When Best Ideas of rust-analyzer and TigerBeetle are Combined in a Tool of Questionable
+   Usefulness
+
+Let's take a closer look at that query string:
+
+```toml
+reverse = false
+position = "0%"
+anchor = ""
+source_bytes_max = 104857600
+target_bytes_max = 102400
+target_lines_max = 50
+filter_in = [
+      ["(replica): 0", "view=74"],
+      ["(replica): 1", "view=74"]
+]
+filter_out = [
+       "ping", "pong"
+]
+```
+
+The secret sauce are `source_bytes_max` and `target_bytes_max` parameters.
+
+Let's start with `target_bytes_max`. This is a lesson from `rust-analyzer`. For dev tools, the user
+of software is a human. Humans are slow, and can't process a lot of information. That means it is
+generally useless to produce more than a hundred lines of output --- a human won't be able to make
+use of a larger result set --- they'd rather refine the query than manually sift through pages of
+results.
+
+So, when designing software to execute a user-supplied query, the inner loop should have some idea
+about the amount of results produced so far, and a short-circuiting logic. It is more valuable to
+produce some result quickly and to inform the user that the query is not specific, than to spend a
+second computing the full result set.
+
+A similar assumption underpins the architecture of a lot of language servers. No matter the size of
+the codebase, the amount of information displayed on the screen in user's IDE at a given point in
+time is O(1). A typical successful language server tries hard to do the abosolute minimal amount of
+work to compute the relevant information, and nothing more.
+
+So, the `window`, by default, limits the output size to the minimum of 100 kilobytes / 50 lines, and
+never tries to compute more than that. If the first 50 lines of the output don't contain the result,
+the user can make the query more specific by adding more AND terms to `filter_in` causes, or adding
+OR terms to `filter_out`.
+
+TigerBeetle gives `window` the second magic parameter --- `source_bytes_max`. The big insight of
+TigerBeetle is that all software always has limits. Sometimes the limit is a  hard wall: if a server
+runs out of file descriptors, it just crashes. The limit can also be a soft, sloughy bog as well: if
+the server runs out of memory, it might start paging memory in and out, slowing to a crawl. Even if
+some requests are, functionally speaking, fulfilled, the results are useless, as they arrive too
+late. Or, in other words, every request has a (potentially quiet large) latency window.
+
+It might be a good idea to make the limits explicit, and design software around them. That gives
+predictable performance, and allows the user to manually chunk larger requests in manageable pieces.
+
+That is exactly what `window` does. Grepping 100 megabytes is pretty fast. Grepping more might be
+slow. So `window` just doesn't do it. Here's a rough rundown of the algorithm:
+
+1. `mmap` the entire input file to a `&[u8]`.
+2. Wait until the control file (`window.toml`) changes and contains a valid query.
+3. Convert the `position` field (which might be absolute or a percentage) to an absolute offset.
+4. Select slice of `source_bytes_max` starting at that offset.
+5. Adjust boundaries of the slice to be on `\n`.
+6. Iterate lines.
+7. If a line matches any of `filter_out` conditions, skip over it.
+8. If a line matches any of `filter_in` conditions, add it to the result.
+9. Break when reaching the end of `source_bytes_max` window, or when the size of output exceeds
+   `target_bytes_max`.
+
+The deal is:
+
+- It's on the user to position a limited window over the interesting part of the input.
+- In exchange, the `window` tool guarantees constant-time performance.
+
+## Limits of Applicability
+
+Important pre-requisites to make the "limit the size of the output" work are:
+
+- The user can refine the query.
+- The results are computed instantly.
+
+If these assumptions are violated, it might be best to return the full list of results.
+
+Here's one counterexample! I love reading blogs. When I find a great post, I often try to read all
+other posts by the same author --- older posts which are still relevant usually are much more
+valuable then the news of the day. I love when blogs have a simple chronological list of all
+articles, a-la: <https://matklad.github.io>{.display}
+
+Two blogging platforms mess up this feature:
+
+WordPress blogs love to have "archives" organized by month, where a month's page typically has 1 to
+3 entries. What's more, WordPress loves to display a couple of pages of content for each entry. This
+is just comically unusable --- the amount of _entries_ on a page is too few to effectively search
+them, but the actual amount of content on a page is overwhelming.
+
+Substack's archive is an infinite scroll that fetches 12 entries at a time. 12 entries is a joke!
+It's only 1kb compressed, and is clearly bellow human processing limit. There _might_ be some
+argument for client-side pagination to postpone loading of posts' images, but feeding the posts
+themselves over the network one tiny droplet at a time seems excessive.
+
+---
+
+To recap:
+
+- Limiting _output_ size might be a good idea, because, with a human on the other side of display,
+  any additional line of output has a diminishing return (and might even be a net-negative). On the
+  other hand, constant-time output allows reducing latency, and can even push a batch workflow into
+  an interactive one
+- Limiting _input_ size might be a good idea, because the input is _always_ limited anyway. The
+  question is whether you know the limit, and whether the clients know how to cut their queries into
+  reasonably-sized batches.
+- If you have exactly the same 20 GB log file problems as me, you might install `window` with
+
+  ```console
+  $ cargo install --git https://github.com/matklad/window
+  ```

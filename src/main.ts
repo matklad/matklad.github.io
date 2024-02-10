@@ -54,11 +54,11 @@ function fatal(message: string) {
 }
 
 async function watch(params: { filter: string }) {
-  let signal = async.deferred();
+  let signal = Promise.withResolvers();
   (async () => {
     let build_id = 0;
-    while (await signal) {
-      signal = async.deferred();
+    while (await signal.promise) {
+      signal = Promise.withResolvers();
       console.log(`rebuild #${build_id}`);
       build_id += 1;
       await build({
