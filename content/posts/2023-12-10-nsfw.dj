@@ -26,7 +26,7 @@ as long as A itself loses access to the cell.
 
 But there are also types which are unsafe to use from multiple threads even if only a single thread
 at a time has access to a value. An example here would be an `Arc<Cell<i32>>`. It's not possible
-to safety send such an `Arc` to a different thread, because a `.clone` call can be used to get an
+to safely send such an `Arc` to a different thread, because a `.clone` call can be used to get an
 independent copy of an `Arc`, effectively creating a _share_ operation out of a _send_ one.
 
 But turns out both cases are covered by just a single trait, `Send`. The thing is, to _share_ a
