@@ -1,0 +1,87 @@
+# Kafka versus Nabokov
+
+Uplifting a lobste.rs comment to a stand-alone post.
+
+`objectif_lune` [asks](https://lobste.rs/s/9xtcun/complex_systems_bridging_between_spec):
+
+> I am on the cusp (hopefully) of kicking off development of a fairly large and complex system
+> (multiple integrated services, kafkas involved, background processes, multiple client frontends,
+> etc…). It’s predominantly going to be built in rust (but that’s only trivially relevant; i.e. not
+> following standard OOP).
+>
+> Here’s where i’m at:
+>
+> 1.  ve defined all the components, services, data stores to use / or develop
+> 2. I have a a fairly concrete conceptualisation of how to structure and manage data on the storage
+>    end of the system which i’m formalizing into a specification
+> 3. I have a deployment model for the various parts of the system to go into production
+>
+> The problem is, I have a gap, from these specs of the individual components and services that need
+> to be built out, to the actual implementation of those services. I’ve scaffolded the code-base
+> around what “feels” like sensible semantics, but bridging from the scope, through the high-level
+> code organisation through to implementation is where I start to get a bit queasy.
+>
+> In the past, i’ve more or less dove head-first into just starting to implement, but the problem has
+> been that I will very easily end up going in circles, or I end up with a lot of duplicated code
+> across areas and just generally feel like it’s not working out the way I had hoped (obviously
+> because i’ve just gone ahead and implemented).
+>
+> What are some tools, processes, design concepts, thinking patterns that you can use to sort of fill
+> in that “last mile” from high-level spec to implementing to try and ensure that things stay on track
+> and limit abandonment or going down dead-ends?
+>
+> I’m interested in advice, articles, books, or anything else that makes sense in the rough context
+> above. Not specifically around for instance design patterns themselves, i’m more than familiar with
+> the tools in that arsenal, but how do you bridge the gap between the concept and the implementation
+> without going too deep down the rabbit-hole of modelling out actual code and everything else in UML
+> for instance? How do you basically minimize getting mired in massive refactors once you get to
+> implementation phase?
+
+My answer:
+
+---
+
+I don’t have much experience building these kind of systems (I like Kafka, but I must say I prefer
+Nabokov’s rendition of similar ideas in “Invitation to a Beheading” and “Pale Fire” more), but
+here’s a couple of things that come to mind.
+
+First, [every complex system that works started out as a simple system that worked](https://en.wikipedia.org/wiki/John_Gall_(author)#Gall's_law). Write code top
+down: <https://www.teamten.com/lawrence/programming/write-code-top-down.html>{.display}
+
+Even if it is a gigantic complex system with many moving parts, start with spiking and end-to-end
+solution which can handle one particular variation of a happy path. Build skeleton first, flesh can
+be added incrementally.
+
+To do this, you’ll need some way to actually run the entire system while it isn’t deployed yet,
+which is something you need to solve before you start writing pages of code.
+
+Similarly, include testing strategy in the specification, and start with one single simple
+end-to-end test. I think that TDD as a way to design a class or a function is mostly snake oil
+(because [“unit” tests are mostly snake
+oil](https://matklad.github.io/2021/05/31/how-to-test.html)), but the overall large scale design of
+the system should absolutely be driven by the way the system will be tested.
+
+It is helpful to dwell on these two laws:
+
+[**First Law of Distributed Object Design:**](https://martinfowler.com/articles/distributed-objects-microservices.html)
+
+> Don’t distribute your objects.
+
+[**Conway’s law:**](https://en.wikipedia.org/wiki/Conway%27s_law)
+
+> Organizations which design systems are constrained to produce designs which are copies of the
+> communication structures of these organizations.
+
+The code architecture of your solution is going to be isomorphic to your org chart, not to your
+deployment topology. Let’s say you want to deploy there different services: `foo`, `bar`, and `baz`.
+Just put all three into a single binary, which chan be invoked as `app foo`, `app bar`, and `app
+baz`. This mostly solves any code duplication issues — if there’s shared code, just call it!
+
+Finally, system boundaries are the focus of the design:
+<https://www.tedinski.com/2018/02/06/system-boundaries.html>{.display}
+
+Figure out hard system boundaries between “your system” and “not your system”, and do design those
+carefully. Anything else that looks like a boundary isn’t. It is useful to spend some effort
+designing those things as well, but it’s more important to make sure that you can easily change
+them. Solid upgrade strategy for deployment trumps any design which seems perfect at a given moment
+in time.
