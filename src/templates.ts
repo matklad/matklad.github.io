@@ -95,7 +95,7 @@ export const base = (
   ${content}
   </main>
 
-  <footer class="site-footer">
+  <footer>
     <p>
       <a href="https://github.com/matklad/matklad.github.io/edit/master${src}">
         <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
