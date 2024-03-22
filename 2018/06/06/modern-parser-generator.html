@@ -1,0 +1,771 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modern Parser Generator</title>
+  <meta name="description" content="Hi! During the last couple of years, I've spent a lot of time writing
+parsers and parser generators, and I want to write down my thoughts
+about this topic. Specifically, I want to describe some properties of
+a parser generator that I would enjoy using. Note that this is not an
+introduction to parsing blog post, some prior knowledge is assumed.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2018/06/06/modern-parser-generator.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Modern Parser Generator</span> <time datetime="2018-06-06">Jun 6, 2018</time></h1>
+<p><span>Hi! During the last couple of years, I</span>&rsquo;<span>ve spent a lot of time writing</span>
+<span>parsers and parser generators, and I want to write down my thoughts</span>
+<span>about this topic. Specifically, I want to describe some properties of</span>
+<span>a parser generator that I would enjoy using. Note that this is not an</span>
+&ldquo;<span>introduction to parsing</span>&rdquo;<span> blog post, some prior knowledge is assumed.</span></p>
+<p><span>Why do I care about this at all? The broad reason is that today a lot</span>
+<span>of tools and even most editors use regular expressions to</span>
+<span>approximately parse programming languages, and I find this outright</span>
+<a href="https://stackoverflow.com/a/1732454/1936422"><span>b҉a͡rb̢ari͞c͘</span></a><span>. I understand</span>
+<span>that in practice parsing is not as easy as it is in theory:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>Law: You can</span>&rsquo;<span>t check code you can</span>&rsquo;<span>t parse. Checking code deeply requires</span>
+<span>understanding the code</span>&rsquo;<span>s semantics. The most basic requirement is that you parse</span>
+<span>it. Parsing is considered a solved problem. Unfortunately, this view is naïve,</span>
+<span>rooted in the widely believed myth that programming languages exist.</span></p>
+</blockquote>
+<figcaption><cite><a href="https://cacm.acm.org/magazines/2010/2/69354-a-few-billion-lines-of-code-later/fulltext"><span>A few billion lines of code later</span></a></cite></figcaption>
+</figure>
+<p><span>However, I do believe we could do better if we use better tools!</span></p>
+<p><span>The specific reason is that I care way too much about the Rust</span>
+<span>programming language and</span></p>
+<ul>
+<li>
+<p><span>I think today it is the best language for writing compiler-like</span>
+<span>stuff (yes, better than OCaml!),</span></p>
+</li>
+<li>
+<p><span>I</span>&rsquo;<span>d love to see an awesome parser generator written in and</span>
+<span>targeting Rust,</span></p>
+</li>
+<li>
+<p><span>I want to write a Rust parser in a</span>
+<a href="https://github.com/rust-lang/rfcs/pull/2256"><span>slightly better way</span></a><span>. I</span>&rsquo;<span>ve</span>
+<a href="https://github.com/intellij-rust/intellij-rust/blob/e39a199992372603ba7b7fe23d77b9138454b972/src/main/grammars/RustParser.bnf"><span>done</span></a>
+<span>it</span>
+<a href="https://github.com/matklad/fall/blob/527ab331f82b8394949041bab668742868c0c282/lang/rust/syntax/src/rust.fall"><span>twice</span></a>
+<span>already :) (update: </span><a href="https://github.com/rust-lang/rust-analyzer/blob/599142c34abad1442994947bd1200ce0bc973c54/crates/parser/src/grammar.rs#L90"><span>thrice</span></a><span>)</span></p>
+</li>
+</ul>
+<p><span>I</span>&rsquo;<span>ve used various parser generators, implemented one,</span>
+<a href="https://github.com/matklad/fall/"><span>fall</span></a><span>, and still haven</span>&rsquo;<span>t met a parser generator</span>
+<span>that I love.</span></p>
+<p><span>The post is split into three major chapters:</span></p>
+<ul>
+<li>
+<p><strong><strong><span>UX</span></strong></strong><span> </span>&mdash;<span> how to make using a parser generator easy, enjoyable and</span>
+<span>fun?</span></p>
+</li>
+<li>
+<p><strong><strong><span>API</span></strong></strong><span> </span>&mdash;<span> what API the generated parser should have.</span></p>
+</li>
+<li>
+<p><strong><strong><span>Parsing Techniques</span></strong></strong><span> </span>&mdash;<span> how exactly do we get from text to the</span>
+<span>parsed tree?</span></p>
+</li>
+</ul>
+<p><span>I</span>&rsquo;<span>ll be using a rather direct and assertive language in the following,</span>
+<span>but the fact is I am totally not sure about anything written here, and</span>
+<span>would love to know more about alternatives!</span></p>
+<section id="UX">
+
+    <h2>
+    <a href="#UX"><span>UX</span> </a>
+    </h2>
+<p><span>Although this text is written in Emacs, I strongly believe that a</span>
+<span>semantic-based, reliable, and fast support from tooling is a great</span>
+<span>boon to learnability and productivity. A great IDE support is a must</span>
+<span>for a modern parser generator, and this chapter talks mostly about</span>
+<span>IDE-related features.</span></p>
+<p><span>The most important productivity boost of a parser generator is the</span>
+<span>ability to fiddle with grammar interactively. The UI for this might</span>
+<span>look as a three-pane view, where the grammar is on the first pane,</span>
+<span>example code to parse is in the second pane and the resulting parse</span>
+<span>tree is in the third one. Editing first two panes should reactively</span>
+<span>update the last one. This is difficult to implement with most</span>
+<span>yacc-like parser generators, I</span>&rsquo;<span>ll talk more about it in the next</span>
+<span>section.</span></p>
+<p><span>The second most important feature is inline tests: for complex</span>
+<span>grammars it could be really hard to map from a particular rule</span>
+<span>specification to actual code that is parsed by the rule. Having a test</span>
+<span>written alongside the rule is invaluable! The test should be just a</span>
+<span>snippet of code in the target language. The </span>&ldquo;<span>gold</span>&rdquo;<span> value of the parse</span>
+<span>tree for the snippet should be saved in the file alongside the grammar</span>
+<span>and should be updated automatically when the grammar changes. Having</span>
+<span>inline tests allows to fit the </span>&ldquo;<span>three pane UI</span>&rdquo;<span> from the previous into</span>
+<span>two panes because you can just use the test as your second pane.</span></p>
+<p><span>Here</span>&rsquo;<span>s a video that shows how it works in fall: </span><a href="https://youtu.be/gb1MJnTcvds" class="url">https://youtu.be/gb1MJnTcvds</a><span>.</span></p>
+<p><span>Note that even if you write your parser by hand, you still should use such</span>
+&ldquo;<span>inline tests</span>&rdquo;<span>. To do so, write them as comments with special markers, and write</span>
+<span>a small script which extracts such comments and turns them into tests proper.</span>
+<span>Here</span>&rsquo;<span>s </span><a href="https://github.com/matklad/libsyntax2/blob/9500ad521121f501aea02f549223eb583cb298ee/src/parser/grammar/types.rs#L145-L168"><span>an</span>
+<span>example</span></a>
+<span>from one experimental hand-written parser of mine. Having such examples of </span>&ldquo;<span>what</span>
+<span>does this </span><code>if</code><span> parses?</span>&rdquo;<span> greatly simplifies reading of parser</span>&rsquo;<span>s code!</span></p>
+<p><span>Here</span>&rsquo;<span>s the list of important misc IDE features, from super important to very</span>
+<span>important. They are not specific to parser generators, so, if you are </span><strong><span>using</span></strong><span> a</span>
+<span>parser generator to implement IDE support for your language, look into these</span>
+<span>first!</span></p>
+<ul>
+<li>
+<p><span>Extend selection to the enclosing syntactic structure (and not just</span>
+<span>to a braced block). A super simple feature, but this combined with</span>
+<span>multiple cursors is arguably more powerful than vim</span>&rsquo;<span>s text objects,</span>
+<span>and most definitely easier to use.</span></p>
+</li>
+<li>
+<p><span>Fuzzy search of symbols in the current file/in the project: super</span>
+<span>handy for navigation, both more important and easier to implement</span>
+<span>than goto definition.</span></p>
+</li>
+<li>
+<p><span>Precise syntax highlighting. Highlighting is not a super-important</span>
+<span>feature and actually works ok even with regex approximations, but</span>
+<span>if you already have the syntax tree, then why not use it?</span></p>
+</li>
+<li>
+<p><span>Go to definition/find references.</span></p>
+</li>
+<li>
+<p><span>Errors and warnings inline, with fixes if available.</span></p>
+</li>
+<li>
+<p><span>Extract rule refactoring, pairs well with extend selection.</span></p>
+</li>
+<li>
+<p><span>Code formatting.</span></p>
+</li>
+<li>
+<p><span>Smart typing: indenting code on </span><code>Enter</code><span>, adding/removing trailing</span>
+<span>commas when joining/splitting lines, and in general auto magically</span>
+<span>fixing punctuation.</span></p>
+</li>
+<li>
+<p><span>Code completion: although for parser generators dumb word-based</span>
+<span>completion tends to work OK.</span></p>
+</li>
+</ul>
+<p><span>Here</span>&rsquo;<span>s a short demo of some of these features in fall: </span><a href="https://youtu.be/WRWmwfBLf7o" class="url">https://youtu.be/WRWmwfBLf7o</a><span>.</span></p>
+<p><span>I want to emphasize that most of these features are </span><strong><strong><span>ridiculously</span></strong></strong><span> easy to</span>
+<span>implement, if you have a parse tree for your language. Take, for example, </span>&ldquo;<span>fuzzy</span>
+<span>search of symbols in the project</span>&rdquo;<span>. This is a super awesome feature for</span>
+<span>navigation. Basically, it is CTAGS done right: first, you parse each file (in</span>
+<span>parallel) and build a list of symbols for it. Then, as user types, you</span>
+<span>incrementally update the changed files. Using fall, I</span>&rsquo;<span>ve implemented this</span>
+<span>feature for Rust, and it took me three small files:</span></p>
+<ul>
+<li>
+<p><a href="https://github.com/matklad/fall/blob/527ab331f82b8394949041bab668742868c0c282/lang/rust/src/editor/file_symbols.rs"><span>find</span><span>_symbols.rs</span></a>
+<span>to extract symbols from a single file, 21(!) lines.</span></p>
+</li>
+<li>
+<p><a href="https://github.com/matklad/fall/blob/527ab331f82b8394949041bab668742868c0c282/indxr/src/lib.rs"><span>indxr.rs</span></a><span>,</span>
+<span>a generic infra to watch files for changes and recompute the index incrementally, 155 lines.</span></p>
+</li>
+<li>
+<p><a href="https://github.com/matklad/fall/blob/master/lang/rust/src/editor/symbol_index.rs"><span>symbol</span><span>_index.rs</span></a>
+<span>glues the previous two together, and adds</span>
+<a href="https://github.com/BurntSushi/fst"><span>fst</span></a><span> by ever-awesome BurntSushi</span>
+<span>on top for fuzzy search, 122 lines.</span></p>
+</li>
+</ul>
+<p><span>This is actually practical: initial indexing of rust-lang/rust repo</span>
+<span>takes about 30 seconds using a single core and fall</span>&rsquo;<span>s ridiculously</span>
+<span>slow parser, and after that everything just works:</span></p>
+<p><a href="https://youtu.be/KyUUDcnOvUw" class="url">https://youtu.be/KyUUDcnOvUw</a></p>
+<p><span>A small note on how to pack all this IDE functionality: make a library. That</span>
+<span>way, anyone could use it anywhere. For example, as a web-assembly module in the</span>
+<span>online version. On top of the library you could implement whatever protocol you</span>
+<span>like, Microsoft</span>&rsquo;<span>s LSP, or some custom one. If you go the protocol-first way,</span>
+<span>using your code outside of certain editors could be harder.</span></p>
+</section>
+<section id="API">
+
+    <h2>
+    <a href="#API"><span>API</span> </a>
+    </h2>
+<section id="Parse-Tree">
+
+    <h3>
+    <a href="#Parse-Tree"><span>Parse Tree</span> </a>
+    </h3>
+<p><span>Traditionally, parser generators work by allowing the user to specify</span>
+<span>custom code for each rule, which is then copy-pasted into the</span>
+<span>generated parser. This is typically used to construct an abstract</span>
+<span>syntax tree, but could be used, for example, to evaluate arithmetic</span>
+<span>expressions during parsing.</span></p>
+<p><span>I don</span>&rsquo;<span>t think this is the right API for the parser generator for three</span>
+<span>reasons though.</span></p>
+<p><span>It feels like a layering violation because it allows to intermix parsing with</span>
+<span>basically everything else. You can literally do code-generation during parsing.</span>
+<span>It makes things like</span>
+<a href="https://eli.thegreenplace.net/2007/11/24/the-context-sensitivity-of-cs-grammar/"><span>the lexer hack</span></a><span> possible.</span></p>
+<p><span>It would be very hard to implement reactive rendering of the parse</span>
+<span>tree if the result of parsing is some user-defined type.</span></p>
+<p><span>Most importantly, I don</span>&rsquo;<span>t think that producing </span><strong><strong><span>abstract</span></strong></strong><span> syntax</span>
+<span>tree as a result of parsing is the right choice. The problem with AST</span>
+<span>is that it, by definition, loses information. The most commonly lost</span>
+<span>things are whitespace and comments. While they are not important for a</span>
+<span>command-line batch compiler, they are crucial for IDEs, which work</span>
+<span>very close to the original source code. Another important IDE-specific</span>
+<span>aspect is support for incomplete code. If a function is missing a body</span>
+<span>and a closing parenthesis on the parameter list, it</span>&rsquo;<span>s still better be</span>
+<span>recognized as a function. It</span>&rsquo;<span>s difficult to support such missing</span>
+<span>pieces in traditional AST.</span></p>
+<p><span>I am pretty confident that a better API for the generated parser is to</span>
+<span>produce a parse tree which losslessly represents both the input text</span>
+<span>and associated tree structure. Losslessness is a very important</span>
+<span>property: it guarantees that we could implement anything in principle.</span></p>
+<p><span>I</span>&rsquo;<span>ve outlined one possible design of such lossless representation in the</span>
+<a href="https://github.com/rust-lang/rfcs/pull/2256"><span>libsyntax2</span></a><span> RFC, the simplified</span>
+<span>version looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Kind</span>(<span class="hl-type">u32</span>);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Node</span> {</span>
+<span class="line">    kind: Kind,</span>
+<span class="line">    span: (<span class="hl-type">usize</span>, <span class="hl-type">usize</span>),</span>
+<span class="line">    children: <span class="hl-type">Vec</span>&lt;Node&gt;,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>That is, the result of parsing is a </span><strong><span>homogeneous</span></strong><span> tree, with nodes</span>
+<span>having two bits of information besides the children:</span></p>
+<ul>
+<li>
+<p><span>Type of a node: is it a function definition, a parameter, a</span>
+<span>comment?</span></p>
+</li>
+<li>
+<p><span>Region of the source text covered by the node.</span></p>
+</li>
+</ul>
+<p><span>A cool thing about such representation is that </span><strong><span>every</span></strong><span> language uses</span>
+<span>the same type of the syntax tree. In fall features like extend</span>
+<span>selection are implemented once and work for all languages.</span></p>
+<p><span>If you need it, you can do the conversion to AST in a separate</span>
+<span>pass. Alternatively, it</span>&rsquo;<span>s possible to layer AST on top of the</span>
+<span>homogeneous tree, using newtype wrappers like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// invariant: Node.kind == STRUCT_DEF</span></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">StructDef</span>(Node);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// invariant: Node.kind == STRUCT_FIELD</span></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">StructField</span>(Node);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">StructDef</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">fields</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Vec</span>&lt;StructField&gt; {</span>
+<span class="line">        <span class="hl-keyword">self</span>.<span class="hl-number">0</span>.children.<span class="hl-title function_ invoke__">iter</span>().<span class="hl-title function_ invoke__">filer</span>(|c| c.kind == STRUCT_FIELD)</span>
+<span class="line">            .<span class="hl-title function_ invoke__">map</span>(StructField)</span>
+<span class="line">            .<span class="hl-title function_ invoke__">collect</span>()</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Parser generator should automatically generate such AST wrappers. However, it</span>
+<span>shouldn</span>&rsquo;<span>t directly infer them from the grammar: not every node kind needs an AST</span>
+<span>wrapper, and method names are important. Better to let the user specify AST</span>
+<span>structure separately, and check that AST and parse tree agree. As an example</span>
+<span>from fall, here is the</span>
+<a href="https://github.com/matklad/fall/blob/527ab331f82b8394949041bab668742868c0c282/lang/rust/syntax/src/rust.fall#L380-L402"><span>grammar rule</span></a><span> for Rust paths, the corresponding</span>
+<a href="https://github.com/matklad/fall/blob/527ab331f82b8394949041bab668742868c0c282/lang/rust/syntax/src/rust.fall#L1253-L1256"><span>ast definition</span></a><span>, and the</span>
+<a href="https://github.com/matklad/fall/blob/527ab331f82b8394949041bab668742868c0c282/lang/rust/syntax/src/rust.rs#L876-L897"><span>generated code</span></a><span>.</span></p>
+</section>
+<section id="Incremental-Reparsing">
+
+    <h3>
+    <a href="#Incremental-Reparsing"><span>Incremental Reparsing</span> </a>
+    </h3>
+<p><span>Another important feature for modern parser generator is support for</span>
+<span>incremental reparsing, which is obviously useful for IDEs.</span></p>
+<p><span>One thing that greatly helps here is the split between parser and</span>
+<span>lexer phases.</span></p>
+<p><span>It is much simpler (and more efficient) to make lexing</span>
+<span>incremental. When lexing, almost any change affects at most a couple</span>
+<span>of tokens, so in theory incremental lexing could be pretty</span>
+<span>efficient. Beware though that worst-case relexing still has to be</span>
+<span>linear, because insertion of unclosed quote changes all the following</span>
+<span>tokens.</span></p>
+<p><span>In contrast, it is much easier to change tree structure significantly</span>
+<span>with a small edit, which places upper-bound on incremental reparsing</span>
+<span>effectiveness. Besides, making parsing incremental is more complicated</span>
+<span>because you have to deal with trees instead of a linear structure.</span></p>
+<p><span>An interesting middle ground here is an incremental lexer combined</span>
+<span>with a fast non-incremental parser.</span></p>
+</section>
+<section id="Lexer">
+
+    <h3>
+    <a href="#Lexer"><span>Lexer</span> </a>
+    </h3>
+<p><span>Traditional lex-style lexers struggle with special cases like ml-style</span>
+<span>properly nested comments or Rust raw literals which are even not</span>
+<a href="https://github.com/rust-lang/rust/blob/cb8ab33ed29544973da866bdc3eff509b3c3e789/src/grammar/raw-string-literal-ambiguity.md"><span>context-free</span></a><span>.</span>
+<span>The problem is typically solved by injecting custom code into lexer,</span>
+<span>which maintains some sort of state, like a nesting level of</span>
+<span>comments. In my experience, making this work properly is very</span>
+<span>frustrating.</span></p>
+<p><span>These two tricks may make writing lexer simpler.</span></p>
+<p><span>Instead of supporting lexer states and injecting custom code, allow to pair</span>
+<span>regex, which defines a token, with a function which takes a string slice and</span>
+<span>outputs </span><code>usize</code><span>. If lexer matches such external token, it then calls supplied</span>
+<span>function to determine the other end of the token. Here</span>&rsquo;<span>s an example from fall:</span>
+<a href="https://github.com/matklad/fall/blob/527ab331f82b8394949041bab668742868c0c282/lang/rust/syntax/src/rust.fall#L4"><span>external</span>
+<span>token</span></a><span>,</span>
+<a href="https://github.com/matklad/fall/blob/527ab331f82b8394949041bab668742868c0c282/lang/rust/syntax/src/rust.fall#L1294-L1324"><span>custom</span>
+<span>functions</span></a><span>.</span></p>
+<p><span>Often it is better to use layered languages instead of lexer</span>
+<span>states. Parsing string literals is a great example of this. String</span>
+<span>literals usually have some notion of a well-formed escape</span>
+<span>sequence. The traditional approach to parsing string literals is to</span>
+<span>switch to a separate lexer state after </span><code>"</code><span>, which handles</span>
+<span>escapes. This is bad for error recovery: if there</span>&rsquo;<span>s a typo in an</span>
+<span>escape sequence, it should still be possible to recognize literal</span>
+<span>correctly. So alternative approach is to parse a string literal as,</span>
+<span>basically, </span>&ldquo;<span>anything between two quotes</span>&rdquo;<span>, and then use a separate</span>
+<span>lexer for escapes specifically later in the compiler pipeline.</span></p>
+<p><span>Another interesting lexing problem which arises in practice is</span>
+<span>context-sensitivity: things like contextual keywords or </span><code>&gt;&gt;</code><span> can</span>
+<span>represent different token types, depending on the surrounding code. To</span>
+<span>deal with this case nicely, the parser should support token</span>
+<span>remapping. While most of the tokens appear in the final parse tree as</span>
+<span>is, the parser should be able to, for example, substitute two </span><code>&gt;</code><span> </span><code>&gt;</code>
+<span>tokens with a single </span><code>&gt;&gt;</code><span>, so that later stages of compilation need</span>
+<span>not to handle this special case.</span></p>
+</section>
+<section id="Parser">
+
+    <h3>
+    <a href="#Parser"><span>Parser</span> </a>
+    </h3>
+<p><span>A nice trick to make parser more general and fast is not to construct</span>
+<span>parse tree directly, but emit a stream of events like </span>&ldquo;<span>start internal</span>
+<span>node</span>&rdquo;<span>, </span>&ldquo;<span>eat token</span>&rdquo;<span>, </span>&ldquo;<span>finish internal node</span>&rdquo;<span>. That way, parsing does not</span>
+<span>itself allocate and, for example, you can use the stream of events to</span>
+<span>patch an existing tree, doing minimal allocations. This also divorces</span>
+<span>the parser from a particular tree structure, so it is easier to</span>
+<span>plug-in different tree backends.</span></p>
+<p><span>Events also help with reshuffling the tree structure. For example,</span>
+<span>during event processing we can turn left-leaning trees to</span>
+<span>right-leaning ones or flatten them into lists. Another interesting</span>
+<span>form of tree reshuffling is attachment of comments. If a comment</span>
+<span>immediately precedes some definition, it should be a part of this</span>
+<span>definition. This is not specified by the language, but it is the</span>
+<span>result that human would expect. With events, we can handle only</span>
+<span>significant tokens to the parser and deal with attaching comments and</span>
+<span>whitespace when reconstructing tree from a flat list of events.</span></p>
+</section>
+<section id="Miscellaneous-concerns">
+
+    <h3>
+    <a href="#Miscellaneous-concerns"><span>Miscellaneous concerns</span> </a>
+    </h3>
+<p><span>To properly implement incremental reparsing, we should start with a</span>
+<span>data structure for text which is more efficient to update than</span>
+<code>String</code><span>. While we do have quite a few extremely high-quality</span>
+<span>implementations of ropes, the ecosystem is critically missing a way to</span>
+<span>talks about them generically. That is, there</span>&rsquo;<span>s no something like</span>
+<span>Java</span>&rsquo;<span>s </span><code>CharSequence</code><span> in Rust (which needs a much more involved design</span>
+<span>in Rust to avoid unnecessary overhead).</span></p>
+<p><span>Luckily, the parse tree needs to remember only the offsets, so we can</span>
+<span>avoid hard-coding a particular text representation, and we don</span>&rsquo;<span>t even</span>
+<span>need a generic parameter for that.</span></p>
+<p><span>Homogeneous trees make reactive testing of the grammar possible in</span>
+<span>theory because you can always produce a text representation of a tree</span>
+<span>from them. But in practice reactivity requires that </span>&ldquo;<span>read grammar,</span>
+<span>compile parser, run it on input</span>&rdquo;<span> loop is fast. Literally generating</span>
+<span>source code of the parser and then compiling it would be too slow, so</span>
+<span>some kind of interpreted mode is required. However, this conflicts</span>
+<span>with the need to be able to extend lexer with custom code. I don</span>&rsquo;<span>t</span>
+<span>know of a great solution here, but something like this would work:</span></p>
+<ul>
+<li>
+<p><span>require that all lexer extensions are specified in the verbatim</span>
+<span>block of the grammar file and don</span>&rsquo;<span>t have external dependencies,</span></p>
+</li>
+<li>
+<p><span>for IDE support, compile the lexer, and only the lexer, in a temp</span>
+<span>dir and communicate with it via IPC.</span></p>
+</li>
+</ul>
+<p><span>A possible alternative is to use a different, approximate lexer for</span>
+<span>interactive testing of the grammar. In my experience this makes such</span>
+<span>testing almost useless because you get different results in</span>
+<span>interesting cases and interesting cases are what is important for this</span>
+<span>feature.</span></p>
+<p><span>In IDEs, a surprisingly complicated problem is managing a list of open</span>
+<span>and modified files, synchronizing them with the file system, providing</span>
+<span>consistent file-system snapshots and making sure that things like</span>
+<span>in-memory buffers are also possible. For parser generators, all this</span>
+<span>complexity might be dodged by requiring that all of the grammar needs</span>
+<span>to be specified in a single file.</span></p>
+</section>
+</section>
+<section id="Parsing-Techniques">
+
+    <h2>
+    <a href="#Parsing-Techniques"><span>Parsing Techniques</span> </a>
+    </h2>
+<p><span>So we want to write a parser generator that produces lossless parse</span>
+<span>trees and which has an awesome IDE support. How do we actually </span><strong><span>parse</span></strong>
+<span>a text into a tree? Unfortunately, while there are many ways to parse</span>
+<span>text, there</span>&rsquo;<span>s no accepted best one. I</span>&rsquo;<span>ll try to do a broad survey of</span>
+<span>various options.</span></p>
+<p><span>I</span>&rsquo;<span>d love to discuss the challenges of the textbook approach of just</span>
+<span>using a context-free grammar/BNF notation. However, let</span>&rsquo;<span>s start with a</span>
+<span>simpler, </span>&ldquo;<span>solved</span>&rdquo;<span> case: regular expressions.</span></p>
+<p><span>Languages which could be described by regular expressions are called</span>
+<span>regular. They are exactly the same languages which could be recognized</span>
+<span>by finite state machines. These two definition mechanisms have nice</span>
+<span>properties which explain the usefulness of regular languages in real</span>
+<span>life:</span></p>
+<ul>
+<li>
+<p><span>Regular expressions map closely to our thinking and are easy for</span>
+<span>humans to understand. Note that there are equivalent in power, but</span>
+<span>much less </span>&ldquo;<span>natural</span>&rdquo;<span> meta-languages for describing regular</span>
+<span>languages: raw finite state machines or regular grammars.</span></p>
+</li>
+<li>
+<p><span>Finite state machines are easy for computers to execute. FSM is</span>
+<span>just a program which is guaranteed to use constant amount of</span>
+<span>memory.</span></p>
+</li>
+</ul>
+<p><span>Regular languages are rather inexpressive, but they work great for</span>
+<span>lexers. On the opposite side of expressivity spectrum are Turing</span>
+<span>machines. For them, we also have a number of meta-languages (like</span>
+<span>Rust), which work great for humans. It</span>&rsquo;<span>s interesting that a Turing</span>
+<span>machine is equivalent to a finite state machine with a pair of stacks:</span>
+<span>to get two stacks from a tape, cut the tape in half where the head</span>
+<span>is. Moving the head then corresponds to popping from one stack and</span>
+<span>pushing to another.</span></p>
+<p><span>And the context-free languages, which are described by CFGs, are</span>
+<span>exactly in between languages recognized by finite state machines and</span>
+<span>languages recognized by Turing machines. You need a push-down</span>
+<span>automaton, or a state machine with </span><strong><span>one</span></strong><span> stack, to recognize a</span>
+<span>context-free language.</span></p>
+<p><span>CFGs are powerful enough to describe arbitrary nesting structures and</span>
+<span>seem to be a good fit for describing programming languages. However,</span>
+<span>there are a couple of problems with CFGs. Let</span>&rsquo;<span>s write a grammar for</span>
+<span>arithmetic expressions with additions, multiplications, parenthesis</span>
+<span>and numbers. The obvious answer,</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">E -&gt; E + E | E * E | (E) | number</span></code></pre>
+
+</figure>
+<p><span>has a problem. It is under specified and does not tell if </span><code>1 + 2 * 3</code>
+<span>is </span><code>(1 + 2) * 3</code><span> or </span><code>1 + (2 * 3)</code><span>. We need to tweak the grammar to get</span>
+<span>rid of this ambiguity:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">E -&gt; F | E + F</span>
+<span class="line">F -&gt; T | F * T</span>
+<span class="line">T -&gt; number | (E)</span></code></pre>
+
+</figure>
+<p><span>I think the necessity of such transformations is a problem! Humans don</span>&rsquo;<span>t think</span>
+<span>like this: it took me three or four courses in formal grammars to really</span>
+<span>internalize this transformation. And if we look at language references, we</span>&rsquo;<span>ll</span>
+<span>typically see a</span>
+<a href="https://doc.rust-lang.org/1.22.1/reference/expressions/operator-expr.html#operator-precedence"><span>precedence</span>
+<span>table</span></a><span> instead of BNF.</span></p>
+<p><span>Another problem here is that we even can</span>&rsquo;<span>t workaround ambiguity by</span>
+<span>plainly forbidding it: checking if CFG is unambiguous is undecidable.</span></p>
+<p><span>So CFGs turn out to be much less practical and simple than regular</span>
+<span>expressions. What options do we have then?</span></p>
+<section id="Abandoning-CFG">
+
+    <h3>
+    <a href="#Abandoning-CFG"><span>Abandoning CFG</span> </a>
+    </h3>
+<p><span>The first choice is to parse </span><strong><span>something</span></strong><span>, not necessary a context-free</span>
+<span>language. A good way to do it is to write a parser by hand. A</span>
+<span>hand-written parser is usually called a recursive descent parser, but</span>
+<span>in reality it includes two crucial techniques in addition to just</span>
+<span>recursive descent. The pure recursive descent works by translating</span>
+<span>grammar rules like </span><code>T -&gt; A B</code><span> into a set of recursive functions:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">parse_t</span>() {</span>
+<span class="line">    <span class="hl-title function_ invoke__">parse_a</span>();</span>
+<span class="line">    <span class="hl-title function_ invoke__">parse_b</span>();</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The theoretical problem here is that it can</span>&rsquo;<span>t deal with</span>
+<span>left-recursion. That is, rules like </span><code>Statements -&gt; Statements ';'
+OneStatement</code><span> make recursive descent parser to loop infinitely. In</span>
+<span>theory, this problem is solved by rewriting the grammar and</span>
+<span>eliminating the left recursion. If you had a formal grammars class,</span>
+<span>you probably have done this! In practice, this is a completely</span>
+<span>non-existent problem, because we have loops:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">parse_statements</span>() {</span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">        <span class="hl-title function_ invoke__">parse_one_statement</span>();</span>
+<span class="line">        <span class="hl-keyword">if</span> !<span class="hl-title function_ invoke__">parse_semicolon</span>() {</span>
+<span class="line">            <span class="hl-keyword">break</span>;</span>
+<span class="line">        }</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The next problem with recursive descent is that parsing expressions with</span>
+<span>precedence requires that weird grammar rewriting.  Luckily, there</span>&rsquo;<span>s a simpler</span>
+<span>technique to deal with expressions. Suppose you want to parse </span><code>1 + 2 * 3</code><span>. One</span>
+<span>way to do that would be to parse it with a </span><code>loop</code><span> as a list of atoms separated</span>
+<span>by operators and then reconstruct a tree separately. If you fuse these two</span>
+<span>stages together, you get a loop, which could recursively call itself and nest,</span>
+<a href="http://journal.stuffwithstuff.com/2011/03/19/pratt-parsers-expression-parsing-made-easy/"><span>a</span>
+<span>Pratt parser</span></a><span>. Understanding it for the first time is hard, but you only need to</span>
+<span>do it once :)</span></p>
+<p><span>The most important feature of hand-written parsers is a great support</span>
+<span>for error recovery and partial parses. It boils down to two simple</span>
+<span>tricks.</span></p>
+<p><span>If you are parsing a homogeneous sequence of things (i.e, you are inside the</span>
+<span>loop), and the current token does not look like it can begin a new element, you</span>
+<span>just skip over it and start the next iteration of the loop. Here</span>&rsquo;<span>s an</span>
+<a href="https://github.com/JetBrains/kotlin/blob/9891f562cc0acb505ee5ff2f30626253ace0201a/compiler/psi/src/org/jetbrains/kotlin/parsing/KotlinParsing.java#L1048-L1136"><span>example</span></a>
+<span>from Kotlin. At</span>
+<a href="https://github.com/JetBrains/kotlin/blob/9891f562cc0acb505ee5ff2f30626253ace0201a/compiler/psi/src/org/jetbrains/kotlin/parsing/KotlinParsing.java#L1086"><span>this</span>
+<span>line</span></a><span>, we</span>&rsquo;<span>ll get </span><code>null</code><span> if current token could not begin a class member</span>
+<span>declaration.</span>
+<a href="https://github.com/JetBrains/kotlin/blob/9891f562cc0acb505ee5ff2f30626253ace0201a/compiler/psi/src/org/jetbrains/kotlin/parsing/KotlinParsing.java#L1089"><span>Here</span></a>
+<span>we just skip over it.</span></p>
+<p><span>If you are parsing a particular thing </span><code>T</code><span>, and you expect token </span><code>foo</code><span>,</span>
+<span>but see </span><code>bar</code><span>, then, roughly:</span></p>
+<ul>
+<li>
+<span>if </span><code>bar</code><span> is not in the </span><code>FOLLOW(T)</code><span>, you skip over it and emit error,</span>
+</li>
+<li>
+<span>if </span><code>bar</code><span> is in </span><code>FOLLOW(T)</code><span>, you emit error, but </span><strong><span>don</span>&rsquo;<span>t</span></strong><span> skip the</span>
+<span>token.</span>
+</li>
+</ul>
+<p><span>That way, parsing something like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">foo</span>(</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">S</span> {</span>
+<span class="line">   f: <span class="hl-type">u32</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>would correctly recognize incomplete function </span><code>foo</code><span> (again, its easier to</span>
+<span>represent such incomplete function with homogeneous parse trees than with AST),</span>
+<span>and a complete struct </span><code>S</code><span>. Here</span>&rsquo;<span>s another</span>
+<a href="https://github.com/JetBrains/kotlin/blob/9891f562cc0acb505ee5ff2f30626253ace0201a/compiler/psi/src/org/jetbrains/kotlin/parsing/KotlinParsing.java#L1219"><span>example</span>
+<span>from Kotlin</span></a><span>.</span></p>
+<p><span>Although hand-written parsers are good at producing high-quality error</span>
+<span>messages as well, I don</span>&rsquo;<span>t think that this is important. In the IDE</span>
+<span>context, for syntax errors it is much more important and beneficial to</span>
+<span>get a red squiggly under the error immediately after you</span>&rsquo;<span>ve typed</span>
+<span>invalid code. Instantaneous feedback and precise location are, in my</span>
+<span>personal experience, enough to fix syntax errors. The error message</span>
+<span>can be just </span>&ldquo;<span>Syntax error</span>&rdquo;<span>, and more elaborate messages are often make</span>
+<span>things </span><strong><span>worse</span></strong><span> because mapping from an error message to what is</span>
+<span>actually wrong is harder than just typing and deleting stuff and</span>
+<span>checking if it works.</span></p>
+<p><span>It is possible to simplify authoring of this style of parsers by</span>
+<span>generating all recursive functions, loop and Pratt parsers from</span>
+<span>declarative BNF/PEG style description. This is what Grammar Kit and</span>
+<span>fall do.</span></p>
+</section>
+<section id="Embracing-ambiguity">
+
+    <h3>
+    <a href="#Embracing-ambiguity"><span>Embracing ambiguity</span> </a>
+    </h3>
+<p><span>Another choice is to stay within CFG class but avoid dealing with</span>
+<span>ambiguity by producing </span><strong><span>all</span></strong><span> possible parse trees for a given</span>
+<span>input. This is typically achieved using non-determinism and</span>
+<span>memorization, using GLR and GLL style techniques.</span></p>
+<p><span>Here I</span>&rsquo;<span>d like to call out</span>
+<a href="https://github.com/tree-sitter/tree-sitter"><span>tree-sitter</span></a><span> project, which actually</span>
+<span>ticks quite a few boxes outlined in this blog post. In particular, it uses</span>
+<span>homogeneous trees, is fully incremental and has surprisingly good support for</span>
+<span>error recovery (though not quite as good as hand-written style parsers, at least</span>
+<span>when I</span>&rsquo;<span>ve last checked it).</span></p>
+</section>
+<section id="Abandoning-generality">
+
+    <h3>
+    <a href="#Abandoning-generality"><span>Abandoning generality</span> </a>
+    </h3>
+<p><span>Yet another choice is to give up full generality and restrict the</span>
+<span>parser generator to a subset of unambiguous grammars, for which we</span>
+<span>actually could verify the absence of ambiguity. This is how traditional</span>
+<span>parser generators like yacc, happy, menhir or LALRPOP work.</span></p>
+<p><span>The very important advantage of these parsers is that you get a strong</span>
+<span>guarantee that the grammar works and does not have nasty</span>
+<span>surprises. The price you have to pay, though, is that sometimes it is</span>
+<span>necessary to tweak an already unambiguous grammar to make the stupid</span>
+<span>tool understand that there</span>&rsquo;<span>s no ambiguity.</span></p>
+<p><span>I also haven</span>&rsquo;<span>t seen deterministic LR parsers with great support for</span>
+<span>error recovery, but looks like it should be possible in theory?</span>
+<span>Recursive descent parsers, which are more or less LL(1), recover from</span>
+<span>errors splendidly, and LR(1) has strictly more information than an</span>
+<span>LL(1) one.</span></p>
+<p><span>So, what is the best choice for writing a parser/parser generator?</span></p>
+<p><span>It seems to me that the two extremes are the most promising: hand</span>
+<span>written parser gives you utmost control over everything, which is</span>
+<span>important when you need to parse some language, not designed by you,</span>
+<span>which is hostile to the usual parsing techniques. On the other hand,</span>
+<span>classical LR-style parsers give you a proof that the grammar is</span>
+<span>unambiguous, which is very useful if you are creating your own</span>
+<span>language. Ultimately, I think that being able to produce lossless</span>
+<span>parse trees supporting partial parses is more important than any</span>
+<span>particular parsing technique, so perhaps supporting both approaches</span>
+<span>with a single API is the right choice?</span></p>
+</section>
+</section>
+<section id="Conclusion">
+
+    <h2>
+    <a href="#Conclusion"><span>Conclusion</span> </a>
+    </h2>
+<p><span>This turned out to be a quite lengthy post, hope it was interesting!</span>
+<span>These are the main points:</span></p>
+<ul>
+<li>
+<p><span>IDE support is important, for the parser generator itself as well as</span>
+<span>for the target language.</span></p>
+</li>
+<li>
+<p><span>Lossless parse trees are more general than ASTs and custom action</span>
+<span>code, and are a better fit for IDEs.</span></p>
+</li>
+<li>
+<p><span>Interactivity matters! Reactive grammar repl and inline tests rock!</span></p>
+</li>
+<li>
+<p><span>Parsing is an unsolved problem :)</span></p>
+</li>
+</ul>
+<p><span>Discussion on</span>
+<a href="https://www.reddit.com/r/rust/comments/8pbi54/blog_post_modern_parser_generator/"><span>/r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2018-06-06-modern-parser-generator.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

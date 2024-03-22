@@ -1,0 +1,470 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mutexes Are Faster Than Spinlocks</title>
+  <meta name="description" content="(at least on commodity desktop Linux with stock settings)">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/01/04/mutexes-are-faster-than-spinlocks.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Mutexes Are Faster Than Spinlocks</span> <time datetime="2020-01-04">Jan 4, 2020</time></h1>
+<p><span>(at least on commodity desktop Linux with stock settings)</span></p>
+<p><span>This is a followup to the </span><a href="/2020/01/02/spinlocks-considered-harmful"><span>previous post</span></a><span> about spinlocks.</span>
+<span>The gist of the previous post was that spinlocks have some pretty bad worst-case behaviors, and, for that reason, one shouldn</span>&rsquo;<span>t blindly use a spinlock if using a sleeping mutex or avoiding blocking altogether is cumbersome.</span></p>
+<p><span>In the comments, I was pointed to </span><a href="https://probablydance.com/2019/12/30/measuring-mutexes-spinlocks-and-how-bad-the-linux-scheduler-really-is/"><span>this interesting article</span></a><span>, which made me realize that there</span>&rsquo;<span>s another misconception:</span></p>
+
+<aside class="admn warn">
+<svg class="icon"><use href="/assets/icons.svg#exclamation"/></svg>
+<div><p><span>For short critical sections, spinlocks perform better</span></p>
+</div>
+</aside><p><span>Until today, I haven</span>&rsquo;<span>t benchmarked any mutexes, so I don</span>&rsquo;<span>t know for sure.</span>
+<span>However, what I know in theory about mutexes and spinlocks makes me doubt this claim, so let</span>&rsquo;<span>s find out.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>In the following, I used the term </span><strong><strong><span>mutex</span></strong></strong><span> as a short-hand for a synchronization</span>
+<span>primitive which is guaranteed to eventually call into the kernel under</span>
+<span>contention. A more appropriate term is </span><strong><strong><span>sleeping mutex</span></strong></strong><span>.</span></p>
+</div>
+</aside><section id="Where-Does-The-Misconception-Come-From">
+
+    <h2>
+    <a href="#Where-Does-The-Misconception-Come-From"><span>Where Does The Misconception Come From?</span> </a>
+    </h2>
+<p><span>I do understand why people might think that way though.</span>
+<span>A simplest mutex just makes </span><code>lock</code><span> / </span><code>unlock</code><span> syscalls when entering and exiting a critical section, offloading all synchronization to the kernel.</span>
+<span>However, syscalls are slow and so, if the length of critical section is smaller than the length of two syscalls, spinning would be faster.</span></p>
+<p><span>It</span>&rsquo;<span>s easy to eliminate the syscall on entry in an uncontended state.</span>
+<span>We can try to optimistically </span><code>CAS</code><span> lock to the locked state, and call into kernel only if we failed and need to sleep.</span>
+<span>Eliminating syscall on exit is </span><a href="http://dept-info.labri.fr/~denis/Enseignement/2008-IR/Articles/01-futex.pdf"><span>tricky</span></a><span>, and so I think historically many implementations did at least one syscall in practice.</span>
+<span>Thus, mutexes </span><strong><span>were</span></strong><span>, in fact, slower than spinlocks in some benchmarks.</span></p>
+<p><span>However, modern mutex implementations avoid all syscalls if there</span>&rsquo;<span>s no contention.</span>
+<span>The trick is to make the state of the mutex an enum: unlocked, locked with some waiting threads, locked without waiting threads.</span>
+<span>This way, we only need to call into the kernel if there are in fact waiters.</span></p>
+<p><span>Another historical benefit of spinlocks is that they are smaller in size.</span>
+<span>A state of a spinlock is just a single boolean variable, while for a mutex you also need a queue of waiting threads. But there</span>&rsquo;<span>s a </span><a href="http://dept-info.labri.fr/~denis/Enseignement/2008-IR/Articles/01-futex.pdf"><span>trick</span></a><span> to combat this inefficiency as well.</span>
+<span>We can use the </span><strong><span>address</span></strong><span> of the boolean flag as token to identify the mutex, and store non-empty queues in a side table.</span>
+<span>Note how this also reduces the (worst case) total number of queues from </span><code>number of mutexes</code><span> to </span><code>number of threads</code><span>!</span></p>
+<p><span>So a modern mutex, like the one in </span><a href="https://webkit.org/blog/6161/locking-in-webkit/"><span>WTF::ParkingLot</span></a><span>, is a single boolean, which behaves more or less like a spinlock in an uncontended case but doesn</span>&rsquo;<span>t have pathological behaviors of the spinlock.</span></p>
+</section>
+<section id="Benchmark">
+
+    <h2>
+    <a href="#Benchmark"><span>Benchmark</span> </a>
+    </h2>
+<p><span>So, let</span>&rsquo;<span>s check if the theory works in practice!</span>
+<span>The source code for the benchmark is here:</span></p>
+<p><a href="https://github.com/matklad/lock-bench" class="url">https://github.com/matklad/lock-bench</a></p>
+<p><span>The interesting bit is reproduced below:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">run_bench</span>&lt;M: Mutex&gt;(options: &amp;Options) <span class="hl-punctuation">-&gt;</span> time::Duration {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">locks</span> = &amp;(<span class="hl-number">0</span>..options.n_locks) <i class="callout" data-value="3"></i></span>
+<span class="line">      .<span class="hl-title function_ invoke__">map</span>(|_| CachePadded::<span class="hl-title function_ invoke__">new</span>(M::<span class="hl-title function_ invoke__">default</span>()))</span>
+<span class="line">      .collect::&lt;<span class="hl-type">Vec</span>&lt;_&gt;&gt;();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">start_barrier</span> =</span>
+<span class="line">    &amp;Barrier::<span class="hl-title function_ invoke__">new</span>(options.n_threads <span class="hl-keyword">as</span> <span class="hl-type">usize</span> + <span class="hl-number">1</span>);</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">end_barrier</span> =</span>
+<span class="line">    &amp;Barrier::<span class="hl-title function_ invoke__">new</span>(options.n_threads <span class="hl-keyword">as</span> <span class="hl-type">usize</span> + <span class="hl-number">1</span>);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-title function_ invoke__">scope</span>(|scope| {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">thread_seeds</span> = <span class="hl-title function_ invoke__">random_numbers</span>(<span class="hl-number">0x6F4A955E</span>)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">scan</span>(<span class="hl-number">0x9BA2BF27</span>, |state, n| {</span>
+<span class="line">        *state ^= n;</span>
+<span class="line">        <span class="hl-title function_ invoke__">Some</span>(*state)</span>
+<span class="line">      })</span>
+<span class="line">      .<span class="hl-title function_ invoke__">take</span>(options.n_threads <span class="hl-keyword">as</span> <span class="hl-type">usize</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">thread_seed</span> <span class="hl-keyword">in</span> thread_seeds {</span>
+<span class="line">      scope.<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> |_| {</span>
+<span class="line">        start_barrier.<span class="hl-title function_ invoke__">wait</span>();</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">indexes</span> = <span class="hl-title function_ invoke__">random_numbers</span>(thread_seed)</span>
+<span class="line">          .<span class="hl-title function_ invoke__">map</span>(|it| it % options.n_locks)</span>
+<span class="line">          .<span class="hl-title function_ invoke__">map</span>(|it| it <span class="hl-keyword">as</span> <span class="hl-type">usize</span>)</span>
+<span class="line">          .<span class="hl-title function_ invoke__">take</span>(options.n_ops <span class="hl-keyword">as</span> <span class="hl-type">usize</span>);</span>
+<span class="line">        <span class="hl-keyword">for</span> <span class="hl-variable">idx</span> <span class="hl-keyword">in</span> indexes {</span>
+<span class="line">          locks[idx].<span class="hl-title function_ invoke__">with_lock</span>(|cnt| *cnt += <span class="hl-number">1</span>); <i class="callout" data-value="1"></i></span>
+<span class="line">        }</span>
+<span class="line">        end_barrier.<span class="hl-title function_ invoke__">wait</span>();</span>
+<span class="line">      });</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    std::thread::<span class="hl-title function_ invoke__">sleep</span>(time::Duration::<span class="hl-title function_ invoke__">from_millis</span>(<span class="hl-number">100</span>));</span>
+<span class="line">    start_barrier.<span class="hl-title function_ invoke__">wait</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">start</span> = time::Instant::<span class="hl-title function_ invoke__">now</span>();</span>
+<span class="line">    end_barrier.<span class="hl-title function_ invoke__">wait</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">elapsed</span> = start.<span class="hl-title function_ invoke__">elapsed</span>();</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">lock</span> <span class="hl-keyword">in</span> locks.<span class="hl-title function_ invoke__">iter</span>() {</span>
+<span class="line">      lock.<span class="hl-title function_ invoke__">with_lock</span>(|cnt| total += *cnt);</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(total, options.n_threads * options.n_ops); <i class="callout" data-value="2"></i></span>
+<span class="line"></span>
+<span class="line">    elapsed</span>
+<span class="line">  })</span>
+<span class="line">  .<span class="hl-title function_ invoke__">unwrap</span>()</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">random_numbers</span>(seed: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-keyword">impl</span> <span class="hl-title class_">Iterator</span>&lt;Item = <span class="hl-type">u32</span>&gt; { <i class="callout" data-value="4"></i></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">random</span> = seed;</span>
+<span class="line">  iter::<span class="hl-title function_ invoke__">repeat_with</span>(<span class="hl-keyword">move</span> || {</span>
+<span class="line">    random ^= random &lt;&lt; <span class="hl-number">13</span>;</span>
+<span class="line">    random ^= random &gt;&gt; <span class="hl-number">17</span>;</span>
+<span class="line">    random ^= random &lt;&lt; <span class="hl-number">5</span>;</span>
+<span class="line">    random</span>
+<span class="line">  })</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Our hypothesis is that mutexes are faster, so we need to pick a workload which favors spinlocks.</span>
+<span>That is, we need to pick a very short critical section, and so we will just be incrementing a counter (</span><strong><strong><span>1</span></strong></strong><span>).</span></p>
+<p><span>This is better than doing a dummy lock/unlock.</span>
+<span>At the end of the benchmark, we will assert that the counter is indeed incremented the correct number of times (</span><strong><strong><span>2</span></strong></strong><span>).</span>
+<span>This has a number of benefits:</span></p>
+<ul>
+<li>
+<span>This is a nice smoke test which at least makes sure that we haven</span>&rsquo;<span>t done an off by one error anywhere.</span>
+</li>
+<li>
+<span>As we will be benchmarking different implementations, it</span>&rsquo;<span>s important to verify that they indeed give the same answer! More than once I</span>&rsquo;<span>ve made some piece of code ten times faster by accidentally eliminating some essential logic :D</span>
+</li>
+<li>
+<span>We can be reasonably sure that compiler won</span>&rsquo;<span>t outsmart us and won</span>&rsquo;<span>t remove empty critical sections.</span>
+</li>
+</ul>
+<p><span>Now, we can just make all the threads hammer a single global counter, but that would only test a situation of extreme contention.</span>
+<span>We need to structure a benchmark in a way that allow us to vary contention level.</span></p>
+<p><span>So instead of a single global counter, we will use an array of counters (</span><strong><strong><span>3</span></strong></strong><span>).</span>
+<span>Each thread will be incrementing random elements of this array.</span>
+<span>By varying the size of the array, we will be able to control the level of contention.</span>
+<span>To avoid false sharing between neighboring elements of the array we will use crossbeam</span>&rsquo;<span>s </span><a href="https://docs.rs/crossbeam-utils/0.7.0/crossbeam_utils/struct.CachePadded.html"><code>CachePadded</code></a><span>.</span>
+<span>To make the benchmark more reproducible, we will vendor a simple PRNG (</span><strong><strong><span>4</span></strong></strong><span>), which we seed manually.</span></p>
+</section>
+<section id="Results">
+
+    <h2>
+    <a href="#Results"><span>Results</span> </a>
+    </h2>
+<p><span>We are testing </span><code>std::sync::Mutex</code><span>, </span><code>parking_lot::Mutex</code><span>, </span><code>spin::Mutex</code><span> and a bespoke implementation of spinlock from </span><a href="https://probablydance.com/2019/12/30/measuring-mutexes-spinlocks-and-how-bad-the-linux-scheduler-really-is/"><span>probablydance article</span></a><span>.</span>
+<span>We  use 32 threads (on 4 core/8 hyperthreads CPU), and each thread increments some counter 10 000 times.</span>
+<span>We run each benchmark 100 times and compute average, min and max times (we are primarily measuring throughput, so average makes more sense than median this time).</span>
+<span>Finally, we run the whole suite twice, to sanity check that the results are reproducible.</span></p>
+
+<figure class="code-block">
+<figcaption class="title">Extreme Contention</figcaption>
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo run --release 32 2 10000 100</span>
+<span class="line"><span class="hl-output">    Finished release [optimized] target(s) in 0.01s</span></span>
+<span class="line"><span class="hl-output">     Running `target/release/lock-bench 32 2 10000 100`</span></span>
+<span class="line"><span class="hl-output">Options {</span></span>
+<span class="line"><span class="hl-output">    n_threads: 32,</span></span>
+<span class="line"><span class="hl-output">    n_locks: 2,</span></span>
+<span class="line"><span class="hl-output">    n_ops: 10000,</span></span>
+<span class="line"><span class="hl-output">    n_rounds: 100,</span></span>
+<span class="line"><span class="hl-output">}</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output">std::sync::Mutex     avg  97ms  min 38ms  max 103ms</span></span>
+<span class="line"><span class="hl-output">parking_lot::Mutex   avg  68ms  min 32ms  max  72ms</span></span>
+<span class="line"><span class="hl-output">spin::Mutex          avg 142ms  min 69ms  max 217ms</span></span>
+<span class="line"><span class="hl-output">AmdSpinlock          avg 127ms  min 50ms  max 219ms</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output">std::sync::Mutex     avg  98ms  min 68ms  max 125ms</span></span>
+<span class="line"><span class="hl-output">parking_lot::Mutex   avg  68ms  min 58ms  max  71ms</span></span>
+<span class="line"><span class="hl-output">spin::Mutex          avg 139ms  min 54ms  max 193ms</span></span>
+<span class="line"><span class="hl-output">AmdSpinlock          avg 127ms  min 50ms  max 210ms</span></span></code></pre>
+
+</figure>
+
+<figure class="code-block">
+<figcaption class="title">Heavy contention</figcaption>
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo run --release 32 64 10000 100</span>
+<span class="line"><span class="hl-output">    Finished release [optimized] target(s) in 0.01s</span></span>
+<span class="line"><span class="hl-output">     Running `target/release/lock-bench 32 64 10000 100`</span></span>
+<span class="line"><span class="hl-output">Options {</span></span>
+<span class="line"><span class="hl-output">    n_threads: 32,</span></span>
+<span class="line"><span class="hl-output">    n_locks: 64,</span></span>
+<span class="line"><span class="hl-output">    n_ops: 10000,</span></span>
+<span class="line"><span class="hl-output">    n_rounds: 100,</span></span>
+<span class="line"><span class="hl-output">}</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output">std::sync::Mutex     avg 21ms  min 11ms  max  23ms</span></span>
+<span class="line"><span class="hl-output">parking_lot::Mutex   avg 10ms  min  6ms  max  11ms</span></span>
+<span class="line"><span class="hl-output">spin::Mutex          avg 55ms  min  7ms  max 161ms</span></span>
+<span class="line"><span class="hl-output">AmdSpinlock          avg 40ms  min  6ms  max 123ms</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output">std::sync::Mutex     avg 21ms  min 20ms  max  24ms</span></span>
+<span class="line"><span class="hl-output">parking_lot::Mutex   avg  9ms  min  6ms  max  12ms</span></span>
+<span class="line"><span class="hl-output">spin::Mutex          avg 48ms  min  7ms  max 138ms</span></span>
+<span class="line"><span class="hl-output">AmdSpinlock          avg 40ms  min  8ms  max 110ms</span></span></code></pre>
+
+</figure>
+
+<figure class="code-block">
+<figcaption class="title">Light contention</figcaption>
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo run --release 32 1000 10000 100</span>
+<span class="line"><span class="hl-output">    Finished release [optimized] target(s) in 0.01s</span></span>
+<span class="line"><span class="hl-output">     Running `target/release/lock-bench 32 1000 10000 100`</span></span>
+<span class="line"><span class="hl-output">Options {</span></span>
+<span class="line"><span class="hl-output">    n_threads: 32,</span></span>
+<span class="line"><span class="hl-output">    n_locks: 1000,</span></span>
+<span class="line"><span class="hl-output">    n_ops: 10000,</span></span>
+<span class="line"><span class="hl-output">    n_rounds: 100,</span></span>
+<span class="line"><span class="hl-output">}</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output">std::sync::Mutex     avg 13ms  min 8ms   max  15ms</span></span>
+<span class="line"><span class="hl-output">parking_lot::Mutex   avg  6ms  min 3ms   max   8ms</span></span>
+<span class="line"><span class="hl-output">spin::Mutex          avg 37ms  min 4ms   max 115ms</span></span>
+<span class="line"><span class="hl-output">AmdSpinlock          avg 39ms  min 2ms   max 127ms</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output">std::sync::Mutex     avg 13ms  min 12ms  max  15ms</span></span>
+<span class="line"><span class="hl-output">parking_lot::Mutex   avg  6ms  min  5ms  max   8ms</span></span>
+<span class="line"><span class="hl-output">spin::Mutex          avg 39ms  min  4ms  max 102ms</span></span>
+<span class="line"><span class="hl-output">AmdSpinlock          avg 37ms  min  5ms  max 103ms</span></span></code></pre>
+
+</figure>
+
+<figure class="code-block">
+<figcaption class="title">No contention</figcaption>
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo run --release 32 1000000 10000 100</span>
+<span class="line"><span class="hl-output">    Finished release [optimized] target(s) in 0.01s</span></span>
+<span class="line"><span class="hl-output">     Running `target/release/lock-bench 32 1000000 10000 100`</span></span>
+<span class="line"><span class="hl-output">Options {</span></span>
+<span class="line"><span class="hl-output">    n_threads: 32,</span></span>
+<span class="line"><span class="hl-output">    n_locks: 1000000,</span></span>
+<span class="line"><span class="hl-output">    n_ops: 10000,</span></span>
+<span class="line"><span class="hl-output">    n_rounds: 100,</span></span>
+<span class="line"><span class="hl-output">}</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output">std::sync::Mutex     avg 15ms  min 8ms   max 27ms</span></span>
+<span class="line"><span class="hl-output">parking_lot::Mutex   avg  7ms  min 4ms   max  9ms</span></span>
+<span class="line"><span class="hl-output">spin::Mutex          avg  5ms  min 4ms   max  8ms</span></span>
+<span class="line"><span class="hl-output">AmdSpinlock          avg  6ms  min 5ms   max 10ms</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output">std::sync::Mutex     avg 15ms  min 8ms   max 27ms</span></span>
+<span class="line"><span class="hl-output">parking_lot::Mutex   avg  6ms  min 4ms   max  9ms</span></span>
+<span class="line"><span class="hl-output">spin::Mutex          avg  5ms  min 4ms   max  7ms</span></span>
+<span class="line"><span class="hl-output">AmdSpinlock          avg  6ms  min 5ms   max  7ms</span></span></code></pre>
+
+</figure>
+</section>
+<section id="Analysis">
+
+    <h2>
+    <a href="#Analysis"><span>Analysis</span> </a>
+    </h2>
+<p><span>There are several interesting observations here!</span></p>
+<p><em><span>First</span></em><span>, we reproduce the result that the variance of spinlocks on Linux with default scheduling settings can be huge:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">parking_lot::Mutex  min 6ms  max  11ms</span>
+<span class="line">AmdSpinlock         min 6ms  max 123ms</span></code></pre>
+
+</figure>
+<p><span>Note that these are extreme results for 100 runs, where each run does </span><code>32 * 10_000</code><span> lock operations.</span>
+<span>That is, individual lock/unlock operations probably have an even higher spread.</span></p>
+<p><em><span>Second</span></em><span>, the uncontended case looks like I have expected: mutexes and spinlocks are not that different, because they essentially use the same code</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Parking_lot::Mutex   avg 6ms  min 4ms  max 9ms</span>
+<span class="line">spin::Mutex          avg 5ms  min 4ms  max 7ms</span></code></pre>
+
+</figure>
+<p><em><span>Third</span></em><span>, under heavy contention mutexes annihilate spinlocks:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">parking_lot::Mutex   avg 10ms  max  11ms</span>
+<span class="line">spin::Mutex          avg 55ms  max 161ms</span></code></pre>
+
+</figure>
+<p><span>Now, this is the opposite of what I would naively expect.</span>
+<span>Even in heavy contended state, the critical section is still extremely short, so for each thread, the most efficient strategy seems to spin for a couple of iterations.</span></p>
+<p><span>But I think I can explain why mutexes are so much better in this case.</span>
+<span>One reason is that with spinlocks a thread can get unlucky and be preempted in the critical section.</span>
+<span>The other more important reason is that, at any given moment in time, there are many threads trying to enter the same critical section.</span>
+<span>With spinlocks, all cores can be occupied by threads who compete for the same lock.</span>
+<span>With mutexes, there is a queue of sleeping threads for each lock, and the kernel generally tries to make sure that only one thread from the group is awake.</span></p>
+<p><span>This is a funny example of mechanical </span><a href="https://en.wikipedia.org/wiki/Race_to_the_bottom"><span>race to the bottom</span></a><span>. Due to the short length of critical section, each individual thread would spend less CPU cycles in total if it were spinning, but it increases the overall cost.</span></p>
+<p><span>EDIT: simpler and more plausible </span><a href="https://www.reddit.com/r/rust/comments/ejx7y8/blog_post_mutexes_are_faster_than_spinlocks/fd3u7rw"><span>explanation</span></a><span> from the author of Rust</span>&rsquo;<span>s parking lot is that it does exponential backoff when spinning, unlike the two spinlock implementations.</span></p>
+<p><em><span>Fourth</span></em><span>, even under heavy contention spin locks can luck out and finish almost as fast as mutexes:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">parking_lot::Mutex   avg 10ms  min 6ms</span>
+<span class="line">spin::Mutex          avg 55ms  min 7ms</span></code></pre>
+
+</figure>
+<p><span>This again shows that a good mutex is roughly equivalent to a spinlock in the best case.</span></p>
+<p><em><span>Fifth</span></em><span>, the amount of contention required to disrupt spinlocks seems to be small. Even if 32 threads compete for 1 000 locks, spinlocks still are considerably slower:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">parking_lot::Mutex   avg  6ms  min 3ms   max   8ms</span>
+<span class="line">spin::Mutex          avg 37ms  min 4ms   max 115ms</span></code></pre>
+
+</figure>
+<p><span>EDIT: someone on Reddit </span><a href="https://www.reddit.com/r/rust/comments/ejx7y8/blog_post_mutexes_are_faster_than_spinlocks/fd3u8vq"><span>noticed</span></a><span> that the number of threads is significantly higher than the number of cores, which is an unfortunate situation for spinlocks.</span>
+<span>And, although the number of threads in the benchmark is configurable, it never occurred to me to actually vary it 😅!</span>
+<span>Lowering the number of threads to four gives a picture similar to the </span>&ldquo;<span>no contention</span>&rdquo;<span> situation above: spinlocks a slightly, but not massively, faster.</span>
+<span>Which makes total sense! as there are more cores than CPUs, there</span>&rsquo;<span>s no harm in spinning.</span>
+<span>And, if you can carefully architecture you application such that it runs a small fixed number of threads, ideally pinned to specific CPUs (like in the </span><a href="http://seastar.io/shared-nothing/"><span>seastar</span></a><span> architecture), using spinlocks might make sense!</span></p>
+</section>
+<section id="Disclaimer">
+
+    <h2>
+    <a href="#Disclaimer"><span>Disclaimer</span> </a>
+    </h2>
+<p><span>As usual, each benchmark exercises only a narrow slice from the space of possible configurations, so it would be wrong to draw a sweeping conclusion that mutexes are </span><strong><strong><span>always</span></strong></strong><span> faster.</span>
+<span>For example, if you are in a situation where preemption is impossible (interrupts are disabled, cooperative multitasking, realtime scheduling, etc), spinlocks might be better (or even the only!) choice.</span>
+<span>And there</span>&rsquo;<span>s also a chance the benchmark doesn</span>&rsquo;<span>t measure what I think it measures :-)</span></p>
+<p><span>But I find this particular benchmark convincing enough to disprove that </span>&ldquo;<span>spinlocks are faster then mutexes for short critical sections</span>&rdquo;<span>.</span>
+<span>In particular I find the qualitative observation that, under contention mutexes allow for better scheduling even if critical sections are short and not preempted in the middle, enlightening.</span></p>
+</section>
+<section id="Reading-List">
+
+    <h2>
+    <a href="#Reading-List"><span>Reading List</span> </a>
+    </h2>
+<ul>
+<li>
+<a href="http://dept-info.labri.fr/~denis/Enseignement/2008-IR/Articles/01-futex.pdf"><span>Futexes Are Tricky</span></a><span> </span>&mdash;<span> a paper describing the </span><code>futex</code><span> syscall used to implement efficient sleeping on Linux.</span>
+</li>
+<li>
+<a href="https://webkit.org/blog/6161/locking-in-webkit/"><span>Locking in WebKit</span></a><span> </span>&mdash;<span> a long post, describing a modern mutex implementation.</span>
+</li>
+<li>
+<a href="https://www.kernel.org/doc/Documentation/locking/mutex-design.txt"><span>Generic Mutex Subsystem</span></a><span> </span>&mdash;<span> Linux kernel docs about sleeping mutexes.</span>
+</li>
+<li>
+<a href="https://www.kernel.org/doc/Documentation/locking/spinlocks.txt"><span>Spinlock</span></a><span> </span>&mdash;<span> Linux kernel docs about spinlocks.</span>
+</li>
+<li>
+<a href="https://www.realworldtech.com/forum/?threadid=189711&amp;curpostid=189723"><span>Do not use spinlocks in user space</span></a><span> </span>&mdash;<span> Linus explains why user space spinlocks are usually bad.</span>
+</li>
+<li>
+<a href="https://www.realworldtech.com/forum/?threadid=189711&amp;curpostid=189755"><span>Almost all serious locking libraries try to do something exactly like that</span></a><span> </span>&mdash;<span> Linus explains how good mutex might be implemented instead.</span>
+</li>
+<li>
+<a href="https://linuxplumbersconf.org/event/4/contributions/286/attachments/225/398/LPC-2019-OptSpin-Locks.pdf"><span>Effcient Userspace Optimistic Spinning Locks</span></a><span> </span>&mdash;<span> a presentation about making fast-path spinlocking in futex-based locks even more efficient.</span>
+<span>The main problem with optimistic spinning is how much of it do you want (that is, tweaking the number of iterations parameter).</span>
+<span>The proposal solves this in an ingenious self-tweeking way (with the help of the kernel): we spin until the holder of the lock itself goes to sleep.</span>
+</li>
+</ul>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/ejx7y8/blog_post_mutexes_are_faster_than_spinlocks/"><span>/r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-01-04-mutexes-are-faster-than-spinlocks.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

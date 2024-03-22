@@ -1,0 +1,255 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A Better Rust Profiler</title>
+  <meta name="description" content="I want a better profiler for Rust.
+Here's what a rust-analyzer benchmark looks like:">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2021/02/10/a-better-profiler.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>A Better Rust Profiler</span> <time datetime="2021-02-10">Feb 10, 2021</time></h1>
+<p><span>I want a better profiler for Rust.</span>
+<span>Here</span>&rsquo;<span>s what a rust-analyzer benchmark looks like:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">benchmark_syntax_highlighting_parser</span>() {</span>
+<span class="line">  <span class="hl-keyword">if</span> <span class="hl-title function_ invoke__">skip_slow_tests</span>() {</span>
+<span class="line">    <span class="hl-keyword">return</span>;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">fixture</span> = bench_fixture::<span class="hl-title function_ invoke__">glorious_old_parser</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> (analysis, file_id) = fixture::<span class="hl-title function_ invoke__">file</span>(&amp;fixture);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">hash</span> = {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">_pt</span> = <span class="hl-title function_ invoke__">bench</span>(<span class="hl-string">&quot;syntax highlighting parser&quot;</span>);</span>
+<span class="line">    analysis</span>
+<span class="line">      .<span class="hl-title function_ invoke__">highlight</span>(file_id)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">unwrap</span>()</span>
+<span class="line">      .<span class="hl-title function_ invoke__">iter</span>()</span>
+<span class="line">      .<span class="hl-title function_ invoke__">filter</span>(|it| {</span>
+<span class="line">        it.highlight.tag == HlTag::<span class="hl-title function_ invoke__">Symbol</span>(SymbolKind::Function)</span>
+<span class="line">      })</span>
+<span class="line">      .<span class="hl-title function_ invoke__">count</span>()</span>
+<span class="line">  };</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(hash, <span class="hl-number">1629</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here</span>&rsquo;<span>s how I want to profile it:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">benchmark_syntax_highlighting_parser</span>() {</span>
+<span class="line">  <span class="hl-keyword">if</span> <span class="hl-title function_ invoke__">skip_slow_tests</span>() {</span>
+<span class="line">    <span class="hl-keyword">return</span>;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">fixture</span> = bench_fixture::<span class="hl-title function_ invoke__">glorious_old_parser</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> (analysis, file_id) = fixture::<span class="hl-title function_ invoke__">file</span>(&amp;fixture);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">hash</span> = {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">_b</span> = <span class="hl-title function_ invoke__">bench</span>(<span class="hl-string">&quot;syntax highlighting parser&quot;</span>);</span>
+<span class="line hl-line">    <span class="hl-keyword">let</span> <span class="hl-variable">_p</span> = better_profiler::<span class="hl-title function_ invoke__">profile</span>();</span>
+<span class="line">    analysis</span>
+<span class="line">      .<span class="hl-title function_ invoke__">highlight</span>(file_id)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">unwrap</span>()</span>
+<span class="line">      .<span class="hl-title function_ invoke__">iter</span>()</span>
+<span class="line">      .<span class="hl-title function_ invoke__">filter</span>(|it| {</span>
+<span class="line">        it.highlight.tag == HlTag::<span class="hl-title function_ invoke__">Symbol</span>(SymbolKind::Function)</span>
+<span class="line">      })</span>
+<span class="line">      .<span class="hl-title function_ invoke__">count</span>()</span>
+<span class="line">  };</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(hash, <span class="hl-number">1629</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>First, the profiler prints to stderr:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">warning: run with `--release`</span>
+<span class="line">warning: add `debug=true` to Cargo.toml</span>
+<span class="line">warning: set `RUSTFLAGS="-Cforce-frame-pointers=yes"`</span></code></pre>
+
+</figure>
+<p><span>Otherwise, if everything is setup correctly, the output is</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Output is saved to:</span>
+<span class="line">   ~/projects/rust-analyzer/profile-results/</span></code></pre>
+
+</figure>
+<p><span>The </span><code>profile-results</code><span> folder contains the following:</span></p>
+<ul>
+<li>
+<code>report.txt</code><span> with</span>
+<ul>
+<li>
+<span>user, cpu, sys time</span>
+</li>
+<li>
+<span>cpu instructions</span>
+</li>
+<li>
+<span>stats for caches &amp; branches a-la </span><code>pref-stat</code>
+</li>
+<li>
+<span>top ten functions by cumulative time</span>
+</li>
+<li>
+<span>top ten functions by self-time</span>
+</li>
+<li>
+<span>top ten hot-spot</span>
+</li>
+</ul>
+</li>
+<li>
+<code>flamegraph.svg</code>
+</li>
+<li>
+<code>data.smth</code><span>, which can be fed into some existing profiler UI (kcachegrind, firefox profiler, etc).</span>
+</li>
+<li>
+<code>report.html</code><span> which contains a basic interactive UI.</span>
+</li>
+</ul>
+<p><span>To tweak settings, the following API is available:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">_p</span> = better_profiler::<span class="hl-title function_ invoke__">profile</span>()</span>
+<span class="line">  .<span class="hl-title function_ invoke__">output</span>(<span class="hl-string">&quot;./other-dir/&quot;</span>)</span>
+<span class="line">  .<span class="hl-title function_ invoke__">samples_per_second</span>(<span class="hl-number">999</span>)</span>
+<span class="line">  .<span class="hl-title function_ invoke__">flamegraph</span>(<span class="hl-literal">false</span>);</span></code></pre>
+
+</figure>
+<p><span>Naturally, the following also works and produces an aggregate profile:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..<span class="hl-number">100</span> {</span>
+<span class="line">  {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">_p</span> = <span class="hl-title function_ invoke__">profile</span>();</span>
+<span class="line">    <span class="hl-title function_ invoke__">interesting_computation</span>();</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-title function_ invoke__">not_interesting_computation</span>();</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>I don</span>&rsquo;<span>t know how this should work.</span>
+<span>I think I would be happy with a perf-based Linux-only implementation.</span>
+<span>The </span><a href="https://github.com/jimblandy/perf-event"><span>perf-event</span></a><span> crate by Jim Blandy (co-author of </span>&ldquo;<span>Programming Rust</span>&rdquo;<span>) is good.</span></p>
+<p><span>Have I missed something?</span>
+<span>Does this tool already exist?</span>
+<span>Or is it impossible for some reason?</span></p>
+<p><span>Discussion on </span><a href="https://old.reddit.com/r/rust/comments/lgqs35/blog_post_i_want_a_better_rust_profiler/"><span>/r/rust</span></a><span>.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2021-02-10-a-better-profiler.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

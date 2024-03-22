@@ -1,0 +1,549 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stopping a Rust Worker</title>
+  <meta name="description" content="This is a small post about a specific pattern for cancellation in the Rust
+programming language. The pattern is simple and elegant, but it's rather
+difficult to come up with it by yourself.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2018/03/03/stopping-a-rust-worker.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Stopping a Rust Worker</span> <time datetime="2018-03-03">Mar 3, 2018</time></h1>
+<p><span>This is a small post about a specific pattern for cancellation in the Rust</span>
+<span>programming language. The pattern is simple and elegant, but it</span>&rsquo;<span>s rather</span>
+<span>difficult to come up with it by yourself.</span></p>
+<section id="Introducing-a-worker">
+
+    <h2>
+    <a href="#Introducing-a-worker"><span>Introducing a worker</span> </a>
+    </h2>
+<p><span>To be able to stop a worker, we need to have one in the first place! So, let</span>&rsquo;<span>s</span>
+<span>implement a model program.</span></p>
+<p><span>The task is to read the output line-by-line, sending these lines to another thread</span>
+<span>for processing (echoing the line back, with ❤️).</span>
+<span>My solution looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::io::BufRead;</span>
+<span class="line"><span class="hl-keyword">use</span> std::sync::mpsc::{Sender, channel};</span>
+<span class="line"><span class="hl-keyword">use</span> std::thread;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">worker</span> = <span class="hl-title function_ invoke__">spawn_worker</span>();</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">stdin</span> = ::std::io::<span class="hl-title function_ invoke__">stdin</span>();</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">line</span> <span class="hl-keyword">in</span> stdin.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">lines</span>() {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">line</span> = line.<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">        worker.<span class="hl-title function_ invoke__">send</span>(Msg::<span class="hl-title function_ invoke__">Echo</span>(line))</span>
+<span class="line">            .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;Bye!&quot;</span>);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Msg</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Echo</span>(<span class="hl-type">String</span>),</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">spawn_worker</span>() <span class="hl-punctuation">-&gt;</span> Sender&lt;Msg&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> (tx, rx) = <span class="hl-title function_ invoke__">channel</span>();</span>
+<span class="line">    thread::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> || {</span>
+<span class="line">        <span class="hl-keyword">loop</span> {</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">msg</span> = rx.<span class="hl-title function_ invoke__">recv</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">            <span class="hl-keyword">match</span> msg {</span>
+<span class="line">                Msg::<span class="hl-title function_ invoke__">Echo</span>(msg) =&gt; <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;{} ❤️&quot;</span>, msg),</span>
+<span class="line">            }</span>
+<span class="line">        }</span>
+<span class="line">    });</span>
+<span class="line">    tx</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The program seems to work:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo r</span>
+<span class="line"><span class="hl-output">    Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs</span></span>
+<span class="line"><span class="hl-output">     Running `target/debug/worker`</span></span>
+<span class="line"><span class="hl-output">hello</span></span>
+<span class="line"><span class="hl-output">hello ❤️</span></span>
+<span class="line"><span class="hl-output">world</span></span>
+<span class="line"><span class="hl-output">world ❤️</span></span>
+<span class="line"><span class="hl-output">Bye!</span></span></code></pre>
+
+</figure>
+</section>
+<section id="Stopping-the-worker-the-obvious-way">
+
+    <h2>
+    <a href="#Stopping-the-worker-the-obvious-way"><span>Stopping the worker, the obvious way</span> </a>
+    </h2>
+<p><span>Now that we have a worker, let</span>&rsquo;<span>s add a new requirement.</span></p>
+<p><span>When the user types </span><code>stop</code><span>, the worker (but not the program itself) should be halted.</span></p>
+<p><span>How can we do this? The most obvious way is to add a new variant, </span><code>Stop</code><span>, to the </span><code>Msg</code>
+<span>enum, and break out of the worker</span>&rsquo;<span>s loop:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::io::BufRead;</span>
+<span class="line"><span class="hl-keyword">use</span> std::sync::mpsc::{Sender, channel};</span>
+<span class="line"><span class="hl-keyword">use</span> std::thread;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">worker</span> = <span class="hl-title function_ invoke__">spawn_worker</span>();</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">stdin</span> = ::std::io::<span class="hl-title function_ invoke__">stdin</span>();</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">line</span> <span class="hl-keyword">in</span> stdin.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">lines</span>() {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">line</span> = line.<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">msg</span> = <span class="hl-keyword">if</span> line == <span class="hl-string">&quot;stop&quot;</span> {</span>
+<span class="line">            Msg::Stop</span>
+<span class="line">        } <span class="hl-keyword">else</span> {</span>
+<span class="line">            Msg::<span class="hl-title function_ invoke__">Echo</span>(line)</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        worker.<span class="hl-title function_ invoke__">send</span>(msg)</span>
+<span class="line">            .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;Bye!&quot;</span>);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Msg</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Echo</span>(<span class="hl-type">String</span>),</span>
+<span class="line">    Stop,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">spawn_worker</span>() <span class="hl-punctuation">-&gt;</span> Sender&lt;Msg&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> (tx, rx) = <span class="hl-title function_ invoke__">channel</span>();</span>
+<span class="line">    thread::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> || {</span>
+<span class="line">        <span class="hl-keyword">loop</span> {</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">msg</span> = rx.<span class="hl-title function_ invoke__">recv</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">            <span class="hl-keyword">match</span> msg {</span>
+<span class="line">                Msg::<span class="hl-title function_ invoke__">Echo</span>(msg) =&gt; <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;{} ❤️&quot;</span>, msg),</span>
+<span class="line">                Msg::Stop =&gt; <span class="hl-keyword">break</span>,</span>
+<span class="line">            }</span>
+<span class="line">        }</span>
+<span class="line">        <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;The worker has stopped!&quot;</span>);</span>
+<span class="line">    });</span>
+<span class="line">    tx</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This works, but only partially:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo r</span>
+<span class="line"><span class="hl-output">    Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs</span></span>
+<span class="line"><span class="hl-output">     Running `target/debug/worker`</span></span>
+<span class="line"><span class="hl-output">hello</span></span>
+<span class="line"><span class="hl-output">hello ❤️</span></span>
+<span class="line"><span class="hl-output">stop</span></span>
+<span class="line"><span class="hl-output">The worker has stopped!</span></span>
+<span class="line"><span class="hl-output">world</span></span>
+<span class="line"><span class="hl-output">thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: "SendError(..)"', /checkout/src/libcore/result.rs:916:5</span></span>
+<span class="line"><span class="hl-output">note: Run with `RUST_BACKTRACE=1` for a backtrace.</span></span></code></pre>
+
+</figure>
+<p><span>We can add more code to fix the panic, but let</span>&rsquo;<span>s stop for a moment and try</span>
+<span>to invent a more elegant way to stop the worker. The answer will be below this</span>
+<span>beautiful Ukiyo-e print :-)</span></p>
+
+<figure>
+
+<img alt="" src="https://upload.wikimedia.org/wikipedia/commons/d/d0/100_views_edo_008.jpg">
+</figure>
+</section>
+<section id="Dropping-the-microphone">
+
+    <h2>
+    <a href="#Dropping-the-microphone"><span>Dropping the microphone</span> </a>
+    </h2>
+<p><span>The answer is: the cleanest way to cancel something in Rust is to drop it.</span>
+<span>For our task, we can stop the worker by dropping the </span><code>Sender</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::io::BufRead;</span>
+<span class="line"><span class="hl-keyword">use</span> std::sync::mpsc::{Sender, channel};</span>
+<span class="line"><span class="hl-keyword">use</span> std::thread;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">worker</span> = <span class="hl-title function_ invoke__">Some</span>(<span class="hl-title function_ invoke__">spawn_worker</span>());</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">stdin</span> = ::std::io::<span class="hl-title function_ invoke__">stdin</span>();</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">line</span> <span class="hl-keyword">in</span> stdin.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">lines</span>() {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">line</span> = line.<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">        <span class="hl-keyword">if</span> line == <span class="hl-string">&quot;stop&quot;</span> {</span>
+<span class="line">            <span class="hl-title function_ invoke__">drop</span>(worker.<span class="hl-title function_ invoke__">take</span>());</span>
+<span class="line">            <span class="hl-keyword">continue</span></span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(<span class="hl-keyword">ref</span> worker) = worker {</span>
+<span class="line">            worker.<span class="hl-title function_ invoke__">send</span>(Msg::<span class="hl-title function_ invoke__">Echo</span>(line)).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">        } <span class="hl-keyword">else</span> {</span>
+<span class="line">            <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;The worker has been stopped!&quot;</span>);</span>
+<span class="line">        };</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;Bye!&quot;</span>);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Msg</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Echo</span>(<span class="hl-type">String</span>),</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">spawn_worker</span>() <span class="hl-punctuation">-&gt;</span> Sender&lt;Msg&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> (tx, rx) = <span class="hl-title function_ invoke__">channel</span>();</span>
+<span class="line">    thread::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> || {</span>
+<span class="line">        <span class="hl-keyword">while</span> <span class="hl-keyword">let</span> <span class="hl-variable">Ok</span>(msg) = rx.<span class="hl-title function_ invoke__">recv</span>() {</span>
+<span class="line">            <span class="hl-keyword">match</span> msg {</span>
+<span class="line">                Msg::<span class="hl-title function_ invoke__">Echo</span>(msg) =&gt; <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;{} ❤️&quot;</span>, msg),</span>
+<span class="line">            }</span>
+<span class="line">        }</span>
+<span class="line">        <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;The worker has stopped!&quot;</span>);</span>
+<span class="line">    });</span>
+<span class="line">    tx</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Note the interesting parts of the solution:</span></p>
+<ul>
+<li>
+<span>no need to invent an additional message type,</span>
+</li>
+<li>
+<span>the </span><code>Sender</code><span> is stored inside an </span><code>Option</code><span>, so that we can</span>
+<span>drop it with the </span><code>.take</code><span> method,</span>
+</li>
+<li>
+<span>the </span><code>Option</code><span> forces us to check if the worker is alive</span>
+<span>before sending a message.</span>
+</li>
+</ul>
+<p><span>More generally, previously the worker had two paths for termination: a normal</span>
+<span>termination via the </span><code>Stop</code><span> message and an abnormal termination after a panic</span>
+<span>in </span><code>recv</code><span> (which might happen if the parent thread panics and drops the </span><code>Sender</code><span>).</span>
+<span>Now there is a single code path for both cases. That means we can be surer that if</span>
+<span>something somewhere dies with a panic then the shutdown will proceed in an</span>
+<span>orderly fashion, it is not a special case anymore.</span></p>
+<p><span>The only thing left to make this ultimately neat is to replace a hand-written </span><code>while let</code>
+<span>with a </span><code>for</code><span> loop:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">for</span> <span class="hl-variable">msg</span> <span class="hl-keyword">in</span> rx {</span>
+<span class="line">    <span class="hl-keyword">match</span> msg {</span>
+<span class="line">        Msg::<span class="hl-title function_ invoke__">Echo</span>(msg) =&gt; <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;{} ❤️&quot;</span>, msg),</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Am-I-awaited">
+
+    <h2>
+    <a href="#Am-I-awaited"><span>Am I awaited?</span> </a>
+    </h2>
+<p><span>It</span>&rsquo;<span>s interesting to see that the same pattern applies to the async version of the</span>
+<span>solution as well.</span></p>
+<p><span>Async baseline:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">extern</span> <span class="hl-keyword">crate</span> futures; <span class="hl-comment">// [dependencies] futures = &quot;0.1&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">use</span> std::io::BufRead;</span>
+<span class="line"><span class="hl-keyword">use</span> std::thread;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">use</span> futures::sync::mpsc::{Sender, channel};</span>
+<span class="line"><span class="hl-keyword">use</span> futures::{Future, Stream, Sink};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">worker</span> = <span class="hl-title function_ invoke__">spawn_worker</span>();</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">stdin</span> = ::std::io::<span class="hl-title function_ invoke__">stdin</span>();</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">line</span> <span class="hl-keyword">in</span> stdin.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">lines</span>() {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">line</span> = line.<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">        worker = worker.<span class="hl-title function_ invoke__">send</span>(Msg::<span class="hl-title function_ invoke__">Echo</span>(line)).<span class="hl-title function_ invoke__">wait</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;Bye!&quot;</span>);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Msg</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Echo</span>(<span class="hl-type">String</span>),</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">spawn_worker</span>() <span class="hl-punctuation">-&gt;</span> Sender&lt;Msg&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> (tx, rx) = <span class="hl-title function_ invoke__">channel</span>(<span class="hl-number">1</span>);</span>
+<span class="line">    thread::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> || {</span>
+<span class="line">        rx.<span class="hl-title function_ invoke__">for_each</span>(|msg| {</span>
+<span class="line">            <span class="hl-keyword">match</span> msg {</span>
+<span class="line">                Msg::<span class="hl-title function_ invoke__">Echo</span>(msg) =&gt; <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;{} ❤️&quot;</span>, msg),</span>
+<span class="line">            }</span>
+<span class="line">            <span class="hl-title function_ invoke__">Ok</span>(())</span>
+<span class="line">        }).<span class="hl-title function_ invoke__">wait</span>().<span class="hl-title function_ invoke__">unwrap</span>()</span>
+<span class="line">    });</span>
+<span class="line">    tx</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Async with a termination message:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">extern</span> <span class="hl-keyword">crate</span> futures; <span class="hl-comment">// [dependencies] futures = &quot;0.1&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">use</span> std::io::BufRead;</span>
+<span class="line"><span class="hl-keyword">use</span> std::thread;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">use</span> futures::sync::mpsc::{Sender, channel};</span>
+<span class="line"><span class="hl-keyword">use</span> futures::{Future, Stream, Sink};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">worker</span> = <span class="hl-title function_ invoke__">spawn_worker</span>();</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">stdin</span> = ::std::io::<span class="hl-title function_ invoke__">stdin</span>();</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">line</span> <span class="hl-keyword">in</span> stdin.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">lines</span>() {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">line</span> = line.<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">msg</span> = <span class="hl-keyword">if</span> line == <span class="hl-string">&quot;stop&quot;</span> {</span>
+<span class="line">            Msg::Stop</span>
+<span class="line">        } <span class="hl-keyword">else</span> {</span>
+<span class="line">            Msg::<span class="hl-title function_ invoke__">Echo</span>(line)</span>
+<span class="line">        };</span>
+<span class="line">        worker = worker.<span class="hl-title function_ invoke__">send</span>(msg).<span class="hl-title function_ invoke__">wait</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;Bye!&quot;</span>);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Msg</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Echo</span>(<span class="hl-type">String</span>),</span>
+<span class="line">    Stop,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">spawn_worker</span>() <span class="hl-punctuation">-&gt;</span> Sender&lt;Msg&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> (tx, rx) = <span class="hl-title function_ invoke__">channel</span>(<span class="hl-number">1</span>);</span>
+<span class="line">    thread::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> || {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">_</span> = rx.<span class="hl-title function_ invoke__">for_each</span>(|msg| {</span>
+<span class="line">            <span class="hl-keyword">match</span> msg {</span>
+<span class="line">                Msg::<span class="hl-title function_ invoke__">Echo</span>(msg) =&gt; {</span>
+<span class="line">                    <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;{} ❤️&quot;</span>, msg);</span>
+<span class="line">                    <span class="hl-title function_ invoke__">Ok</span>(())</span>
+<span class="line">                },</span>
+<span class="line">                Msg::Stop =&gt; <span class="hl-title function_ invoke__">Err</span>(()),</span>
+<span class="line">            }</span>
+<span class="line">        }).<span class="hl-title function_ invoke__">then</span>(|result| {</span>
+<span class="line">            <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;The worker has stopped!&quot;</span>);</span>
+<span class="line">            result</span>
+<span class="line">        }).<span class="hl-title function_ invoke__">wait</span>();</span>
+<span class="line">    });</span>
+<span class="line">    tx</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo r</span>
+<span class="line"><span class="hl-output">    Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs</span></span>
+<span class="line"><span class="hl-output">     Running `target/debug/worker`</span></span>
+<span class="line"><span class="hl-output">hello</span></span>
+<span class="line"><span class="hl-output">hello ❤️</span></span>
+<span class="line"><span class="hl-output">stop</span></span>
+<span class="line"><span class="hl-output">The worker has stopped!</span></span>
+<span class="line"><span class="hl-output">world</span></span>
+<span class="line"><span class="hl-output">thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: SendError("...")', /checkout/src/libcore/result.rs:916:5</span></span>
+<span class="line"><span class="hl-output">note: Run with `RUST_BACKTRACE=1` for a backtrace.</span></span></code></pre>
+
+</figure>
+<p><span>Async with drop:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">extern</span> <span class="hl-keyword">crate</span> futures; <span class="hl-comment">// [dependencies] futures = &quot;0.1&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">use</span> std::io::BufRead;</span>
+<span class="line"><span class="hl-keyword">use</span> std::thread;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">use</span> futures::sync::mpsc::{Sender, channel};</span>
+<span class="line"><span class="hl-keyword">use</span> futures::{Future, Stream, Sink};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">worker</span> = <span class="hl-title function_ invoke__">Some</span>(<span class="hl-title function_ invoke__">spawn_worker</span>());</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">stdin</span> = ::std::io::<span class="hl-title function_ invoke__">stdin</span>();</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">line</span> <span class="hl-keyword">in</span> stdin.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">lines</span>() {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">line</span> = line.<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">        <span class="hl-keyword">if</span> line == <span class="hl-string">&quot;stop&quot;</span> {</span>
+<span class="line">            <span class="hl-title function_ invoke__">drop</span>(worker.<span class="hl-title function_ invoke__">take</span>());</span>
+<span class="line">            <span class="hl-keyword">continue</span>;</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(w) = worker {</span>
+<span class="line">            worker = <span class="hl-title function_ invoke__">Some</span>(w.<span class="hl-title function_ invoke__">send</span>(Msg::<span class="hl-title function_ invoke__">Echo</span>(line)).<span class="hl-title function_ invoke__">wait</span>().<span class="hl-title function_ invoke__">unwrap</span>())</span>
+<span class="line">        } <span class="hl-keyword">else</span> {</span>
+<span class="line">            <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;The worker has been stopped!&quot;</span>);</span>
+<span class="line">        }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;Bye!&quot;</span>);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Msg</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Echo</span>(<span class="hl-type">String</span>),</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">spawn_worker</span>() <span class="hl-punctuation">-&gt;</span> Sender&lt;Msg&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> (tx, rx) = <span class="hl-title function_ invoke__">channel</span>(<span class="hl-number">1</span>);</span>
+<span class="line">    thread::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> || {</span>
+<span class="line">        rx.<span class="hl-title function_ invoke__">for_each</span>(|msg| {</span>
+<span class="line">            <span class="hl-keyword">match</span> msg {</span>
+<span class="line">                Msg::<span class="hl-title function_ invoke__">Echo</span>(msg) =&gt; <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;{} ❤️&quot;</span>, msg),</span>
+<span class="line">            }</span>
+<span class="line">            <span class="hl-title function_ invoke__">Ok</span>(())</span>
+<span class="line">        }).<span class="hl-title function_ invoke__">map</span>(|()| {</span>
+<span class="line">            <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;The worker has stopped!&quot;</span>);</span>
+<span class="line">        }).<span class="hl-title function_ invoke__">wait</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    });</span>
+<span class="line">    tx</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo r</span>
+<span class="line"><span class="hl-output">    Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs</span></span>
+<span class="line"><span class="hl-output">     Running `target/debug/worker`</span></span>
+<span class="line"><span class="hl-output">hello</span></span>
+<span class="line"><span class="hl-output">hello ❤️</span></span>
+<span class="line"><span class="hl-output">stop</span></span>
+<span class="line"><span class="hl-output">The worker has stopped!</span></span>
+<span class="line"><span class="hl-output">world</span></span>
+<span class="line"><span class="hl-output">The worker has been stopped!</span></span>
+<span class="line"><span class="hl-output">Bye!</span></span></code></pre>
+
+</figure>
+</section>
+<section id="Conclusion">
+
+    <h2>
+    <a href="#Conclusion"><span>Conclusion</span> </a>
+    </h2>
+<p><span>So, yeah, this all was written just to say </span>&ldquo;<span>in Rust, cancellation is </span><code>drop</code>&rdquo;<span> :-)</span></p>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/81j1gd/blog_stropping_a_rust_worker/"><span>/r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2018-03-03-stopping-a-rust-worker.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

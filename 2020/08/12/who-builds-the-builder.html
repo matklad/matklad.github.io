@@ -1,0 +1,151 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Who Builds the Builder?</title>
+  <meta name="description" content="This is a short note on the builder pattern, or, rather, on the builder method pattern.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/08/12/who-builds-the-builder.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Who Builds the Builder?</span> <time datetime="2020-08-12">Aug 12, 2020</time></h1>
+<p><span>This is a short note on the builder pattern, or, rather, on the builder </span><em><span>method</span></em><span> pattern.</span></p>
+<p><span>TL;DR: if you have </span><code>Foo</code><span> and </span><code>FooBuilder</code><span>, consider adding a </span><code>builder</code><span> method to </span><code>Foo</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Foo</span> { ... }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">FooBuilder</span> { ... }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Foo</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">builder</span>() <span class="hl-punctuation">-&gt;</span> FooBuilder {</span>
+<span class="line">        FooBuilder::<span class="hl-title function_ invoke__">default</span>()</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">FooBuilder</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">build</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> Foo { ... }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>A more minimal solution is to rely just on </span><code>FooBuilder::default</code><span> or </span><code>FooBuilder::new</code><span>.</span>
+<span>There are two problems with that:</span></p>
+<p><em><span>First</span></em><span>, it is hard to discover.</span>
+<span>Nothing in the docs/signature of </span><code>Foo</code><span> mentions </span><code>FooBuilder</code><span>, you need to look elsewhere to learn how to create a </span><code>Foo</code><span>.</span>
+<span>I remember being puzzled at how to create a </span><a href="https://docs.rs/globset/0.4.5/globset/struct.GlobSet.html"><code>GlobSet</code></a><span> for exactly this reason.</span>
+<span>In contrast, the </span><code>builder</code><span> method is right there on </span><code>Foo</code><span>, probably the first one.</span></p>
+<p><em><span>Second</span></em><span>, it is more annoying to use, as you need to import </span><em><span>both</span></em><span> </span><code>Foo</code><span> and </span><code>FooBuilder</code><span>.</span>
+<span>With </span><code>Foo::builder</code><span> method often only one import suffices, as you don</span>&rsquo;<span>t need to name the builder type.</span></p>
+<p><span>Case studies:</span></p>
+<ul>
+<li>
+<a href="https://github.com/rust-analyzer/rust-analyzer/commit/7510048ec0a5d5e7136e3ea258954eb244d15baf"><code>TextEdit::build</code></a><span> from rust-analyzer.</span>
+</li>
+<li>
+<a href="https://doc.rust-lang.org/std/fs/struct.File.html#method.with_options"><code>File::with_options</code></a><span> from std.</span>
+</li>
+<li>
+<a href="https://docs.rs/http/0.2.1/http/request/struct.Request.html#method.builder"><code>Request</code></a><span> and </span><a href="https://docs.rs/http/0.2.1/http/response/struct.Response.html#method.builder"><code>Response</code></a><span> from http.</span>
+</li>
+</ul>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/i8kofk/blog_post_who_builds_the_builder/"><span>/r/rust</span></a><span>.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-08-12-who-builds-the-builder.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

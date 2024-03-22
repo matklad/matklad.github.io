@@ -1,0 +1,361 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zig And Rust</title>
+  <meta name="description" content="This post will be a bit all over the place.
+Several months ago, I wrote Hard Mode Rust, exploring an allocation-conscious style of programming.
+In the ensuing discussion, @jamii name-dropped TigerBeetle, a reliable, distributed, fast, and small database written in Zig in a similar style, and, well, I now find myself writing Zig full-time, after more than seven years of Rust.
+This post is a hand-wavy answer to the why? question.
+It is emphatically not a balanced and thorough comparison of the two languages.
+I haven't yet written my 100k lines of Zig to do that.
+(if you are looking for a more general what the heck is Zig, I can recommend @jamii's post).
+In fact, this post is going to be less about languages, and more about styles of writing software (but pre-existing knowledge of Rust and Zig would be very helpful).
+Without further caveats, let's get started.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/03/26/zig-and-rust.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Zig And Rust</span> <time datetime="2023-03-26">Mar 26, 2023</time></h1>
+<p><span>This post will be a bit all over the place.</span>
+<span>Several months ago, I wrote </span><a href="https://matklad.github.io/2022/10/06/hard-mode-rust.html"><em><span>Hard Mode Rust</span></em></a><span>, exploring an allocation-conscious style of programming.</span>
+<span>In the ensuing discussion, </span><a href="https://github.com/Jamii"><span>@jamii</span></a><span> name-dropped </span><a href="https://tigerbeetle.com"><span>TigerBeetle</span></a><span>, a reliable, distributed, fast, and small database written in Zig in a similar style, and, well, I now find myself writing Zig full-time, after more than seven years of Rust.</span>
+<span>This post is a hand-wavy answer to the </span>&ldquo;<span>why?</span>&rdquo;<span> question.</span>
+<span>It is emphatically </span><em><span>not</span></em><span> a balanced and thorough comparison of the two languages.</span>
+<span>I haven</span>&rsquo;<span>t yet written my </span><a href="https://matklad.github.io/2021/09/05/Rust100k.html"><span>100k lines of Zig</span></a><span> to do that.</span>
+<span>(if you are looking for a more general </span>&ldquo;<span>what the heck is Zig</span>&rdquo;<span>, I can recommend </span><a href="https://www.scattered-thoughts.net/writing/assorted-thoughts-on-zig-and-rust/"><span>@jamii</span>&rsquo;<span>s post</span></a><span>).</span>
+<span>In fact, this post is going to be less about languages, and more about styles of writing software (but pre-existing knowledge of Rust and Zig would be very helpful).</span>
+<span>Without further caveats, let</span>&rsquo;<span>s get started.</span></p>
+<section id="Reliable-Software">
+
+    <h2>
+    <a href="#Reliable-Software"><span>Reliable Software</span> </a>
+    </h2>
+<p><span>To the first approximation, we all strive to write bug-free programs.</span>
+<span>But I think a closer look reveals that we don</span>&rsquo;<span>t actually care about programs being correct 100% of the time, at least in the majority of the domains.</span>
+<span>Empirically, almost every program has bugs, and yet it somehow works out OK.</span>
+<span>To pick one specific example, most programs use stack, but almost no programs understand what their stack usage is exactly, and how far they can go.</span>
+<span>When we call </span><code>malloc</code><span>, we just hope that we have enough stack space for it, we almost never check.</span>
+<span>Similarly, all Rust programs abort on OOM, and can</span>&rsquo;<span>t state their memory requirements up-front.</span>
+<span>Certainly good enough, but not perfect.</span></p>
+<p><span>The second approximation is that we strive to balance program usefulness with the effort to develop the program.</span>
+<span>Bugs reduce usefulness a lot, and there are two styles of software engineering to deal with the:</span></p>
+<p><em><span>Erlang style</span></em><span>, where we embrace failability of both hardware and software and explicitly design programs to be resilient to partial faults.</span></p>
+<p><a href="https://www.sqlite.org/testing.html"><em><span>SQLite style</span></em></a><span>, where we overcome an unreliable environment at the cost of rigorous engineering.</span></p>
+<p><span>rust-analyzer and TigerBeetle are perfect specimens of the two approaches, let me describe them.</span></p>
+</section>
+<section id="rust-analyzer">
+
+    <h2>
+    <a href="#rust-analyzer"><span>rust-analyzer</span> </a>
+    </h2>
+<p><a href="https://rust-analyzer.github.io"><span>rust-analyzer</span></a><span> is an LSP server for the Rust programming language.</span>
+<span>By its nature, it</span>&rsquo;<span>s expansive.</span>
+<span>Great developer tools usually have a feature for every niche use-case.</span>
+<span>It also is a fast-moving open source project which has to play catch-up with the </span><code>rustc</code><span> compiler.</span>
+<span>Finally, the nature of IDE dev tooling makes availability significantly more important than correctness.</span>
+<span>An erroneous completion option would cause a smirk (if it is noticed at all), while the server crashing and all syntax highlighting turning off will be noticed immediately.</span></p>
+<p><span>For this cluster of reasons, rust-analyzer is shifted far towards the </span>&ldquo;<span>embrace software imperfections</span>&rdquo;<span> side of the spectrum.</span>
+<span>rust-analyzer is designed around having bugs.</span>
+<span>All the various features are carefully compartmentalized at runtime, such that panicking code in just a single feature can</span>&rsquo;<span>t bring down the whole process.</span>
+<span>Critically, almost no code has access to any mutable state, so usage of </span><code>catch_unwind</code><span> can</span>&rsquo;<span>t lead to a rotten state.</span></p>
+<p><span>Development process </span><em><span>itself</span></em><span> is informed by this calculus.</span>
+<span>For example, PRs with new features land when there</span>&rsquo;<span>s a reasonable certainty that the happy case works correctly.</span>
+<span>If some weird incomplete code would cause the feature to crash, that</span>&rsquo;<span>s OK.</span>
+<span>It might be even a benefit </span>&mdash;<span> fixing a well-reproducible bug in an isolated feature is a gateway drug to heavy contribution to rust-analyzer.</span>
+<span>Our tight weekly release schedule (and the nightly release) help to get bug fixes out there faster.</span></p>
+<p><span>Overall, the philosophy is to maximize provided value by focusing on the common case.</span>
+<span>Edge cases become eventually correct over time.</span></p>
+</section>
+<section id="TigerBeetle">
+
+    <h2>
+    <a href="#TigerBeetle"><span>TigerBeetle</span> </a>
+    </h2>
+<p><span>TigerBeetle is the opposite of that.</span></p>
+<p><span>It is a database, with domain model fixed at compile time (we currently do double-entry bookkeeping).</span>
+<span>The database is distributed, meaning that there are six TigerBeetle replicas running on different geographically and operationally isolated machines, which together implement a replicated state machine.</span>
+<span>That is, TigerBeetle replicas exchange messages to make sure every replica processes the same set of transactions, in the same order.</span>
+<span>That</span>&rsquo;<span>s a surprisingly hard problem if you allow machines to fail (the whole point of using many machines for redundancy), so we use a smart </span><a href="https://pmg.csail.mit.edu/papers/vr-revisited.pdf"><span>consensus algorithm</span></a><span>  (non-byzantine) for this.</span>
+<span>Traditionally, consensus algorithms assume reliable storage </span>&mdash;<span> data once written to disk can be always retrieved later.</span>
+<span>In reality, storage is unreliable, nearly byzantine </span>&mdash;<span> a disk can return bogus data without signaling an error, and even a single such error can </span><a href="https://www.usenix.org/conference/fast18/presentation/alagappan"><span>break consensus</span></a><span>.</span>
+<span>TigerBeetle combats that by allowing a replica to repair its local storage using data from other replicas.</span></p>
+<p><span>On the engineering side of things, we are building a reliable, predictable system.</span>
+<span>And predictable means </span><em><span>really</span></em><span> predictable.</span>
+<span>Rather than reining in sources of non-determinism, we build the whole system from the ground up from a set of fully deterministic, hand crafted components.</span>
+<span>Here are some of our unconventional choices (</span><a href="https://github.com/tigerbeetledb/tigerbeetle/blob/fe09404d465df46b2bdfc017633eff37b4ab2343/docs/DESIGN.md"><span>design doc</span></a><span>):</span></p>
+<p><span>It</span>&rsquo;<span>s </span><a href="https://matklad.github.io/2022/10/06/hard-mode-rust.html"><span>hard mode</span></a><span>!</span>
+<span>We allocate all the memory at a startup, and there</span>&rsquo;<span>s zero allocation after that.</span>
+<span>This removes all the uncertainty about allocation.</span></p>
+<p><span>The code is architected with brutal simplicity.</span>
+<span>As a single example, we don</span>&rsquo;<span>t use JSON, or ProtoBuf, or Cap</span>&rsquo;<span>n</span>&rsquo;<span>Proto for serialization.</span>
+<span>Rather, we just cast the bytes we received from the network to a desired type.</span>
+<span>The motivation here is not so much performance, as reduction of the number of moving parts.</span>
+<span>Parsing is hard, but, if you control both sides of the communication channel, you don</span>&rsquo;<span>t need to do it, you can send checksummed data as is.</span></p>
+<p><span>We aggressively minimize all dependencies.</span>
+<span>We know exactly the system calls our system is making, because all IO is our own code (on Linux, our main production platform, we don</span>&rsquo;<span>t link libc).</span></p>
+<p><span>There</span>&rsquo;<span>s little abstraction between components </span>&mdash;<span> all parts of TigerBeetle work in concert.</span>
+<span>For example, one of our core types, </span><a href="https://github.com/tigerbeetledb/tigerbeetle/blob/fe09404d465df46b2bdfc017633eff37b4ab2343/src/message_pool.zig#L64"><code>Message</code></a><span>, is used throughout the stack:</span></p>
+<ul>
+<li>
+<span>network receives bytes from a TCP connection directly into a </span><code>Message</code>
+</li>
+<li>
+<span>consensus processes and sends </span><code>Message</code><span>s</span>
+</li>
+<li>
+<span>similarly, storage writes </span><code>Message</code><span>s to disk</span>
+</li>
+</ul>
+<p><span>This naturally leads to very simple and fast code.</span>
+<span>We don</span>&rsquo;<span>t need to do anything special to be zero copy </span>&mdash;<span> given that we allocate everything up-front, we simply don</span>&rsquo;<span>t have any extra memory to copy the data to!</span>
+<span>(A separate issue is that, arguably, you just can</span>&rsquo;<span>t treat storage as a separate black box in a fault-tolerant distributed system, because storage is also faulty).</span></p>
+<p><em><span>Everything</span></em><span> in TigerBeetle has an explicit upper-bound.</span>
+<span>There</span>&rsquo;<span>s not a thing which is </span><em><span>just</span></em><span> an </span><code>u32</code><span> </span>&mdash;<span> all data is checked to meet specific numeric limits at the edges of the system.</span></p>
+<p><span>This includes </span><code>Message</code><span>s.</span>
+<span>We just upper-bound how many messages can be in-memory at the same time, and allocate precisely that amount of messages (</span><a href="https://github.com/tigerbeetledb/tigerbeetle/blob/53092098d69cc8facf94a2472bc79ca9d525a605/src/message_pool.zig#L16-L40"><span>source</span></a><span>).</span>
+<span>Getting a new message from the message pool can</span>&rsquo;<span>t allocate and can</span>&rsquo;<span>t fail.</span></p>
+<p><span>With all that strictness and explicitness about resources, of course we also fully externalize any IO, including time.</span>
+<em><span>All</span></em><span> inputs are passed in explicitly, there</span>&rsquo;<span>s no ambient influences from the environment.</span>
+<span>And that means that the bulk of our testing consists of trying all possible permutations of effects of the environment.</span>
+<span>Deterministic randomized simulation is </span><a href="https://dl.acm.org/doi/10.1145/3158134"><span>very effective</span></a><span> at uncovering issues in real implementations of distributed systems.</span></p>
+<p><span>What I am getting at is that TigerBeetle isn</span>&rsquo;<span>t really a normal </span>&ldquo;<span>program</span>&rdquo;<span> program.</span>
+<span>It strictly is a finite state machine, explicitly coded as such.</span></p>
+</section>
+<section id="Back-From-The-Weeds">
+
+    <h2>
+    <a href="#Back-From-The-Weeds"><span>Back From The Weeds</span> </a>
+    </h2>
+<p><span>Oh, right, Rust and Zig, the topic of the post!</span></p>
+<p><span>I find myself often returning to </span><a href="http://venge.net/graydon/talks/intro-talk.pdf"><span>the first Rust slide deck</span></a><span>.</span>
+<span>A lot of core things are different (no longer Rust uses only the old ideas), but a lot is the same.</span>
+<span>To be a bit snarky, while Rust </span>&ldquo;<span>is not for lone genius hackers</span>&rdquo;<span>, Zig </span>&hellip;<span> kinda is.</span>
+<span>On more peaceable terms, while Rust is a language for building </span><em><span>modular</span></em><span> software, Zig is in some sense anti-modular.</span></p>
+<p><span>It</span>&rsquo;<span>s appropriate to quote </span><a href="https://youtu.be/HgtRAbE1nBM?t=2359"><span>Bryan Cantrill</span></a><span> here:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>I can write C that frees memory properly</span>&hellip;<span>that basically doesn</span>&rsquo;<span>t suffer from</span>
+<span>memory corruption</span>&hellip;<span>I can do that, because I</span>&rsquo;<span>m controlling heaven and earth in</span>
+<span>my software. It makes it very hard to compose software. Because even if you and</span>
+<span>I both know how to write memory safe C, it</span>&rsquo;<span>s very hard for us to have an</span>
+<span>interface boundary where we can agree about who does what.</span></p>
+</blockquote>
+
+</figure>
+<p><span>That</span>&rsquo;<span>s the core of what Rust is doing: it provides you with a language to precisely express the contracts between components, such that components can be integrated in a machine-checkable way.</span></p>
+<p><span>Zig doesn</span>&rsquo;<span>t do that. It isn</span>&rsquo;<span>t even memory safe. My first experience writing a non-trivial Zig program went like this:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>ME: Oh wow! Do you mean I can finally </span><em><span>just</span></em><span> store a pointer to a struct</span>&rsquo;<span>s field in the struct itself?</span></p>
+<p><span>30 seconds later</span></p>
+<p><span>PROGRAM: Segmentation fault.</span></p>
+</blockquote>
+
+</figure>
+<p><span>However!</span><br>
+<span>Zig </span><em><span>is</span></em><span> a much smaller language than Rust.</span>
+<span>Although you</span>&rsquo;<span>ll </span><em><span>have</span></em><span> to be able to keep the entirety of the program in your head, to control heaven and earth to not mess up resource management, doing that could be easier.</span></p>
+<p><span>It</span>&rsquo;<span>s not true that rewriting a Rust program in Zig would make it simpler.</span>
+<span>On the contrary, I expect the result to be significantly more complex (and segfaulty).</span>
+<span>I noticed that a lot of Zig code written in </span>&ldquo;<span>let</span>&rsquo;<span>s replace </span><a href="https://doc.rust-lang.org/rust-by-example/scope/raii.html"><span>RAII</span></a><span> with </span><a href="https://ziglang.org/documentation/master/#defer"><span>defer</span></a>&rdquo;<span> style has resource-management bugs.</span></p>
+<p><span>But it often is possible to architect the software such that there</span>&rsquo;<span>s little resource management to do (eg, allocating everything up-front, like TigerBeetle, or even at compile time, like many smaller embedded systems).</span>
+<span>It</span>&rsquo;<span>s hard </span>&mdash;<span> simplicity is always hard.</span>
+<span>But, if you go this  way, I feel like Zig can provide substantial benefits.</span></p>
+<p><span>Zig has just a single feature, dynamically-typed comptime, which subsumes most of the special-cased Rust machinery.</span>
+<span>It is definitely a tradeoff, instantiation-time errors are much worse for complex cases.</span>
+<span>But a lot more of the cases are simple, because there</span>&rsquo;<span>s no need for programming in the language of types.</span>
+<span>Zig is very spartan when it comes to the language.</span>
+<span>There are no closures </span>&mdash;<span> if you want them, you</span>&rsquo;<span>ll have to pack a wide-pointer yourself.</span>
+<span>Zig</span>&rsquo;<span>s expressiveness is aimed at producing just the right assembly, not at allowing maximally concise and abstract source code.</span>
+<span>In the words of Andrew Kelley, Zig is a DSL for emitting machine code.</span></p>
+<p><span>Zig strongly prefers explicit resource management.</span>
+<span>A lot of Rust programs are web-servers.</span>
+<span>Most web servers have a very specific execution pattern of processing multiple independent short-lived requests concurrently.</span>
+<span>The most natural way to code this would be to give each request a dedicated bump allocator, which turns drops into no-ops and </span>&ldquo;<span>frees</span>&rdquo;<span> the memory at bulk after each request by resetting offset to zero.</span>
+<span>This would be pretty efficient, and would provide per-request memory profiling and limiting out of the box.</span>
+<span>I don</span>&rsquo;<span>t think any popular Rust frameworks do this </span>&mdash;<span> using the global allocator is convenient enough and creates a strong local optima.</span>
+<span>Zig forces you to pass the allocator in, so you might as well think about the most appropriate one!</span></p>
+<p><span>Similarly, the standard library is very conscious about allocation, more so than Rust</span>&rsquo;<span>s.</span>
+<span>Collections are </span><em><span>not</span></em><span> parametrized by an allocator, like in C++ or (future) Rust.</span>
+<span>Rather, an allocator is passed in explicitly to every method which actually needs to allocate.</span>
+<span>This is </span><a href="https://matklad.github.io/2020/12/28/csdi.html"><em><span>Call Site Dependency Injection</span></em></a><span>, and it is more flexible.</span>
+<span>For example in TigerBeetle we need a couple of hash maps.</span>
+<span>These maps are sized at a startup time to hold just the right number of elements, and are never resized.</span>
+<span>So we pass an allocator to </span><a href="https://github.com/tigerbeetledb/tigerbeetle/blob/53092098d69cc8facf94a2472bc79ca9d525a605/src/vsr/replica.zig#L540"><code>init</code></a><span> method, but we don</span>&rsquo;<span>t pass it to the </span><a href="https://github.com/tigerbeetledb/tigerbeetle/blob/53092098d69cc8facf94a2472bc79ca9d525a605/src/vsr/replica.zig#L758"><span>event loop</span></a><span>.</span>
+<span>We get to both use the standard hash-map, and to feel confident that there</span>&rsquo;<span>s no way we can allocate in the actual event loop, because it doesn</span>&rsquo;<span>t have access to an allocator.</span></p>
+</section>
+<section id="Wishlist">
+
+    <h2>
+    <a href="#Wishlist"><span>Wishlist</span> </a>
+    </h2>
+<p><span>Finally, my wishlist for Zig.</span></p>
+<p><em><span>First</span></em><span>, I think Zig</span>&rsquo;<span>s strength lies strictly in the realm of writing </span>&ldquo;<span>perfect</span>&rdquo;<span> systems software.</span>
+<span>It is a relatively thin slice of the market, but it is important.</span>
+<span>One of the problems with Rust is that we don</span>&rsquo;<span>t have a reliability-oriented high-level programming language with a good quality of implementation (modern ML, if you will).</span>
+<span>This is a blessing for Rust, because it makes its niche bigger, increasing the amount of community momentum behind the language.</span>
+<span>This is also a curse, because a bigger niche makes it harder to maintain focus.</span>
+<span>For Zig, Rust already plays this role of </span>&ldquo;<span>modern ML</span>&rdquo;<span>, which creates bigger pressure to specialize.</span></p>
+<p><em><span>Second</span></em><span>, my biggest worry about Zig is its semantics around aliasing, provenance, mutability and self-reference ball of problems.</span>
+<span>I don</span>&rsquo;<span>t worry all that much about this creating </span>&ldquo;<span>iterator invalidation</span>&rdquo;<span> style of UB.</span>
+<span>TigerBeetle runs in </span><code>-DReleaseSafe</code><span>, which mostly solves spatial memory safety, it doesn</span>&rsquo;<span>t really do dynamic memory allocation, which unasks the question about temporal memory safety,</span>
+<span>and it has a very thorough fuzzer-driven test suite, which squashes the remaining bugs.</span>
+<span>I do worry about the semantics of the language itself.</span>
+<span>My current understanding is that, to correctly compile a C-like low-level language, one really needs to nail down semantics of pointers.</span>
+<span>I am not sure </span>&ldquo;<span>portable assembly</span>&rdquo;<span> is really a thing: it is possible to create a compiler which does little optimization and </span>&ldquo;<span>works as expected</span>&rdquo;<span> most of the time, but I am doubtful that it</span>&rsquo;<span>s possible to correctly describe the behavior of such a compiler.</span>
+<span>If you start asking questions about what are pointers, and what is memory, you end up in a fairly complicated land, where bytes are poison.</span>
+<span>Rust tries to define that precisely, but writing code which abides by the Rust rules without a borrow-checker isn</span>&rsquo;<span>t really possible </span>&mdash;<span> the rules are too subtle.</span>
+<span>Zig</span>&rsquo;<span>s implementation today is </span><em><span>very</span></em><span> fuzzy around potentially aliased pointers, copies of structs with interior-pointers and the like.</span>
+<span>I wish that Zig had a clear answer to what the desired semantics is.</span></p>
+<p><span id="ide"><em><span>Third</span></em></span><span>, IDE support.</span>
+<span>I</span>&rsquo;<span>ve written about that before </span><a href="https://matklad.github.io/2023/02/10/how-a-zig-ide-could-work.html"><span>on this blog</span></a><span>.</span>
+<span>As of today, developing Zig is quite pleasant </span>&mdash;<span> </span><a href="https://github.com/zigtools/zls"><span>the language server</span></a><span> is pretty spartan, but already is quite helpful, and for the rest, Zig is exceptionally greppable.</span>
+<span>But, with the lazy compilation model and the absence of out-of-the-language meta programming, I feel like Zig could be more ambitious here.</span>
+<span>To position itself well for the future in terms of IDE support, I think it would be nice if the compiler gets the basic data model for IDE use-case.</span>
+<span>That is, there should be an API to create a persistent analyzer process, which ingests a stream of code edits, and produces a continuously updated model of the code without explicit compilation requests.</span>
+<span>The model can be very simple, just </span>&ldquo;<span>give me an AST of this file at this point in time</span>&rdquo;<span> would do </span>&mdash;<span> all the fancy IDE features can be filled in later.</span>
+<span>What matters is a shape of data flow through the compiler </span>&mdash;<span> not an edit-compile cycle, but rather a continuously updated view of the world.</span></p>
+<p><em><span>Fourth</span></em><span>, one of the values of Zig which resonates with me a lot is a preference for low-dependency, self-contained processes.</span>
+<span>Ideally, you get yourself a </span><code>./zig</code><span> binary, and go from there.</span>
+<span>The preference, at this time of changes, is to bundle a particular version of </span><code>./zig</code><span> with a project, instead of using a system-wide </span><code>zig</code><span>.</span>
+<span>There are two aspects that could be better.</span></p>
+<p>&ldquo;<span>Getting yourself a Zig</span>&rdquo;<span> is a finicky problem, because it requires bootstrapping.</span>
+<span>To do that, you need to run some code that will download the binary for your platform, but each platform has its own way to </span>&ldquo;<span>run code</span>&rdquo;<span>.</span>
+<span>I wish that Zig provided a blessed set of scripts, </span><code>get_zig.sh</code><span>, </span><code>get_zig.bat</code><span>, etc (or maybe a small actually portable binary?), which projects could just vendor, so that the contribution experience becomes fully project-local and self-contained:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> ./get_zig.sh</span>
+<span class="line"><span class="hl-title function_">$</span> ./zig build</span></code></pre>
+
+</figure>
+<p><span>Once you have </span><code>./zig</code><span>, you can use that to drive the </span><em><span>rest</span></em><span> of the automation.</span>
+<span>You already can </span><code>./zig build</code><span> to drive the build, but there</span>&rsquo;<span>s more to software than just building.</span>
+<span>There</span>&rsquo;<span>s always a long tail of small things which traditionally get solved with a pile of platform-dependent bash scripts.</span>
+<span>I wish that Zig pushed the users harder towards specifying all that automation in Zig.</span>
+<span>A picture is worth a thousand words, so</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment"># BAD: dependency on the OS</span></span>
+<span class="line"><span class="hl-title function_">$</span> ./scripts/deploy.sh --port 92</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># OK: no dependency, but a mouthful to type</span></span>
+<span class="line"><span class="hl-title function_">$</span> ./zig build task -- deploy --port 92</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># Would be GREAT:</span></span>
+<span class="line"><span class="hl-title function_">$</span> ./zig do deploy --port 92</span></code></pre>
+
+</figure>
+<p><span>Attempting to summarize,</span></p>
+<ul>
+<li>
+<span>Rust is about compositional safety, it</span>&rsquo;<span>s a more scalable language than Scala.</span>
+</li>
+<li>
+<span>Zig is about perfection.</span>
+<span>It is a very sharp, dangerous, but, ultimately, more flexible tool.</span>
+</li>
+</ul>
+<p><span>Discussion on </span><a href="https://old.reddit.com/r/Zig/comments/123jpia/blog_post_zig_and_rust/"><span>/r/Zig</span></a><span> and </span><a href="https://old.reddit.com/r/rust/comments/123jpry/blog_post_zig_and_rust/"><span>/r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-03-26-zig-and-rust.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

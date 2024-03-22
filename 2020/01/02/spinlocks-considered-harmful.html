@@ -1,0 +1,474 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spinlocks Considered Harmful</title>
+  <meta name="description" content="Happy new year 🎉!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Spinlocks Considered Harmful</span> <time datetime="2020-01-02">Jan 2, 2020</time></h1>
+<p><span>Happy new year 🎉!</span></p>
+<p><span>In this post, I will be expressing strong opinions about a topic I have relatively little practical experience with, so feel free to roast and educate me in comments (link at the end of the post) :-)</span></p>
+<p><span>Specifically, I</span>&rsquo;<span>ll talk about:</span></p>
+<ul>
+<li>
+<span>spinlocks,</span>
+</li>
+<li>
+<span>spinlocks in Rust with </span><code>#[no_std]</code><span>,</span>
+</li>
+<li>
+<span>priority inversion,</span>
+</li>
+<li>
+<span>CPU interrupts,</span>
+</li>
+<li>
+<span>and a couple of neat/horrible systemsy Rust hacks.</span>
+</li>
+</ul>
+<section id="Context">
+
+    <h2>
+    <a href="#Context"><span>Context</span> </a>
+    </h2>
+<p><span>I maintain </span><a href="https://github.com/matklad/once_cell/"><code>once_cell</code></a><span> crate, which is a synchronization primitive.</span>
+<span>It uses </span><code>std</code><span> blocking facilities under the hood (specifically, </span><code>std::thread::park</code><span>), and as such is not compatible with </span><code>#[no_std]</code><span>.</span>
+<span>A popular request is to add a spin-lock based implementation for use in </span><code>#[no_std]</code><span> environments: </span><a href="https://github.com/matklad/once_cell/issues/61"><span>#61</span></a><span>.</span></p>
+<p><span>More generally, this seems to be a common pattern in Rust ecosystem:</span></p>
+<ul>
+<li>
+<span>A crate uses </span><code>Mutex</code><span> or other synchronization mechanism from </span><code>std</code>
+</li>
+<li>
+<span>Someone asks for </span><code>#[no_std]</code><span> support</span>
+</li>
+<li>
+<code>Mutex</code><span> is swapped for some variation of spinlock.</span>
+</li>
+</ul>
+<p><span>For example, the </span><code>lazy_static</code><span> crate does this:</span></p>
+<p><a href="https://github.com/rust-lang-nursery/lazy-static.rs/blob/421669662b35fcb455f2902daed2e20bbbba79b6/src/core_lazy.rs#L10"><span>github.com/rust-lang-nursery/lazy-static.rs/blob/master/src/core_lazy.rs</span></a></p>
+<p><span>I think this is an anti-pattern, and I am writing this blog post to call it out.</span></p>
+</section>
+<section id="What-Is-a-Spinlock-Anyway">
+
+    <h2>
+    <a href="#What-Is-a-Spinlock-Anyway"><span>What Is a Spinlock, Anyway?</span> </a>
+    </h2>
+<p><span>A </span><code>Spinlock</code><span> is the simplest possible implementation of a mutex, its general form looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">static</span> LOCKED: AtomicBool = AtomicBool::<span class="hl-title function_ invoke__">new</span>(<span class="hl-literal">false</span>);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">while</span> LOCKED.<span class="hl-title function_ invoke__">compare_and_swap</span>(<span class="hl-literal">false</span>, <span class="hl-literal">true</span>, Ordering::Acquire) { <i class="callout" data-value="1"></i></span>
+<span class="line">  std::sync::atomic::<span class="hl-title function_ invoke__">spin_loop_hint</span>(); <i class="callout" data-value="4"></i></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">/* Critical section */</span>  <i class="callout" data-value="2"></i></span>
+<span class="line"></span>
+<span class="line">LOCKED.<span class="hl-title function_ invoke__">store</span>(<span class="hl-literal">false</span>, Ordering::Release);<i class="callout" data-value="3"></i></span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<span>To grab a lock, we repeatedly execute compare</span><em><span>and</span></em><span>swap until it succeeds. The CPU </span>&ldquo;<span>spins</span>&rdquo;<span> in this very short loop.</span>
+</li>
+<li>
+<span>Only one thread at a time can be here.</span>
+</li>
+<li>
+<span>To release the lock, we do a single atomic store.</span>
+</li>
+<li>
+<span>Spinning is wasteful, so we use an </span><a href="https://en.wikipedia.org/wiki/Intrinsic_function"><span>intrinsic</span></a><span> to instruct the CPU to enter a low-power mode.</span>
+</li>
+</ol>
+<p><span>Why we need </span><code>Ordering::Acquire</code><span> and </span><code>Ordering::Release</code><span> is very interesting, but beyond the scope of this article.</span></p>
+<p><span>The key take-away here is that a spinlock is implemented entirely in user space: from OS point of view, a </span>&ldquo;<span>spinning</span>&rdquo;<span> thread looks exactly like a thread that does a heavy computation.</span></p>
+<p><span>An OS-based mutex, like </span><a href="https://doc.rust-lang.org/std/sync/struct.Mutex.html"><code>std::sync::Mutex</code></a><span> or </span><a href="https://docs.rs/parking_lot/0.10.0/parking_lot/type.Mutex.html"><code>parking_lot::Mutex</code></a><span>, uses a </span><strong><strong><span>system call</span></strong></strong><span> to tell the operating system that a thread needs to be blocked. In pseudo code, an implementation might look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">static</span> LOCKED: AtomicBool = AtomicBool::<span class="hl-title function_ invoke__">new</span>(<span class="hl-literal">false</span>);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">while</span> LOCKED.<span class="hl-title function_ invoke__">compare_and_swap</span>(<span class="hl-literal">false</span>, <span class="hl-literal">true</span>, Ordering::Acquire)</span>
+<span class="line">  <span class="hl-title function_ invoke__">park_this_thread</span>(&amp;LOCKED);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">/* Critical section */</span></span>
+<span class="line"></span>
+<span class="line">LOCKED.<span class="hl-title function_ invoke__">store</span>(<span class="hl-literal">false</span>, Ordering::Release);</span>
+<span class="line"><span class="hl-title function_ invoke__">unpark_some_thread</span>(&amp;LOCKED);</span></code></pre>
+
+</figure>
+<p><span>The main difference is </span><code>park_this_thread</code><span> </span>&mdash;<span> a </span><strong><strong><span>blocking</span></strong></strong><span> system call.</span>
+<span>It instructs the OS to take current thread off the CPU until it is woken up by an </span><code>unpark_some_thread</code><span> call.</span>
+<span>The kernel maintains a </span><strong><span>queue</span></strong><span> of threads waiting for a mutex.</span>
+<span>The </span><code>park</code><span> call enqueues current thread onto this queue, while </span><code>unpark</code><span> dequeues some thread. The </span><code>park</code><span> system call returns when the thread is dequeued.</span>
+<span>In the meantime, the thread waits off the CPU.</span></p>
+<p><span>If there are several different mutexes, the kernel needs to maintain several queues.</span>
+<span>An address of a lock can be used as a token to identify a specific queue (this is a </span><a href="http://man7.org/linux/man-pages/man2/futex.2.html"><span>futex</span></a><span> API).</span></p>
+<p><span>System calls are expensive, so production implementations of </span><code>Mutex</code><span> usually spin for several iterations before calling into OS, optimistically hoping that the </span><code>Mutex</code><span> will be released soon.</span>
+<span>However, the waiting always bottoms out in a syscall.</span></p>
+</section>
+<section id="Spinning-Just-For-a-Little-Bit-What-Can-Go-Wrong">
+
+    <h2>
+    <a href="#Spinning-Just-For-a-Little-Bit-What-Can-Go-Wrong"><span>Spinning Just For a Little Bit, What Can Go Wrong?</span> </a>
+    </h2>
+<p><span>Because spin locks are so simple and fast, it seems to be a good idea to use them for short-lived critical sections.</span>
+<span>For example, if you only need to increment a couple of integers, should you really bother with complicated syscalls? In the worst case, the other thread will spin just for a couple of iterations</span>&hellip;</p>
+<p><span>Unfortunately, this logic is flawed!</span>
+<span>A thread can be preempted at any time, including during a short critical section.</span>
+<span>If it is preempted, that means that all other threads will need to spin until the original thread gets its share of CPU again.</span>
+<span>And, because a spinning thread looks like a good, busy thread to the OS, the other threads will spin until they exhaust their quants, preventing the unlucky thread from getting back on the processor!</span></p>
+<p><span>If this sounds like a series of unfortunate events, don</span>&rsquo;<span>t worry, it gets even worse. Enter </span><strong><strong><span>Priority Inversion</span></strong></strong><span>. Suppose our threads have priorities, and OS tries to schedule high-priority threads over low-priority ones.</span></p>
+<p><span>Now, what happens if the thread that enters a critical section is a low-priority one, but competing threads have high priority?</span>
+<span>It will likely get preempted: there are higher priority threads after all.</span>
+<span>And, if the number of cores is smaller than the number of high priority threads that try to lock a mutex, it likely won</span>&rsquo;<span>t be able to complete a critical section at all: OS will be repeatedly scheduling all the other threads!</span></p>
+</section>
+<section id="No-OS-no-problem">
+
+    <h2>
+    <a href="#No-OS-no-problem"><span>No OS, no problem?</span> </a>
+    </h2>
+<p><span>But wait! </span>&mdash;<span> you would say </span>&mdash;<span> we only use spin locks in </span><code>#[no_std]</code><span> crates, so there</span>&rsquo;<span>s no OS to preempt our threads.</span></p>
+<p><em><span>First</span></em><span>, it</span>&rsquo;<span>s not really true: it</span>&rsquo;<span>s perfectly fine, and often even desirable, to use </span><code>#[no_std]</code><span> crates for usual user-space applications.</span>
+<span>For example, if you write a Rust replacement for a low-level C library, like zlib or openssl, you will probably make the crate </span><code>#[no_std]</code><span>, so that non-Rust applications can link to it without pulling the whole of the Rust runtime.</span></p>
+<p><em><span>Second</span></em><span>, if there</span>&rsquo;<span>s really no OS to speak about, and you are on the bare metal (or in the kernel), it gets even worse than priority inversion.</span></p>
+<p><span>On bare metal, we generally don</span>&rsquo;<span>t worry about </span><em><span>thread</span></em><span> preemption, but we need to worry about </span><a href="https://en.wikipedia.org/wiki/Interrupt"><span>processor interrupts</span></a><span>. That is, while processor is executing some code, it might receive an interrupt from some periphery device, and temporary switch to the interrupt handler</span>&rsquo;<span>s code.</span></p>
+<p><span>And here comes the disaster: if the main code is in the middle of the critical section when the interrupt arrives, and if the interrupt handler tries to enter the critical section as well, we get a guaranteed deadlock!</span>
+<span>There</span>&rsquo;<span>s no OS to switch threads after a quant expires.</span>
+<span>Here are Linux kernel </span><a href="https://www.kernel.org/doc/Documentation/locking/spinlocks.txt"><span>docs</span></a><span> discussing this issue.</span></p>
+</section>
+<section id="Practical-Applications">
+
+    <h2>
+    <a href="#Practical-Applications"><span>Practical Applications</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s trigger priority inversion!</span>
+<span>Our victim is the </span><a href="https://github.com/rust-random/getrandom/tree/v0.1.13"><code>getrandom</code></a><span> crate.</span>
+<span>I don</span>&rsquo;<span>t pick on </span><code>getrandom</code><span> specifically here: the pattern is pervasive across the ecosystem.</span></p>
+<p><span>The crate uses spinning in the </span><a href="https://github.com/rust-random/getrandom/blob/v0.1.13/src/util.rs#L54-L82"><code>LazyUsize</code></a><span> utility type:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">LazyUsize</span>(AtomicUsize);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">LazyUsize</span> {</span>
+<span class="line">  <span class="hl-comment">// Synchronously runs the init() function. Only one caller</span></span>
+<span class="line">  <span class="hl-comment">// will have their init() function running at a time, and</span></span>
+<span class="line">  <span class="hl-comment">// exactly one successful call will be run. init() returning</span></span>
+<span class="line">  <span class="hl-comment">// UNINIT or ACTIVE will be considered a failure, and future</span></span>
+<span class="line">  <span class="hl-comment">// calls to sync_init will rerun their init() function.</span></span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">sync_init</span>(</span>
+<span class="line">    &amp;<span class="hl-keyword">self</span>,</span>
+<span class="line">    init: <span class="hl-keyword">impl</span> <span class="hl-title class_">FnOnce</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span>,</span>
+<span class="line">    <span class="hl-keyword">mut</span> wait: <span class="hl-keyword">impl</span> <span class="hl-title class_">FnMut</span>(),</span>
+<span class="line">  ) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span> {</span>
+<span class="line">    <span class="hl-comment">// Common and fast path with no contention.</span></span>
+<span class="line">    <span class="hl-comment">// Don&#x27;t wast time on CAS.</span></span>
+<span class="line">    <span class="hl-keyword">match</span> <span class="hl-keyword">self</span>.<span class="hl-number">0</span>.<span class="hl-title function_ invoke__">load</span>(Relaxed) {</span>
+<span class="line">      <span class="hl-keyword">Self</span>::UNINIT | <span class="hl-keyword">Self</span>::ACTIVE =&gt; {}</span>
+<span class="line">      val =&gt; <span class="hl-keyword">return</span> val,</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-comment">// Relaxed ordering is fine,</span></span>
+<span class="line">    <span class="hl-comment">// as we only have a single atomic variable.</span></span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">      <span class="hl-keyword">match</span> <span class="hl-keyword">self</span>.<span class="hl-number">0</span>.<span class="hl-title function_ invoke__">compare_and_swap</span>(</span>
+<span class="line">        <span class="hl-keyword">Self</span>::UNINIT,</span>
+<span class="line">        <span class="hl-keyword">Self</span>::ACTIVE,</span>
+<span class="line">        Relaxed,</span>
+<span class="line">      ) {</span>
+<span class="line">        <span class="hl-keyword">Self</span>::UNINIT =&gt; {</span>
+<span class="line">          <span class="hl-keyword">let</span> <span class="hl-variable">val</span> = <span class="hl-title function_ invoke__">init</span>();</span>
+<span class="line">          <span class="hl-keyword">self</span>.<span class="hl-number">0</span>.<span class="hl-title function_ invoke__">store</span>(</span>
+<span class="line">            <span class="hl-keyword">match</span> val {</span>
+<span class="line">              <span class="hl-keyword">Self</span>::UNINIT | <span class="hl-keyword">Self</span>::ACTIVE =&gt; <span class="hl-keyword">Self</span>::UNINIT,</span>
+<span class="line">              val =&gt; val,</span>
+<span class="line">            },</span>
+<span class="line">            Relaxed,</span>
+<span class="line">          );</span>
+<span class="line">          <span class="hl-keyword">return</span> val;</span>
+<span class="line">        }</span>
+<span class="line">        <span class="hl-keyword">Self</span>::ACTIVE =&gt; <span class="hl-title function_ invoke__">wait</span>(),</span>
+<span class="line">        val =&gt; <span class="hl-keyword">return</span> val,</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>There</span>&rsquo;<span>s a </span><code>static</code><span> instance of </span><code>LazyUsize</code><span> which caches file descriptor for </span><code>/dev/random</code><span>:</span></p>
+<p><a href="https://github.com/rust-random/getrandom/blob/v0.1.13/src/use_file.rs#L26" class="url">https://github.com/rust-random/getrandom/blob/v0.1.13/src/use_file.rs#L26</a></p>
+<p><span>This descriptor is used when calling </span><code>getrandom</code><span> </span>&mdash;<span> the only function that is exported by the crate.</span></p>
+<p><span>To trigger priority inversion, we will create </span><code>1 + N</code><span> threads, each of which will call </span><code>getrandom::getrandom</code><span>.</span>
+<span>We arrange it so that the first thread has a low priority, and the rest are high priority.</span>
+<span>We stagger threads a little bit so that the first one does the initialization.</span>
+<span>We also make creating the file descriptor slow, so that the first thread gets preempted while in the critical section.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>This is actually a typical scenario for </span><code>getrandom</code><span>!</span>
+<span>Getting the first chunk of random bytes might block for a long time while the system gathers entropy after a reboot.</span>
+<span>I even had a fun bug last year, where my desktop environment won</span>&rsquo;<span>t start until I press some key.</span>
+<span>It was waiting for entropy for some reason, and the keypress provided it.</span></p>
+</div>
+</aside><p><span>Here is the implementation of this plan: </span><a href="https://github.com/matklad/spin-of-death" class="url">https://github.com/matklad/spin-of-death</a><span>.</span></p>
+<p><span>It uses a couple of systems programming hacks to make this disaster scenario easy to reproduce.</span>
+<span>To simulate slow </span><code>/dev/random</code><span>, we want to intercept the </span><code>poll</code><span> syscall </span><code>getrandom</code><span> is using to ensure that there</span>&rsquo;<span>s enough entropy.</span>
+<span>We can use </span><a href="https://strace.io/"><span>strace</span></a><span> to log system calls issued by a program.</span>
+<span>I don</span>&rsquo;<span>t know if strace can be used to make a syscall run slow (now, once I</span>&rsquo;<span>ve looked at the website, I see that it can in fact be used to tamper with syscalls, </span><em><span>sigh</span></em><span>), but we actually don</span>&rsquo;<span>t need to!</span>
+<code>getrandom</code><span> does not use the syscall directly, it uses the </span><code>poll</code><span> function from </span><code>libc</code><span>.</span>
+<span>We can substitute this function by using </span><code>LD_PRELOAD</code><span>, but there</span>&rsquo;<span>s an even simpler way!</span>
+<span>We can trick the static linker into using a function which we define ourselves:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[no_mangle]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">extern</span> <span class="hl-string">&quot;C&quot;</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">poll</span>(</span>
+<span class="line">  _fds: *<span class="hl-keyword">const</span> <span class="hl-type">u8</span>,</span>
+<span class="line">  _nfds: <span class="hl-type">usize</span>,</span>
+<span class="line">  _timeout: <span class="hl-type">i32</span>,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">  <span class="hl-title function_ invoke__">sleep_ms</span>(<span class="hl-number">500</span>);</span>
+<span class="line">  <span class="hl-number">1</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The name of the function accidentally ( :) ) clashes with a well-known </span><a href="http://man7.org/linux/man-pages/man2/poll.2.html"><span>POSIX function</span></a><span>.</span></p>
+<p><span>However, this alone is not enough.</span>
+<code>getrandom</code><span> </span><a href="https://github.com/rust-random/getrandom/blob/v0.1.13/src/linux_android.rs"><span>tries to use</span></a><span> </span><code>getrandom</code><span> syscall first, and that code path does not use a spin lock.</span>
+<span>We need to fool </span><code>getrandom</code><span> into believing that the syscall is not available.</span>
+<span>Our </span><code>extern "C"</code><span> trick wouldn</span>&rsquo;<span>t have worked if </span><code>getrandom</code><span> literally used the </span><code>syscall</code><span> instruction.</span>
+<span>However, as inline assembly (which you need to issue a syscall manually) is not available on stable Rust, </span><code>getrandom</code><span> goes via </span><code>syscall</code><span> </span><em><span>function</span></em><span> from </span><code>libc</code><span>.</span>
+<span>That we can override with the same trick.</span></p>
+<p><span>However, there</span>&rsquo;<span>s a wrinkle!</span>
+<span>Traditionally, </span><code>libc</code><span> API used </span><code>errno</code><span> for error reporting.</span>
+<span>That is, on a failure the function would return an single specific invalid value, and set the </span><code>errno</code><span> thread local variable to the specific error code. </span><code>syscall</code><span> follows this pattern.</span></p>
+<p><span>The </span><code>errno</code><span> interface is cumbersome to use.</span>
+<span>The worst part of </span><code>errno</code><span> is that the specification requires it to be a macro, and so you can only really use it from </span><code>C</code><span> </span><em><span>source code</span></em><span>.</span>
+<span>Internally, on Linux the macro calls </span><code>__get_errno_location</code><span> function to get the thread local, but this is an implementation detail (which we will gladly take advantage of, in this land of reckless systems hacking!). The irony is that the ABI of Linux syscall just </span><strong><span>returns</span></strong><span> error codes, so </span><code>libc</code><span> has to do some legwork to adapt to the awkward </span><code>errno</code><span> interface.</span></p>
+<p><span>So, here</span>&rsquo;<span>s a strong contender for the most cursed function I</span>&rsquo;<span>ve written so far:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[no_mangle]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">extern</span> <span class="hl-string">&quot;C&quot;</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">syscall</span>(</span>
+<span class="line">  _syscall: <span class="hl-type">u64</span>,</span>
+<span class="line">  _buf: *<span class="hl-keyword">const</span> <span class="hl-type">u8</span>,</span>
+<span class="line">  _len: <span class="hl-type">usize</span>,</span>
+<span class="line">  _flags: <span class="hl-type">u32</span>,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">isize</span> {</span>
+<span class="line">  <span class="hl-keyword">extern</span> <span class="hl-string">&quot;C&quot;</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">__errno_location</span>() <span class="hl-punctuation">-&gt;</span> *<span class="hl-keyword">mut</span> <span class="hl-type">i32</span>;</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">unsafe</span> {</span>
+<span class="line">    *__errno_location() = <span class="hl-number">38</span>; <span class="hl-comment">// ENOSYS</span></span>
+<span class="line">  }</span>
+<span class="line">  -<span class="hl-number">1</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>It makes </span><code>getrandom</code><span> believe that there</span>&rsquo;<span>s no </span><code>getrandom</code><span> syscall, which causes it to fallback to </span><code>/dev/random</code><span> implementation.</span></p>
+<p><span>To set thread priorities, we use </span><a href="https://docs.rs/thread-priority/0.1.1/thread_priority/"><span>thread_priority</span></a><span> crate, which is a thin wrapper around </span><code>pthread</code><span> APIs.</span>
+<span>We will be using real time priorities, which require </span><code>sudo</code><span>.</span></p>
+<p><span>And here are the results:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo build --release</span>
+<span class="line"><span class="hl-output">    Finished release [optimized] target(s) in 0.01s</span></span>
+<span class="line"><span class="hl-title function_">$</span> time sudo ./target/release/spin-of-death</span>
+<span class="line"><span class="hl-output">^CCommand terminated by signal 2</span></span>
+<span class="line"><span class="hl-output">real 136.54s</span></span>
+<span class="line"><span class="hl-output">user 96.02s</span></span>
+<span class="line"><span class="hl-output">sys  940.70s</span></span>
+<span class="line"><span class="hl-output">rss  6880k</span></span></code></pre>
+
+</figure>
+<p><span>Note that I had to kill the program after two minutes.</span>
+<span>Also note the impressive system time, as well as load average</span></p>
+
+<figure>
+
+<img alt="" src="/assets/priority-inversion.png">
+</figure>
+<p><span>If we </span><a href="https://github.com/matklad/getrandom/commit/a7dc21fed9b789832702b98807a62de7bf7312d4"><span>patch</span></a><span> </span><code>getrandom</code><span> to use </span><code>std::sync::Once</code><span> instead we get a much better result:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo build --release --features os-blocking-getrandom</span>
+<span class="line"><span class="hl-output">    Finished release [optimized] target(s) in 0.01s</span></span>
+<span class="line"><span class="hl-title function_">$</span> time sudo ./target/release/spin-of-death</span>
+<span class="line"><span class="hl-output">real 0.51s </span><i class="callout" data-value="1"></i></span>
+<span class="line"><span class="hl-output">user 0.01s</span></span>
+<span class="line"><span class="hl-output">sys  0.04s</span></span>
+<span class="line"><span class="hl-output">rss  6912k</span></span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<span>Note how </span><code>real</code><span> is half a second, but </span><code>user</code><span> and </span><code>sys</code><span> are small.</span>
+<span>That</span>&rsquo;<span>s because we are waiting for 500 milliseconds in our </span><code>poll</code>
+</li>
+</ol>
+<p><span>This is because </span><code>Once</code><span> uses OS facilities for blocking, and so OS notices that high priority threads are actually blocked and gives the low priority thread a chance to finish its work.</span></p>
+</section>
+<section id="If-Not-a-Spinlock-Then-What">
+
+    <h2>
+    <a href="#If-Not-a-Spinlock-Then-What"><span>If Not a Spinlock, Then What?</span> </a>
+    </h2>
+<p><em><span>First</span></em><span>, if you only use a spin lock because </span>&ldquo;<span>it</span>&rsquo;<span>s faster for small critical sections</span>&rdquo;<span>, just replace it with a mutex from </span><code>std</code><span> or </span><code>parking_lot</code><span>.</span>
+<span>They already do a small amount of spinning iterations before calling into the kernel, so they are as fast as a spinlock in the best case, and infinitely faster in the worst case.</span></p>
+<p><em><span>Second</span></em><span>, it seems like most problematic uses of spinlocks come from one time initialization (which is exactly what my </span><code>once_cell</code><span> crate helps with). I think it usually is possible to get away without using spinlocks. For example, instead of storing the state itself, the library may just delegate state storing to the user. For </span><code>getrandom</code><span>, it can expose two functions:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">init</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Result</span>&lt;RandomState&gt;;</span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">getrandom</span>(state: &amp;RandomState, buf: &amp;<span class="hl-keyword">mut</span>[<span class="hl-type">u8</span>]) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Result</span>&lt;<span class="hl-type">usize</span>&gt;;</span></code></pre>
+
+</figure>
+<p><span>It then becomes the user</span>&rsquo;<span>s problem to cache </span><code>RandomState</code><span> appropriately.</span>
+<span>For example, std may continue using a thread local (</span><a href="https://github.com/rust-lang/rust/blob/0ec370670220b712b042ee09aab067ec7e5878d5/src/libstd/collections/hash/map.rs#L2460"><span>src</span></a><span>) while rand, with </span><code>std</code><span> feature enabled, could use a global variable, protected by </span><code>Once</code><span>.</span></p>
+<p><span>Another option, if the state fits into </span><code>usize</code><span> and the initializing function is idempotent and relatively quick, is to do a racy initialization:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">get_state</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span> {</span>
+<span class="line">  <span class="hl-keyword">static</span> CACHE: AtomicUsize = AtomicUsize::<span class="hl-title function_ invoke__">new</span>(<span class="hl-number">0</span>);</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">res</span> = CACHE.<span class="hl-title function_ invoke__">load</span>(Ordering::Relaxed);</span>
+<span class="line">  <span class="hl-keyword">if</span> res == <span class="hl-number">0</span> {</span>
+<span class="line">    res = <span class="hl-title function_ invoke__">init</span>();</span>
+<span class="line">    CACHE.<span class="hl-title function_ invoke__">store</span>(res, Ordering::Relaxed);</span>
+<span class="line">  }</span>
+<span class="line">  res</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">init</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span> { ... }</span></code></pre>
+
+</figure>
+<p><span>Take a second to appreciate the absence of </span><code>unsafe</code><span> blocks and cross-core communication in the above example!</span>
+<del><span>At worst, </span><code>init</code><span> will be called </span><code>number of cores</code><span> times</span></del><span> (EDIT: this is wrong, thanks to /u/pcpthm for </span><a href="https://www.reddit.com/r/rust/comments/eis1tr/blog_post_spinlocks_considered_harmful/fctg66s"><span>pointing this out</span></a><span>!).</span></p>
+<p><span>There</span>&rsquo;<span>s also a nuclear option: parametrize the library by blocking behavior, and allow the user to supply their own synchronization primitive.</span></p>
+<p><em><span>Third</span></em><span>, sometimes you just </span><strong><strong><span>know</span></strong></strong><span> that there</span>&rsquo;<span>s only a single thread in the program, and you might want to use a spinlock just to silence those annoying compiler errors about </span><code>static mut</code><span>.</span>
+<span>The primary use case here I think is WASM. A solution for this case is to assume that blocking just doesn</span>&rsquo;<span>t happen, and panic otherwise. This is what </span><a href="https://github.com/rust-lang/rust/blob/0ec370670220b712b042ee09aab067ec7e5878d5/src/libstd/sys/wasm/mutex.rs"><span>std does</span></a><span> for </span><code>Mutex</code><span> on WASM, and what is implemented for </span><code>once_cell</code><span> in this PR: </span><a href="https://github.com/matklad/once_cell/pull/82"><span>#82</span></a><span>.</span></p>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/eis1tr/blog_post_spinlocks_considered_harmful/"><span>/r/rust</span></a><span>.</span></p>
+<p><span>EDIT: If you enjoyed this post, you might also like this one:</span></p>
+<p><a href="https://probablydance.com/2019/12/30/measuring-mutexes-spinlocks-and-how-bad-the-linux-scheduler-really-is/" class="url">https://probablydance.com/2019/12/30/measuring-mutexes-spinlocks-and-how-bad-the-linux-scheduler-really-is/</a></p>
+<p><span>Looks like we have some contention here!</span></p>
+<p><span>EDIT: there</span>&rsquo;<span>s now a follow up post, where we actually benchmark spinlocks:</span></p>
+<p><a href="https://matklad.github.io/2020/01/04/mutexes-are-faster-than-spinlocks.html" class="url">https://matklad.github.io/2020/01/04/mutexes-are-faster-than-spinlocks.html</a></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-01-02-spinlocks-considered-harmful.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

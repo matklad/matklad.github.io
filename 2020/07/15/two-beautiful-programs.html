@@ -1,0 +1,211 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Two Beautiful Rust Programs</title>
+  <meta name="description" content="This is a short ad of a Rust programming language targeting experienced C++ developers.
+Being an ad, it will only whet your appetite, consult other resources for fine print.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/07/15/two-beautiful-programs.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Two Beautiful Rust Programs</span> <time datetime="2020-07-15">Jul 15, 2020</time></h1>
+<p><span>This is a short ad of a </span><a href="https://www.rust-lang.org/"><span>Rust</span></a><span> programming language targeting experienced C++ developers.</span>
+<span>Being an ad, it will only whet your appetite, consult other resources for fine print.</span></p>
+<section id="First-Program">
+
+    <h2>
+    <a href="#First-Program"><span>First Program</span> </a>
+    </h2>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">xs</span> = <span class="hl-built_in">vec!</span>[<span class="hl-number">1</span>, <span class="hl-number">2</span>, <span class="hl-number">3</span>];</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">x</span>: &amp;<span class="hl-type">i32</span> = &amp;xs[<span class="hl-number">0</span>];</span>
+<span class="line">  xs.<span class="hl-title function_ invoke__">push</span>(<span class="hl-number">92</span>);</span>
+<span class="line">  <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;{}&quot;</span>, *x);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This program creates a vector of 32-bit integers (</span><code>std::vector&lt;int32_t&gt;</code><span>), takes a reference to the first element, </span><code>x</code><span>, pushes one more number onto the vector and then uses </span><code>x</code><span>.</span>
+<span>The program is wrong: extending the vector may invalidate references to element, and </span><code>*x</code><span> might dereference a dangling pointer.</span></p>
+<p><span>The beauty of this program is that it doesn</span>&rsquo;<span>t compile:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">error[E0502]: cannot borrow xs as mutable</span>
+<span class="line">    because it is also borrowed as immutable</span>
+<span class="line"> --&gt; src/main.rs:4:5</span>
+<span class="line"></span>
+<span class="line">     let x: &amp;i32 = &amp;xs[0];</span>
+<span class="line">                    -- immutable borrow occurs here</span>
+<span class="line">     xs.push(92);</span>
+<span class="line">     ^^^^^^^^^^^ mutable borrow occurs here</span>
+<span class="line">     println!(x);</span>
+<span class="line">              - immutable borrow later used here</span></code></pre>
+
+</figure>
+<p><span>Rust compiler tracks the aliasing status of every piece of data and forbids mutations of potentially aliased data.</span>
+<span>In this example, </span><code>x</code><span> and </span><code>xs</code><span> alias the first integer in the vector</span>&rsquo;<span>s storage in the heap.</span></p>
+<p><span>Rust doesn</span>&rsquo;<span>t allow doing stupid things.</span></p>
+</section>
+<section id="Second-Program">
+
+    <h2>
+    <a href="#Second-Program"><span>Second Program</span> </a>
+    </h2>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> crossbeam::scope;</span>
+<span class="line"><span class="hl-keyword">use</span> parking_lot::{Mutex, MutexGuard};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">counter</span> = Mutex::<span class="hl-title function_ invoke__">new</span>(<span class="hl-number">0</span>);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-title function_ invoke__">scope</span>(|s| {</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..<span class="hl-number">10</span> {</span>
+<span class="line">      s.<span class="hl-title function_ invoke__">spawn</span>(|_| {</span>
+<span class="line">        <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..<span class="hl-number">10</span> {</span>
+<span class="line">          <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span>: MutexGuard&lt;<span class="hl-type">i32</span>&gt; = counter.<span class="hl-title function_ invoke__">lock</span>();</span>
+<span class="line">          *guard += <span class="hl-number">1</span>;</span>
+<span class="line">        }</span>
+<span class="line">      });</span>
+<span class="line">    }</span>
+<span class="line">  }).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">total</span>: &amp;<span class="hl-keyword">mut</span> <span class="hl-type">i32</span> = counter.<span class="hl-title function_ invoke__">get_mut</span>();</span>
+<span class="line">  <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;total = {}&quot;</span>, *total)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This program creates an integer counter protected by a mutex, spawns 10 threads, increments the counter 10 times from each thread, and prints the total.</span></p>
+<p><span>The </span><code>counter</code><span> variable lives on the stack, and  a pointer to these stack data is shared with other threads.</span>
+<span>The threads have to lock the mutex to do the increments.</span>
+<span>When printing the total, the counter is read bypassing the mutex, without any synchronization.</span></p>
+<p><span>The beauty of this program is that it relies on several bits of subtle reasoning for correctness, each of which is checked by compiler:</span></p>
+<ol>
+<li>
+<span>Child threads don</span>&rsquo;<span>t escape the </span><code>main</code><span> function and so can read </span><code>counter</code><span> from its stack.</span>
+</li>
+<li>
+<span>Child threads only access </span><code>counter</code><span> through the mutex.</span>
+</li>
+<li>
+<span>Child threads will have terminated by the time we read </span><code>total</code><span> out of </span><code>counter</code><span> without mutex.</span>
+</li>
+</ol>
+<p><span>If any of these constraints are broken, the compiler rejects the code.</span>
+<span>There</span>&rsquo;<span>s no need for </span><code>std::shared_ptr</code><span> just to defensively make sure that the memory isn</span>&rsquo;<span>t freed under your feet.</span></p>
+<p><span>Rust allows doing dangerous, clever, and fast things without fear of introducing undefined behavior.</span></p>
+<p><span>If you like what you see, here are two books I recommend for diving deeper into Rust:</span></p>
+<ul>
+<li>
+<a href="https://doc.rust-lang.org/book/"><span>The Rust Programming Language</span></a>
+</li>
+<li>
+<a href="https://www.oreilly.com/library/view/programming-rust/9781491927274/"><span>Programming Rust</span></a>
+</li>
+</ul>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-07-15-two-beautiful-programs.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

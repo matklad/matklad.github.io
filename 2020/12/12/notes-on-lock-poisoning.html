@@ -1,0 +1,231 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notes On Lock Poisoning</title>
+  <meta name="description" content="Rust's libs teams is considering overhauling std::sync module.
+As a part of this effort, they are launching lock poisoning survey.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/12/12/notes-on-lock-poisoning.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Notes On Lock Poisoning</span> <time datetime="2020-12-12">Dec 12, 2020</time></h1>
+<p><span>Rust</span>&rsquo;<span>s libs teams is considering overhauling </span><code>std::sync</code><span> module.</span>
+<span>As a part of this effort, they are launching lock poisoning survey.</span></p>
+<p><a href="https://blog.rust-lang.org/2020/12/11/lock-poisoning-survey.html" class="url">https://blog.rust-lang.org/2020/12/11/lock-poisoning-survey.html</a></p>
+<p><span>This is post is a an extended response to that survey.</span>
+<span>It is not be well-edited :-)</span></p>
+<section id="Panics-Should-Propagate">
+
+    <h2>
+    <a href="#Panics-Should-Propagate"><span>Panics Should Propagate</span> </a>
+    </h2>
+<p><span>Midori error model makes sharp distinction between two kinds of errors:</span></p>
+<ul>
+<li>
+<span>bugs in the program, like indexing an array with </span><code>-92</code>
+</li>
+<li>
+<span>error conditions in programs</span>&rsquo;<span> environment (reading a file which doesn</span>&rsquo;<span>t exist)</span>
+</li>
+</ul>
+<p><span>In Rust, those correspond to panics and Results.</span>
+<span>It</span>&rsquo;<span>s important to not mix the two.</span></p>
+<p><span>std I think sadly does mix them in sync API.</span>
+<span>The following APIs convert panics to recoverable results:</span></p>
+<ul>
+<li>
+<code>Mutex::lock</code>
+</li>
+<li>
+<code>thread::JoinHandle::join</code>
+</li>
+<li>
+<code>mpsc::Sender::send</code>
+</li>
+</ul>
+<p><span>All those APIs return a </span><code>Result</code><span> when the other thread panicked.</span>
+<span>These leads to people using </span><code>?</code><span> with these methods, using recoverable error handling for bugs in the program.</span></p>
+<p><span>In my mind, a better design would be to make those API </span><code>panic</code><span> by default.</span>
+<span>Sometimes synchronization point also happen to be failure isolation boundaries.</span>
+<span>More verbose result-returning </span><code>catching_lock</code><span>, </span><code>catching_join</code><span>, </span><code>catching_send</code><span> would work for those special cases.</span></p>
+<p><span>If </span><code>std::Mutex</code><span> did implement lock poisoning, but the </span><code>lock</code><span> method returned a </span><code>LockGuard&lt;T&gt;</code><span>, rather than </span><code>Result&lt;LockGuard&lt;T&gt;, PoisonError&gt;</code><span>, then we wouldn</span>&rsquo;<span>t be discussing poisoning in the rust book, in every mutex example, and wouldn</span>&rsquo;<span>t consider changing the status quo.</span>
+<span>At the same time, we</span>&rsquo;<span>d preserve </span>&ldquo;<span>safer</span>&rdquo;<span> semantics of lock poisoning.</span></p>
+<p><span>There</span>&rsquo;<span>s an additional consideration here.</span>
+<span>In a single-threaded program, panic propagation is linear.</span>
+<span>One panic is unwound past a sequence of frames.</span>
+<span>If we get the second panic in some </span><code>Drop</code><span>, the result is process aborting.</span></p>
+<p><span>In a multi-threaded program, the stack is tree-shaped.</span>
+<span>What should happen if one of the three parallel threads panics?</span>
+<span>I believe the right semantics here is that siblings are cancelled, and then the panic is propagated to the parent.</span>
+<span>How to implement cancellation is an open question.</span>
+<span>If </span><em><span>two</span></em><span> children panic, we should propagate a pair of panics.</span></p>
+</section>
+<section id="Almost-UnwindSafe">
+
+    <h2>
+    <a href="#Almost-UnwindSafe"><span>Almost UnwindSafe</span> </a>
+    </h2>
+<p><span>A topic closely related to lock poisoning is unwinding safety </span>&mdash;<span> </span><code>UnwindSafe</code><span> and </span><code>RefUnwindSafe</code><span> traits.</span>
+<span>I want to share an amusing story how this machinery almost, but not quite, saved my bacon.</span></p>
+<p><span>rust-analyzer implements cancellation via unwinding.</span>
+<span>After a user types something and we have new code to process, we set a global flag.</span>
+<span>Long-running background tasks like syntax highlighting read this flag and, if it is set, panic with a </span><code>struct Cancelled</code><span> payload.</span>
+<span>We use </span><code>resume_unwind</code><span> and not </span><code>panic</code><span> to avoid printing backtrace.</span>
+<span>After the stack is unwound, we can start processing new code.</span></p>
+<p><span>This means that rust-analyzer</span>&rsquo;<span>s data, stored in the </span><code>Db</code><span> type, needs to be unwind safe.</span></p>
+<p><span>One day while I was idly hacking on rust-analyzer during Rust all-hands I</span>&rsquo;<span>ve noticed a weird compilation error, telling me that </span><code>Db</code><span> doesn</span>&rsquo;<span>t implement the corresponding trait.</span>
+<span>What</span>&rsquo;<span>s worse, removing the </span><code>target</code><span> directory fixed the bug.</span>
+<span>This was an instance of incorrect incremental compilation.</span></p>
+<p><span>The problem stemmed from two issues:</span></p>
+<ul>
+<li>
+<code>UnwindSafe</code><span> and </span><code>RefUnwindSafe</code><span> are auto traits, and inference rules for those are complicated</span>
+</li>
+<li>
+<code>Db</code><span> type has a curiously recurring template structure</span>
+</li>
+</ul>
+<p><span>With incremental compilation in the mix, something somewhere went wrong.</span></p>
+<p><span>The compiler bug was fixed after several months, but, to work around it in the meantime, we</span>&rsquo;<span>ve added a manual </span><code>impl UnwindSafe for Db</code><span> which masked the bug.</span></p>
+<p><span>Couple of months more has passed, and we started integrating chalk into rust-analyzer.</span>
+<span>At that time, chalk had it</span>&rsquo;<span>s own layer of caching, in addition to the incremental compilation of rust-analyzer itself.</span>
+<span>So we had something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Db</span> {</span>
+<span class="line">    solver: parking_lot::Mutex&lt;ChalkSolver&gt;,</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>(We used parking_lot for perf, and to share mutex impl between salsa and rust-analyzer).</span></p>
+<p><span>Now, one of the differences between </span><code>std::Mutex</code><span> and </span><code>parking_lot::Mutex</code><span> is lock poisoning.</span>
+<span>And that means that </span><code>std::Mutex</code><span> is unwind safe (as it just becomes poisoned), while </span><code>parking_lot::Mutex</code><span> is not.</span>
+<span>Chalk used some </span><code>RefCell</code>&rsquo;<span>s internally, so it wasn</span>&rsquo;<span>t unwind safe.</span>
+<span>So the whole </span><code>Db</code><span> stopped being </span><code>UnwindSafe</code><span> after addition of chalk.</span>
+<em><span>But</span></em><span> because we had that manual </span><code>impl UnwindSafe for Db</code><span>, we haven</span>&rsquo;<span>t noticed this.</span></p>
+<p><span>And that lead to a heisenbug.</span>
+<span>If cancellation happened during trait solving, we unwound past </span><code>ChalkSolver</code><span>.</span>
+<span>And, as didn</span>&rsquo;<span>t have strict exception safety guarantees, that messed up its internal questions.</span>
+<span>So the </span><em><span>next</span></em><span> trait solving query would observe really weird errors like index out of bounds inside chalk.</span></p>
+<p><span>The solution was to:</span></p>
+<ul>
+<li>
+<span>remove the manual impl (by that time the underlying compiler bug was fixed).</span>
+</li>
+<li>
+<span>get the </span><code>Db: !UnwindSafe</code><span> expected error.</span>
+</li>
+<li>
+<span>replace </span><code>parking_lot::Mutex</code><span> with </span><code>std::Mutex</code><span> to get unwind-safety.</span>
+</li>
+<li>
+<span>change calls to </span><code>.lock</code><span> to propagate cancellation.</span>
+</li>
+</ul>
+<p><span>The last point is interesting, it means that we need support for recoverable poisoning in this case.</span>
+<span>We need to understand that the other thread was cancelled mid-operation (so that chalk</span>&rsquo;<span>s state might be inconsistent).</span>
+<span>And we also need to re-raise the panic with a </span><em><span>specific</span></em><span> payload </span>&mdash;<span> the </span><code>Cancelled</code><span> struct.</span>
+<span>This is because the situation is not a bug.</span></p>
+<p><span>Discussion on </span><a href="https://old.reddit.com/r/rust/comments/kbnphb/blog_post_notes_on_lock_poisoning/"><span>/r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-12-12-notes-on-lock-poisoning.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

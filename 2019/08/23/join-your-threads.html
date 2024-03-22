@@ -1,0 +1,319 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Join Your Threads</title>
+  <meta name="description" content="This is a note on how to make multithreaded programs more robust.
+It's not really specific to Rust, but I get to advertise my new jod-thread micro-crate :)">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2019/08/23/join-your-threads.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Join Your Threads</span> <time datetime="2019-08-23">Aug 23, 2019</time></h1>
+<p><span>This is a note on how to make multithreaded programs more robust.</span>
+<span>It</span>&rsquo;<span>s not really specific to Rust, but I get to advertise my new </span><a href="https://crates.io/crates/jod-thread"><span>jod-thread</span></a><span> micro-crate :)</span></p>
+<p><span>Let</span>&rsquo;<span>s say you</span>&rsquo;<span>ve created a fresh new thread with </span><code>std::thread::spawn</code><span>, but haven</span>&rsquo;<span>t call </span><code>JoinHandle::join</code><span> anywhere in your program.</span>
+<span>What can go wrong in this situation?</span>
+<span>As a reminder, </span><code>join</code><span> blocks until the thread represented by handle completes successfully or with a panic.</span></p>
+<p><em><span>First</span></em><span>, if the </span><code>main</code><span> function finishes earlier, some destructors on that other thread</span>&rsquo;<span>s stack might not run.</span>
+<span>It</span>&rsquo;<span>s not a big deal if all that destructors do is just freeing memory: the OS cleanups after the process exit anyway.</span>
+<span>However, </span><code>Drop</code><span> could have been used for something like flushing IO buffers, and that is more problematic.</span></p>
+<p><em><span>Second</span></em><span>, not joining threads can lead to surprising interference between unrelated parts of the program and in general to more chaotic behavior.</span>
+<span>Imagine, for example, running a test suite with many tests.</span>
+<span>In this situation typical </span>&ldquo;<span>singleton</span>&rdquo;<span> threads may accumulate during a test run.</span>
+<span>Another scenario is spawning helper threads when processing tasks.</span>
+<span>If you don</span>&rsquo;<span>t join these threads, you might end up using more resources than there are concurrent tasks, making it harder to measure the load.</span>
+<span>To be clear, if you </span><em><span>don</span>&rsquo;<span>t</span></em><span> call </span><code>join</code><span>, the thread will complete at some point anyway, it won</span>&rsquo;<span>t leak or anything.</span>
+<span>But this </span><em><span>some</span></em><span> point is non-deterministic.</span></p>
+<p><em><span>Third</span></em><span>, If a thread panics in a forest, and no one is around to hear it, does it make a sound?</span>
+<span>The </span><code>join</code><span> method returns a </span><code>Result</code><span>, which is be an </span><code>Err</code><span> if the thread has panicked.</span>
+<span>If you don</span>&rsquo;<span>t join the thread, you won</span>&rsquo;<span>t get a chance to react to this event.</span>
+<span>So, unless you are looking at the </span><code>stderr</code><span> at this moment, you might not realize that something is wrong!</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>If you haven</span>&rsquo;<span>t read the </span><a href="https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/"><span>Notes on Structured Concurrency</span></a><span>, do it now!</span>
+<span>It</span>&rsquo;<span>s a much longer post than mine, but is also more general.</span></p>
+</div>
+</aside><p><span>It seems like joining the threads by default is a good idea.</span>
+<span>However, </span><em><span>just</span></em><span> calling </span><code>JoinHandle::join</code><span> is not enough:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">thread</span> = std::thread::<span class="hl-title function_ invoke__">spawn</span>(|| {</span>
+<span class="line">    <span class="hl-comment">/* useful work */</span></span>
+<span class="line">});</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// ...</span></span>
+<span class="line"></span>
+<span class="line">thread.<span class="hl-title function_ invoke__">join</span>().<span class="hl-title function_ invoke__">unwrap</span>(); <span class="hl-comment">// propagate the panic</span></span></code></pre>
+
+</figure>
+<p><span>The problem is, code in </span>&hellip;<span> might use </span><code>?</code><span> (or some other form of early return), or it can panic, and in both cases the thread won</span>&rsquo;<span>t be joined.</span>
+<span>As usual, the solution is to put the </span>&ldquo;<span>cleanup</span>&rdquo;<span> operation into a </span><code>Drop</code><span> impl.</span>
+<span>That</span>&rsquo;<span>s exactly what my crate, </span><a href="https://crates.io/crates/jod-thread"><code>jod_thread</code></a><span>, does!</span>
+<span>Note that this is really a micro crate, so consider just rolling your own </span><strong><strong><span>j</span></strong></strong><span>oin </span><strong><strong><span>o</span></strong></strong><span>n </span><strong><strong><span>d</span></strong></strong><span>rop.</span>
+<span>The value is not in the code, it</span>&rsquo;<span>s in the pattern of never leaving a loose thread behind!</span></p>
+<section id="A-Look-At-C">
+
+    <h2>
+    <a href="#A-Look-At-C"><span>A Look At C++</span> </a>
+    </h2>
+<p><span>As usual, it is instructive to contrast and compare Rust and C++.</span></p>
+<p><span>In C++, </span><code>std::thread</code><span> has this interesting peculiarity that it terminates the process in destructor unless you call </span><code>.join</code><span> (which works just like in Rust) or </span><code>.detach</code><span> (which says </span>&ldquo;<span>I won</span>&rsquo;<span>t be joining this thread at all</span>&rdquo;<span>).</span>
+<span>In other words, C++ mandates that you explicitly choose between joining and detaching.</span>
+<span>Why is that?</span></p>
+<p><span>It</span>&rsquo;<span>s easy to argue that detach by default is a wrong choice for C++: it can easily lead to undefined behavior if the lambda passed to the thread uses values from parent</span>&rsquo;<span>s stack frame.</span></p>
+<p><span>Or, as Scott Meyer poetically puts it in the Item 37 of </span><a href="https://www.aristeia.com/EMC++.html"><span>Effective Modern C++</span></a><span> (which is probably the best book to read if you are into both Rust and C++):</span></p>
+
+<aside class="admn warn">
+<svg class="icon"><use href="/assets/icons.svg#exclamation"/></svg>
+<div><p><span>In </span><code>doWork</code><span>, for example, </span><code>goodVals</code><span> is a local variable that is captured by reference.</span>
+<span>It</span>&rsquo;<span>s also modified inside the lambda (via the call to </span><code>push_back</code><span>).</span>
+<span>Suppose, then, that while the lambda is running asynchronously, </span><code>conditionsAreSatisfied()</code><span> returns </span><code>false</code><span>.</span>
+<span>In that case, </span><code>doWork</code><span> would return, and its local variables (including </span><code>goodVals</code><span>) would be destroyed.</span>
+<span>Its stack frame would be popped, and execution of its thread would continue at </span><code>doWork</code>&rsquo;<span>s call site.</span></p>
+<p><span>Statements following that call site would, at some point, make additional function calls, and at least one such call would probably end up using some or all of the memory that had once been occupied by the doWork stack frame.</span>
+<span>Let</span>&rsquo;<span>s call such a function </span><code>f</code><span>.</span>
+<span>While </span><code>f</code><span> was running, the lambda that doWork initiated would still be running asynchronously.</span>
+<span>That lambda could call push_back on the stack memory that used to be </span><code>goodVals</code><span> but that is now somewhere inside </span><code>f</code>&rsquo;<span>s stack frame.</span>
+<span>Such a call would modify the memory that used to be </span><code>goodVals</code><span>, and that means that from </span><code>f</code>&rsquo;<span>s perspective, the content of memory in its stack frame could spontaneously change!</span>
+<span>Imagine the fun you</span>&rsquo;<span>d have debugging </span><em><span>that</span></em><span>.</span></p>
+</div>
+</aside><p><span>This also happens to be one of my favorite arguments for </span>&ldquo;<span>why Rust?</span>&rdquo;<span> :)</span></p>
+<p><span>The reasoning behind not making </span><code>join</code><span> the default is less clear cut.</span>
+<span>The book says that </span><code>join</code><span> by default is be counterintuitive, but that is somewhat circular: it is surprising precisely because it is not the default.</span></p>
+<p><span>In Rust, unlike C++, implicit detach can</span>&rsquo;<span>t cause undefined behavior (compiler will just refuse the code if the lambda borrows from the stack).</span>
+<span>I suspect this </span>&ldquo;<span>we can, so why not?</span>&rdquo;<span> is the reason why Rust detaches by default.</span></p>
+<p><span>However, there</span>&rsquo;<span>s a twist!</span>
+<span>C++ core guidelines now recommend to always use </span><code>gsl::joining_thread</code><span> (which does implicit join) over </span><code>std::thread</code><span> in  </span><a href="http://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#cp25-prefer-gsljoining_thread-over-stdthread"><span>CP.25</span></a><span>.</span>
+<span>The following </span><a href="http://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#cp26-dont-detach-a-thread"><span>CP.26</span></a><span> reinforces the point by advising against </span><code>.detach()</code><span> method.</span>
+<span>The reasoning is roughly similar to my post: detached threads make the program more chaotic, as they add superfluous degrees of freedom to the runtime behavior.</span></p>
+<p><span>It</span>&rsquo;<span>s interesting that I</span>&rsquo;<span>ve learned about these two particular guidelines only today, when refreshing my C++ for this section of the post!</span></p>
+<p><span>So, it seems like both C++ and Rust picked the wrong default for the thread API in this case. But at least C++ has official guidelines recommending the better approach.</span>
+<span>And Rust, </span>&hellip;<span> well, Rust has  my blog post now :-)</span></p>
+</section>
+<section id="A-Silver-Bullet">
+
+    <h2>
+    <a href="#A-Silver-Bullet"><span>A Silver Bullet</span> </a>
+    </h2>
+<p><span>Of course there isn</span>&rsquo;<span>t one!</span>
+<span>Joining on drop seems to be a better default, but it brings its own problems.</span>
+<span>The nastiest one is deadlocks: if you are joining a thread which waits for something else, you might wait forever.</span>
+<span>I don</span>&rsquo;<span>t think there</span>&rsquo;<span>s an easy solution here: </span><em><span>not</span></em><span> joining the thread lets you forget about the deadlock, and may even make it go away (if a child thread is blocked on the parent thread), but you</span>&rsquo;<span>ll get a detached thread on your hands!</span>
+<span>The fix is to just arrange the threads in such a way that shutdown is always orderly and clean.</span>
+<span>Ideally, shutdown should work the same for both the happy and panicking path.</span></p>
+<p><span>I want to discuss a specific instructive issue that I</span>&rsquo;<span>ve solved in </span><a href="https://github.com/rust-analyzer/rust-analyzer"><span>rust-analyzer</span></a><span>.</span>
+<span>It was about the usual setup with a worker thread that consumes items from a channel, roughly like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">frobnicate</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> (sender, receiver) = <span class="hl-title function_ invoke__">channel</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">worker</span> = jod_thread::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> || {</span>
+<span class="line">        <span class="hl-keyword">for</span> <span class="hl-title class_">item</span> receiver {</span>
+<span class="line">            <span class="hl-title function_ invoke__">do_work</span>(item)</span>
+<span class="line">        }</span>
+<span class="line">    });</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// prepare some work and send it via sender</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, the worker thread has a simple termination condition: it stops when the channel is closed.</span>
+<span>However, here lies the problem: we create the channel before the thread, so the </span><code>sender</code><span> is dropped </span><em><span>after</span></em><span> the </span><code>worker</code><span>.</span>
+<span>This is a deadlock: </span><code>frobnicate</code><span> waits for </span><code>worker</code><span> to exit, and </span><code>worker</code><span> waits for </span><code>frobnicate</code><span> to drop the </span><code>sender</code><span>!</span></p>
+<p><span>There</span>&rsquo;<span>s a straightforward fix: drop the </span><code>sender</code><span> first!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">frobnicate</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> (sender, receiver) = <span class="hl-title function_ invoke__">channel</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">worker</span> = jod_thread::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> || {</span>
+<span class="line">        <span class="hl-keyword">for</span> <span class="hl-title class_">item</span> receiver {</span>
+<span class="line">            <span class="hl-title function_ invoke__">do_work</span>(item)</span>
+<span class="line">        }</span>
+<span class="line">    });</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// prepare some work and send it via sender</span></span>
+<span class="line"></span>
+<span class="line">    <span class="hl-title function_ invoke__">drop</span>(sender);</span>
+<span class="line">    <span class="hl-title function_ invoke__">drop</span>(worker);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This solution, while obvious, has a pretty serious problem!</span>
+<span>The </span><code>prepare some work ...</code><span> bit of code can contain early returns due to error handling or it may panic.</span>
+<span>In both case the result is a deadlock.</span>
+<span>What is the worst, now deadlock happens only on the </span><em><span>unhappy</span></em><span> path!</span></p>
+<p><span>There is an elegant, but tricky fix for this. Take a minute to think about it!</span>
+<span>How to change the above snippet such that the </span><code>worker</code><span> thread is guranted to be joined, without deadlocks, regardless of the exit condition (normal termination,</span><code>?</code><span>, panic) of </span><code>frobnicate</code><span>?</span></p>
+<p><span>The answer will be below these beautiful Ukiyo-e prints :-)</span></p>
+
+<figure>
+<figcaption class="title">Fine Wind, Clear Morning</figcaption>
+
+<img alt="" src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Red_Fuji_southern_wind_clear_morning.jpg/1024px-Red_Fuji_southern_wind_clear_morning.jpg">
+</figure>
+
+<figure>
+<figcaption class="title">Rainstorm Beneath the Summit</figcaption>
+
+<img alt="" src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/Lightnings_below_the_summit.jpg/1024px-Lightnings_below_the_summit.jpg">
+</figure>
+<p><span>First of all, the problem we are seeing here is an instance of a very general setup.</span>
+<span>We have a bug which only manifests itself if a rare error condition arises.</span>
+<span>In some sense, we have a bug in the (implicit) error handling (just like </span><a href="https://www.usenix.org/conference/osdi14/technical-sessions/presentation/yuan"><span>92%</span></a><span> of critical bugs).</span>
+<span>The solutions here are a classic:</span></p>
+<ol>
+<li>
+<span>Artificially trigger unhappy path often (</span>&ldquo;<span>restoring from backup every night</span>&rdquo;<span>).</span>
+</li>
+<li>
+<span>Make sure that there aren</span>&rsquo;<span>t different happy and unhappy paths (</span>&ldquo;<span>crash only software</span>&rdquo;<span>).</span>
+</li>
+</ol>
+<p><span>We are going to do the second one.</span>
+<span>Specifically, we</span>&rsquo;<span>ll arrange the code in such way that compiler automatically drops </span><code>worker</code><span> first, without the need for explicit </span><code>drop</code><span>.</span></p>
+<p><span>Something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">worker</span> = jod_thread::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> || { ... });</span>
+<span class="line"><span class="hl-keyword">let</span> (sender, receiver) = <span class="hl-title function_ invoke__">channel</span>();</span></code></pre>
+
+</figure>
+<p><span>The problem here is that we need </span><code>receiver</code><span> inside the worker, but moving </span><code>let (sender, receiver)</code><span> up brings us back to the square one.</span>
+<span>Instead, we do this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">worker</span>;</span>
+<span class="line"><span class="hl-keyword">let</span> (sender, receiver) = <span class="hl-title function_ invoke__">channel</span>();</span>
+<span class="line">worker = jod_thread::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-keyword">move</span> || { ... });</span></code></pre>
+
+</figure>
+<p><span>Beautiful, isn</span>&rsquo;<span>t it?</span>
+<span>And super cryptic: the </span><a href="https://github.com/rust-analyzer/ra_vfs/blob/af1a6ace3d0edf57d62a76321e3e52eeb99d6d4c/src/io.rs#L71-L83"><span>real code</span></a><span> has a sizable comment chunk!</span></p>
+<p><span>The second big issue with join by default is that, if you have many threads in the same scope, and one of them errors, you really want to not only </span><em><span>wait</span></em><span> until others are finished, but to actually cancel them.</span>
+<span>Unfortunately, cancelling a thread is a notoriously thorny problem, which I</span>&rsquo;<span>ve explained a bit in </span><a href="/2018/07/24/exceptions-in-structured-concurrency.html"><span>another post</span></a><span>.</span></p>
+</section>
+<section id="Wrapping-Up">
+
+    <h2>
+    <a href="#Wrapping-Up"><span>Wrapping Up</span> </a>
+    </h2>
+<p><span>So, yeah, join your threads, but be on guard about deadlocks!</span>
+<span>Note that most of the time one shouldn</span>&rsquo;<span>t actually spawn threads manually: instead, tasks should be spawned to a common threadpool.</span>
+<span>This way, physical parallelism is nicely separated from logical concurrency.</span>
+<span>However, tasks should generally be joined for the same reason threads should be joined.</span>
+<span>A nice additional properly of tasks is that joining the threadpool itself in the end ensures that no tasks are leaked in the single place.</span></p>
+<p><span>A part of the inspiration for this post was the fact that I once forgot to join a thread :(</span>
+<span>This rather embarrassingly happened in my </span><a href="/2018/03/03-stopping-a-rust-worker.html"><span>other post</span></a><span>.</span>
+<span>Luckily, my current colleague </span><a href="https://github.com/stjepang"><span>Stjepan Glavina</span></a><span> </span><a href="https://github.com/rust-lang/rust/issues/48820"><span>noticed this</span></a><span>.</span>
+<span>Thank you, Stjepan!</span></p>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/cummsx/blog_post_join_your_threads/"><span>r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2019-08-23-join-your-threads.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

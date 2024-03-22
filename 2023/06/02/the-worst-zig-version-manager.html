@@ -1,0 +1,240 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Worst Zig Version Manager</title>
+  <meta name="description" content="https://github.com/matklad/hello-getzig">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/06/02/the-worst-zig-version-manager.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>The Worst Zig Version Manager</span> <time datetime="2023-06-02">Jun 2, 2023</time></h1>
+
+<figure class="code-block">
+<figcaption class="title">./getzig.ps1</figcaption>
+
+
+<pre><code><span class="line">#!/bin/sh</span>
+<span class="line">echo `# &lt;#`</span>
+<span class="line"></span>
+<span class="line">mkdir -p ./zig</span>
+<span class="line"></span>
+<span class="line">wget https://ziglang.org/download/0.10.1/zig-linux-x86_64-0.10.1.tar.xz -O ./zig/zig-linux-x86_64-0.10.1.tar.xz</span>
+<span class="line">tar -xf ./zig/zig-linux-x86_64-0.10.1.tar.xz -C ./zig --strip-components=1</span>
+<span class="line">rm ./zig/zig-linux-x86_64-0.10.1.tar.xz</span>
+<span class="line"></span>
+<span class="line">echo "Zig installed."</span>
+<span class="line">./zig/zig version</span>
+<span class="line"></span>
+<span class="line">exit</span>
+<span class="line">#&gt; &gt; $null</span>
+<span class="line"></span>
+<span class="line">Invoke-WebRequest -Uri "https://ziglang.org/download/0.10.1/zig-windows-x86_64-0.10.1.zip" -OutFile ".\zig-windows-x86_64-0.10.1.zip"</span>
+<span class="line">Expand-Archive -Path ".\zig-windows-x86_64-0.10.1.zip" -DestinationPath ".\" -Force</span>
+<span class="line">Remove-Item -Path " .\zig-windows-x86_64-0.10.1.zip"</span>
+<span class="line">Rename-Item -Path ".\zig-windows-x86_64-0.10.1" -NewName ".\zig"</span>
+<span class="line"></span>
+<span class="line">Write-Host "Zig installed."</span>
+<span class="line">./zig/zig.exe version</span></code></pre>
+
+</figure>
+<p class="display"><a href="https://github.com/matklad/hello-getzig" class="url">https://github.com/matklad/hello-getzig</a></p>
+<p><span>Longer version:</span></p>
+<p><span>One of the values of Zig which resonates with me deeply is a mindful approach to dependencies.</span>
+<span>Zig tries hard not to ask too much from the environment, such that, if you get </span><code>zig version</code><span> running, you can be reasonably sure that everything else works.</span>
+<span>That</span>&rsquo;<span>s one of the main motivations for adding an HTTP client to the Zig distribution recently.</span>
+<span>Building software today involves downloading various components from the Internet, and, if Zig wants for software built with Zig to be hermetic and self-sufficient, it needs to provide ability to download files from HTTP servers.</span></p>
+<p><span>There</span>&rsquo;<span>s one hurdle for self-sufficiency: how do you get Zig in the first place?</span>
+<span>One answer to this question is </span>&ldquo;<span>from your distribution</span>&rsquo;<span>s package manager</span>&rdquo;<span>.</span>
+<span>This is not a very satisfying answer, at least until the language is both post 1.0 and semi-frozen in development.</span>
+<span>And even then, what if your distribution is Windows?</span>
+<span>How many distributions should be covered by </span>&ldquo;<span>Installing Zig</span>&rdquo;<span> section of your </span><code>CONTRIBUTING.md</code><span>?</span></p>
+<p><span>Another answer would be a version manager, a-la </span><code>rustup</code><span>, </span><code>nvm</code><span>, or </span><code>asdf</code><span>.</span>
+<span>These tools work well, but they are quite complex, and rely on various subtle properties of the environment, like </span><code>PATH</code><span>, shell activation scripts and busybox-style multipurpose executable.</span>
+<span>And, well, this also kicks the can down the road </span>&mdash;<span> you can use </span><code>zvm</code><span> to get Zig, but how do you get </span><code>zvm</code><span>?</span></p>
+<p><span>I like how we do this in </span><a href="https://github.com/tigerbeetledb/tigerbeetle/blob/56d14e82769deb6817809f866253220ae0f499d1/scripts/install_zig.sh"><span>TigerBeetle</span></a><span>.</span>
+<span>We don</span>&rsquo;<span>t use </span><code>zig</code><span> from </span><code>PATH</code><span>.</span>
+<span>Instead, we just put the correct version of Zig into </span><code>./zig</code><span> folder in the root of the repository, and run it like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> ./zig/zig build test</span></code></pre>
+
+</figure>
+<p><span>Suddenly, whole swaths of complexity go away.</span>
+<span>Quiz time: if you need to add a directory to </span><code>PATH</code><span>, which script should be edited so that both the graphical environment and the terminal are affected?</span></p>
+<p><span>Finally, another interesting case study is Gradle.</span>
+<span>Usually Gradle is a negative example, but they do have a good approach for installing Gradle itself.</span>
+<span>The standard pattern is to store two scripts, </span><code>gradlew.sh</code><span> and </span><code>gradlew.bat</code><span>, which bootstrap the right version of Gradle by downloading a jar file (java itself is not bootstrapped this way though).</span></p>
+<p><span>What all these approaches struggle to overcome is the problem of bootstrapping.</span>
+<span>Generally, if you need to automate anything, you can write a program to do that.</span>
+<span>But you need some pre-existing program runner!</span>
+<span>And there</span>&rsquo;<span>s just no good options out of the box </span>&mdash;<span> bash and powershell are passable, but barely, and they are different.</span>
+<span>And </span>&ldquo;<span>bash</span>&rdquo;<span> and the set of coreutils also differs depending on the Unix in question.</span>
+<span>But there</span>&rsquo;<span>s just no good solution here </span>&mdash;<span> if you want to bootstrap automatically, you must start with universally available tools.</span></p>
+<p><span>But is there perhaps some scripting language which is shared between Windows and Unix?</span>
+<a href="https://github.com/cspotcode"><span>@cspotcode</span></a><span> suggests </span><a href="https://cspotcode.com/posts/polyglot-powershell-and-bash-script"><span>a horrible workaround</span></a><span>.</span>
+<span>You can write a script which is </span><em><span>both</span></em><span> a bash script and a powershell script.</span>
+<span>And it even isn</span>&rsquo;<span>t too too ugly!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">!/bin/bash</span>
+<span class="line">echo `# &lt;#`</span>
+<span class="line"></span>
+<span class="line">echo "Bash!"</span>
+<span class="line"></span>
+<span class="line">exit</span>
+<span class="line">#&gt; &gt; $null</span>
+<span class="line"></span>
+<span class="line">Write-Host "PowerShell!"</span></code></pre>
+
+</figure>
+<p><span>So, here</span>&rsquo;<span>s an idea for a hermetic Zig version management workflow.</span>
+<span>There</span>&rsquo;<span>s a canonical, short </span><code>getzig.ps1</code><span> PowerShell/sh script which is vendored verbatim by various projects.</span>
+<span>Running this script downloads an appropriate version of Zig, and puts it into </span><code>./zig/zig</code><span> inside the repository (</span><code>.gitignore</code><span> contains </span><code>/zig</code><span>).</span>
+<span>Building, testing, and other workflows use </span><code>./zig/zig</code><span> instead of relying on global system state (</span><code>$PATH</code><span>).</span></p>
+<p><span>A proof-of-concept </span><code>getzig.ps1</code><span> is at the start of this article.</span>
+<span>Note that I don</span>&rsquo;<span>t know bash, powershell, and how to download files from the Internet securely, so the above PoC was mostly written by Chat GPT.</span>
+<span>But it seems to work on my machine.</span>
+<span>I clone </span><a href="https://github.com/matklad/hello-getzig" class="url">https://github.com/matklad/hello-getzig</a><span> and run</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> ./getzig.ps1</span>
+<span class="line"><span class="hl-title function_">$</span> ./zig/zig run ./hello.zig</span></code></pre>
+
+</figure>
+<p><span>on both NixOS and Windows 10, and it prints hello.</span></p>
+<p><span>If anyone wants to make an actual thing out of this idea, here</span>&rsquo;<span>s possible desiderata:</span></p>
+<ul>
+<li>
+<p><span>A single polyglot </span><code>getzig.sh.ps1</code><span> is cute, but using a couple of different scripts wouldn</span>&rsquo;<span>t be a big problem.</span></p>
+</li>
+<li>
+<p><span>Size of the scripts </span><em><span>could</span></em><span> be a problem, as they are supposed to be vendored into each repository.</span>
+<span>I</span>&rsquo;<span>d say 512 lines for combined </span><code>getzig.sh.ps1</code><span> would be a reasonable complexity limit.</span></p>
+</li>
+<li>
+<p><span>The script must </span>&ldquo;<span>just work</span>&rdquo;<span> on all four major desktop operating systems: Linux, Mac, Windows, and WSL.</span></p>
+</li>
+<li>
+<p><span>The script should be polymorphic in </span><code>curl</code><span> / </span><code>wget</code><span> and </span><code>bash</code><span> / </span><code>sh</code><span>.</span></p>
+</li>
+<li>
+<p><span>It</span>&rsquo;<span>s ok if it doesn</span>&rsquo;<span>t work absolutely everywhere </span>&mdash;<span> downloading/building Zig manually for an odd platform is also an acceptable workflow.</span></p>
+</li>
+<li>
+<p><span>The script should auto-detect appropriate host platform and architecture.</span></p>
+</li>
+<li>
+<p><span>Zig version should be specified in a separate </span><code>zig-version.txt</code><span> file.</span></p>
+</li>
+<li>
+<p><span>After downloading the file, its integrity should be verified.</span>
+<span>For this reason, </span><code>zig-version.txt</code><span> should include a hash alongside the version.</span>
+<span>As downloads are different depending on the platform, I think we</span>&rsquo;<span>ll need some help from Zig upstream here.</span>
+<span>In particular, each published Zig version should include a cross-platform manifest file, which lists hashes and urls of per-platform binaries.</span>
+<span>The hash included into </span><code>zig-version.txt</code><span> should be the manifest</span>&rsquo;<span>s hash.</span></p>
+</li>
+</ul>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-06-02-the-worst-zig-version-manager.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

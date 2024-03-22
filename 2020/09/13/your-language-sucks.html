@@ -1,0 +1,188 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your Language Sucks, It Doesn't Matter</title>
+  <meta name="description" content="This post describes my own pet theory of programming languages popularity.
+My understanding is that no one knows why some languages are popular and others aren't, so there's no harm done if I add my own thoughts to the overall confusion.
+Obviously, this is all wild speculation and a just-so story without any kind of data backed research.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/09/13/your-language-sucks.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Your Language Sucks, It Doesn</span>&rsquo;<span>t Matter</span> <time datetime="2020-09-13">Sep 13, 2020</time></h1>
+<p><span>This post describes my own pet theory of programming languages popularity.</span>
+<span>My understanding is that no one knows why some languages are popular and others aren</span>&rsquo;<span>t, so there</span>&rsquo;<span>s no harm done if I add my own thoughts to the overall confusion.</span>
+<span>Obviously, this is all wild speculation and a just-so story without any kind of data backed research.</span></p>
+<p><span>The central thesis is that the actual programming language (syntax, semantics, paradigm) doesn</span>&rsquo;<span>t really matter.</span>
+<span>What matters is characteristics of the runtime </span>&mdash;<span> roughly, what does memory of the running process look like?</span></p>
+<p><span>To start, an observation.</span>
+<span>A lot of software is written in vimscript and emacs lisp (</span><a href="https://magit.vc/"><span>magit</span></a><span> being one example I can</span>&rsquo;<span>t live without).</span>
+<span>And these languages are objectively bad.</span>
+<span>This happens even with less esoteric technologies, notable examples being PHP and JavaScript.</span>
+<span>While JavaScript is great in some aspects (it</span>&rsquo;<span>s the first mainstream language with lambdas!), it surely isn</span>&rsquo;<span>t hard to imagine a trivially better version of it (for example, without two different </span><code>null</code><span>s).</span></p>
+<p><span>This is a general rule </span>&mdash;<span> as soon as you have a language which is Turing-complete, and has some capabilities for building abstractions, people will just get the things done with it.</span>
+<span>Surely, some languages are more productive, some are less productive, but, overall, FP vs OOP vs static types vs dynamic types doesn</span>&rsquo;<span>t seem super relevant.</span>
+<span>It</span>&rsquo;<span>s always possible to overcome the language by spending some more time writing a program.</span></p>
+<p><span>In contrast, overcoming language runtime is not really possible.</span>
+<span>If you want to extend vim, you kinda have to use vimscript.</span>
+<span>If you want your code to run in the browser, JavaScript is still the best bet.</span>
+<span>Need to embed your code anywhere? GC is probably not an option for you.</span></p>
+<p><span>This two observations lead to the following hypothesis:</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>Languages generally become popular when they bring innovative runtime, or when they have runtime exclusivity.</span>
+<span>The quality of the language itself is secondary.</span></p>
+</div>
+</aside><p><span>Let</span>&rsquo;<span>s see some examples which can be </span>&ldquo;<span>explained</span>&rdquo;<span> by this theory.</span></p>
+<dl>
+<dt><span>C</span></dt>
+<dd>
+<p><span>C has a pretty spartan runtime, which is notable for two reasons.</span>
+<span>First, it was the first fast enough runtime for a high-level language.</span>
+<span>It was possible to write the OS kernel in C, which had been typically done in assembly before that for performance.</span>
+<span>Second, C is the language of Unix.</span>
+<span>(And yes, I would put C into the </span>&ldquo;<span>easily improved upon</span>&rdquo;<span> category of languages. Null-terminated strings are just a bad design).</span></p>
+</dd>
+<dt><span>JavaScript</span></dt>
+<dd>
+<p><span>This language has been exclusive in the browsers for quite some time.</span></p>
+</dd>
+<dt><span>Java</span></dt>
+<dd>
+<p><span>This case I think is the most interesting for the theory.</span>
+<span>A common explanation for Java</span>&rsquo;<span>s popularity is </span>&ldquo;<span>marketing by Sun</span>&rdquo;<span>, and subsequent introduction of Java into University</span>&rsquo;<span>s curricula.</span>
+<span>This doesn</span>&rsquo;<span>t seem convincing to me.</span>
+<span>Let</span>&rsquo;<span>s look at the 90</span>&rsquo;<span>s popular languages (I am not sure about percentage and relative ranking here, but the composition seems broadly correct to me):</span></p>
+
+<figure>
+<figcaption class="title">https://www.youtube.com/watch?v=Og847HVwRSI</figcaption>
+
+<img alt="" src="/assets/lang-pop.png">
+</figure>
+<p><span>On this list, Java is the only non-dynamic cross-platform memory safe language.</span>
+<span>That is, Java is both memory safe (no manual error-prone memory management) and can be implemented reasonably efficiently (field access is a load and not a dictionary lookup).</span>
+<span>This seems like a pretty compelling reason to choose Java, irrespective of what the language itself actually looks like.</span></p>
+</dd>
+<dt><span>Go</span></dt>
+<dd>
+<p><span>One can argue whether focus on simplicity at the expense of everything else is good or bad, but statically linked zero dependency binaries definitely were a reason for Go popularity in the devops sphere.</span>
+<span>In a sense, Go is an upgrade over </span>&ldquo;<span>memory safe &amp; reasonably fast</span>&rdquo;<span> Java runtime, when you no longer need to install JVM separately.</span></p>
+</dd>
+</dl>
+<p><span>Naturally, there are also some things which are not explained by my hypothesis.</span>
+<span>One is scripting languages.</span>
+<span>A highly dynamic runtime with </span><code>eval</code><span> and ability to easily link C extensions indeed would be a differentiator, so we would expect a popular scripting language.</span>
+<span>However, it</span>&rsquo;<span>s unclear why they are Python and PHP, and not Ruby and Perl.</span></p>
+<p><span>Another one is language evolutions: C++ and TypeScript don</span>&rsquo;<span>t innovate runtime-wise, yet they are still major languages.</span></p>
+<p><span>Finally, let</span>&rsquo;<span>s make some bold predictions using the theory.</span></p>
+<p><em><span>First</span></em><span>, I expect Rust to become a major language, naturally :)</span>
+<span>This needs some explanation </span>&mdash;<span> on the first blush, Rust is runtime-equivalent to C and C++, so the theory should predict just the opposite.</span>
+<span>But I would argue that memory safety is a runtime property, despite the fact that it is, uniquely to Rust, achieved exclusively via language machinery.</span></p>
+<p><em><span>Second</span></em><span>, I predict Julia to become more popular.</span>
+<span>It</span>&rsquo;<span>s pretty unique, runtime-wise, with its stark rejection of </span><a href="https://en.wikipedia.org/wiki/Ousterhout's_dichotomy"><span>Ousterhout</span>&rsquo;<span>s Dichotomy</span></a><span> and insisting that, yeah, we</span>&rsquo;<span>ll just JIT highly dynamic language to suuuper fast numeric code at runtime.</span></p>
+<p><em><span>Third</span></em><span>, I wouldn</span>&rsquo;<span>t be surprised if Dart grows.</span>
+<span>On the one hand, it</span>&rsquo;<span>s roughly in the same boat as Go and Java, with memory safe runtime with fixed layout of objects and pervasive dynamic dispatch.</span>
+<span>But the quality of implementation of the runtimes is staggering: it has first-class JIT, AOT and JS compilers.</span>
+<span>Moreover, it has top-notch hot-reload support.</span>
+<span>Nothing here is a breakthrough, but the combination is impressive.</span></p>
+<p><em><span>Fourth</span></em><span>, I predict that Nim, Crystal and Zig (which is very interesting, language design wise) would not become popular.</span></p>
+<p><em><span>Fifth</span></em><span>, I predict that Swift will be pretty popular on Apple hardware due to platform exclusivity, but won</span>&rsquo;<span>t grow much outside of it, </span><em><span>despite</span></em><span> being very innovative in language design (generics in Swift are the opposite of the generics in Go).</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-09-13-your-language-sucks.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

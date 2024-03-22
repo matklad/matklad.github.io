@@ -1,0 +1,399 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fast and Simple Rust Interner</title>
+  <meta name="description" content="This post describes a simple technique for writing interners in Rust which I haven't seen documented before.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/03/22/fast-simple-rust-interner.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Fast and Simple Rust Interner</span> <time datetime="2020-03-22">Mar 22, 2020</time></h1>
+<p><span>This post describes a simple technique for writing interners in Rust which I haven</span>&rsquo;<span>t seen documented before.</span></p>
+<p><span>String interning is a classical optimization when you have to deal with many equal strings.</span>
+<span>The canonical example would be a compiler: most identifiers in a program are repeated several times.</span></p>
+<p><span>Interning works by ensuring that there</span>&rsquo;<span>s only one canonical copy of each distinct string in memory.</span>
+<span>It can give the following benefits:</span></p>
+<ul>
+<li>
+<span>Less memory allocated to hold strings.</span>
+</li>
+<li>
+<span>If all strings are canonicalized, comparison can be done in </span><code>O(1)</code><span> (instead of </span><code>O(n)</code><span>) by using pointer equality.</span>
+</li>
+<li>
+<span>Interned strings themselves can be represented with an index (typically </span><code>u32</code><span>) instead of a </span><code>(ptr, len)</code><span> pair.</span>
+<span>This makes data structures which embed strings more compact.</span>
+</li>
+</ul>
+<p><span>The simplest possible interner in Rust could look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::collections::HashMap;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Interner</span> {</span>
+<span class="line">    map: HashMap&lt;<span class="hl-type">String</span>, <span class="hl-type">u32</span>&gt;,</span>
+<span class="line">    vec: <span class="hl-type">Vec</span>&lt;<span class="hl-type">String</span>&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Interner</span> {</span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">intern</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>, name: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(&amp;idx) = <span class="hl-keyword">self</span>.map.<span class="hl-title function_ invoke__">get</span>(name) {</span>
+<span class="line">            <span class="hl-keyword">return</span> idx;</span>
+<span class="line">        }</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">idx</span> = <span class="hl-keyword">self</span>.map.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span>;</span>
+<span class="line">        <span class="hl-keyword">self</span>.map.<span class="hl-title function_ invoke__">insert</span>(name.<span class="hl-title function_ invoke__">to_owned</span>(), idx);</span>
+<span class="line">        <span class="hl-keyword">self</span>.vec.<span class="hl-title function_ invoke__">push</span>(name.<span class="hl-title function_ invoke__">to_owned</span>());</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-built_in">debug_assert!</span>(<span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">lookup</span>(idx) == name);</span>
+<span class="line">        <span class="hl-built_in">debug_assert!</span>(<span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">intern</span>(name) == idx);</span>
+<span class="line"></span>
+<span class="line">        idx</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">lookup</span>(&amp;<span class="hl-keyword">self</span>, idx: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> &amp;<span class="hl-type">str</span> {</span>
+<span class="line">        <span class="hl-keyword">self</span>.vec[idx <span class="hl-keyword">as</span> <span class="hl-type">usize</span>].<span class="hl-title function_ invoke__">as_str</span>()</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>To remove duplicates, we store strings in a </span><code>HashMap</code><span>.</span>
+<span>To map from an index back to the string, we also store strings in a </span><code>Vec</code><span>.</span></p>
+<p><span>I didn</span>&rsquo;<span>t quite like this solution yesterday, for two reasons:</span></p>
+<ul>
+<li>
+<span>It allocates a lot </span>&mdash;<span> each interned string is </span><em><span>two</span></em><span> separate allocations.</span>
+</li>
+<li>
+<span>Using a </span><code>HashMap</code><span> feels like cheating, surely there should be a better, more classical data structure!</span>
+</li>
+</ul>
+<p><span>So I</span>&rsquo;<span>ve spent a part of the evening cobbling together a non-allocating </span><a href="https://en.wikipedia.org/wiki/Trie"><span>trie</span></a><span>-based interner.</span>
+<span>The result: trie does indeed asymptotically reduce the number of allocations from </span><code>O(n)</code><span> to </span><code>O(log(n))</code><span>.</span>
+<span>Unfortunately, it is slower, larger and way more complex than the above snippet.</span>
+<span>Minimizing allocations </span><em><span>is</span></em><span> important, but allocators are pretty fast, and that shouldn</span>&rsquo;<span>t be done at the expense of everything else.</span>
+<span>Also, Rust </span><code>HashMap</code><span> (implemented by </span><a href="https://github.com/Amanieu/"><span>@Amanieu</span></a><span> based on </span><a href="https://abseil.io/blog/20180927-swisstables"><span>Swiss Table</span></a><span>) is </span><em><em><span>fast</span></em></em><span>.</span></p>
+
+<details>
+<summary>For the curious, the Trie design I've used</summary>
+<p><span>The trie is build on per-byte basis (each node has at most 256 children).</span>
+<span>Each internal node is marked with a single byte.</span>
+<span>Leaf nodes are marked with substrings, so that only the common prefix requires node per byte.</span></p>
+<p><span>To avoid allocating individual interned strings, we store them in a </span><strong><span>single</span></strong><span> long </span><code>String</code><span>.</span>
+<span>An interned string is represented by a </span><code>Span</code><span> (pair of indexes) inside the big buffer.</span></p>
+<p><span>Trie itself is a tree structure, and we can use a standard trick of packing its nodes into array and using indexes to avoid allocating every node separately.</span>
+<span>However, nodes themselves can be of varying size, as each node can have different number of children.</span>
+<span>We can still array-allocate them, by rolling our own mini-allocator (using a segregated free list)!</span></p>
+<p><span>Node</span>&rsquo;<span>s children are represented as a sorted array of links.</span>
+<span>We use binary search for indexing and simple linear shift insertion.</span>
+<span>With at most 256 children per node, it shouldn</span>&rsquo;<span>t be </span><em><span>that</span></em><span> bad.</span>
+<span>Additionally, we pre-allocate 256 nodes and use array indexing for the first transition.</span></p>
+<p><span>Links are organized in layers.</span>
+<span>The layer </span><code>n</code><span> stores a number of </span><code>[Link]</code><span> chunks of length </span><code><span>2</span><sup><span>n</span></sup></code><span> (in a single contiguous array).</span>
+<span>Each chunk represents the links for a single node (with possibly some extra capacity).</span>
+<span>Node can find its chunk because it knows the number of links (which gives the number of layers) and the first link in the layer.</span>
+<span>A new link for the node is added to the current chunk if there</span>&rsquo;<span>s space.</span>
+<span>If the chunk is full, it is copied to a chunk twice as big first.</span>
+<span>The old chunk is then added to the list of free chunks for reuse.</span></p>
+<p><span>Here</span>&rsquo;<span>s the whole definition of the data structure:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Interner</span> {</span>
+<span class="line">    trie: <span class="hl-type">Vec</span>&lt;Node&gt;,</span>
+<span class="line">    links: <span class="hl-type">Vec</span>&lt;Layer&gt;,</span>
+<span class="line">    strs: <span class="hl-type">Vec</span>&lt;Span&gt;,</span>
+<span class="line">    buf: <span class="hl-type">String</span>,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Span</span> { start: <span class="hl-type">u32</span>, end: <span class="hl-type">u32</span> }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Node</span> {</span>
+<span class="line">    <span class="hl-type">str</span>: <span class="hl-type">Option</span>&lt;<span class="hl-type">u32</span>&gt;,</span>
+<span class="line">    n_links: <span class="hl-type">u8</span>,</span>
+<span class="line">    first_link: <span class="hl-type">u32</span>,</span>
+<span class="line"><span class="hl-comment">//  layer: u32 = first_link.next_power_of_two(),</span></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Link</span> { byte: <span class="hl-type">u8</span>, node: <span class="hl-type">u32</span>, }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Layer</span> {</span>
+<span class="line">    links: <span class="hl-type">Vec</span>&lt;Link&gt;,</span>
+<span class="line">    free: <span class="hl-type">Vec</span>&lt;<span class="hl-type">u32</span>&gt;,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Isn</span>&rsquo;<span>t it incredibly cool that you can look only at the fields and understand how the thing works,</span>
+<span>without even seeing the rest 150 lines of relatively tricky implementation?</span></p>
+
+</details>
+  <p><span>However, implementing a trie made me realize that there</span>&rsquo;<span>s a simple optimization we can apply to our naive interner to get rid of extra allocations.</span>
+<span>In the trie, I concatenate all interned strings into one giant </span><code>String</code><span> and use </span><code>(u32, u32)</code><span> index pairs as an internal representation of string slice.</span></p>
+<p><span>If we translate this idea to our naive interner, we get:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Span</span> { start: <span class="hl-type">u32</span>, end: <span class="hl-type">u32</span> }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Interner</span> {</span>
+<span class="line">    map: HashMap&lt;Span, <span class="hl-type">u32</span>&gt;,</span>
+<span class="line">    vec: <span class="hl-type">Vec</span>&lt;Span&gt;,</span>
+<span class="line">    buf: <span class="hl-type">String</span>,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Interner</span> {</span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">intern</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>, name: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> { ... }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">lookup</span>(&amp;<span class="hl-keyword">self</span>, idx: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> &amp;<span class="hl-type">str</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">Span</span> { start, end } = <span class="hl-keyword">self</span>.vec[idx <span class="hl-keyword">as</span> <span class="hl-type">usize</span>]</span>
+<span class="line">        &amp;<span class="hl-keyword">self</span>.buf[start <span class="hl-keyword">as</span> <span class="hl-type">usize</span>..end <span class="hl-keyword">as</span> <span class="hl-type">usize</span>]</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The problem here is that we can</span>&rsquo;<span>t actually write implementations of </span><code>Eq</code><span> and </span><code>Hash</code><span> for </span><code>Span</code><span> to make this work.</span>
+<span>In theory, this is possible: to compare two </span><code>Spans</code><span>, you resolve them to </span><code>&amp;str</code><span> via </span><code>buf</code><span>, and then compare the strings.</span>
+<span>However, Rust API does not allow to express this idea.</span>
+<span>Moreover, even if </span><code>HashMap</code><span> allowed supplying a key closure at </span><em><span>construction</span></em><span> time, it wouldn</span>&rsquo;<span>t help!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">HashMap</span>&lt;K, V, KeyFn, Key&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">    KeyFn: <span class="hl-title function_ invoke__">Fn</span>(&amp;K) <span class="hl-punctuation">-&gt;</span> Key,</span>
+<span class="line">    Key: Hash + <span class="hl-built_in">Eq</span>,</span>
+<span class="line">{</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">new_with_key_fn</span>(key_fn: F) <span class="hl-punctuation">-&gt;</span> <span class="hl-keyword">Self</span> { ... }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Such API would run afoul of the borrow checker.</span>
+<span>The </span><code>key_fn</code><span> would have to borrow from the same </span><code>struct</code><span>.</span>
+<span>What would work is supplying a </span><code>key_fn</code><span> at call-site for every </span><code>HashMap</code><span> operation, but that would hurt ergonomics and ease of use a lot.</span>
+<span>This exact problem requires</span>
+<a href="https://github.com/matklad/rfcs/blob/std-lazy/text/0000-standard-lazy-types.md#why-not-lazy-as-a-primitive"><span>slightly unusual</span></a>
+<span>design of lazy values in Rust.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>If you find yourself in need of such </span>&ldquo;<span>call-site closure</span>&rdquo;<span> container, you can use a sorted </span><code>Vec</code><span>,</span>
+<a href="https://doc.rust-lang.org/std/primitive.slice.html#method.binary_search_by_key"><code>binary_search_by_key</code></a>
+<span>is exactly this pattern.</span></p>
+<p><span>Another alternative is the </span><code>hashbrown</code><span> crate, which has</span>
+<a href="https://docs.rs/hashbrown/0.7.1/hashbrown/hash_map/struct.RawVacantEntryMut.html#method.insert_with_hasher"><span>raw entry API</span></a><span>.</span></p>
+</div>
+</aside><p><span>However, with a bit of </span><code>unsafe</code><span>, we can make something similar work.</span>
+<span>The trick is to add strings to </span><code>buf</code><span> in such a way that they are never moved, even if more strings are added on top.</span>
+<span>That way, we can just store </span><code>&amp;str</code><span> in the </span><code>HashMap</code><span>.</span>
+<span>To achieve address stability, we use another trick from the </span><a href="https://crates.io/crates/typed_arena"><code>typed_arena</code></a><span> crate.</span>
+<span>If the </span><code>buf</code><span> is full (so that adding a new string would invalidate old pointers), we allocate a new buffer, twice as large,</span>
+<em><span>without</span></em><span> coping the contents of the old one.</span></p>
+<p><span>Here</span>&rsquo;<span>s the full implementation:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::{mem, collections::HashMap};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Interner</span> {</span>
+<span class="line">    map: HashMap&lt;&amp;<span class="hl-symbol">&#x27;static</span> <span class="hl-type">str</span>, <span class="hl-type">u32</span>&gt;,</span>
+<span class="line">    vec: <span class="hl-type">Vec</span>&lt;&amp;<span class="hl-symbol">&#x27;static</span> <span class="hl-type">str</span>&gt;,</span>
+<span class="line">    buf: <span class="hl-type">String</span>,</span>
+<span class="line">    full: <span class="hl-type">Vec</span>&lt;<span class="hl-type">String</span>&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Interner</span> {</span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">with_capacity</span>(cap: <span class="hl-type">usize</span>) <span class="hl-punctuation">-&gt;</span> Interner {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">cap</span> = cap.<span class="hl-title function_ invoke__">next_power_of_two</span>();</span>
+<span class="line">        Interner {</span>
+<span class="line">            map: HashMap::<span class="hl-title function_ invoke__">default</span>(),</span>
+<span class="line">            vec: <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>(),</span>
+<span class="line">            buf: <span class="hl-type">String</span>::<span class="hl-title function_ invoke__">with_capacity</span>(cap),</span>
+<span class="line">            full: <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>(),</span>
+<span class="line">        }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">intern</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>, name: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(&amp;id) = <span class="hl-keyword">self</span>.map.<span class="hl-title function_ invoke__">get</span>(name) {</span>
+<span class="line">            <span class="hl-keyword">return</span> id;</span>
+<span class="line">        }</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">name</span> = <span class="hl-keyword">unsafe</span> { <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">alloc</span>(name) };</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">id</span> = <span class="hl-keyword">self</span>.map.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span>;</span>
+<span class="line">        <span class="hl-keyword">self</span>.map.<span class="hl-title function_ invoke__">insert</span>(name, id);</span>
+<span class="line">        <span class="hl-keyword">self</span>.vec.<span class="hl-title function_ invoke__">push</span>(name);</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-built_in">debug_assert!</span>(<span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">lookup</span>(id) == name);</span>
+<span class="line">        <span class="hl-built_in">debug_assert!</span>(<span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">intern</span>(name) == id);</span>
+<span class="line"></span>
+<span class="line">        id</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">lookup</span>(&amp;<span class="hl-keyword">self</span>, id: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> &amp;<span class="hl-type">str</span> {</span>
+<span class="line">        <span class="hl-keyword">self</span>.vec[id <span class="hl-keyword">as</span> <span class="hl-type">usize</span>]</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">unsafe</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">alloc</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>, name: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> &amp;<span class="hl-symbol">&#x27;static</span> <span class="hl-type">str</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">cap</span> = <span class="hl-keyword">self</span>.buf.<span class="hl-title function_ invoke__">capacity</span>();</span>
+<span class="line hl-line">        <span class="hl-keyword">if</span> cap &lt; <span class="hl-keyword">self</span>.buf.<span class="hl-title function_ invoke__">len</span>() + name.<span class="hl-title function_ invoke__">len</span>() {</span>
+<span class="line hl-line">            <span class="hl-keyword">let</span> <span class="hl-variable">new_cap</span> = (cap.<span class="hl-title function_ invoke__">max</span>(name.<span class="hl-title function_ invoke__">len</span>()) + <span class="hl-number">1</span>)</span>
+<span class="line hl-line">                .<span class="hl-title function_ invoke__">next_power_of_two</span>();</span>
+<span class="line hl-line">            <span class="hl-keyword">let</span> <span class="hl-variable">new_buf</span> = <span class="hl-type">String</span>::<span class="hl-title function_ invoke__">with_capacity</span>(new_cap);</span>
+<span class="line hl-line">            <span class="hl-keyword">let</span> <span class="hl-variable">old_buf</span> = mem::<span class="hl-title function_ invoke__">replace</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>.buf, new_buf);</span>
+<span class="line hl-line">            <span class="hl-keyword">self</span>.full.<span class="hl-title function_ invoke__">push</span>(old_buf);</span>
+<span class="line hl-line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">interned</span> = {</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">start</span> = <span class="hl-keyword">self</span>.buf.<span class="hl-title function_ invoke__">len</span>();</span>
+<span class="line">            <span class="hl-keyword">self</span>.buf.<span class="hl-title function_ invoke__">push_str</span>(name);</span>
+<span class="line">            &amp;<span class="hl-keyword">self</span>.buf[start..]</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        &amp;*(interned <span class="hl-keyword">as</span> *<span class="hl-keyword">const</span> <span class="hl-type">str</span>)</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The precise rule for increasing capacity is slightly more complicated:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">new_cap</span> = (cap.<span class="hl-title function_ invoke__">max</span>(name.<span class="hl-title function_ invoke__">len</span>()) + <span class="hl-number">1</span>).<span class="hl-title function_ invoke__">next_power_of_two</span>();</span></code></pre>
+
+</figure>
+<p><span>Just doubling won</span>&rsquo;<span>t be enough, we also need to make sure that the new string actually fits.</span></p>
+<p><span>We could have used a single </span><code>bufs: Vec&lt;String&gt;</code><span> in place of both </span><code>buf</code><span> and </span><code>full</code><span>.</span>
+<span>The benefit of splitting the last buffer into a dedicated field is that we statically guarantee that there</span>&rsquo;<span>s at least one buffer.</span>
+<span>That way, we void a bounds check and/or </span><code>.unwrap</code><span> when accessing the active buffer.</span></p>
+<p><span>We also use </span><code>&amp;'static str</code><span> to fake interior references.</span>
+<a href="https://github.com/rust-lang/miri"><span>Miri</span></a><span> (rust in-progress UB checker) is not entirely happy about this.</span>
+<span>I haven</span>&rsquo;<span>t dug into this yet, it might be another instance of</span>
+<a href="https://github.com/rust-lang/rust/pull/61114"><span>rust-lang/rust#61114</span></a><span>.</span>
+<span>To be on the safe side, we can use </span><code>*const str</code><span> instead, with a bit of boilerplate to delegate </span><code>PartialEq</code><span> and </span><code>Hash</code><span>.</span>
+<span>Some kind of (hypothetical) </span><code>'unsafe</code><span> lifetime could also be useful here!</span>
+<span>The critical detail that makes our use of fake </span><code>'static</code><span> sound here is that the </span><code>alloc</code><span> function is private.</span>
+<span>The public </span><code>lookup</code><span> function shortens the lifetime to that of </span><code>&amp;self</code><span> (via lifetime elision).</span></p>
+<p><span>For the real implementation, I would change two things:</span></p>
+<ul>
+<li>
+<p><span>Use </span><code>rustc_hash::FxHashMap</code><span>.</span>
+<span>It</span>&rsquo;<span>s a standard Rust </span><code>HashMap</code><span> with a faster (but not DOS-resistant) hash function </span>&mdash;<span> </span><code>FxHash</code><span>.</span>
+<code>Fx</code><span> stands for </span><strong><strong><span>F</span></strong></strong><span>irefo</span><strong><strong><span>x</span></strong></strong><span>, this is a modification of FNV hash originally used in the browser.</span></p>
+</li>
+<li>
+<p><span>Add a newtype wrapper for string indexes:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]</span></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">StrId</span>(<span class="hl-type">u32</span>);</span></code></pre>
+
+</figure>
+</li>
+</ul>
+<p><span>That</span>&rsquo;<span>s all I have to say about fast and simple string interning in Rust!</span>
+<span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/fn1jxf/blog_post_fast_and_simple_rust_interner/"><span>/r/rust</span></a><span>.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-03-22-fast-simple-rust-interner.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

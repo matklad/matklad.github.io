@@ -1,0 +1,224 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Why an IDE?</title>
+  <meta name="description" content="Some time ago I wrote a reddit comment explaining the benefits of IDEs.
+Folks refer to it from time to time, so I decided to edit it into an article form.
+Enjoy!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/11/11/yde.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Why an IDE?</span> <time datetime="2020-11-11">Nov 11, 2020</time></h1>
+<p><span>Some time ago I wrote a reddit comment explaining the benefits of IDEs.</span>
+<span>Folks refer to it from time to time, so I decided to edit it into an article form.</span>
+<span>Enjoy!</span></p>
+<p><span>I think I have a rather balanced perspective on IDEs.</span>
+<span>I used to be a heavy Emacs user (</span><a href="https://github.com/matklad/.emacs.d/tree/475de5db99f8729c57fed7e6fde4cd06f5ccb62f"><span>old config</span></a><span>, </span><a href="https://github.com/matklad/config/blob/d555642a5a9e4e8b0ca0c77f188ffd976f06327c/home/.emacs.d/init.el"><span>current config</span></a><span>).</span>
+<span>I worked at JetBrains on </span><a href="https://github.com/intellij-rust/intellij-rust"><span>IntelliJ Rust</span></a><span> for several years.</span>
+<span>I used evil mode and vim for a bit, and tried tmux and kakoune.</span>
+<span>Nowadays, I primarily use VS Code to develop </span><a href="https://github.com/rust-analyzer/rust-analyzer/"><span>rust-analyzer</span></a><span>: LSP-based editor-independent IDE backend for Rust.</span></p>
+<p><span>I will be focusing on IntelliJ family of IDEs, as I believe these are the most advanced IDEs today.</span></p>
+<p><span>The main distinguishing feature of IntelliJ is semantic understanding of code.</span>
+<span>The core of IntelliJ is a compiler which parses, type checks and otherwise understands your code.</span>
+<a href="https://martinfowler.com/bliki/PostIntelliJ.html"><span>PostIntelliJ</span></a><span> is the canonical post about this.</span>
+<span>That article also refutes the claim that </span>&ldquo;<span>Smalltalk IDE is the best we</span>&rsquo;<span>ve ever had</span>&rdquo;<span>.</span></p>
+<p><span>Note that </span>&ldquo;<span>semantic understanding</span>&rdquo;<span> is mostly unrelated to the traditional interpretation of </span>&ldquo;<span>IDE</span>&rdquo;<span> as </span><em><em><span>Integrated</span></em></em><span> Development Environment.</span>
+<span>I personally don</span>&rsquo;<span>t feel that the </span>&ldquo;<span>Integrated</span>&rdquo;<span> bit is all that important.</span>
+<span>I commit&amp;push from the command line using Julia scripts, rebase in magit, and do code reviews in a browser.</span>
+<span>If anything, there</span>&rsquo;<span>s an ample room for improvement for the integration bits.</span>
+<span>For me, </span><strong><strong><span>I</span></strong></strong><span> in </span>&ldquo;<strong><span>I</span></strong><span>DE</span>&rdquo;<span> stands for </span>&ldquo;<span>intelligent</span>&rdquo;<span>, smart.</span></p>
+<p><span>Keep in mind this terminology difference.</span>
+<span>I feel it is a common source of misunderstanding.</span>
+&ldquo;<span>Unix and command line can do anything an IDE can do</span>&rdquo;<span> is correct about integrated bits, but is wrong about semantical bits.</span></p>
+<p><span>Traditional editors like Vim or Emacs understand programming languages very approximately, mostly via regular expressions.</span>
+<span>For me, this feels very wrong.</span>
+<span>It</span>&rsquo;<span>s </span><a href="https://stackoverflow.com/a/1732454"><span>common knowledge</span></a><span> that HTML shall not be parsed with regex.</span>
+<span>Yet this is exactly what happens every time one does </span><code>vim index.html</code><span> with syntax highlighting on.</span>
+<span>I sincerely think that almost every syntax highlighter out there is wrong and we, as an industry, should do better.</span>
+<span>I also understand that this is a tall order, but I do my best to change the status quo here :-)</span></p>
+<p><span>These are mostly theoretical concerns though.</span>
+<span>The question is, does semantic understanding help in practice?</span>
+<span>I am pretty sure that it is non-essential, especially for smaller code bases.</span>
+<span>My </span><a href="https://github.com/matklad/rustraytracer"><span>first non-trivial Rust program</span></a><span> was written in Emacs, and it was fine.</span>
+<span>Most of rust-analyzer was written using pretty spartan IDE support.</span>
+<span>There are a lot of insanely-productive folks who are like </span>&ldquo;<span>sometimes I type vim, sometimes I type vi, they are sufficiently similar</span>&rdquo;<span>.</span>
+<span>Regex-based syntax highlighting and regex based fuzzy symbol search (</span><a href="https://github.com/universal-ctags/ctags"><span>ctags</span></a><span>) get you a really long way.</span></p>
+<p><span>However, I do believe that features unlocked by deep understanding of the language help.</span>
+<span>The funniest example here is extend/shrink selection.</span>
+<span>This features allows you to extend current selection to the next encompassing syntactic construct.</span>
+<span>It</span>&rsquo;<span>s the simplest feature a PostIntelliJ IDE can have, it only needs the parser.</span>
+<span>But it is sooo helpful when writing code, it just completely blows vim</span>&rsquo;<span>s text objects out of the water, especially when combined with multiple cursors.</span>
+<span>In a sense, this is structural editing which works for text.</span></p>
+
+<figure>
+
+<img alt="" src="https://user-images.githubusercontent.com/1711539/98809232-80e3db00-241d-11eb-883a-5aece9a1dbfc.gif">
+</figure>
+<p><span>If you add further knowledge of the language into a mix, you</span>&rsquo;<span>ll get the </span>&ldquo;<span>assists</span>&rdquo;<span> system: micro-refactoring which available in a particular context.</span>
+<span>For example, if the cursor is on a comma in a list of function arguments, you can </span><kbd><kbd>alt</kbd> + <kbd>enter</kbd></kbd><span> &gt; </span>&ldquo;<span>swap arguments</span>&rdquo;<span>, and the order of arguments will be changed in the declaration and on various call-sites as well.</span>
+<span>(See </span><a href="https://rust-analyzer.github.io/blog/2020/09/28/how-to-make-a-light-bulb.html"><span>this post</span></a><span> to learn how assists are implemented).</span></p>
+<p><span>These small dwim things add up to a really nice editing experience, where you mostly express the intention, and the IDE deals with boring syntactical aspects of code editing:</span></p>
+
+<figure>
+
+<img alt="" src="https://user-images.githubusercontent.com/1711539/98812121-37e25580-2422-11eb-8541-2c5a32926845.gif">
+</figure>
+<p><span>For larger projects, complex refactors are a huge time-saver.</span>
+<span>Doing project-wide renames and signature changes automatically and without thinking reduces the cost of keeping the code clean.</span></p>
+<p><span>Another transformative experience is navigation.</span>
+<span>In IntelliJ, you generally don</span>&rsquo;<span>t </span>&ldquo;<span>open a file</span>&rdquo;<span>.</span>
+<span>Instead you think directly in terms of functions, types and modules, and navigate to those using file structure, goto symbol, to do definition/implementation/type, etc:</span></p>
+<p><a href="https://www.jetbrains.com/help/idea/navigating-through-the-source-code.html" class="url">https://www.jetbrains.com/help/idea/navigating-through-the-source-code.html</a></p>
+<p><span>When I used Emacs, I really admired its buffer management facilities, because they made opening a file I want a breeze.</span>
+<span>When I later switched to IntelliJ, I stopped thinking in terms of a set of opened files altogether.</span>
+<span>I disabled editor tabs and started using editor splits less often </span>&mdash;<span> you don</span>&rsquo;<span>t need bookmarks if you can just find things.</span></p>
+<p><span>For me, there</span>&rsquo;<span>s one aspect of traditional editors which is typically not matched in IDEs out of the box </span>&mdash;<span> basic cursor motion.</span>
+<span>Using arrow keys for that is slow and flow-breaking, because one needs to move the hand from the home row.</span>
+<span>Even Emacs</span>&rsquo;<span> horrific </span><kbd><kbd>C-p</kbd></kbd><span>, </span><kbd><kbd>C-n</kbd></kbd><span> are a big improvement, and vim</span>&rsquo;<span>s </span><kbd><kbd>hjkl</kbd></kbd><span> go even further.</span>
+<span>One fix here is to configure each tool to use your favorite shortcuts, but this is a whack-a-mole game.</span>
+<span>What I do is remapping </span><kbd><kbd>CapsLock</kbd></kbd><span> to act as an extra modifier, such that </span><kbd><kbd>ijkl</kbd></kbd><span> </span><strong><span>are</span></strong><span> arrow keys.</span>
+<span>(There are also keyboards with </span><a href="https://ultimatehackingkeyboard.com"><span>hardware</span></a><span> </span><a href="https://ergodox-ez.com"><span>support</span></a><span> for this).</span>
+<span>This works in all applications the same way.</span>
+<span>Easy motion / ace jump functionality for jumping to any visible character is also handy, and usually is available </span><a href="https://plugins.jetbrains.com/plugin/9803-acejump-lite"><span>via</span></a><span> </span><a href="https://marketplace.visualstudio.com/items?itemName=lucax88x.codeacejumper"><span>a plugin</span></a><span>.</span></p>
+<p><span>Recent advancements with LSP protocol promise to give one the best of both worlds, where semantic-aware backend and light-weight editor frontend are different processes, which can be mixed and matched.</span>
+<span>This is nice in theory, but not as nice in practice as IntelliJ yet, mostly because IntelliJ is way more polished.</span></p>
+<p><span>To give a simple example, in IntelliJ for </span>&ldquo;<span>go to symbol by fuzzy name</span>&rdquo;<span> functionality, I can filter the search scope by:</span></p>
+<ul>
+<li>
+<span>is this my code/code from a dependency?</span>
+</li>
+<li>
+<span>is this test/production code?</span>
+</li>
+<li>
+<span>is a symbol a type-like thing, or a method-like thing?</span>
+</li>
+<li>
+<span>path to the module where the symbol is defined.</span>
+</li>
+</ul>
+<p><span>VS Code and LSP simply do not have capabilities for such filters yet, they have to be bolted on using hacks.</span>
+<span>Support for LSP in other editors is even more hit-and-miss.</span></p>
+<p><span>LSP did achieve a significant breakthrough </span>&mdash;<span> it made people care about implementing IDE backends.</span>
+<span>Experience shows that re-engineering an existing compiler to power an IDE is often impossible, or isomorphic to a rewrite.</span>
+<span>How a compiler talks to an editor is the smaller problem.</span>
+<span>The hard one is building a compiler that can do IDE stuff in the first place.</span>
+<span>Check out </span><a href="https://rust-analyzer.github.io/blog/2020/07/20/three-architectures-for-responsive-ide.html"><span>this post</span></a><span> for some of the technical details.</span>
+<span>Starting with this use-case in mind saves a lot of effort down the road.</span></p>
+<p><span>This I think is a big deal.</span>
+<span>I hypothesize that the reason why IDEs do not completely dominate tooling landscape is the lack of good IDE backends.</span></p>
+<p><span>If we look at the set of languages fairly popular recently, a significant fraction of them is dynamically typed: PHP, JavaScript, Python, Ruby.</span>
+<span>The helpfulness of an IDE for dynamically typed languages is severely limited: while approximations and heuristics can get you a long way, you still need humans in the loop to verify IDE</span>&rsquo;<span>s guesses.</span></p>
+<p><span>There</span>&rsquo;<span>s C++, but its templates are effectively dynamically typed, with exactly the same issues (and a very complex base language to boot).</span>
+<span>Curiously, C looks like a language for which implementing a near-perfect IDE is pretty feasible.</span>
+<span>I don</span>&rsquo;<span>t know why it didn</span>&rsquo;<span>t happen before CLion.</span></p>
+<p><span>This leaves C# and Java.</span>
+<span>Indeed, these languages are dominated by IDEs.</span>
+<span>There</span>&rsquo;<span>s a saying that you can</span>&rsquo;<span>t write Java without an IDE.</span>
+<span>I think it gets the causation direction backwards: Java is one of the few languages for which it is possible to implement a great IDE without great pain.</span>
+<span>Supporting evidence here is Go.</span>
+<span>According to </span><a href="https://go.dev/blog/survey2019-results#developer-tools"><span>survey results</span></a><span>, text editors are stably declining in popularity in favor of IDEs.</span></p>
+<p><span>I think this is because Go actually has good IDEs.</span>
+<span>This is possible because the language is sufficiently statically typed for an IDE to be a marked improvement.</span>
+<span>Additionally, the language is very simple, so the amount of work you need to put in to make a decent IDE is much lower than for other languages.</span>
+<span>If you have something like JavaScript</span>&hellip;
+<span>Well, you first need to build an alternative language for which you can actually implement an IDE (</span><a href="https://www.typescriptlang.org"><span>TypeScript</span></a><span>) and only then you can build the IDE itself (</span><a href="https://github.com/microsoft/vscode"><span>VS Code</span></a><span>).</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-11-11-yde.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

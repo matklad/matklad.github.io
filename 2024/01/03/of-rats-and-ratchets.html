@@ -1,0 +1,159 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Of Rats and Ratchets</title>
+  <meta name="description" content="This is going to be related to software engineering, pinky promise!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/01/03/of-rats-and-ratchets.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Of Rats and Ratchets</span> <time datetime="2024-01-03">Jan 3, 2024</time></h1>
+<p><span>This is going to be related to software engineering, pinky promise!</span></p>
+<p><span>I was re-reading Doctor Zhivago by Boris Pasternak recently. It is a beautiful novel set in Russia</span>
+<span>during the revolutionary years before World War II. It focuses on the life of Yuri Zhivago, a doctor</span>
+<span>and a poet, while the Russian revolutions roar in the background. It is a poignant and topical tale</span>
+<span>of a country descending into blood-thirsty madness.</span></p>
+<p><span>Being a doctor, a literati, and a descendant of once wealthy family, Zhivago is not exactly welcomed</span>
+<span>in the new Russia. That</span>&rsquo;<span>s why a significant part of the novel takes place far away from Moscow and</span>
+<span>St. Petersburg, in Siberia, where it is easier for undesirables to exist in a fragile truce with the</span>
+<span>state.</span></p>
+<p><span>What</span>&rsquo;<span>s your first problem, if you are going to live in someone else</span>&rsquo;<span>s abandoned house in Siberia,</span>
+<span>eking out a living off whatever supplies had been left? The rats, who are also very keen on the said</span>
+<span>supplies. Clearly, rats are a big problem, and require immediate attention.</span></p>
+<p><span>It</span>&rsquo;<span>s easy to exert effort and get rid of the rats </span>&mdash;<span> take a broom, some light source, and just</span>
+<span>chase away the rascals from the house. However observably effective the method is, it is not a</span>
+<span>solution </span>&mdash;<span> the rats will come back as soon as you are asleep. The proper solution starts with</span>
+<span>identifying all the holes through which the pest gets in, and thoroughly plugging those! Only then</span>
+<span>can you hope that the house </span><em><span>stays</span></em><span> rat free.</span></p>
+<p><span>I feel the dynamics plays out in software projects. There</span>&rsquo;<span>s lots of rats, everything</span>&rsquo;<span>s broken and in</span>
+<span>need of fixing, all the time. And there</span>&rsquo;<span>s usually plenty of desire and energy to fix things. The</span>
+<span>problem is, often times the fixes are not durable </span>&mdash;<span> an immediate problem is resolved promptly, but</span>
+<span>then it returns back two years down the line. This is most apparent in benchmarks </span>&mdash;<span> everyone loves</span>
+<span>adding a microbenchmark to motivate a particular change, and then the benchmark bitrots with no one</span>
+<span>to run it.</span></p>
+<p><span>It</span>&rsquo;<span>s important not only to fix things, but to fix them in a durable way; to seal up the holes, not</span>
+<span>just to wave the broom vigorously.</span></p>
+<p><span>The best way to do this is to setup a not rocket science rule, and then to use it as a ratchet to</span>
+<span>monotonically increase the set of properties the codebase possesses, one small check at a time.</span>
+<span>Crucially, the ratchet should be set up up front, </span><em><span>before</span></em><span> any of the problems are actually fixed,</span>
+<span>and it must allow for incremental steps.</span></p>
+<p><span>Let</span>&rsquo;<span>s say you lack documentation, and want to ensure that every file in the code-base has a</span>
+<span>top-level comment explaining  the relevant context. A good way to approach this problem is to write</span>
+<span>a test that reads every file in the project, computes the set of poorly documented files, and xors</span>
+<span>that against the hard-coded naughty list. This test is then committed to the project with the</span>
+<span>naughty list encompassing all the existing files. Although no new docs are added, the ratchet is in</span>
+<span>place </span>&mdash;<span> all new files are guaranteed to be documented. And its easier to move a notch up the</span>
+<span>ratchet by documenting a single file and crossing it out from the naughty list.</span></p>
+<p><span>More generally, widen your view of tests </span>&mdash;<span> a test is a program that checks a property of a</span>
+<span>repository of code at a particular commit. Any property </span>&mdash;<span> code style, absence of warnings,</span>
+<span>licenses of dependencies, the maximum size of any binary file committed into the repository,</span>
+<span>presence of unwanted merge commits, average assertion density.</span></p>
+<p><span>Not everything can be automated though. For things which can</span>&rsquo;<span>t be, the best trick I</span>&rsquo;<span>ve found is</span>
+<span>writing them down. </span><em><span>Just</span></em><span> agreeing that </span><em><span>X</span></em><span> is a team practice is not enough, even if it </span><em><span>might</span></em>
+<span>work for the first six months. Only when </span><em><span>X</span></em><span> is written down in a markdown document inside a</span>
+<span>repository it might becomes a durable practice. But beware </span>&mdash;<span> document what </span><em><span>is</span></em><span>, rather than what</span>
+<em><span>should</span></em><span> be. If there</span>&rsquo;<span>s a clear disagreement between what the docs say the world is, and the actual</span>
+<span>world, the ratcheting effect of the written word disappears. If there</span>&rsquo;<span>s a large diff between reality</span>
+<span>and documentation, don</span>&rsquo;<span>t hesitate to remove conflicting parts of the documentation. Having a ratchet</span>
+<span>that enforces a tiny set of properties is much more valuable than aspirations to enforce everything.</span></p>
+<p><span>Coming back to Doctor Zhivago, it is worth noting that the novel is arranged into a myriad of</span>
+<span>self-contained small chapters </span>&mdash;<span> a blessing for a modern attention-deprived world, as it creates a</span>
+<span>clear sense of progression even when you don</span>&rsquo;<span>t have enough focus to get lost in a book for hours.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-01-03-of-rats-and-ratchets.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

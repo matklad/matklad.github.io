@@ -1,0 +1,200 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unsafe as a Human-Assisted Type System</title>
+  <meta name="description" content="This is a short note about yet another way to look at Rust's unsafe.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2019/07/25/unsafe-as-a-type-system.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Unsafe as a Human-Assisted Type System</span> <time datetime="2019-07-25">Jul 25, 2019</time></h1>
+<p><span>This is a short note about yet another way to look at Rust</span>&rsquo;<span>s </span><code>unsafe</code><span>.</span></p>
+<p><span>Today, an interesting </span><a href="https://github.com/rust-lang/rust/issues/62894"><span>bug</span></a><span> was found in rustc, which made me aware just how useful </span><code>unsafe</code><span> is for making code maintainable.</span>
+<span>The story begins a couple of months ago, when I was casually browsing through recent pull requests for </span><a href="http://github.com/rust-lang/rust/"><span>rust-lang/rust</span></a><span>.</span>
+<span>I was probably waiting for my code to compile at that moment :]</span>
+<span>Anyway, a </span><a href="https://github.com/rust-lang/rust/pull/58061"><span>pull request</span></a><span> caught my attention, and, while I was reading the diff, I noticed a usage of </span><code>unsafe</code><span>.</span>
+<span>It looked roughly like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">map_in_place</span>&lt;T, F&gt;(t: &amp;<span class="hl-keyword">mut</span> T, f: F)</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">    F: <span class="hl-title function_ invoke__">FnOnce</span>(T) <span class="hl-punctuation">-&gt;</span> T,</span>
+<span class="line">{</span>
+<span class="line">    <span class="hl-keyword">unsafe</span> { std::ptr::<span class="hl-title function_ invoke__">write</span>(t, <span class="hl-title function_ invoke__">f</span>(std::ptr::<span class="hl-title function_ invoke__">read</span>(t))); }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This function applies a </span><code>T -&gt; T</code><span> function to a </span><code>&amp;mut T</code><span> value, a-la </span><a href="https://crates.io/crates/take_mut"><code>take_mut</code></a><span> crate.</span></p>
+<p><span>There is a safe way to do this in Rust, by temporary replacing the value with something useless (</span><a href="http://giphygifs.s3.amazonaws.com/media/MS0fQBmGGMaRy/giphy.gif"><span>Jones</span>&rsquo;<span>s trick</span></a><span>):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">map_in_place_safe</span>&lt;T, F&gt;(t: &amp;<span class="hl-keyword">mut</span> T, f: F)</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">    F: <span class="hl-title function_ invoke__">FnOnce</span>(T) <span class="hl-punctuation">-&gt;</span> T,</span>
+<span class="line">    T: <span class="hl-built_in">Default</span>,</span>
+<span class="line">{</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">stolen_t</span> = std::mem::<span class="hl-title function_ invoke__">replace</span>(t, T::<span class="hl-title function_ invoke__">default</span>());</span>
+<span class="line">    t = <span class="hl-title function_ invoke__">f</span>(stolen_t)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>In </span><code>map_in_place</code><span> we don</span>&rsquo;<span>t have a </span><code>T: Default</code><span> bound, so the trick is not applicable.</span>
+<span>Instead, the function uses (</span><code>unsafe</code><span>) </span><code>ptr::read</code><span> to get an owned value out of a unique reference, and then uses </span><code>ptr::write</code><span> to store the new value back, without calling the destructor.</span></p>
+<p><span>However, the code has a particular </span><code>unsafe</code><span> code smell: it calls user-supplied code (</span><code>f</code><span>) from within an </span><code>unsafe</code><span> block.</span>
+<span>This is usually undesirable, because it makes reasoning about invariants harder: arbitrary code can do arbitrary unexpected things.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>In this particular case, </span>&ldquo;<span>user code</span>&rdquo;<span> is clearly visible: it is literally a user-supplied closure.</span>
+<span>The problem is not always that obvious: for example, arbitrary code might hide behind an innocent-looking </span><code>&lt;</code><span> operator that is invoked on a generic </span><code>T: Ord</code><span>.</span></p>
+</div>
+</aside><p><span>And, indeed, this function is unsound: if </span><code>f</code><span> panics and unwinds, the </span><code>t</code><span> value would be dropped twice!</span>
+<span>The solution here (which I know from the </span><code>take_mut</code><span> crate) is to just abort the process if the closure panics.</span>
+<span>Stern, but effective!</span></p>
+<p><span>I felt really torn about bringing this issue up: clearly, inside the compiler we know what we are doing, and the error case seems extremely marginal.</span>
+<span>Nevertheless, I did leave the comment, and the abort trick was implemented.</span></p>
+<p><span>And guess what?</span>
+<span>Today a bug report came in (</span><a href="https://github.com/rust-lang/rust/issues/62894"><span>#62894</span></a><span>), demonstrating that closure does panic in some cases, and </span><code>rustc</code><span> aborts.</span>
+<span>To be clear, the abort in this case </span><em><span>is a good thing</span></em><span>!</span>
+<span>If rustc didn</span>&rsquo;<span>t abort, it would be a use-after-free.</span></p>
+<p><span>Note how cool is this: a casual code-reviewer was able to prevent a memory-safety issue by looking at just a single one-line function.</span>
+<span>This was possible for two reasons:</span></p>
+<ol>
+<li>
+<span>The code was marked </span><code>unsafe</code><span> which made it stand out.</span>
+</li>
+<li>
+<span>The safety reasoning was purely local: I didn</span>&rsquo;<span>t need to understand the PR (or surrounding code) as a whole to reason about the </span><code>unsafe</code><span> block.</span>
+</li>
+</ol>
+<p><span>The last bullet point is especially interesting, because it is what makes type systems  </span><sup><span>[1]</span></sup><span> in general effective in large-scale software development:</span></p>
+<ol>
+<li>
+<span>Checking types is a local (per-expression, per-function, per-module, depending on the language) procedure.</span>
+<span>Every step is almost trivial: verify that sub-expressions have the right type and work out the result type.</span>
+</li>
+<li>
+<span>Together, these local static checks guarantee a highly non-trivial global property:</span>
+<span>during runtime, actual types of all the values match inferred static types of variables.</span>
+</li>
+</ol>
+<p><span>Rust</span>&rsquo;<span>s </span><code>unsafe</code><span> is similar: if we verify every usage of </span><code>unsafe</code><span> (local property!) to be correct, then we guarantee that the program as a whole does not contain undefined behavior.</span></p>
+<p><span>The devil is in the details, however, so the reality is slightly more nuanced.</span></p>
+<p><em><span>First</span></em><span>, </span><code>unsafe</code><span> should be checked by humans, thus a human-assisted type system.</span>
+<span>The problem with humans, however, is that they make mistakes all the time.</span></p>
+<p><em><span>Second</span></em><span>, checking </span><code>unsafe</code><span> can involve a rather large chunk of code.</span>
+<span>For example, if you implement </span><code>Vec</code><span>, you can (safely) write to its </span><code>length</code><span> field from anywhere in the defining module.</span>
+<span>That means that correctness of </span><code>Deref</code><span> impl for </span><code>Vec</code><span> depends on the whole module.</span>
+<span>Common wisdom says that the boundary for </span><code>unsafe</code><span> code is a module, but I would love to see a more precise characteristic.</span>
+<span>For example, in </span><code>map_in_place</code><span> case it</span>&rsquo;<span>s pretty clear that only a single function should be examined.</span>
+<span>On the other hand, if </span><code>Vec</code>&rsquo;<span>s field are </span><code>pub(super)</code><span>, parent module should be scrutinized as well.</span></p>
+<p><em><span>Third</span></em><span>, it</span>&rsquo;<span>s trivial to make all </span><code>unsafe</code><span> blocks technically correct by just making every function </span><code>unsafe</code><span>.</span>
+<span>That wouldn</span>&rsquo;<span>t be a useful thing to do though!</span>
+<span>Similarly, if </span><code>unsafe</code><span> is used willy-nilly across the ecosystem, its value is decreased, because there would be many incorrect </span><code>unsafe</code><span> blocks, and reviewing each additional block would be harder.</span></p>
+<p><em><span>Fourth</span></em><span>, and probably most disturbing, correctness of two </span><code>unsafe</code><span> blocks in isolation </span><a href="http://smallcultfollowing.com/babysteps/blog/2016/10/02/observational-equivalence-and-unsafe-code/"><span>does not guarantee</span></a><span> that they together are correct!</span>
+<span>We shouldn</span>&rsquo;<span>t panic though: in practice, realistic usages of </span><code>unsafe</code><span> do compose.</span></p>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/chvl50/blog_post_unsafe_as_a_humanassisted_type_system/"><span>r/rust</span></a><span>.</span></p>
+<p><strong><strong><span>Update(2020-08-17):</span></strong></strong><span> oops, </span><a href="https://lobste.rs/s/9e7o8e/comparative_unsafety#c_btqrdt"><span>I did it again</span></a><span>.</span></p>
+<p><span>[1] </span><code>unsafe</code><span> is really an effect system, but the difference is not important here.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2019-07-25-unsafe-as-a-type-system.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

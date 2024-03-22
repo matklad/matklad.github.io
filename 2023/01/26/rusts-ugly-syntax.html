@@ -1,0 +1,328 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rust's Ugly Syntax</title>
+  <meta name="description" content="People complain about Rust syntax.
+I think that most of the time when people think they have an issue with Rust's syntax, they actually object to Rust's semantics.
+In this slightly whimsical post, I'll try to disentangle the two.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/01/26/rusts-ugly-syntax.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Rust</span>&rsquo;<span>s Ugly Syntax</span> <time datetime="2023-01-26">Jan 26, 2023</time></h1>
+<p><span>People complain about Rust syntax.</span>
+<span>I think that most of the time when people think they have an issue with Rust</span>&rsquo;<span>s syntax, they actually object to Rust</span>&rsquo;<span>s semantics.</span>
+<span>In this slightly whimsical post, I</span>&rsquo;<span>ll try to disentangle the two.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with an example of an ugly Rust syntax:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">read</span>&lt;P: <span class="hl-built_in">AsRef</span>&lt;Path&gt;&gt;(path: P) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt; {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">inner</span>(path: &amp;Path) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">file</span> = File::<span class="hl-title function_ invoke__">open</span>(path)?;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">bytes</span> = <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">    file.<span class="hl-title function_ invoke__">read_to_end</span>(&amp;<span class="hl-keyword">mut</span> bytes)?;</span>
+<span class="line">    <span class="hl-title function_ invoke__">Ok</span>(bytes)</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-title function_ invoke__">inner</span>(path.<span class="hl-title function_ invoke__">as_ref</span>())</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This function reads contents of a given binary file.</span>
+<span>This is lifted straight from the standard library, so it is very much not a strawman example.</span>
+<span>And, at least to me, it</span>&rsquo;<span>s definitely not a pretty one!</span></p>
+<p><span>Let</span>&rsquo;<span>s try to imagine what this same function would look like if Rust had a better syntax.</span>
+<span>Any resemblance to real programming languages, living or dead, is purely coincidental!</span></p>
+<p><span>Let</span>&rsquo;<span>s start with Rs++:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">template</span>&lt;std::HasConstReference&lt;std::Path&gt; P&gt;</span>
+<span class="line">std::io::outcome&lt;std::vector&lt;<span class="hl-type">uint8_t</span>&gt;&gt;</span>
+<span class="line">std::<span class="hl-built_in">read</span>(P path) {</span>
+<span class="line">    <span class="hl-keyword">return</span> <span class="hl-built_in">read_</span>(path.<span class="hl-built_in">as_reference</span>());</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-type">static</span></span>
+<span class="line">std::io::outcome&lt;std::vector&lt;<span class="hl-type">uint8_t</span>&gt;&gt;</span>
+<span class="line"><span class="hl-built_in">read_</span>(&amp;<span class="hl-keyword">auto</span> <span class="hl-type">const</span> std::Path path) {</span>
+<span class="line">    <span class="hl-keyword">auto</span> file = <span class="hl-keyword">try</span> std::File::<span class="hl-built_in">open</span>(path);</span>
+<span class="line">    std::vector bytes;</span>
+<span class="line">    <span class="hl-keyword">try</span> file.<span class="hl-built_in">read_to_end</span>(&amp;bytes);</span>
+<span class="line">    <span class="hl-keyword">return</span> <span class="hl-built_in">okey</span>(bytes);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>A Rhodes variant:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">public</span> io.Result&lt;ArrayList&lt;Byte&gt;&gt; read&lt;P <span class="hl-keyword">extends</span> <span class="hl-title class_">ReferencingFinal</span>&lt;Path&gt;&gt;(</span>
+<span class="line">        P path) {</span>
+<span class="line">    <span class="hl-keyword">return</span> myRead(path.get_final_reference());</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">private</span> io.Result&lt;ArrayList&lt;Byte&gt;&gt; <span class="hl-title function_">myRead</span><span class="hl-params">(</span></span>
+<span class="line"><span class="hl-params">        <span class="hl-keyword">final</span> reference lifetime <span class="hl-keyword">var</span> Path path)</span> {</span>
+<span class="line">    <span class="hl-type">var</span> <span class="hl-variable">file</span> <span class="hl-operator">=</span> <span class="hl-keyword">try</span> File.open(path);</span>
+<span class="line">    ArrayList&lt;Byte&gt; bytes = ArrayList.new();</span>
+<span class="line">    <span class="hl-keyword">try</span> file.readToEnd(borrow bytes);</span>
+<span class="line">    <span class="hl-keyword">return</span> Success(bytes);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Typical RhodesScript:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">public <span class="hl-keyword">function</span> read&lt;P <span class="hl-keyword">extends</span> <span class="hl-title class_">IncludingRef</span>&lt;<span class="hl-title class_">Path</span>&gt;&gt;(</span>
+<span class="line">    <span class="hl-attr">path</span>: P,</span>
+<span class="line">): io.<span class="hl-property">Result</span>&lt;<span class="hl-title class_">Array</span>&lt;byte&gt;&gt; {</span>
+<span class="line">    <span class="hl-keyword">return</span> <span class="hl-title function_">myRead</span>(path.<span class="hl-title function_">included_ref</span>());</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">private <span class="hl-keyword">function</span> <span class="hl-title function_">myRead</span>(<span class="hl-params"></span></span>
+<span class="line"><span class="hl-params">    path: &amp;<span class="hl-keyword">const</span> Path,</span></span>
+<span class="line"><span class="hl-params"></span>): io.<span class="hl-property">Result</span>&lt;<span class="hl-title class_">Array</span>&lt;byte&gt;&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> file = <span class="hl-keyword">try</span> <span class="hl-title class_">File</span>.<span class="hl-title function_">open</span>(path);</span>
+<span class="line">    <span class="hl-title class_">Array</span>&lt;byte&gt; bytes = <span class="hl-title class_">Array</span>.<span class="hl-title function_">new</span>()</span>
+<span class="line">    <span class="hl-keyword">try</span> file.<span class="hl-title function_">readToEnd</span>(&amp;bytes)</span>
+<span class="line">    <span class="hl-keyword">return</span> <span class="hl-title class_">Ok</span>(bytes);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Rattlesnake:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">def</span> <span class="hl-title function_">read</span>[P: Refing[Path]](path: P): io.Result[<span class="hl-type">List</span>[byte]]:</span>
+<span class="line">    <span class="hl-keyword">def</span> <span class="hl-title function_">inner</span>(<span class="hl-params">path: @Path</span>): io.Result[<span class="hl-type">List</span>[byte]]:</span>
+<span class="line">        file := <span class="hl-keyword">try</span> File.<span class="hl-built_in">open</span>(path)</span>
+<span class="line">        <span class="hl-built_in">bytes</span> := <span class="hl-type">List</span>.new()</span>
+<span class="line">        <span class="hl-keyword">try</span> file.read_to_end(@: <span class="hl-built_in">bytes</span>)</span>
+<span class="line">        <span class="hl-keyword">return</span> Ok(<span class="hl-built_in">bytes</span>)</span>
+<span class="line">    <span class="hl-keyword">return</span> inner(path.ref)</span></code></pre>
+
+</figure>
+<p><span>And, to conclude, CrabML:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">read :: 'p  ref_of =&gt; 'p -&gt; u8 vec io.either.t</span>
+<span class="line">let read p =</span>
+<span class="line">  let</span>
+<span class="line">    inner :: &amp;path -&gt; u8 vec.t io.either.t</span>
+<span class="line">    inner p =</span>
+<span class="line">      let mut file = try (File.open p) in</span>
+<span class="line">      let mut bytes = vec.new () in</span>
+<span class="line">      try (file.read_to_end (&amp;mut bytes)); Right bytes</span>
+<span class="line">  in</span>
+<span class="line">    ref_op p |&gt; inner</span>
+<span class="line">;;</span></code></pre>
+
+</figure>
+<p><span>As a slightly more serious and useful exercise, let</span>&rsquo;<span>s do the opposite </span>&mdash;<span> keep the Rust syntax, but try to simplify semantics until the end result looks presentable.</span></p>
+<p><span>Here</span>&rsquo;<span>s our starting point:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">read</span>&lt;P: <span class="hl-built_in">AsRef</span>&lt;Path&gt;&gt;(path: P) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt; {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">inner</span>(path: &amp;Path) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">file</span> = File::<span class="hl-title function_ invoke__">open</span>(path)?;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">bytes</span> = <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">    file.<span class="hl-title function_ invoke__">read_to_end</span>(&amp;<span class="hl-keyword">mut</span> bytes)?;</span>
+<span class="line">    <span class="hl-title function_ invoke__">Ok</span>(bytes)</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-title function_ invoke__">inner</span>(path.<span class="hl-title function_ invoke__">as_ref</span>())</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The biggest source of noise here is the nested function.</span>
+<span>The motivation for it is somewhat esoteric.</span>
+<span>The outer function is generic, while the inner function isn</span>&rsquo;<span>t.</span>
+<span>With the current compilation model, that means that the outer function is compiled together with the user</span>&rsquo;<span>s code, gets inlined and is optimized down to nothing.</span>
+<span>In contrast, the inner function is compiled when the std itself is being compiled, saving time when compiling user</span>&rsquo;<span>s code.</span>
+<span>One way to simplify this (losing a bit of performance) is to say that generic functions are always separately compiled, but accept an extra runtime argument under the hood which describes the physical dimension of input parameters.</span></p>
+<p><span>With that, we get</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">read</span>&lt;P: <span class="hl-built_in">AsRef</span>&lt;Path&gt;&gt;(path: P) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">file</span> = File::<span class="hl-title function_ invoke__">open</span>(path.<span class="hl-title function_ invoke__">as_ref</span>())?;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">bytes</span> = <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  file.<span class="hl-title function_ invoke__">read_to_end</span>(&amp;<span class="hl-keyword">mut</span> bytes)?;</span>
+<span class="line">  <span class="hl-title function_ invoke__">Ok</span>(bytes)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The next noisy element is the </span><code>&lt;P: AsRef&lt;Path&gt;&gt;</code><span> constraint.</span>
+<span>It is needed because Rust loves exposing physical layout of bytes in memory as an interface, specifically for cases where that brings performance.</span>
+<span>In particular, the meaning of </span><code>Path</code><span> is not that it is some abstract representation of a file path, but that it is just literally a bunch of contiguous bytes in memory.</span>
+<span>So we need </span><code>AsRef</code><span> to make this work with </span><em><span>any</span></em><span> abstraction which is capable of representing such a slice of bytes.</span>
+<span>But if we don</span>&rsquo;<span>t care about performance, we can require that all interfaces are fairly abstract and mediated via virtual function calls, rather than direct memory access.</span>
+<span>Then we won</span>&rsquo;<span>t need </span><code>AsRef</code><span>at all:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">read</span>(path: &amp;Path) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">file</span> = File::<span class="hl-title function_ invoke__">open</span>(path)?;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">bytes</span> = <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  file.<span class="hl-title function_ invoke__">read_to_end</span>(&amp;<span class="hl-keyword">mut</span> bytes)?;</span>
+<span class="line">  <span class="hl-title function_ invoke__">Ok</span>(bytes)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Having done this, we can actually get rid of </span><code>Vec&lt;u8&gt;</code><span> as well </span>&mdash;<span> we can no longer use generics to express efficient growable array of bytes in the language itself.</span>
+<span>We</span>&rsquo;<span>d have to use some opaque </span><code>Bytes</code><span> type provided by the runtime:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">read</span>(path: &amp;Path) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;Bytes&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">file</span> = File::<span class="hl-title function_ invoke__">open</span>(path)?;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">bytes</span> = Bytes::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  file.<span class="hl-title function_ invoke__">read_to_end</span>(&amp;<span class="hl-keyword">mut</span> bytes)?;</span>
+<span class="line">  <span class="hl-title function_ invoke__">Ok</span>(bytes)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Technically, we are still carrying ownership and borrowing system with us, but, without direct control over memory layout of types, it no longer brings massive performance benefits.</span>
+<span>It still helps to avoid GC, prevent iterator invalidation, and statically check that non-thread-safe code isn</span>&rsquo;<span>t actually used across threads.</span>
+<span>Still, we can easily get rid of those &amp;-pretzels if we just switch to GC.</span>
+<span>We don</span>&rsquo;<span>t even need to worry about concurrency much </span>&mdash;<span> as our objects are separately allocated and always behind a pointer, we can hand-wave data races away by noticing that operations with pointer-sized things are atomic on x86 anyway.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">read</span>(path: Path) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;Bytes&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">file</span> = File::<span class="hl-title function_ invoke__">open</span>(path)?;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">bytes</span> = Bytes::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  file.<span class="hl-title function_ invoke__">read_to_end</span>(bytes)?;</span>
+<span class="line">  <span class="hl-title function_ invoke__">Ok</span>(bytes)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Finally, we are being overly pedantic with error handling here </span>&mdash;<span> not only we mention a possibility of failure in the return type, we even use </span><code>?</code><span> to highlight any specific expression that might fail.</span>
+<span>It would be much simpler to not think about error handling at all, and let some top-level</span><br>
+<code>try { } catch (...) { /* intentionally empty */ }</code><br>
+<span>handler deal with it:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">read</span>(path: Path) <span class="hl-punctuation">-&gt;</span> Bytes {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">file</span> = File::<span class="hl-title function_ invoke__">open</span>(path);</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">bytes</span> = Bytes::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  file.<span class="hl-title function_ invoke__">read_to_end</span>(bytes);</span>
+<span class="line">  bytes</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><strong><strong><span>Much</span></strong></strong><span> better now!</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-01-26-rusts-ugly-syntax.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

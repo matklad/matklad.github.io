@@ -1,0 +1,159 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARCHITECTURE.md</title>
+  <meta name="description" content="If you maintain an open-source project in the range of 10k-200k lines of code, I strongly encourage you to add an ARCHITECTURE document next to README and CONTRIBUTING.
+Before going into the details of why and how, I want to emphasize that this is not another docs are good, write more docs advice.
+I am pretty sloppy about documentation, and, e.g., I often use just simplify as a commit message.
+Nonetheless, I feel strongly about the issue, even to the point of pestering you :-)">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2021/02/06/ARCHITECTURE.md.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>ARCHITECTURE.md</span> <time datetime="2021-02-06">Feb 6, 2021</time></h1>
+<p><span>If you maintain an open-source project in the range of 10k-200k lines of code, I strongly encourage you to add an </span><code>ARCHITECTURE</code><span> document next to </span><code>README</code><span> and </span><code>CONTRIBUTING</code><span>.</span>
+<span>Before going into the details of why and how, I want to emphasize that this is not another </span>&ldquo;<span>docs are good, write more docs</span>&rdquo;<span> advice.</span>
+<span>I am pretty sloppy about documentation, and, e.g., I often use just </span>&ldquo;<span>simplify</span>&rdquo;<span> as a commit message.</span>
+<span>Nonetheless, I feel strongly about the issue, even to the point of pestering you :-)</span></p>
+<p><span>I have experience with both contributing to and maintaining open-source projects.</span>
+<span>One of the lessons I</span>&rsquo;<span>ve learned is that the biggest difference between an occasional contributor and a core developer lies in the knowledge about the physical architecture of the project.</span>
+<span>Roughly, it takes 2x more time to write a patch if you are unfamiliar with the project, but it takes 10x more time to figure out </span><em><span>where</span></em><span> you should change the code.</span>
+<span>This difference might be hard to perceive if you</span>&rsquo;<span>ve been working with the project for a while.</span>
+<span>If I am new to a code base, I read each file as a sequence of logical chunks specified in some pseudo-random order.</span>
+<span>If I</span>&rsquo;<span>ve made significant contributions before, the perception is quite different.</span>
+<span>I have a mental map of the code in my head, so I no longer read sequentially.</span>
+<span>Instead, I just jump to where the thing should be, and, if it is not there, I move it.</span>
+<span>One</span>&rsquo;<span>s mental map is the source of truth.</span></p>
+<p><span>I find the </span><code>ARCHITECTURE</code><span> file to be a low-effort high-leverage way to bridge this gap.</span>
+<span>As the name suggests, this file should describe the high-level architecture of the project.</span>
+<span>Keep it short: every recurring contributor will have to read it.</span>
+<span>Additionally, the shorter it is, the less likely it will be invalidated by some future change.</span>
+<span>This is the main rule of thumb for </span><code>ARCHITECTURE</code><span> </span>&mdash;<span> only specify things that are unlikely to frequently change.</span>
+<span>Don</span>&rsquo;<span>t try to keep it synchronized with code.</span>
+<span>Instead, revisit it a couple of times a year.</span></p>
+<p><span>Start with a bird</span>&rsquo;<span>s eye overview of the problem being solved.</span>
+<span>Then, specify a more-or-less detailed </span><em><span>codemap</span></em><span>.</span>
+<span>Describe coarse-grained modules and how they relate to each other.</span>
+<span>The codemap should answer </span>&ldquo;<span>where</span>&rsquo;<span>s the thing that does X?</span>&rdquo;<span>.</span>
+<span>It should also answer </span>&ldquo;<span>what does the thing that I am looking at do?</span>&rdquo;<span>.</span>
+<span>Avoid going into details of </span><em><span>how</span></em><span> each module works, pull this into separate documents or (better) inline documentation.</span>
+<span>A codemap is a map of a country, not an atlas of maps of its states.</span>
+<span>Use this as a chance to reflect on the project structure.</span>
+<span>Are the things you want to put near each other in the codemap adjacent when you run </span><code>tree .</code><span>?</span></p>
+<p><em><span>Do</span></em><span> name important files, modules, and types.</span>
+<span>Do </span><em><span>not</span></em><span> directly link them (links go stale).</span>
+<span>Instead, encourage the reader to use symbol search to find the mentioned entities by name.</span>
+<span>This doesn</span>&rsquo;<span>t require maintenance and will help to discover related, similarly named things.</span></p>
+<p><span>Explicitly call-out architectural invariants.</span>
+<span>Often, important invariants are expressed as an </span><em><span>absence</span></em><span> of something, and it</span>&rsquo;<span>s pretty hard to divine that from reading the code.</span>
+<span>Think about a common example from web development: nothing in the model layer specifically doesn</span>&rsquo;<span>t depend on the views.</span></p>
+<p><span>Point out boundaries between layers and systems as well.</span>
+<span>A boundary implicitly contains information about the implementation of the system behind it.</span>
+<span>It even constrains all </span><em><span>possible</span></em><span> implementations.</span>
+<span>But finding a boundary by just randomly looking at the code is hard </span>&mdash;<span> good boundaries have measure zero.</span></p>
+<p><span>After finishing the codemap, add a separate section on cross-cutting concerns.</span></p>
+<p><span>A good example of </span><code>ARCHITECTURE</code><span> document is this one from rust-analyzer:</span>
+<a href="https://github.com/rust-analyzer/rust-analyzer/blob/d7c99931d05e3723d878bea5dc26766791fa4e69/docs/dev/architecture.md"><span>architecture.md</span></a><span>.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>This post is a part of </span><a href="https://matklad.github.io/2021/09/05/Rust100k.html"><span>One Hundred Thousand Lines of Rust</span></a><span> series.</span></p>
+</div>
+</aside></article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2021-02-06-ARCHITECTURE.md.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

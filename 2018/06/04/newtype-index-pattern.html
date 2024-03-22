@@ -1,0 +1,331 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Newtype Index Pattern</title>
+  <meta name="description" content="Similarly to the previous post, we will once again add types to the Rust
+code which works perfectly fine without them. This time, we'll try to improve
+the pervasive pattern of using indexes to manage cyclic data structures.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2018/06/04/newtype-index-pattern.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Newtype Index Pattern</span> <time datetime="2018-06-04">Jun 4, 2018</time></h1>
+<p><span>Similarly to the </span><a href="/2018/05/24/typed-key-pattern.html"><span>previous post</span></a><span>, we will once again add types to the Rust</span>
+<span>code which works perfectly fine without them. This time, we</span>&rsquo;<span>ll try to improve</span>
+<span>the pervasive pattern of using indexes to manage cyclic data structures.</span></p>
+<section id="The-problem">
+
+    <h2>
+    <a href="#The-problem"><span>The problem</span> </a>
+    </h2>
+<p><span>Often one wants to work with a data structure which contains a cycle</span>
+<span>of some form: object </span><code>foo</code><span> references </span><code>bar</code><span>, which references </span><code>baz</code>
+<span>which references </span><code>foo</code><span> again. The textbook example here is a graph of</span>
+<span>vertices and edges. In practice, however, true graphs are a rare</span>
+<span>encounter. Instead, you are more likely to see a tree with parent</span>
+<span>pointers, which contains a lot of trivial cycles. And sometimes cyclic</span>
+<span>graphs are implicit: an </span><code>Employee</code><span> can be the head of a </span><code>Departement</code><span>,</span>
+<span>and </span><code>Departement</code><span> has a </span><code>Vec&lt;Employee&gt;</code><span> personal. This is sort-of a</span>
+<span>graph in disguise: in usual graphs, all vertices are of the same type,</span>
+<span>and here </span><code>Employee</code><span> and </span><code>Departement</code><span> are different types.</span></p>
+<p><span>Working with such data structures is hard in any language. To arrive</span>
+<span>at a situation when </span><code>A</code><span> points to </span><code>B</code><span> which points back to </span><code>A</code><span>, some</span>
+<span>form of mutability is required. Indeed, either </span><code>A</code><span> or </span><code>B</code><span> must be</span>
+<span>created first, and so it can not point to the other immediately after</span>
+<span>construction. You can paper over this mutability with </span><code>let rec</code><span>, as in</span>
+<span>OCaml, or with laziness, as in Haskell, but it is still there.</span></p>
+<p><span>Rust tends to surface subtle problems in the form of compile-time</span>
+<span>errors, so implementing such graphs in Rust is challenging. The three</span>
+<span>usual approaches are:</span></p>
+<ul>
+<li>
+<span>reference counting, explanation by </span><a href="https://github.com/nrc/r4cppp/blob/master/graphs/README.md#rcrefcellnode"><span>nrc</span></a><span>,</span>
+</li>
+<li>
+<span>arena and real cyclic references, explanation by</span>
+<a href="https://exyr.org/2018/rust-arenas-vs-dropck/"><span>simonsapin</span></a><span> (this one is really neat!),</span>
+</li>
+<li>
+<span>arena and integer indices, explanation by </span><a href="http://smallcultfollowing.com/babysteps/blog/2015/04/06/modeling-graphs-in-rust-using-vector-indices/"><span>nikomatsakis</span></a><span>.</span>
+</li>
+</ul>
+<p><span>(apparently, rewriting a Haskell monad tutorial in Rust results in a</span>
+<span>graphs blog post).</span></p>
+<p><span>I personally like the indexing approach the most. However it presents</span>
+<span>an interesting readability challenge. With references, you have a</span>
+<code>foo</code><span> of type </span><code>&amp;Foo</code><span>, and it is immediately clear what that </span><code>foo</code><span> is,</span>
+<span>and what you can do with it. With indexes, however, you have a </span><code>foo:
+usize</code><span>, and it is not obvious that you somehow can get a </span><code>Foo</code><span>. Even</span>
+<span>worse, if indexes are used for two types of objects, like </span><code>Foo</code><span> and</span>
+<code>Bar</code><span>, you may end up with </span><code>thing: usize</code><span>. While writing the code with</span>
+<code>usize</code><span> actually works pretty well (I don</span>&rsquo;<span>t think I</span>&rsquo;<span>ve ever used the</span>
+<span>wrong index type), reading it later is more complicated, because</span>
+<code>usize</code><span> is much less suggestive of what you could do.</span></p>
+</section>
+<section id="Newtype-trick">
+
+    <h2>
+    <a href="#Newtype-trick"><span>Newtype trick</span> </a>
+    </h2>
+<p><span>One way to ameliorate this problem is to introduce a newtype wrapper</span>
+<span>around </span><code>usize</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Foo</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]</span></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">FooIdx</span>(<span class="hl-type">usize</span>);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Arena</span> {</span>
+<span class="line">    foos: <span class="hl-type">Vec</span>&lt;Foo&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Arena</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">foo</span>(&amp;<span class="hl-keyword">self</span>, foo: FooIdx) <span class="hl-punctuation">-&gt;</span> &amp;Foo {</span>
+<span class="line">        &amp;<span class="hl-keyword">self</span>.foos[foo.<span class="hl-number">0</span>]</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, </span>&ldquo;<span>one should use </span><code>FooIdx</code><span> to index into </span><code>Vec&lt;Foo&gt;</code>&rdquo;<span> is still just</span>
+<span>a convention. A cool thing about Rust is that we can turn this</span>
+<span>convention into a property verified during type checking. By adding an</span>
+<span>appropriate impl, we should be able to index into </span><code>Vec&lt;Foo&gt;</code><span> with</span>
+<code>FooIdx</code><span> directly:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">direct_indexing</span>(foos: <span class="hl-type">Vec</span>&lt;Foo&gt;, idx: FooIdx) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">_foo</span>: &amp;Foo = &amp;foos[idx];</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The impl would look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::ops;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">ops</span>::Index&lt;FooIdx&gt; <span class="hl-keyword">for</span> <span class="hl-title class_">Vec</span>&lt;Foo&gt; {</span>
+<span class="line">    <span class="hl-keyword">type</span> <span class="hl-title class_">Output</span> = Foo;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">index</span>(&amp;<span class="hl-keyword">self</span>, index: FooIdx) <span class="hl-punctuation">-&gt;</span> &amp;Foo {</span>
+<span class="line">        &amp;<span class="hl-keyword">self</span>[index.<span class="hl-number">0</span>]</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Coherence">
+
+    <h2>
+    <a href="#Coherence"><span>Coherence</span> </a>
+    </h2>
+<p><span>It</span>&rsquo;<span>s insightful to study why this impl is allowed. In Rust, types,</span>
+<span>traits and impls are separate. This creates a room for a problem: what</span>
+<span>if there are two impl blocks for a given (trait, type) pair? The</span>
+<span>obvious choice is to forbid to have two impls in the first place, and</span>
+<span>this is what Rust does.</span></p>
+<p><span>Actually enforcing this restriction is tricky! The simplest rule of</span>
+&ldquo;<span>error if a set of crates currently compiled contains duplicate impls</span>&rdquo;
+<span>has severe drawbacks. First of all, this is a global check, which</span>
+<span>requires the knowledge of all compiled crates. This postpones the</span>
+<span>check until the later stages of compilation. It also plays awfully</span>
+<span>with dependencies, because two completely unrelated crates might fail</span>
+<span>the compilation if present simultaneously. What</span>&rsquo;<span>s more, it doesn</span>&rsquo;<span>t</span>
+<span>actually solve the problem, because the compiler does not necessary</span>
+<span>know the set of all crates beforehand. For example, you may load</span>
+<span>additional code at runtime via dynamic libraries, and silent bad</span>
+<span>things might happen if you program and dynamic library have duplicate</span>
+<span>impls.</span></p>
+<p><span>To be able to combine crates freely, we want a much stronger property:</span>
+<span>not only the set of crates currently compiled, but all existing and</span>
+<span>even future crates must not violate the one impl restriction. How on</span>
+<span>earth is it possible to check this? Should </span><code>cargo publish</code><span> look for</span>
+<span>conflicting impls across all of the crates.io?</span></p>
+<p><span>Luckily, and this is stunningly beautiful, it is possible to loosen</span>
+<span>this world-global property to a local one. In the simplest form, we</span>
+<span>can place a restriction that </span><code>impl Foo for Bar</code><span> can appear either in</span>
+<span>the crate that defines </span><code>Foo</code><span>, or in the one that defines</span>
+<code>Bar</code><span>. Crucially, whichever one defines the impl has to use the other,</span>
+<span>which makes it possible to detect the conflict.</span></p>
+<p><span>This is all really nifty, but we</span>&rsquo;<span>ve just defined an </span><code>Index</code><span> impl for</span>
+<code>Vec</code><span>, and both </span><code>Index</code><span> and </span><code>Vec</code><span> are from the standard library! How</span>
+<span>is it possible? The trick is that </span><code>Index</code><span> has a type parameter: </span><code>trait
+Index&lt;Idx: ?Sized&gt;</code><span>. It is a template for a trait of sorts, and we get</span>
+<span>a </span>&ldquo;<span>real</span>&rdquo;<span> trait when we substitute type parameter with a type. Because</span>
+<code>FooIdx</code><span> is a local type, the resulting </span><code>Index&lt;FromIdx&gt;</code><span> trait is also</span>
+<span>considered local. The precise rules here are quite tricky, </span><a href="https://github.com/rust-lang/rfcs/pull/2451"><span>this</span>
+<span>RFC</span></a><span> explains them pretty well.</span></p>
+</section>
+<section id="More-impls">
+
+    <h2>
+    <a href="#More-impls"><span>More impls</span> </a>
+    </h2>
+<p><span>Because </span><code>Index&lt;FooIdx&gt;</code><span> and </span><code>Index&lt;BarIdx&gt;</code><span> are different traits, one</span>
+<span>type can implement both of them. This is convenient for containers</span>
+<span>which hold distinct types:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Arena</span> {</span>
+<span class="line">    foos: <span class="hl-type">Vec</span>&lt;Foo&gt;,</span>
+<span class="line">    bars: <span class="hl-type">Vec</span>&lt;Bar&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">ops</span>::Index&lt;FooIdx&gt; <span class="hl-keyword">for</span> <span class="hl-title class_">Arena</span> { ... }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">ops</span>::Index&lt;BarIdx&gt; <span class="hl-keyword">for</span> <span class="hl-title class_">Arena</span> { ... }</span></code></pre>
+
+</figure>
+<p><span>It</span>&rsquo;<span>s also helpful to define arithmetic operations and conversions for</span>
+<span>the newtyped indexes. I</span>&rsquo;<span>ve put together a</span>
+<a href="https://crates.io/crates/typed_index_derive"><code>typed_index_derive</code></a><span> crate to automate this boilerplate via a</span>
+<span>proc macro, the end result looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[macro_use]</span></span>
+<span class="line"><span class="hl-keyword">extern</span> <span class="hl-keyword">crate</span> typed_index_derive;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Spam</span>(<span class="hl-type">String</span>);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(</span></span>
+<span class="line"><span class="hl-meta">    // Usual derives for plain old data</span></span>
+<span class="line"><span class="hl-meta">    Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash,</span></span>
+<span class="line"><span class="hl-meta"></span></span>
+<span class="line"><span class="hl-meta">    TypedIndex</span></span>
+<span class="line"><span class="hl-meta">)]</span></span>
+<span class="line"><span class="hl-meta">#[typed_index(Spam)]</span> <span class="hl-comment">// index into `&amp;[Spam]`</span></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">SpamIdx</span>(<span class="hl-type">usize</span>); <span class="hl-comment">// could be `u32` instead of `usize`</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">spams</span> = <span class="hl-built_in">vec!</span>[<span class="hl-title function_ invoke__">Spam</span>(<span class="hl-string">&quot;foo&quot;</span>.<span class="hl-title function_ invoke__">into</span>()), <span class="hl-title function_ invoke__">Spam</span>(<span class="hl-string">&quot;bar&quot;</span>.<span class="hl-title function_ invoke__">into</span>()), <span class="hl-title function_ invoke__">Spam</span>(<span class="hl-string">&quot;baz&quot;</span>.<span class="hl-title function_ invoke__">into</span>())];</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// Conversions between `usize` and `SpamIdx`</span></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">idx</span>: SpamIdx = <span class="hl-number">1</span>.<span class="hl-title function_ invoke__">into</span>();</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(<span class="hl-type">usize</span>::<span class="hl-title function_ invoke__">from</span>(idx), <span class="hl-number">1</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// Indexing `Vec&lt;Spam&gt;` with `SpamIdx`, `IndexMut` works as well</span></span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(&amp;spams[idx].<span class="hl-number">0</span>, <span class="hl-string">&quot;bar&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// Indexing `Vec&lt;usize&gt;` is rightfully forbidden</span></span>
+<span class="line">    <span class="hl-comment">// vec![1, 2, 3][idx]</span></span>
+<span class="line">    <span class="hl-comment">// error: slice indices are of type `usize` or ranges of `usize`</span></span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// It is possible to  add/subtract `usize` from an index</span></span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(&amp;spams[idx - <span class="hl-number">1</span>].<span class="hl-number">0</span>, <span class="hl-string">&quot;foo&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// The difference between two indices is `usize`</span></span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(idx - idx, <span class="hl-number">0usize</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/8ohaj4/blog_post_newtype_index_pattern/"><span>/r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2018-06-04-newtype-index-pattern.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

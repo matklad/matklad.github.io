@@ -1,0 +1,601 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fast Rust Builds</title>
+  <meta name="description" content="It's common knowledge that Rust code is slow to compile.
+But I have a strong gut feeling that most Rust code out there compiles much slower than it could.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2021/09/04/fast-rust-builds.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Fast Rust Builds</span> <time datetime="2021-09-04">Sep 4, 2021</time></h1>
+<p><span>It</span>&rsquo;<span>s common knowledge that Rust code is slow to compile.</span>
+<span>But I have a strong gut feeling that most Rust code out there compiles much slower than it could.</span></p>
+<p><span>As an example, one fairly recent </span><a href="https://kerkour.com/blog/rust-development-workflow/"><span>post</span></a><span> says:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>With Rust, on the other hand, it takes between </span><strong><strong><span>15 and 45 minutes</span></strong></strong><span> to run a CI pipeline, depending on your project and the power of your CI servers.</span></p>
+</blockquote>
+
+</figure>
+<p><span>This doesn</span>&rsquo;<span>t make sense to me.</span>
+<span>rust-analyzer CI takes </span><strong><strong><span>8</span></strong></strong><span> minutes on GitHub actions.</span>
+<span>It is a fairly large and complex project with 200k lines of own code and 1 million lines of dependencies on top.</span></p>
+<p><span>It is true that Rust is slow to compile in a rather fundamental way.</span>
+<span>It picked </span>&ldquo;<span>slow compiler</span>&rdquo;<span> in the </span><a href="https://research.swtch.com/generic"><span>generic dilemma</span></a><span>, and its overall philosophy prioritizes runtime over compile time (an excellent series of posts about that:</span>
+<a href="https://pingcap.com/blog/rust-compilation-model-calamity"><span>1</span></a><span>,</span>
+<a href="https://pingcap.com/blog/generics-and-compile-time-in-rust"><span>2</span></a><span>,</span>
+<a href="https://pingcap.com/blog/rust-huge-compilation-units"><span>3</span></a><span>,</span>
+<a href="https://pingcap.com/blog/reasons-rust-compiles-slowly"><span>4</span></a><span>).</span>
+<span>But </span><code>rustc</code><span> is not a slow compiler </span>&mdash;<span> it implements the most </span><a href="https://blog.jetbrains.com/kotlin/2020/09/the-dark-secrets-of-fast-compilation-for-kotlin/#:~:text=I%20think%20Rust%20qualifies%20as%20a%20counter%20example%20here]"><span>advanced incremental compilation</span></a><span> in industrial compilers, it takes advantage of compilation model based on proper modules (crates), and it has been </span><a href="https://blog.mozilla.org/nnethercote/2020/09/08/how-to-speed-up-the-rust-compiler-one-last-time/"><span>meticulously optimized</span></a><span>.</span>
+<span>Fast to compile Rust projects are a reality, even if they are not common.</span>
+<span>Admittedly, some care and domain knowledge is required to do that.</span></p>
+<p><span>So let</span>&rsquo;<span>s take a closer look at what did it take for us to keep the compilation time within reasonable bounds for rust-analyzer!</span></p>
+<section id="Why-Care-About-Build-Times">
+
+    <h2>
+    <a href="#Why-Care-About-Build-Times"><span>Why Care About Build Times</span> </a>
+    </h2>
+<p><span>One thing I want to make clear is that optimizing project</span>&rsquo;<span>s build time is in some sense busy-work.</span>
+<span>Reducing compilation time provides very small </span><em><span>direct</span></em><span> benefits to the users, and is pure accidental complexity.</span></p>
+<p><span>That being said, compilation time is a </span><em><em><span>multiplier</span></em></em><span> for basically everything.</span>
+<span>Whether you want to ship more features, to make code faster, to adapt to a change of requirements, or to attract new contributors, build time is a factor in that.</span></p>
+<p><span>It also is a non-linear factor.</span>
+<span>Just waiting for the compiler is the smaller problem.</span>
+<span>The big one is losing the state of the flow or (worse) mental context switch to do something else while the code is compiling.</span>
+<span>One minute of work for the compiler wastes more than one minute of work for the human.</span></p>
+<p><span>It</span>&rsquo;<span>s hard for me to quantify the impact, but my intuitive understanding is that, as soon as the project grows beyond several thousands lines written by a single person, build times become pretty darn important!</span></p>
+<p><span>The most devilish property of build times is that they creep up on you.</span>
+<span>While the project is small, build times are going to be acceptable.</span>
+<span>As projects grow incrementally, build times start to slowly increase as well.</span>
+<span>And if you let them grow, it might be rather hard to get them back in check later!</span></p>
+<p><span>If project is already too slow to compile, then:</span></p>
+<ul>
+<li>
+<span>Improving build times will be time consuming, because each iteration of </span>&ldquo;<span>try a change, trigger the build, measure improvement</span>&rdquo;<span> will take long time (yes, build times are a multiplier for everything, </span><em><span>including</span></em><span> build times themselves!)</span>
+</li>
+<li>
+<span>There won</span>&rsquo;<span>t be easy wins: in contrast to runtime performance, pareto principle doesn</span>&rsquo;<span>t work!</span>
+<span>If you write a thousand lines of code, maybe one hundred of them will be performance-sensitive, but each line will add to compile times!</span>
+</li>
+<li>
+<span>Small wins will seem too small until they add up: shaving off five seconds is a much bigger deal for a five minute build than for an hour-long build.</span>
+</li>
+<li>
+<span>Dually, small regressions will go unnoticed.</span>
+</li>
+</ul>
+<p><span>There</span>&rsquo;<span>s also a culture aspect to it: if you join a project and its CI takes one hour, then an hour-long CI is normal, right?</span></p>
+<p><span>Luckily, there</span>&rsquo;<span>s one simple trick to solve the problem of build times </span>&hellip;</p>
+</section>
+<section id="The-Silver-Bullet">
+
+    <h2>
+    <a href="#The-Silver-Bullet"><span>The Silver Bullet</span> </a>
+    </h2>
+<p><span>You need to care about build times, keep an eye on them, and fix them </span><em><span>before</span></em><span> they become a problem.</span>
+<span>Build times are a fairly easy optimization problem: it</span>&rsquo;<span>s trivial to get direct feedback (just time the build), there are a bunch of tools for profiling, and you don</span>&rsquo;<span>t even need to come up with a representative benchmark.</span>
+<span>The task is to optimize a particular project</span>&rsquo;<span>s build time, not performance of the compiler in general.</span>
+<span>That</span>&rsquo;<span>s a nice property of most instances of accidental complexity </span>&mdash;<span> they tend to be well defined engineering problems with well understood solutions.</span></p>
+<p><span>The only hard bit about compilation time is that you don</span>&rsquo;<span>t know that it is a problem until it actually is one!</span>
+<span>So, the most valuable thing you can get from this post is this:</span>
+<span>if you are working on a Rust project, take some time to optimize its build today, and try to repeat the exercise once in a while.</span></p>
+<p><span>Now, with the software engineering bits cleared, let</span>&rsquo;<span>s finally get to some actionable programming advice!</span></p>
+</section>
+<section id="bors">
+
+    <h2>
+    <a href="#bors"><span>bors</span> </a>
+    </h2>
+<p><span>I like to use CI time as one of the main metrics to keep an eye on.</span></p>
+<p><span>Part of that is that CI time is important in itself.</span>
+<span>While you are not bound by CI when developing features, CI time directly affects how annoying it is to context switch when finishing one piece of work and starting the next one.</span>
+<span>Juggling five outstanding PRs waiting for CI to complete is not productive.</span>
+<span>Longer CI also creates a pressure to </span><em><span>not</span></em><span> split the work into independent chunks.</span>
+<span>If correcting a typo requires keeping a PR tab open for half a hour, it</span>&rsquo;<span>s better to just make a drive by fix in the next feature branch, right?</span></p>
+<p><span>But a bigger part is that CI gives you a standardized benchmark.</span>
+<span>Locally, you compile incrementally, and the time of build varies greatly with the kinds of changes you are doing.</span>
+<span>Often, you compile just a subset of the project.</span>
+<span>Due to this inherent variability, local builds give poor continuous feedback about build times.</span>
+<span>Standardized CI though runs for every change and gives you a time series where numbers are directly comparable.</span></p>
+<p><span>To increase this standardization pressure of CI, I recommend following </span><a href="https://graydon2.dreamwidth.org/1597.html"><span>not rocket science rule</span></a><span> and setting up a merge robot which guarantees that every state of the main branch passes CI.</span>
+<a href="https://bors.tech"><span>bors</span></a><span> is a particular implementation I use, but there are others.</span></p>
+<p><span>While it</span>&rsquo;<span>s by far not the biggest reason to use something like bors, it gives two benefits for healthy compile times:</span></p>
+<ul>
+<li>
+<span>It ensures that every change goes via CI, and creates pressure to keep CI healthy overall</span>
+</li>
+<li>
+<span>The time between leaving </span><code>r+</code><span> comment on the PR and receiving the </span>&ldquo;<span>PR merged</span>&rdquo;<span> notification gives you an always on feedback loop.</span>
+<span>You don</span>&rsquo;<span>t need to specifically time the build, every PR is a build benchmark.</span>
+</li>
+</ul>
+</section>
+<section id="CI-Caching">
+
+    <h2>
+    <a href="#CI-Caching"><span>CI Caching</span> </a>
+    </h2>
+<p><span>If you think about it, it</span>&rsquo;<span>s pretty obvious how a good caching strategy for CI should work.</span>
+<span>It makes sense to cache stuff that changes rarely, but it</span>&rsquo;<span>s useless to cache frequently changing things.</span>
+<span>That is, cache all the dependencies, but don</span>&rsquo;<span>t cache project</span>&rsquo;<span>s own crates.</span></p>
+<p><span>Unfortunately, almost nobody does this.</span>
+<span>A </span><a href="https://github.com/actions/cache/blob/main/examples.md#rust---cargo"><span>typical example</span></a><span> would just cache the whole of </span><code>./target</code><span> directory.</span>
+<span>That</span>&rsquo;<span>s wrong </span>&mdash;<span> the </span><code>./target</code><span> is huge, and most of it is useless on CI.</span></p>
+<p><span>It</span>&rsquo;<span>s not super trivial to fix though </span>&mdash;<span> sadly, Cargo doesn</span>&rsquo;<span>t make it too easy to figure out which part of </span><code>./target</code><span> are durable dependencies, and which parts are volatile local crates.</span>
+<span>So, you</span>&rsquo;<span>ll need to write </span><a href="https://github.com/rust-analyzer/rust-analyzer/blob/94d9fc2a28ea5d97e3a9293b9dac05bdb00304cc/xtask/src/pre_cache.rs#L30-L53"><span>some code</span></a><span> to clean the </span><code>./target</code><span> before storing the cache.</span>
+<span>For GitHub actions in particular you can also use </span><a href="https://github.com/Swatinem/rust-cache"><span>Swatinem/rust-cache</span></a><span>.</span></p>
+</section>
+<section id="CI-Workflow">
+
+    <h2>
+    <a href="#CI-Workflow"><span>CI Workflow</span> </a>
+    </h2>
+<p><span>Caching is usually the low-hanging watermelon, but there are several more things to tweak.</span></p>
+<p><a href="https://github.com/rust-analyzer/rust-analyzer/blob/48f84a7b60bcbd7ec5fa6434d92d9e7a8eb9731b/.github/workflows/ci.yaml#L56-L61"><span>Split</span></a><span> CI into separate </span><code>cargo test --no-run</code><span> and </span><code>cargo test</code><span>.</span>
+<span>It is vital to know which part of your CI is the build, and which are the tests.</span></p>
+<p><a href="https://github.com/rust-analyzer/rust-analyzer/blob/25368d24308d6a94ffe8b99f0122bcf5a2175322/.github/workflows/ci.yaml#L11"><span>Disable</span></a><span> incremental compilation.</span>
+<span>CI builds often are closer to from-scratch builds, as changes are typically much bigger than from a local edit-compile cycle.</span>
+<span>For from-scratch builds, incremental adds an extra dependency-tracking overhead.</span>
+<span>It also significantly increases the amount of IO and the size of </span><code>./target</code><span>, which make caching less effective.</span></p>
+<p><a href="https://github.com/rust-analyzer/rust-analyzer/blob/48f84a7b60bcbd7ec5fa6434d92d9e7a8eb9731b/Cargo.toml#L6-L10"><span>Disable</span></a><span> debuginfo </span>&mdash;<span> it makes </span><code>./target</code><span> much bigger, which again harms caching.</span>
+<span>Depending on your preferred workflow, you might consider disabling debuginfo unconditionally, this brings some benefits for local builds as well.</span></p>
+<p><span>While we are at it, </span><a href="https://github.com/rust-analyzer/rust-analyzer/blob/3dae94bf2b3e496adb049da589c7efef272a39b8/.github/workflows/ci.yaml#L15"><span>add</span></a><span> </span><code>-D warnings</code><span> to the </span><code>RUSTFLAGS</code><span> environmental variable to deny warning for all crates at the same time.</span>
+<span>It</span>&rsquo;<span>s a bad idea to </span><code>#![deny(warnings)]</code><span> in code: you need to repeat it for every crate, it needlessly makes local development harder, and it might break your users when they upgrade their compiler.</span>
+<span>It might also make sense to bump cargo network retry limits.</span></p>
+</section>
+<section id="Read-The-Lockfile">
+
+    <h2>
+    <a href="#Read-The-Lockfile"><span>Read The Lockfile</span> </a>
+    </h2>
+<p><span>Another obvious advice is to use fewer, smaller dependencies.</span></p>
+<p><span>This is nuanced: libraries do solve actual problems, and it would be stupid to roll your own solution to something already solved by crates.io.</span>
+<span>And it</span>&rsquo;<span>s not like it</span>&rsquo;<span>s guaranteed that your solution will be smaller.</span></p>
+<p><span>But it</span>&rsquo;<span>s important to realise what problems your application is and is not solving.</span>
+<span>If you are building a CLI utility for thousands of people of to use, you absolutely need </span><a href="http://clap.rs"><span>clap</span></a><span> with all of its features.</span>
+<span>If you are writing a quick script to run during CI, which only the team will be using, it</span>&rsquo;<span>s probably fine to start with simplistic command line parsing, but faster builds.</span></p>
+<p><span>One </span><em><span>tremendously</span></em><span> useful exercise here is to read </span><code>Cargo.lock</code><span> (not </span><code>Cargo.toml</code><span>) and for each dependency think about the actual problem this dependency solves for the person in front of your application.</span>
+<span>It</span>&rsquo;<span>s very frequent that you</span>&rsquo;<span>ll find dependencies that just don</span>&rsquo;<span>t make sense at all, </span><em><span>in your context</span></em><span>.</span></p>
+<p><span>As an illustrative example, rust-analyzer depends on </span><code>regex</code><span>.</span>
+<span>This doesn</span>&rsquo;<span>t make sense </span>&mdash;<span> we have exact parsers and lexers for Rust and Markdown, we don</span>&rsquo;<span>t need to interpret regular expressions at runtime.</span>
+<code>regex</code><span> is also one of the heavier dependencies </span>&mdash;<span> it</span>&rsquo;<span>s a full implementation of a small language!</span>
+<span>The reason why this dependency is there is because the logging library we use allows to say something like:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">RUST_LOG=rust_analyzer=very complex filtering expression</span></code></pre>
+
+</figure>
+<p><span>where parsing of the filtering expression is done by regular expressions.</span></p>
+<p><span>This is undoubtedly a very useful feature to have for some applications, but in the context of rust-analyzer we don</span>&rsquo;<span>t need it.</span>
+<span>Simple </span><code>env_logger</code><span>-style filtering would be enough.</span></p>
+<p><span>Once you identify a similar redundant dependency, it</span>&rsquo;<span>s usually enough to tweak </span><code>features</code><span> field somewhere, or to send a PR upstream to make non-essential bits configurable.</span></p>
+<p><span>Sometimes it is a bigger yak to shave :)</span>
+<span>For example, rust-analyzer optionally use </span><code>jemalloc</code><span> crate, and its build script pulls in </span><a href="https://docs.rs/fs_extra"><code>fs_extra</code></a><span> and (of all the things!) </span><a href="https://docs.rs/paste"><code>paste</code></a><span>.</span>
+<span>The ideal solution here would be of course to have a production grade, stable, pure rust memory allocator.</span></p>
+</section>
+<section id="Profile-Before-Optimize">
+
+    <h2>
+    <a href="#Profile-Before-Optimize"><span>Profile Before Optimize</span> </a>
+    </h2>
+<p><span>Now that we</span>&rsquo;<span>ve dealt with things which are just sensible to do, it</span>&rsquo;<span>s time to start measuring before cutting.</span>
+<span>A tool to use here is </span><code>timings</code><span> flag for Cargo (</span><a href="https://doc.rust-lang.org/nightly/cargo/reference/unstable.html#timings"><span>documentation</span></a><span>).</span>
+<span>Sadly, I lack the eloquence to adequately express the level of quality and polish of this feature, so let me just say ❤️ and continue with my dry prose.</span></p>
+<p><code>cargo build -Z timings</code><span> records profiling data during the build, and then renders it as a very legible and information-dense HTML file.</span>
+<span>This is a nightly feature, so you</span>&rsquo;<span>ll need the </span><code>+nightly</code><span> toggle.</span>
+<span>This isn</span>&rsquo;<span>t a problem in practice, as you only need to run this manually once in a while.</span></p>
+<p><span>Here</span>&rsquo;<span>s an example from rust-analyzer:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo +nightly build -p rust-analyzer --bin rust-analyzer \</span>
+<span class="line">  -Z timings --release</span></code></pre>
+
+</figure>
+
+<figure>
+
+<img alt="" src="/assets/cargo-timings.png">
+</figure>
+<p><span>Not only can you see how long each crate took to compile, but you</span>&rsquo;<span>ll also see how individual compilations where scheduled, </span><em><span>when</span></em><span> each crate started to compile, and its critical dependency.</span></p>
+</section>
+<section id="Compilation-Model-Crates">
+
+    <h2>
+    <a href="#Compilation-Model-Crates"><span>Compilation Model: Crates</span> </a>
+    </h2>
+<p><span>This last point is important </span>&mdash;<span> crates form a directed acyclic graph of dependencies and, on a multicore CPU, the shape of this graph affects the compilation time a lot.</span></p>
+<p><span>This is slow to compile, as all the crates need to be compiled sequentially:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">A -&gt; B -&gt; C -&gt; D -&gt; E</span></code></pre>
+
+</figure>
+<p><span>This version is much faster, as it enables significantly more parallelism:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">   +-  B  -+</span>
+<span class="line">  /         \</span>
+<span class="line">A  -&gt;  C  -&gt;  E</span>
+<span class="line">  \         /</span>
+<span class="line">   +-  D  -+</span></code></pre>
+
+</figure>
+<p><span>There</span>&rsquo;<span>s also connection between parallelism and incrementality.</span>
+<span>In the wide graph, changing </span><code>B</code><span> doesn</span>&rsquo;<span>t entail recompiling </span><code>C</code><span> and </span><code>D</code><span>.</span></p>
+<p><span>The first advice you get when complaining about compile times in Rust is: </span>&ldquo;<span>split the code into crates</span>&rdquo;<span>.</span>
+<span>It is not </span><em><span>that</span></em><span> easy </span>&mdash;<span> if you ended up with a graph like the first one, you are not winning much.</span>
+<span>It is important to architect the applications to look like the second picture </span>&mdash;<span> a common vocabulary crate, a number of independent features, and a leaf crate to tie everything together.</span>
+<span>The most important property of a crate is which crates it doesn</span>&rsquo;<span>t (transitively) depend on.</span></p>
+<p><span>Another important consideration is the number of final artifacts (most typically binaries).</span>
+<span>Rust is statically linked, so, if two different binaries use the same library, each binary contains a separately linked copy of the library.</span>
+<span>If you have </span><code>n</code><span> binaries and </span><code>m</code><span> libraries, and each binary uses each library, then the amount of work to do during the linking is </span><code>m * n</code><span>.</span>
+<span>For this reason, it</span>&rsquo;<span>s better to minimize the number of artifacts.</span>
+<span>One common technique here is </span><a href="https://www.busybox.net/FAQ.html#design"><span>BusyBox</span></a><span>-style Swiss Army knife executables.</span>
+<span>The idea is that you can hardlink the same executable as several files with different names.</span>
+<span>The program then can look at the zeroth command line argument to learn the name it was invoked with, and use it effectively as a name of a subcommand.</span>
+<span>One cargo-specific gotcha here is that, by default, each file in </span><code>./examples</code><span> or </span><code>./tests</code><span> folder creates a new executable.</span></p>
+</section>
+<section id="Compilation-Model-Macros-And-Pipelining">
+
+    <h2>
+    <a href="#Compilation-Model-Macros-And-Pipelining"><span>Compilation Model: Macros And Pipelining</span> </a>
+    </h2>
+<p><span>But Cargo is even smarter than that!</span>
+<span>It does pipelined compilation </span>&mdash;<span> splitting the compilation of a crate into metadata and codegen phases, and starting compilation of dependent crates as soon as the metadata phase is over.</span></p>
+<p><span>This has interesting interactions with procedural macros (and build scripts).</span>
+<code>rustc</code><span> needs to run procedural macros to compute crate</span>&rsquo;<span>s metadata.</span>
+<span>That means that procedural macros can</span>&rsquo;<span>t be pipelined, and crates using procedural macros are blocked until the proc macro is fully compiled to the binary code.</span></p>
+<p><span>Separately from that, procedural macros need to parse Rust code, and that is a relatively complex task.</span>
+<span>The de-facto crate for this, </span><code>syn</code><span>, takes quite some time to compile (not because it is bloated </span>&mdash;<span> just because parsing Rust is hard).</span></p>
+<p><span>This generally means that projects tend to have </span><code>syn</code><span> / </span><code>serde</code><span> shaped hole in the CPU utilization profile during compilation.</span>
+<span>It</span>&rsquo;<span>s relatively important to use procedural macros only where they pull their weight, and try to push crates before </span><code>syn</code><span> in the </span><code>cargo -Z timings</code><span> graph.</span></p>
+<p><span>The latter can be tricky, as proc macro dependencies can sneak up on you.</span>
+<span>The problem here is that they are often hidden behind feature flags, and those feature flags might be enabled by downstream crates.</span>
+<span>Consider this example:</span></p>
+<p><span>You have a convenient utility type </span>&mdash;<span> for example, an SSO string, in a </span><code>small_string</code><span> crate.</span>
+<span>To implement serialization, you don</span>&rsquo;<span>t actually need derive (just delegating to </span><code>String</code><span> works), so you add an (optional) dependency on </span><code>serde</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-section">[package]</span></span>
+<span class="line"><span class="hl-attr">name</span> = <span class="hl-string">&quot;small-string&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-section">[dependencies]</span></span>
+<span class="line"><span class="hl-attr">serde</span> = { version = <span class="hl-string">&quot;1&quot;</span> }</span></code></pre>
+
+</figure>
+<p><span>SSO string is a rather useful abstraction, so it gets used throughout the codebase.</span>
+<span>Then in some leaf crate which, eg, needs to expose a JSON API, you add dependency on </span><code>small_string</code><span> with the </span><code>serde</code><span> feature, as well as </span><code>serde</code><span> with derive itself:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-section">[package]</span></span>
+<span class="line"><span class="hl-attr">name</span> = <span class="hl-string">&quot;json-api&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-section">[dependencies]</span></span>
+<span class="line"><span class="hl-attr">small-string</span> = { version = <span class="hl-string">&quot;1&quot;</span>, features = [ <span class="hl-string">&quot;serde&quot;</span> ] }</span>
+<span class="line"><span class="hl-attr">serde</span> = { version = <span class="hl-string">&quot;1&quot;</span>, features = [ <span class="hl-string">&quot;derive&quot;</span> ] }</span></code></pre>
+
+</figure>
+<p><span>The problem here is that </span><code>json-api</code><span> enables the </span><code>derive</code><span> feature of </span><code>serde</code><span>, and that means that </span><code>small-string</code><span> and all of its reverse-dependencies now need to wait for </span><code>syn</code><span> to compile!</span>
+<span>Similarly, if a crate depends on a subset of </span><code>syn</code>&rsquo;<span>s features, but something else in the crate graph enables all features, the original crate gets them as a bonus as well!</span></p>
+<p><span>It</span>&rsquo;<span>s not necessarily the end of the world, but it shows that dependency graph can get tricky with the presence of features.</span>
+<span>Luckily, </span><code>cargo -Z timings</code><span> makes it easy to notice that something strange is happening, even if it might not be always obvious what </span><em><span>exactly</span></em><span> went wrong.</span></p>
+<p><span>There</span>&rsquo;<span>s also a much more direct way for procedural macros to slow down compilation </span>&mdash;<span> if the macro generates a lot of code, the result would take some time to compile.</span>
+<span>That is, some macros allow you to write just a bit of source code, which feels innocuous enough, but expands to substantial amount of logic.</span>
+<span>The prime example is serialization </span>&mdash;<span> I</span>&rsquo;<span>ve noticed that converting values to/from JSON accounts for surprisingly big amount of compiling.</span>
+<span>Thinking in terms of overall crate graph helps here </span>&mdash;<span> you want to keep serialization at the boundary of the system, in the leaf crates.</span>
+<span>If you put serialization near the foundation, then all intermediate crates would have to pay its build-time costs.</span></p>
+<p><span>All that being said, an interesting side-note here is that procedural macros are not </span><em><span>inherently</span></em><span> slow to compile.</span>
+<span>Rather, it</span>&rsquo;<span>s the fact that most proc macros need to parse Rust or to generate a lot of code that makes them slow.</span>
+<span>Sometimes, a macro can accept a simplified syntax which can be parsed without </span><code>syn</code><span>, and emit a tiny bit of Rust code based on that.</span>
+<span>Producing valid Rust is not nearly as complicated as parsing it!</span></p>
+</section>
+<section id="Compilation-Model-Monomorphization">
+
+    <h2>
+    <a href="#Compilation-Model-Monomorphization"><span>Compilation Model: Monomorphization</span> </a>
+    </h2>
+<p><span>Now that we</span>&rsquo;<span>ve covered macro issues at the level of crates, it</span>&rsquo;<span>s time to look closer, at the code-level concerns.</span>
+<span>The main thing to look here are generics.</span>
+<span>It</span>&rsquo;<span>s vital to understand how they are compiled, which, in case of Rust, is achieved by monomorphization.</span>
+<span>Consider a run of the mill generic function:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">frobnicate</span>&lt;T: SomeTrait&gt;(x: &amp;T) {</span>
+<span class="line">   ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>When Rust compiles this function, it doesn</span>&rsquo;<span>t actually emit machine code.</span>
+<span>Instead, it stores an abstract representation of function body in the library.</span>
+<span>The actual compilation happens when you </span><em><span>instantiate</span></em><span> the function with a particular type parameter.</span>
+<span>The C++ terminology gives the right intuition here </span>&mdash;<span> </span><code>frobnicate</code><span> is a </span>&ldquo;<span>template</span>&rdquo;<span>, it produces an actual function when a concrete type is substituted for the parameter </span><code>T</code><span>.</span></p>
+<p><span>In other words, in the following case</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">frobnicate_both</span>(x: <span class="hl-type">String</span>, y: Widget) {</span>
+<span class="line">  <span class="hl-title function_ invoke__">frobnicate</span>(&amp;x);</span>
+<span class="line">  <span class="hl-title function_ invoke__">frobnicate</span>(&amp;y);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>on the level of machine code there will be two separate copies of </span><code>frobnicate</code><span>, which would differ in details of how they deal with parameter, but would be otherwise identical.</span></p>
+<p><span>Sounds pretty bad, right?</span>
+<span>Seems like that you can write a gigantic generic function, and then write just a small bit of code to instantiate it with a bunch of types, to create a lot of load for the compiler.</span></p>
+<p><span>Well, I have bad news for you </span>&mdash;<span> the reality is much, much worse.</span>
+<span>You don</span>&rsquo;<span>t even need different types to create duplication.</span>
+<span>Let</span>&rsquo;<span>s say we have four crates which form a diamond</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">   +- B -+</span>
+<span class="line">  /       \</span>
+<span class="line">A           D</span>
+<span class="line">  \       /</span>
+<span class="line">   +- C -+</span></code></pre>
+
+</figure>
+<p><span>The </span><code>frobnicate</code><span> is defined in </span><code>A</code><span>, and is used by </span><code>B</code><span> and </span><code>C</code></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// A</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">frobnicate</span>&lt;T: SomeTrait&gt;(x: &amp;T) { ... }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// B</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">do_b</span>(s: <span class="hl-type">String</span>) { a::<span class="hl-title function_ invoke__">frobnicate</span>(&amp;s) }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// C</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">do_c</span>(s: <span class="hl-type">String</span>) { a::<span class="hl-title function_ invoke__">frobnicate</span>(&amp;s) }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// D</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">hello</span> = <span class="hl-string">&quot;hello&quot;</span>.<span class="hl-title function_ invoke__">to_owned</span>();</span>
+<span class="line">  b::<span class="hl-title function_ invoke__">do_b</span>(&amp;hello);</span>
+<span class="line">  c::<span class="hl-title function_ invoke__">do_c</span>(&amp;hello);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>In this case, we only ever instantiate </span><code>frobincate</code><span> with </span><code>String</code><span>, but it will get compiled twice, because monomorphization happens </span><em><span>per crate</span></em><span>.</span>
+<code>B</code><span> and </span><code>C</code><span> are compiled separately, and each includes machine code for </span><code>do_*</code><span> functions, so they need </span><code>frobnicate&lt;String&gt;</code><span>.</span>
+<span>If optimizations are disabled, rustc can share template instantiations with dependencies, but that doesn</span>&rsquo;<span>t work for sibling dependencies.</span>
+<span>With optimizations, rustc doesn</span>&rsquo;<span>t share monomorphizations even with direct dependencies.</span></p>
+<p><span>In other words, generics in Rust can lead to accidentally-quadratic compilation times across many crates!</span></p>
+<p><span>If you are wondering whether it gets worse than that, the answer is yes.</span>
+<span>I </span><em><span>think</span></em><span> the actual unit of monomorphization is codegen unit, so duplicates are possible even within one crate.</span></p>
+</section>
+<section id="Keeping-an-Eye-on-Instantiations">
+
+    <h2>
+    <a href="#Keeping-an-Eye-on-Instantiations"><span>Keeping an Eye on Instantiations</span> </a>
+    </h2>
+<p><span>Besides just duplication, generics add one more problem </span>&mdash;<span> they shift the blame for compile times to consumers.</span>
+<span>Most of the compile time cost of generic functions is borne out by the crates that use the functionality, while the defining crate just typechecks the code without doing any code generation.</span>
+<span>Coupled with the fact that at times it is not at all obvious what gets instantiated where and why (</span><a href="https://github.com/rust-analyzer/rust-analyzer/issues/10065"><span>example</span></a><span>), this make it hard to directly see the footprint of generic APIs</span></p>
+<p><span>Luckily, this is not needed </span>&mdash;<span> there</span>&rsquo;<span>s a tool for that!</span>
+<a href="https://github.com/dtolnay/cargo-llvm-lines"><code>cargo llvm-lines</code></a><span> tells you which monomorphizations are happening in a specific crate.</span></p>
+<p><span>Here</span>&rsquo;<span>s an example from a </span><a href="https://github.com/rust-analyzer/rust-analyzer/issues/10065"><span>recent investigation</span></a><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo llvm-lines --lib --release -p ide_ssr | head -n 12</span>
+<span class="line"><span class="hl-output"> Lines          Copies        Function name</span></span>
+<span class="line"><span class="hl-output">  -----          ------        -------------</span></span>
+<span class="line"><span class="hl-output">  533069 (100%)  28309 (100%)  (TOTAL)</span></span>
+<span class="line"><span class="hl-output">   20349 (3.8%)    357 (1.3%)  RawVec&lt;T,A&gt;::current_memory</span></span>
+<span class="line"><span class="hl-output">   18324 (3.4%)    332 (1.2%)  &lt;Weak&lt;T&gt; as Drop&gt;::drop</span></span>
+<span class="line"><span class="hl-output">   14024 (2.6%)    332 (1.2%)  Weak&lt;T&gt;::inner</span></span>
+<span class="line"><span class="hl-output">   11718 (2.2%)    378 (1.3%)  core::ptr::metadata::from_raw_parts_mut</span></span>
+<span class="line"><span class="hl-output">   10710 (2.0%)    357 (1.3%)  &lt;RawVec&lt;T,A&gt; as Drop&gt;::drop</span></span>
+<span class="line"><span class="hl-output">    7984 (1.5%)    332 (1.2%)  &lt;Arc&lt;T&gt; as Drop&gt;::drop</span></span>
+<span class="line"><span class="hl-output">    7968 (1.5%)    332 (1.2%)  Layout::for_value_raw</span></span>
+<span class="line"><span class="hl-output">    6790 (1.3%)     97 (0.3%)  hashbrown::raw::RawTable&lt;T,A&gt;::drop_elements</span></span>
+<span class="line"><span class="hl-output">    6596 (1.2%)     97 (0.3%)  &lt;hashbrown::raw::RawIterRange&lt;T&gt; as Iterator&gt;::next</span></span></code></pre>
+
+</figure>
+<p><span>It shows, for each generic function, how many copies of it were generated, and what</span>&rsquo;<span>s their total size.</span>
+<span>The size is measured very coarsely, in the number of llvm ir lines it takes to encode the function.</span>
+<span>A useful fact: llvm doesn</span>&rsquo;<span>t have generic functions, its the job of </span><code>rustc</code><span> to turn a function template and a set of instantiations into a set of actual functions.</span></p>
+</section>
+<section id="Keeping-Instantiations-In-Check">
+
+    <h2>
+    <a href="#Keeping-Instantiations-In-Check"><span>Keeping Instantiations In Check</span> </a>
+    </h2>
+<p><span>Now that we understand the pitfalls of monomorphization, a rule of thumb becomes obvious: do not put generic code at the boundaries between the crates.</span>
+<span>When designing a large system, architect it as a set of components where each of the components does something concrete and has non-generic interface.</span></p>
+<p><span>If you do need generic interface for better type-safety and ergonomics, make sure that the interface layer is thin, and that it immediately delegates to a non-generic implementation.</span>
+<span>The classical example to internalize here are various functions from </span><code>str::fs</code><span> module which operate on paths:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">read</span>&lt;P: <span class="hl-built_in">AsRef</span>&lt;Path&gt;&gt;(path: P) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt; {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">inner</span>(path: &amp;Path) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">file</span> = File::<span class="hl-title function_ invoke__">open</span>(path)?;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">bytes</span> = <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">    file.<span class="hl-title function_ invoke__">read_to_end</span>(&amp;<span class="hl-keyword">mut</span> bytes)?;</span>
+<span class="line">    <span class="hl-title function_ invoke__">Ok</span>(bytes)</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-title function_ invoke__">inner</span>(path.<span class="hl-title function_ invoke__">as_ref</span>())</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The outer function is parameterized </span>&mdash;<span> it is ergonomic to use, but is compiled afresh for every downstream crate.</span>
+<span>That</span>&rsquo;<span>s not a problem though, because it is very small, and immediately delegates to a non-generic function that gets compiled in the std.</span></p>
+<p><span>If you are writing a function which takes a path as an argument, either use </span><code>&amp;Path</code><span>, or use </span><code>impl AsRef&lt;Path&gt;</code><span> and delegate to a non-generic implementation.</span>
+<span>If you care about API ergonomics enough to use impl trait, you should use </span><code>inner</code><span> trick </span>&mdash;<span> compile times are as big part of ergonomics, as the syntax used to call the function.</span></p>
+<p><span>A second common case here are closures: by default, prefer </span><code>&amp;dyn Fn()</code><span> over </span><code>impl Fn()</code><span>.</span>
+<span>Similarly to paths, an </span><code>impl</code><span>-based nice API might be a thin wrapper around </span><code>dyn</code><span>-based implementation which does the bulk of the work.</span></p>
+<p><span>Another idea along these lines is </span>&ldquo;<span>generic, inline hotpath; concrete, outline coldpath</span>&rdquo;<span>.</span>
+<span>In the </span><a href="https://lib.rs/crates/once_cell"><span>once_cell</span></a><span> crate, there</span>&rsquo;<span>s this curious pattern (simplified, here</span>&rsquo;<span>s the </span><a href="https://github.com/matklad/once_cell/blob/f92720a4cac370c117e9d565aebbae2b8de51852/src/imp_std.rs#L86"><span>actual source</span></a><span>):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">OnceCell</span>&lt;T&gt; {</span>
+<span class="line">  state: AtomicUsize,</span>
+<span class="line">  inner: <span class="hl-type">Option</span>&lt;T&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span>&lt;T&gt; OnceCell&lt;T&gt; {</span>
+<span class="line">  <span class="hl-meta">#[cold]</span></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">initialize</span>&lt;F: <span class="hl-title function_ invoke__">FnOnce</span>() <span class="hl-punctuation">-&gt;</span> T&gt;(&amp;<span class="hl-keyword">self</span>, f: F) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">f</span> = <span class="hl-title function_ invoke__">Some</span>(f);</span>
+<span class="line">    <span class="hl-title function_ invoke__">synchronize_access</span>(<span class="hl-keyword">self</span>.state, &amp;<span class="hl-keyword">mut</span> || {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">f</span> = f.<span class="hl-title function_ invoke__">take</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">      <span class="hl-keyword">match</span> <span class="hl-keyword">self</span>.inner {</span>
+<span class="line">        <span class="hl-literal">None</span> =&gt; <span class="hl-keyword">self</span>.inner = <span class="hl-title function_ invoke__">Some</span>(<span class="hl-title function_ invoke__">f</span>()),</span>
+<span class="line">        <span class="hl-title function_ invoke__">Some</span>(_value) =&gt; (),</span>
+<span class="line">      }</span>
+<span class="line">    });</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">synchronize_access</span>(state: &amp;AtomicUsize, init: &amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">dyn</span> <span class="hl-title function_ invoke__">FnMut</span>()) {</span>
+<span class="line">  <span class="hl-comment">// One hundred lines of tricky synchronization code on atomics.</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, the </span><code>initialize</code><span> function is generic twice: first, the </span><code>OnceCell</code><span> is parametrized with the type of value being stored, and then </span><code>initialize</code><span> takes a generic closure parameter.</span>
+<span>The job of </span><code>initialize</code><span> is to make sure (even if it is called concurrently from many threads) that at most one </span><code>f</code><span> is run.</span>
+<span>This mutual exclusion task doesn</span>&rsquo;<span>t actually depend on specific </span><code>T</code><span> and </span><code>F</code><span> and is implemented as non-generic </span><code>synchronize_access</code><span>, to improve compile time.</span>
+<span>One wrinkle here is that, ideally, we</span>&rsquo;<span>d want an </span><code>init: dyn FnOnce()</code><span> argument, but that</span>&rsquo;<span>s not expressible in today</span>&rsquo;<span>s Rust.</span>
+<span>The </span><code>let mut f = Some(f) / let f = f.take().unwrap()</code><span> is a standard work-around for this case.</span></p>
+</section>
+<section id="Conclusions">
+
+    <h2>
+    <a href="#Conclusions"><span>Conclusions</span> </a>
+    </h2>
+<p><span>I guess that</span>&rsquo;<span>s it!</span>
+<span>To repeat the main ideas:</span></p>
+<p><span>Build times are a big factor in the overall productivity of the humans working on the project.</span>
+<span>Optimizing this is a straightforward engineering task </span>&mdash;<span> the tools are there.</span>
+<span>What might be hard is not letting them slowly regress.</span>
+<span>I hope this post provides enough motivation and inspiration for that!</span>
+<span>As a rough baseline, 200k line Rust project somewhat optimized for reasonable build times should take about 10 minutes of CI on GitHub actions.</span></p>
+<p><span>Discussion on </span><a href="https://old.reddit.com/r/rust/comments/pid70f/blog_post_fast_rust_builds"><span>/r/rust</span></a><span>.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>This post is a part of </span><a href="https://matklad.github.io/2021/09/05/Rust100k.html"><span>One Hundred Thousand Lines of Rust</span></a><span> series.</span></p>
+</div>
+</aside></section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2021-09-04-fast-rust-builds.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

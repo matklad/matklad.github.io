@@ -1,0 +1,389 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Types and the Zig Programming Language</title>
+  <meta name="description" content="Notes on less-than-obvious aspects of Zig's type system and things that surprised me after diving
+deeper into the language.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/08/09/types-and-zig.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Types and the Zig Programming Language</span> <time datetime="2023-08-09">Aug 9, 2023</time></h1>
+<p><span>Notes on less-than-obvious aspects of Zig</span>&rsquo;<span>s type system and things that surprised me after diving</span>
+<span>deeper into the language.</span></p>
+<section id="Nominal-Types">
+
+    <h2>
+    <a href="#Nominal-Types"><span>Nominal Types</span> </a>
+    </h2>
+<p><span>Zig has a nominal type system despite the fact that types lack names. A struct type is declared by</span>
+<span class="display"><code>struct { field: T }</code><span>.</span></span>
+<span>It</span>&rsquo;<span>s anonymous; an explicit assignment is required to name the type:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> S = <span class="hl-keyword">struct</span> {</span>
+<span class="line">  field: T,</span>
+<span class="line">};</span></code></pre>
+
+</figure>
+<p><span>Still, the type system is nominal, not structural. The following does not compile:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> f</span>() <span class="hl-keyword">struct</span> { f: <span class="hl-type">i32</span> } {</span>
+<span class="line">  <span class="hl-keyword">return</span> .{ .f = <span class="hl-numbers">92</span> };</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> g</span>(s: <span class="hl-keyword">struct</span> { f: <span class="hl-type">i32</span> }) <span class="hl-type">void</span> {</span>
+<span class="line">  _ = s;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> main</span>() <span class="hl-type">void</span> {</span>
+<span class="line">  g(f()); <span class="hl-comment">// &lt;- type mismatch</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The following does:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> S = <span class="hl-keyword">struct</span> { f: <span class="hl-type">i32</span> };</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> f</span>() S {</span>
+<span class="line">  <span class="hl-keyword">return</span> .{ .f = <span class="hl-numbers">92</span> };</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> g</span>(s: S) <span class="hl-type">void</span> {</span>
+<span class="line">  _ = s;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> main</span>() <span class="hl-type">void</span> {</span>
+<span class="line">  g(f());</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>One place where Zig is structural are anonymous struct literals:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> main</span>() <span class="hl-type">void</span> {</span>
+<span class="line">  <span class="hl-keyword">const</span> x                      = .{ .foo = <span class="hl-numbers">1</span> };</span>
+<span class="line">  <span class="hl-keyword">const</span> y: <span class="hl-keyword">struct</span> { foo: <span class="hl-type">i32</span> } = x;</span>
+<span class="line">  <span class="hl-keyword">comptime</span> assert(<span class="hl-built_in">@TypeOf</span>(x) <span class="hl-operator">!=</span> <span class="hl-built_in">@TypeOf</span>(y));</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Types of </span><code>x</code><span> and </span><code>y</code><span> are different, but </span><code>x</code><span> can be coerced to </span><code>y</code><span>.</span></p>
+<p><span>In other words, Zig structs are anonymous and nominal, but anonymous structs are structural!</span></p>
+</section>
+<section id="No-Unification">
+
+    <h2>
+    <a href="#No-Unification"><span>No Unification</span> </a>
+    </h2>
+<p><span>Simple type inference for an expression works by first recursively inferring the types of</span>
+<span>subexpressions, and then deriving the result type from that. So, to infer types in</span>
+<span class="display"><code>foo().bar()</code><span>,</span></span><span> we first derive the type of </span><code>foo()</code><span>, then lookup method </span><code>bar</code><span> on that</span>
+<span>type, and use the return type of the method.</span></p>
+<p><span>More complex type inference works through so called unification algorithm. It starts with a similar</span>
+<span>recursive walk over the expression tree, but this walk doesn</span>&rsquo;<span>t infer types directly, but rather</span>
+<span>assigns a type variable to each subexpression, and generates equations relating type variables. So the</span>
+<span>result of this first phase look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">x = y</span>
+<span class="line">Int = y</span></code></pre>
+
+</figure>
+<p><span>Then, in the second phase the equations are solved, yielding, in this case, </span><code>x = Int</code><span> and </span><code>y = Int</code><span>.</span></p>
+<p><span>Usually languages with powerful type systems have unification somewhere, though often unification</span>
+<span>is limited in scope (for example, Kotlin infers types statement-at-a-time).</span></p>
+<p><span>It is curious that Zig doesn</span>&rsquo;<span>t do unification, type inference is a simple single-pass recursion (or</span>
+<span>at least it should be, I haven</span>&rsquo;<span>t looked at how it is actually implemented). So, anytime there</span>&rsquo;<span>s a</span>
+<span>generic function like</span>
+<span class="display"><code>fn reverse(comptime T: type, xs: []T) void</code><span>,</span></span>
+<span>the call site has to pass the type in explicitly:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> main</span>() <span class="hl-type">void</span> {</span>
+<span class="line">  <span class="hl-keyword">var</span> xs: [<span class="hl-numbers">3</span>]<span class="hl-type">i32</span> = .{<span class="hl-numbers">1</span>, <span class="hl-numbers">2</span>, <span class="hl-numbers">3</span>};</span>
+<span class="line">  reverse(<span class="hl-type">i32</span>, <span class="hl-operator">&amp;</span>xs);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Does it mean that you have to pass the types all the time? Not really! In fact, the only place which</span>
+<span>feels like a burden are functions in </span><code>std.mem</code><span> module which operate on slices, but that</span>&rsquo;<span>s just</span>
+<span>because slices are builtin types (a kind of pointer really) without methods. The thing is, when you</span>
+<span>call a method on a </span>&ldquo;<span>generic type</span>&rdquo;<span>, its type parameters are implicitly in scope, and don</span>&rsquo;<span>t have to be</span>
+<span>specified. Study this example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> std = <span class="hl-built_in">@import</span>(<span class="hl-string">&quot;std&quot;</span>);</span>
+<span class="line"><span class="hl-keyword">const</span> assert = std.debug.assert;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> Slice</span>(<span class="hl-keyword">comptime</span> T: <span class="hl-type">type</span>) <span class="hl-type">type</span> {</span>
+<span class="line">  <span class="hl-keyword">return</span> <span class="hl-keyword">struct</span> {</span>
+<span class="line">    ptr: [<span class="hl-operator">*</span>]T,</span>
+<span class="line">    len: <span class="hl-type">usize</span>,</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">fn</span><span class="hl-function"> init</span>(ptr: [<span class="hl-operator">*</span>]T, len: <span class="hl-type">usize</span>) <span class="hl-built_in">@This</span>() {</span>
+<span class="line">      <span class="hl-keyword">return</span> .{ .ptr = ptr, .len = len };</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">fn</span><span class="hl-function"> reverse</span>(slice: <span class="hl-built_in">@This</span>()) <span class="hl-type">void</span>{</span>
+<span class="line">      ...</span>
+<span class="line">    }</span>
+<span class="line">  };</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> main</span>() <span class="hl-type">void</span> {</span>
+<span class="line">  <span class="hl-keyword">var</span> xs: [<span class="hl-numbers">3</span>]<span class="hl-type">i32</span> = .{<span class="hl-numbers">1</span>, <span class="hl-numbers">2</span>, <span class="hl-numbers">3</span>};</span>
+<span class="line">  <span class="hl-keyword">var</span> slice = Slice(<span class="hl-type">i32</span>).init(<span class="hl-operator">&amp;</span>xs, xs.len);</span>
+<span class="line"></span>
+<span class="line">  slice.reverse(); <span class="hl-comment">// &lt;- look, no types!</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>There</span>&rsquo;<span>s a runtime parallel here. At runtime, there</span>&rsquo;<span>s a single dynamic dispatch, which prioritizes</span>
+<span>dynamic type of the first argument, and multiple dynamic dispatch, which can look at dynamic types</span>
+<span>of all arguments. Here, at compile time, the type of the first argument gets a preferential</span>
+<span>treatment. And, similarly to runtime, this covers 80% of use cases! Though, I</span>&rsquo;<span>d love for things like</span>
+<code>std.mem.eql</code><span> to be actual methods on slices</span>&hellip;</p>
+</section>
+<section id="Mandatory-Function-Signatures">
+
+    <h2>
+    <a href="#Mandatory-Function-Signatures"><span>Mandatory Function Signatures</span> </a>
+    </h2>
+<p><span>One of the best tricks a language server can pull off for as-you-type analysis is skipping bodies of</span>
+<span>the functions in dependencies. This works as long as the language requires complete signatures. In</span>
+<span>functional languages, its customary to make signatures optional, which precludes this crucial</span>
+<span>optimization. As per </span><a href="https://matklad.github.io/2023/08/01/on-modularity-of-lexical-analysis.html"><em><span>Modularity Of Lexical</span>
+<span>Analysis</span></em></a><span>, this has</span>
+<span>repercussions for all of:</span></p>
+<ul>
+<li>
+<span>incremental compilation,</span>
+</li>
+<li>
+<span>parallel compilation,</span>
+</li>
+<li>
+<span>robustness to errors.</span>
+</li>
+</ul>
+<p><span>I always assumed that Zig with its crazy </span><code>comptime</code><span> requires autopsy.</span>
+<span>But that</span>&rsquo;<span>s not actually the case! Zig doesn</span>&rsquo;<span>t have </span><code>decltype(auto)</code><span>, signatures are always explicit!</span></p>
+<p><span>Let</span>&rsquo;<span>s look at, e.g., </span><code>std.mem.bytesAsSlice</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> bytesAsSlice</span>(</span>
+<span class="line">  <span class="hl-keyword">comptime</span> T: <span class="hl-type">type</span>,</span>
+<span class="line">  bytes: <span class="hl-type">anytype</span>,</span>
+<span class="line">) BytesAsSliceReturnType(T, <span class="hl-built_in">@TypeOf</span>(bytes)) {</span></code></pre>
+
+</figure>
+<p><span>Note how the return type is not </span><code>anytype</code><span>, but the actual, real thing. You could write complex</span>
+<span>computations there, but you can</span>&rsquo;<span>t look inside the body. Of course, it also is possible to write </span><span class="display"><code>fn
+foo() @TypeOf(bar()) {</code><span>,</span></span><span> but that feels like a fair game </span>&mdash;<span> </span><code>bar()</code><span> will be evaluated at</span>
+<span>compile time. In other words, only bodies of functions invoked at comptime needs to be looked at by</span>
+<span>a language server. This potentially improves performance for this use-case quite a bit!</span></p>
+<p><span>It</span>&rsquo;<span>s useful to contrast this with Rust. There, you could write</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">sneaky</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-keyword">impl</span> <span class="hl-title class_">Sized</span> {</span>
+<span class="line">  <span class="hl-number">0i32</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Although it feels like you are stating the interface, it</span>&rsquo;<span>s not really the case. Auto traits like</span>
+<code>Send</code><span> and </span><code>Sync</code><span> leak, and that can be detected by downstream code and lead to, e.g., different</span>
+<span>methods being called via </span><code>Deref</code><span>-based specialization depending on </span><code>: Send</code><span> being implemented:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">X</span>&lt;T&gt;(T);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span>&lt;T: <span class="hl-built_in">Send</span>&gt; X&lt;T&gt; {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">foo</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">i32</span> { todo!() }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Y</span>;</span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Y</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">foo</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">String</span> { todo!() }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span>&lt;T&gt; std::ops::Deref <span class="hl-keyword">for</span> <span class="hl-title class_">X</span>&lt;T&gt; {</span>
+<span class="line">  <span class="hl-keyword">type</span> <span class="hl-title class_">Target</span> = Y;</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">deref</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> &amp;Y { todo!() }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-keyword">impl</span> <span class="hl-title class_">Sized</span> {</span>
+<span class="line">  ()</span>
+<span class="line"><span class="hl-comment">//  std::rc::Rc::new(())</span></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">x</span> = <span class="hl-title function_ invoke__">X</span>(<span class="hl-title function_ invoke__">f</span>());</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">t</span> = x.<span class="hl-title function_ invoke__">foo</span>(); <span class="hl-comment">// &lt;- which `foo`?</span></span>
+<span class="line">  <span class="hl-comment">// The answer is inside f&#x27;s body!</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Zig is much more strict here, you have to fully name the return type (the name doesn</span>&rsquo;<span>t have to be</span>
+<span>pretty, take a second look at </span><code>bytesAsSlice</code><span>). But its not perfect, a genuine leakage happens  with</span>
+<span>inferred error types (</span><code>!T</code><span> syntax). A bad example would look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> f</span>() <span class="hl-operator">!</span><span class="hl-type">void</span> {</span>
+<span class="line">   <span class="hl-comment">// Mystery!</span></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> main</span>() <span class="hl-operator">!</span><span class="hl-type">void</span> {</span>
+<span class="line">  f() <span class="hl-keyword">catch</span> <span class="hl-operator">|</span>err<span class="hl-operator">|</span> {</span>
+<span class="line">    <span class="hl-keyword">comptime</span> assert(</span>
+<span class="line">      <span class="hl-built_in">@typeInfo</span>(<span class="hl-built_in">@TypeOf</span>(err)).ErrorSet.?.len <span class="hl-operator">==</span> <span class="hl-numbers">1</span>,</span>
+<span class="line">    );</span>
+<span class="line">  };</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, to check </span><code>main</code><span>, we actually do need to dissect </span><code>f</code>&rsquo;<span>s body, we can</span>&rsquo;<span>t treat the error union</span>
+<span>abstractly. When the compiler analyzes </span><code>main</code><span>, it needs to stop to process </span><code>f</code><span> signature (which is</span>
+<span>very fast, as it is very short) and then </span><code>f</code><span>’s body (this part could be quite slow, there might be a</span>
+<span>lot of code behind that </span><code>Mystery</code><span>! It</span>&rsquo;<span>s interesting to ponder alternative semantics, where, during</span>
+<span>type checking, inferred types are treated abstractly, and error exhastiveness is a separate late</span>
+<span>pass in the compiler. That way, complier only needs </span><code>f</code>&rsquo;<span>s signature to check </span><code>main</code><span>. And that means</span>
+<span>that bodies of </span><code>main</code><span> and </span><code>f</code><span> could be checked in parallel.</span></p>
+<p><span>That</span>&rsquo;<span>s all for today! The type system surprising I</span>&rsquo;<span>ve found so far are:</span></p>
+<ul>
+<li>
+<p><span>Nominal type system despite notable absence of names of types.</span></p>
+</li>
+<li>
+<p><span>Unification-less generics which don</span>&rsquo;<span>t incur unreasonable annotation burden due to methods </span>&ldquo;<span>closing</span>
+<span>over</span>&rdquo;<span> generic parameters.</span></p>
+</li>
+<li>
+<p><span>Explicit signatures with no </span><a href="https://wiki.dlang.org/Voldemort_types"><span>Voldemort types</span></a><span> with a</span>
+<span>notable exception of error unions.</span></p>
+</li>
+</ul>
+<p><span>Discussion on </span><a href="https://ziggit.dev/t/types-and-the-zig-programming-language/1430"><span>ziggit.dev</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-08-09-types-and-zig.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

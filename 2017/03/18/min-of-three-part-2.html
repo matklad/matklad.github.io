@@ -1,0 +1,542 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Min of Three Part 2</title>
+  <meta name="description" content="This is the continuation of the previous post about optimizing 2D grid
+based dynamic programming algorithm for CPU level parallelism.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2017/03/18/min-of-three-part-2.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Min of Three Part 2</span> <time datetime="2017-03-18">Mar 18, 2017</time></h1>
+<p><span>This is the continuation of the </span><a href="https://matklad.github.io/2017/03/12/min-of-three.html"><span>previous post</span></a><span> about optimizing 2D grid</span>
+<span>based dynamic programming algorithm for </span><a href="https://en.wikipedia.org/wiki/Superscalar_processor"><span>CPU level parallelism</span></a><span>.</span></p>
+<section id="In-The-Previous-Episode">
+
+    <h2>
+    <a href="#In-The-Previous-Episode"><span>In The Previous Episode</span> </a>
+    </h2>
+<p><span>This is the code we are trying to make faster:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">dtw</span>(xs: &amp;[<span class="hl-type">f64</span>], ys: &amp;[<span class="hl-type">f64</span>]) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">f64</span> {</span>
+<span class="line">    <span class="hl-comment">// assume equal lengths for simplicity</span></span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(xs.<span class="hl-title function_ invoke__">len</span>(), ys.<span class="hl-title function_ invoke__">len</span>());</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = xs.<span class="hl-title function_ invoke__">len</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">prev</span> = <span class="hl-built_in">vec!</span>[<span class="hl-number">0f64</span>; n + <span class="hl-number">1</span>];</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">curr</span> = <span class="hl-built_in">vec!</span>[std::<span class="hl-type">f64</span>::MAX; n + <span class="hl-number">1</span>];</span>
+<span class="line">    curr[<span class="hl-number">0</span>] = <span class="hl-number">0.0</span>;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">ix</span> <span class="hl-keyword">in</span> <span class="hl-number">1</span>..(n + <span class="hl-number">1</span>) {</span>
+<span class="line">        ::std::mem::<span class="hl-title function_ invoke__">swap</span>(&amp;<span class="hl-keyword">mut</span> curr, &amp;<span class="hl-keyword">mut</span> prev);</span>
+<span class="line">        curr[<span class="hl-number">0</span>] = std::<span class="hl-type">f64</span>::MAX;</span>
+<span class="line">        <span class="hl-keyword">for</span> <span class="hl-variable">iy</span> <span class="hl-keyword">in</span> <span class="hl-number">1</span>..(n + <span class="hl-number">1</span>) {</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">d11</span> = prev[iy - <span class="hl-number">1</span>];</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">d01</span> = curr[iy - <span class="hl-number">1</span>];</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">d10</span> = prev[iy];</span>
+<span class="line"></span>
+<span class="line">            <span class="hl-comment">// Find the minimum of d11, d01, d10</span></span>
+<span class="line">            <span class="hl-comment">// by enumerating all the cases.</span></span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">d</span> = <span class="hl-keyword">if</span> d11 &lt; d01 {</span>
+<span class="line">                <span class="hl-keyword">if</span> d11 &lt; d10 { d11 } <span class="hl-keyword">else</span> { d10 }</span>
+<span class="line">            } <span class="hl-keyword">else</span> {</span>
+<span class="line">                <span class="hl-keyword">if</span> d01 &lt; d10 { d01 } <span class="hl-keyword">else</span> { d10 }</span>
+<span class="line">            };</span>
+<span class="line"></span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">cost</span> = {</span>
+<span class="line">                <span class="hl-keyword">let</span> <span class="hl-variable">t</span> = xs[ix - <span class="hl-number">1</span>] - ys[iy - <span class="hl-number">1</span>];</span>
+<span class="line">                t * t</span>
+<span class="line">            };</span>
+<span class="line"></span>
+<span class="line">            curr[iy] = d + cost;</span>
+<span class="line">        }</span>
+<span class="line">    }</span>
+<span class="line">    curr[n]</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><a href="http://play.rust-lang.org/?gist=3d42c67904441279c4cbb1708fb35a06&amp;version=stable"><span>Code on Rust playground</span></a><span> (293 ms)</span></p>
+<p><span>It calculates </span><a href="https://en.wikipedia.org/wiki/Dynamic_time_warping"><span>dynamic time warping</span></a><span> distance between two </span><code>double</code>
+<span>vectors using an update rule which is structured like this:</span></p>
+
+<figure>
+
+<img alt="Dynamic programming 2D table" src="/assets/min3_table.png">
+</figure>
+<p><span>This code takes 293 milliseconds to run on a particular input</span>
+<span>data. The speedup from 435 milliseconds stated in the previous post is</span>
+<span>due to Moore</span>&rsquo;<span>s law: I</span>&rsquo;<span>ve upgraded the CPU :)</span></p>
+<p><span>We can bring run time down by tweaking how we calculate the minimum of</span>
+<span>three elements.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">min2</span>(x: <span class="hl-type">f64</span>, y: <span class="hl-type">f64</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">f64</span> {</span>
+<span class="line">    <span class="hl-keyword">if</span> x &lt; y { x } <span class="hl-keyword">else</span> { y }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">dtw</span>(xs: &amp;[<span class="hl-type">f64</span>], ys: &amp;[<span class="hl-type">f64</span>]) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">f64</span> {</span>
+<span class="line">    <span class="hl-comment">// ...</span></span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">d</span> = <span class="hl-title function_ invoke__">min2</span>(<span class="hl-title function_ invoke__">min2</span>(d11, d10), d01);</span>
+<span class="line">    <span class="hl-comment">// ...</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><a href="http://play.rust-lang.org/?gist=caf7609db82341fb7ccf13033738232e&amp;version=stable"><span>Code on Rust playground</span></a><span> (210 ms)</span></p>
+<p><span>This version takes only 210 milliseconds, presumably because the</span>
+<span>minimum of two elements in the previous row can be calculated without</span>
+<span>waiting for the preceding element in the current row to be computed.</span></p>
+<p><span>The assembly for the main loop looks like this (AT&amp;T syntax,</span>
+<span>destination register on the right)</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">   18.32    vmovsd -0x8(%rax,%rsi,8),%xmm1</span>
+<span class="line">    0.00    vminsd (%rax,%rsi,8),%xmm1,%xmm1</span>
+<span class="line">    6.72    vminsd %xmm0,%xmm1,%xmm0</span>
+<span class="line">    4.64    vmovsd -0x8(%r12,%r10,8),%xmm1</span>
+<span class="line">    0.00    vsubsd -0x8(%r13,%rsi,8),%xmm1,%xmm1</span>
+<span class="line">    7.69    vmulsd %xmm1,%xmm1,%xmm1</span>
+<span class="line">   36.14    vaddsd %xmm1,%xmm0,%xmm0</span>
+<span class="line">   14.16    vmovsd %xmm0,(%rdi,%rsi,8)</span></code></pre>
+
+</figure>
+<p><span>Check the </span><a href="https://matklad.github.io/2017/03/12/min-of-three.html"><span>previous post</span></a><span> for more details!</span></p>
+</section>
+<section id="The-parallel-plan">
+
+    <h2>
+    <a href="#The-parallel-plan"><span>The parallel plan</span> </a>
+    </h2>
+<p><span>Can we loosen dependencies between cells even more to benefit from instruction</span>
+<span>level parallelism? What if instead of filling the table row by row, we do it</span>
+<span>diagonals?</span></p>
+
+<figure>
+
+<img alt="Diagonal update" src="/assets/min3_diag_color.png">
+</figure>
+<p><span>We</span>&rsquo;<span>d need to remember </span><strong><span>two</span></strong><span> previous diagonals instead of one previous</span>
+<span>row, but all the cells on the next diagonal would be independent! In</span>
+<span>theory, compiler should be able to use </span><a href="https://en.wikipedia.org/wiki/SIMD#Hardware"><span>SIMD instructions</span></a><span> to make the</span>
+<span>computation truly parallel.</span></p>
+</section>
+<section id="Implementation-Plan">
+
+    <h2>
+    <a href="#Implementation-Plan"><span>Implementation Plan</span> </a>
+    </h2>
+<p><span>Coding up this diagonal traversal is a bit tricky, because you need to</span>
+<span>map linear vector indices to diagonal indices.</span></p>
+<p><span>The original indexing worked like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">        iy</span>
+<span class="line">       ----&gt;</span>
+<span class="line">    | . . . .</span>
+<span class="line"> ix | . . . .</span>
+<span class="line">    | . . . .</span>
+<span class="line">    V . . . .</span></code></pre>
+
+</figure>
+<ul>
+<li>
+<code>ix</code><span> and </span><code>iy</code><span> are indices in the input vectors.</span>
+</li>
+<li>
+<span>The outer loop is over </span><code>ix</code><span>.</span>
+</li>
+<li>
+<span>On each iteration, we remember two rows (</span><code>curr</code><span> and </span><code>prev</code><span> in the</span>
+<span>code).</span>
+</li>
+</ul>
+<p><span>For our grand plan, we need to fit a rhombus peg in a square hole:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">   id</span>
+<span class="line">  ----&gt;</span>
+<span class="line"> . . . .        |</span>
+<span class="line">   . . . .      | ix</span>
+<span class="line">     . . . .    |</span>
+<span class="line">       . . . .  V</span></code></pre>
+
+</figure>
+<ul>
+<li>
+<code>id</code><span> is the index of the diagonal. There are twice as much diagonals</span>
+<span>as rows.</span>
+</li>
+<li>
+<span>The outer loop is over </span><code>id</code><span>.</span>
+</li>
+<li>
+<span>On each iteration we remember three columns (</span><code>d1</code><span>, </span><code>d2</code><span> </span><code>d3</code><span> in the</span>
+<span>code).</span>
+</li>
+<li>
+<span>There is a phase transition once we</span>&rsquo;<span>ve crossed the main diagonal.</span>
+</li>
+<li>
+<span>We can derive </span><code>iy</code><span> from the fact that </span><code>ix + iy = id</code><span>.</span>
+</li>
+</ul>
+</section>
+<section id="Code">
+
+    <h2>
+    <a href="#Code"><span>Code</span> </a>
+    </h2>
+<p><span>The actual code looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">dtw</span>(xs: &amp;[<span class="hl-type">f64</span>], ys: &amp;[<span class="hl-type">f64</span>]) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">f64</span> {</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(xs.<span class="hl-title function_ invoke__">len</span>(), ys.<span class="hl-title function_ invoke__">len</span>());</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = xs.<span class="hl-title function_ invoke__">len</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">d1</span> = <span class="hl-built_in">vec!</span>[<span class="hl-number">0f64</span>; n + <span class="hl-number">1</span>];</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">d2</span> = <span class="hl-built_in">vec!</span>[<span class="hl-number">0f64</span>; n + <span class="hl-number">1</span>];</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">d3</span> = <span class="hl-built_in">vec!</span>[<span class="hl-number">0f64</span>; n + <span class="hl-number">1</span>];</span>
+<span class="line">    d2[<span class="hl-number">0</span>] = ::std::<span class="hl-type">f64</span>::MAX;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">id</span> <span class="hl-keyword">in</span> <span class="hl-number">1</span>..(<span class="hl-number">2</span> * n + <span class="hl-number">1</span>) {</span>
+<span class="line">        ::std::mem::<span class="hl-title function_ invoke__">swap</span>(&amp;<span class="hl-keyword">mut</span> d1, &amp;<span class="hl-keyword">mut</span> d2);</span>
+<span class="line">        ::std::mem::<span class="hl-title function_ invoke__">swap</span>(&amp;<span class="hl-keyword">mut</span> d2, &amp;<span class="hl-keyword">mut</span> d3);</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">ix_range</span> = <span class="hl-keyword">if</span> id &lt;= n {</span>
+<span class="line">            d3[<span class="hl-number">0</span>] = ::std::<span class="hl-type">f64</span>::MAX;</span>
+<span class="line">            d3[id] = ::std::<span class="hl-type">f64</span>::MAX;</span>
+<span class="line">            <span class="hl-number">1</span>..id</span>
+<span class="line">        } <span class="hl-keyword">else</span> {</span>
+<span class="line">            (id - n..n + <span class="hl-number">1</span>)</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">for</span> <span class="hl-variable">ix</span> <span class="hl-keyword">in</span> ix_range {</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">iy</span> = id - ix;</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">d</span> = <span class="hl-title function_ invoke__">min2</span>(<span class="hl-title function_ invoke__">min2</span>(d2[ix - <span class="hl-number">1</span>], d2[ix]), d1[ix - <span class="hl-number">1</span>]);</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">cost</span> = {</span>
+<span class="line">                <span class="hl-keyword">let</span> <span class="hl-variable">t</span> = xs[ix - <span class="hl-number">1</span>] - ys[iy - <span class="hl-number">1</span>];</span>
+<span class="line">                t * t</span>
+<span class="line">            };</span>
+<span class="line">            d3[ix] = d + cost;</span>
+<span class="line">        };</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    d3[n]</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><a href="http://play.rust-lang.org/?gist=4522cb9d4d0e95e9daa4b1f1d6a563b0&amp;version=stable"><span>Code on Rust playground</span></a><span> (185 ms)</span></p>
+<p><span>It take 185 milliseconds to run. The assembly for the main loop is</span>
+<span>quite interesting:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">    1.67    cmp    %rax,%rdx</span>
+<span class="line">    0.00    jbe    6d95</span>
+<span class="line">    1.95    lea    0x1(%rax),%rbx</span>
+<span class="line">    8.09    cmp    %rbx,%rdx</span>
+<span class="line">    0.98    jbe    6da4</span>
+<span class="line">    1.12    cmp    %rax,%r8</span>
+<span class="line">    0.00    jbe    6db3</span>
+<span class="line">    3.49    cmp    %r12,%rax</span>
+<span class="line">    0.00    jae    6de9</span>
+<span class="line">    9.07    cmp    %r12,%rcx</span>
+<span class="line">    0.00    jae    6dc5</span>
+<span class="line">    0.56    cmp    %rbx,%r9</span>
+<span class="line">    0.00    jbe    6dd7</span>
+<span class="line">    2.23    vmovsd (%r15,%rax,8),%xmm0</span>
+<span class="line">   11.72    vminsd 0x8(%r15,%rax,8),%xmm0,%xmm0</span>
+<span class="line">    2.09    vminsd (%r11,%rax,8),%xmm0,%xmm0</span>
+<span class="line">    2.51    vmovsd (%r14,%rax,8),%xmm1</span>
+<span class="line">    7.95    mov    -0x88(%rbp),%rdi</span>
+<span class="line">    3.07    vsubsd (%rdi,%rcx,8),%xmm1,%xmm1</span>
+<span class="line">    3.91    vmulsd %xmm1,%xmm1,%xmm1</span>
+<span class="line">   15.90    vaddsd %xmm1,%xmm0,%xmm0</span>
+<span class="line">    8.37    vmovsd %xmm0,0x8(%r13,%rax,8)</span></code></pre>
+
+</figure>
+<p><span>First of all, we don</span>&rsquo;<span>t see any vectorized instructions, the code does</span>
+<span>roughly the same operations as the in previous version. Also, there is</span>
+<span>a whole bunch of extra branching instructions on the top. These are</span>
+<span>bounds checks which were not eliminated this time. And this is great:</span>
+<span>if I add all off-by one errors I</span>&rsquo;<span>ve made implementing diagonal</span>
+<span>indexing, I would get an integer overflow! Nevertheless, we</span>&rsquo;<span>ve got</span>
+<span>some speedup.</span></p>
+<p><span>Can we go further and add get SIMD instructions here? At the moment,</span>
+<span>Rust does not have a stable way to explicitly emit SIMD</span>
+<span>(</span><a href="https://internals.rust-lang.org/t/getting-explicit-simd-on-stable-rust/4380"><span>it</span>&rsquo;<span>s going to change some day</span></a><span>) (UPDATE: we have </span><a href="https://doc.rust-lang.org/core/arch/index.html"><span>SIMD on stable</span></a><span> now!), so the only choice we</span>
+<span>have is to tweak the source code until LLVM sees an opportunity for</span>
+<span>vectorization.</span></p>
+</section>
+<section id="SIMD">
+
+    <h2>
+    <a href="#SIMD"><span>SIMD</span> </a>
+    </h2>
+<p><span>Although bounds checks themselves don</span>&rsquo;<span>t slow down the code that much,</span>
+<span>they can prevent LLVM from vectorizing. So let</span>&rsquo;<span>s dip our toes into</span>
+<code>unsafe</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">unsafe</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">d</span> = <span class="hl-title function_ invoke__">min2</span>(</span>
+<span class="line">        <span class="hl-title function_ invoke__">min2</span>(*d2.<span class="hl-title function_ invoke__">get_unchecked</span>(ix - <span class="hl-number">1</span>), *d2.<span class="hl-title function_ invoke__">get_unchecked</span>(ix)),</span>
+<span class="line">        *d1.<span class="hl-title function_ invoke__">get_unchecked</span>(ix - <span class="hl-number">1</span>),</span>
+<span class="line">    );</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">cost</span> = {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">t</span> =</span>
+<span class="line">            xs.<span class="hl-title function_ invoke__">get_unchecked</span>(ix - <span class="hl-number">1</span>) - ys.<span class="hl-title function_ invoke__">get_unchecked</span>(iy - <span class="hl-number">1</span>);</span>
+<span class="line">        t * t</span>
+<span class="line">    };</span>
+<span class="line">    *d3.<span class="hl-title function_ invoke__">get_unchecked_mut</span>(ix) = d + cost;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><a href="http://play.rust-lang.org/?gist=a7d7e447794eda6fef7b08a28c2c79da&amp;version=stable"><span>Code on Rust playground</span></a><span> (52 ms)</span></p>
+<p><span>The  code is  as  fast as  it  is  ugly: it  finishes  in whooping  52</span>
+<span>milliseconds! And of course we see SIMD in the assembly:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">    5.74    vmovupd -0x8(%r8,%rcx,8),%ymm0</span>
+<span class="line">    1.44    vminpd (%r8,%rcx,8),%ymm0,%ymm0</span>
+<span class="line">    7.66    vminpd -0x8(%r11,%rcx,8),%ymm0,%ymm0</span>
+<span class="line">    5.26    vmovupd -0x8(%rbx,%rcx,8),%ymm1</span>
+<span class="line">    7.66    vpermpd $0x1b,0x20(%r12),%ymm2</span>
+<span class="line">    5.26    vsubpd %ymm2,%ymm1,%ymm1</span>
+<span class="line">    7.66    vmulpd %ymm1,%ymm1,%ymm1</span>
+<span class="line">    8.61    vaddpd %ymm1,%ymm0,%ymm0</span>
+<span class="line">    2.39    vmovupd %ymm0,(%rdx,%rcx,8)</span>
+<span class="line">    2.39    vmovupd 0x18(%r8,%rcx,8),%ymm0</span>
+<span class="line">    5.74    vminpd 0x20(%r8,%rcx,8),%ymm0,%ymm0</span>
+<span class="line">    9.09    vminpd 0x18(%r11,%rcx,8),%ymm0,%ymm0</span>
+<span class="line">    0.96    vmovupd 0x18(%rbx,%rcx,8),%ymm1</span>
+<span class="line">    4.78    vpermpd $0x1b,(%r12),%ymm2</span>
+<span class="line">    3.83    vsubpd %ymm2,%ymm1,%ymm1</span>
+<span class="line">    3.83    vmulpd %ymm1,%ymm1,%ymm1</span>
+<span class="line">   10.53    vaddpd %ymm1,%ymm0,%ymm0</span>
+<span class="line">    4.78    vmovupd %ymm0,0x20(%rdx,%rcx,8)</span></code></pre>
+
+</figure>
+</section>
+<section id="Safe-SIMD">
+
+    <h2>
+    <a href="#Safe-SIMD"><span>Safe SIMD</span> </a>
+    </h2>
+<p><span>How can we get the same results with safe Rust? One possible way is to</span>
+<span>use iterators, but in this case the resulting code would be rather</span>
+<span>ugly, because you</span>&rsquo;<span>ll need a lot of nested </span><code>.zip</code>&rsquo;<span>s. So let</span>&rsquo;<span>s try a</span>
+<span>simple trick of hoisting the bounds checks of the loop. The idea is to</span>
+<span>transform this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..n {</span>
+<span class="line">    assert i &lt; xs.<span class="hl-title function_ invoke__">len</span>();</span>
+<span class="line">    xs.<span class="hl-title function_ invoke__">get_unchecked</span>(i);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>into this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">assert xs.<span class="hl-title function_ invoke__">len</span>() &lt; n;</span>
+<span class="line"><span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..n {</span>
+<span class="line">    xs.<span class="hl-title function_ invoke__">get_unchecked</span>(i);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>In Rust, this is possible by explicitly slicing the buffer before the loop:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">ix_range</span> = <span class="hl-keyword">if</span> id &lt;= n {</span>
+<span class="line">    d3[<span class="hl-number">0</span>] = ::std::<span class="hl-type">f64</span>::MAX;</span>
+<span class="line">    d3[id] = ::std::<span class="hl-type">f64</span>::MAX;</span>
+<span class="line">    <span class="hl-number">1</span>..id</span>
+<span class="line">} <span class="hl-keyword">else</span> {</span>
+<span class="line">    (id - n..n + <span class="hl-number">1</span>)</span>
+<span class="line">};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">ix_range_1</span> = ix_range.start - <span class="hl-number">1</span>..ix_range.end - <span class="hl-number">1</span>;</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">dn</span> = ix_range.end - ix_range.start;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">d1</span> = &amp;d1[ix_range_1.<span class="hl-title function_ invoke__">clone</span>()];</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">d2_0</span> = &amp;d2[ix_range.<span class="hl-title function_ invoke__">clone</span>()];</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">d2_1</span> = &amp;d2[ix_range_1.<span class="hl-title function_ invoke__">clone</span>()];</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">d3</span> = &amp;<span class="hl-keyword">mut</span> d3[ix_range.<span class="hl-title function_ invoke__">clone</span>()];</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">xs</span> = &amp;xs[ix_range_1.<span class="hl-title function_ invoke__">clone</span>()];</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">ys</span> = &amp;ys[id - ix_range.end..id - ix_range.start];</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// All the buffers we access inside the loop</span></span>
+<span class="line"><span class="hl-comment">// will have the same length</span></span>
+<span class="line"><span class="hl-built_in">assert!</span>(</span>
+<span class="line">    d1.<span class="hl-title function_ invoke__">len</span>() == dn &amp;&amp; d2_0.<span class="hl-title function_ invoke__">len</span>() == dn &amp;&amp; d2_1.<span class="hl-title function_ invoke__">len</span>() == dn</span>
+<span class="line">    &amp;&amp; d3.<span class="hl-title function_ invoke__">len</span>() == dn &amp;&amp; xs.<span class="hl-title function_ invoke__">len</span>() == dn &amp;&amp; ys.<span class="hl-title function_ invoke__">len</span>() == dn</span>
+<span class="line">);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..dn { <span class="hl-comment">// so hopefully LLVM can eliminate bounds checks.</span></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">d</span> = <span class="hl-title function_ invoke__">min2</span>(<span class="hl-title function_ invoke__">min2</span>(d2_0[i], d2_1[i]), d1[i]);</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">cost</span> = {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">t</span> = xs[i] - ys[ys.<span class="hl-title function_ invoke__">len</span>() - i - <span class="hl-number">1</span>];</span>
+<span class="line">        t * t</span>
+<span class="line">    };</span>
+<span class="line">    d3[i] = d + cost;</span>
+<span class="line">};</span></code></pre>
+
+</figure>
+<p><a href="http://play.rust-lang.org/?gist=65a707923aa0d49aa06e84c509c83bed&amp;version=stable"><span>Code on Rust playground</span></a><span> (107 ms)</span></p>
+<p><span>This is definitely an improvement over the best safe version, but is</span>
+<span>still twice as slow as the unsafe variant. Looks like some bounds</span>
+<span>checks are still there! It is possible to find them by selectively</span>
+<span>using </span><code>unsafe</code><span> to replace some indexing operations.</span></p>
+<p><span>And it turns out that only </span><code>ys</code><span> is still checked!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">t</span> = xs[i] - <span class="hl-keyword">unsafe</span> { ys.<span class="hl-title function_ invoke__">get_unchecked</span>(ys.<span class="hl-title function_ invoke__">len</span>() - i - <span class="hl-number">1</span>) };</span></code></pre>
+
+</figure>
+<p><a href="http://play.rust-lang.org/?gist=d735daf2993acd1286d399c813546c71&amp;version=stable"><span>Code on Rust playground</span></a><span> (52 ms)</span></p>
+<p><span>If we use </span><code>unsafe</code><span> only for </span><code>ys</code><span>, we regain all the performance.</span></p>
+<p><span>LLVM is having trouble iterating </span><code>ys</code><span> in reverse, but the fix is easy:</span>
+<span>just reverse it once at the beginning of the function:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">ys_rev</span>: <span class="hl-type">Vec</span>&lt;<span class="hl-type">f64</span>&gt; = ys.<span class="hl-title function_ invoke__">iter</span>().<span class="hl-title function_ invoke__">cloned</span>().<span class="hl-title function_ invoke__">rev</span>().<span class="hl-title function_ invoke__">collect</span>();</span></code></pre>
+
+</figure>
+<p><a href="http://play.rust-lang.org/?gist=6f6bcf941df819d10f8fa688f86765ad&amp;version=stable"><span>Code on Rust playground</span></a><span> (50 ms)</span></p>
+</section>
+<section id="Conclusions">
+
+    <h2>
+    <a href="#Conclusions"><span>Conclusions</span> </a>
+    </h2>
+<p><span>We</span>&rsquo;<span>ve gone from almost 300 milliseconds to only 50 in safe Rust. That</span>
+<span>is quite impressive! However, the resulting code is rather brittle and</span>
+<span>even small changes can prevent vectorization from triggering.</span></p>
+<p><span>It</span>&rsquo;<span>s also important to understand that to allow for SIMD, we had to</span>
+<span>change the underlying algorithm. This is not something even a very</span>
+<span>smart compiler could do!</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2017-03-18-min-of-three-part-2.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

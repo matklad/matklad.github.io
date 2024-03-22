@@ -1,0 +1,1624 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resilient LL Parsing Tutorial</title>
+  <meta name="description" content="In this tutorial, I will explain a particular approach to parsing, which gracefully handles syntax errors and is thus suitable for language servers, which, by their nature, have to handle incomplete and invalid code.
+Explaining the problem and the solution requires somewhat less than a trivial worked example, and I want to share a couple of tricks not directly related to resilience, so the tutorial builds a full, self-contained parser, instead of explaining abstractly just the resilience.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/05/21/resilient-ll-parsing-tutorial.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Resilient LL Parsing Tutorial</span> <time datetime="2023-05-21">May 21, 2023</time></h1>
+<p><span>In this tutorial, I will explain a particular approach to parsing, which gracefully handles syntax errors and is thus suitable for language servers, which, by their nature, have to handle incomplete and invalid code.</span>
+<span>Explaining the problem and the solution requires somewhat less than a trivial worked example, and I want to share a couple of tricks not directly related to resilience, so the tutorial builds a full, self-contained parser, instead of explaining abstractly </span><em><span>just</span></em><span> the resilience.</span></p>
+<p><span>The tutorial is descriptive, rather than prescriptive </span>&mdash;<span> it tells you what you </span><em><span>can</span></em><span> do, not what you </span><em><span>should</span></em><span> do.</span></p>
+<ul>
+<li>
+<span>If you are looking into building a production grade language server, treat it as a library of ideas, not as a blueprint.</span>
+</li>
+<li>
+<span>If you want to get something working quickly, I think today the best answer is </span>&ldquo;<span>just use </span><a href="https://tree-sitter.github.io"><span>Tree-sitter</span></a>&rdquo;<span>, so you</span>&rsquo;<span>d better read its docs rather than this tutorial.</span>
+</li>
+<li>
+<span>If you are building an IDE-grade parser from scratch, then techniques presented here might be directly applicable.</span>
+</li>
+</ul>
+<section id="Why-Resilience-is-Needed">
+
+    <h2>
+    <a href="#Why-Resilience-is-Needed"><span>Why Resilience is Needed?</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s look at one motivational example for resilient parsing:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">fib_rec</span>(f1: <span class="hl-type">u32</span>,</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">fib</span>(n: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">  <span class="hl-title function_ invoke__">fib_rec</span>(<span class="hl-number">1</span>, <span class="hl-number">1</span>, n)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, a user is in the process of defining the </span><code>fib_rec</code><span> helper function.</span>
+<span>For a language server, it</span>&rsquo;<span>s important that the incompleteness doesn</span>&rsquo;<span>t get in the way.</span>
+<span>In particular:</span></p>
+<ul>
+<li>
+<p><span>The following function, </span><code>fib</code><span>, should be parsed without any errors such that syntax and semantic highlighting is not disturbed, and all calls to </span><code>fib</code><span> elsewhere typecheck correctly.</span></p>
+</li>
+<li>
+<p><span>The </span><code>fib_rec</code><span> function itself should be recognized as a partially complete function, so that various language server assists can help complete it correctly.</span></p>
+</li>
+<li>
+<p><span>In particular, a smart language server can actually infer the expected type of </span><code>fib_rec</code><span> from a call we already have, and suggest completing the whole prototype.</span>
+<span>rust-analyzer doesn</span>&rsquo;<span>t do that today, but one day it should.</span></p>
+</li>
+</ul>
+<p><span>Generalizing this example, what we want from our parser is to recognize as much of the syntactic structure as feasible.</span>
+<span>It should be able to localize errors </span>&mdash;<span> a mistake in a function generally should not interfere with parsing unrelated functions.</span>
+<span>As the code is read and written left-to-right, the parser should also recognize valid partial prefixes of various syntactic constructs.</span></p>
+<p><span>Academic literature suggests another lens to use when looking at this problem: error recovery.</span>
+<span>Rather than just recognizing incomplete constructs, the parser can attempt to guess a minimal edit which completes the construct and gets rid of the syntax error.</span>
+<span>From this angle, the above example would look rather like </span><span class="display"><code>fn fib_rec(f1: u32, /* ) {} */</code><span> ,</span></span><span> where the stuff in a comment is automatically inserted by the parser.</span></p>
+<p><span>Resilience is a more fruitful framing to use for a language server </span>&mdash;<span> incomplete code is the ground truth, and only the user knows how to correctly complete it.</span>
+<span>An language server can only offer guesses and suggestions, and they are more precise if they employ post-parsing semantic information.</span></p>
+<p><span>Error recovery might work better when emitting understandable syntax errors, but, in a language server, the importance of clear error messages for </span><em><span>syntax</span></em><span> errors is relatively lower, as highlighting such errors right in the editor synchronously with typing usually provides tighter, more useful tacit feedback.</span></p>
+</section>
+<section id="Approaches-to-Error-Resilience">
+
+    <h2>
+    <a href="#Approaches-to-Error-Resilience"><span>Approaches to Error Resilience</span> </a>
+    </h2>
+<p><span>The classic approach for handling parser errors is to explicitly encode error productions and synchronization tokens into the language grammar.</span>
+<span>This approach isn</span>&rsquo;<span>t a natural fit for resilience framing </span>&mdash;<span> you don</span>&rsquo;<span>t want to anticipate every possible error, as there are just too many possibilities.</span>
+<span>Rather, you want to recover as much of a valid syntax tree as possible, and more or less ignore arbitrary invalid parts.</span></p>
+<p><span>Tree-sitter does something more interesting.</span>
+<span>It is a </span><strong><strong><span>G</span></strong></strong><span>LR parser, meaning that it non-deterministically tries many possible LR (bottom-up) parses, and looks for the best one.</span>
+<span>This allows Tree-sitter to recognize many complete valid small fragments of a tree, but it might have trouble assembling them into incomplete larger fragments.</span>
+<span>In our example </span><span class="display"><code>fn fib_rec(f1: u32,</code><span> ,</span></span><span> Tree-sitter correctly recognizes </span><code>f1: u32</code><span> as a formal parameter, but doesn</span>&rsquo;<span>t recognize </span><code>fib_rec</code><span> as a function.</span></p>
+<p><span>Top-down (LL) parsing paradigm makes it harder to recognize valid small fragments, but naturally allows for incomplete large nodes.</span>
+<span>Because code is written top-down and left-to-right, LL seems to have an advantage for typical patterns of incomplete code.</span>
+<span>Moreover, there isn</span>&rsquo;<span>t really anything special you need to do to make LL parsing resilient.</span>
+<span>You sort of</span>&hellip;<span> just not crash on the first error, and everything else more or less just works.</span></p>
+<p><span>Details are fiddly though, so, in the rest of the post, we will write a complete implementation of a hand-written recursive descent + Pratt resilient parser.</span></p>
+</section>
+<section id="Introducing-L">
+
+    <h2>
+    <a href="#Introducing-L"><span>Introducing L</span> </a>
+    </h2>
+<p><span>For the lack of imagination on my side, the toy language we will be parsing is called </span><code>L</code><span>.</span>
+<span>It is a subset of Rust, which has just enough features to make some syntax mistakes.</span>
+<span>Here</span>&rsquo;<span>s Fibonacci:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">fib</span>(n: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">f1</span> = <span class="hl-title function_ invoke__">fib</span>(n - <span class="hl-number">1</span>);</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">f2</span> = <span class="hl-title function_ invoke__">fib</span>(n - <span class="hl-number">2</span>);</span>
+<span class="line">    <span class="hl-keyword">return</span> f1 + f2;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Note that there</span>&rsquo;<span>s no base case, because L doesn</span>&rsquo;<span>t have syntax for </span><code>if</code><span>.</span>
+<span>Here</span>&rsquo;<span>s the syntax it does have, as an </span><a href="https://rust-analyzer.github.io/blog/2020/10/24/introducing-ungrammar.html"><span>ungrammar</span></a><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-literal">File</span> = Fn*</span>
+<span class="line"></span>
+<span class="line"><span class="hl-literal">Fn</span> = <span class="hl-string">&#x27;fn&#x27;</span> <span class="hl-string">&#x27;name&#x27;</span> ParamList (<span class="hl-string">&#x27;-&gt;&#x27;</span> TypeExpr)? Block</span>
+<span class="line"></span>
+<span class="line"><span class="hl-literal">ParamList</span> = <span class="hl-string">&#x27;(&#x27;</span> Param* <span class="hl-string">&#x27;)&#x27;</span></span>
+<span class="line"><span class="hl-literal">Param</span> = <span class="hl-string">&#x27;name&#x27;</span> <span class="hl-string">&#x27;:&#x27;</span> TypeExpr <span class="hl-string">&#x27;,&#x27;</span>?</span>
+<span class="line"></span>
+<span class="line"><span class="hl-literal">TypeExpr</span> = <span class="hl-string">&#x27;name&#x27;</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-literal">Block</span> = <span class="hl-string">&#x27;{&#x27;</span> Stmt* <span class="hl-string">&#x27;}&#x27;</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-literal">Stmt</span> =</span>
+<span class="line">  StmtExpr</span>
+<span class="line">| StmtLet</span>
+<span class="line">| StmtReturn</span>
+<span class="line"></span>
+<span class="line"><span class="hl-literal">StmtExpr</span> = Expr <span class="hl-string">&#x27;;&#x27;</span></span>
+<span class="line"><span class="hl-literal">StmtLet</span> = <span class="hl-string">&#x27;let&#x27;</span> <span class="hl-string">&#x27;name&#x27;</span> <span class="hl-string">&#x27;=&#x27;</span> Expr <span class="hl-string">&#x27;;&#x27;</span></span>
+<span class="line"><span class="hl-literal">StmtReturn</span> = <span class="hl-string">&#x27;return&#x27;</span> Expr <span class="hl-string">&#x27;;&#x27;</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-literal">Expr</span> =</span>
+<span class="line">  ExprLiteral</span>
+<span class="line">| ExprName</span>
+<span class="line">| ExprParen</span>
+<span class="line">| ExprBinary</span>
+<span class="line">| ExprCall</span>
+<span class="line"></span>
+<span class="line"><span class="hl-literal">ExprLiteral</span> = <span class="hl-string">&#x27;int&#x27;</span> | <span class="hl-string">&#x27;true&#x27;</span> | <span class="hl-string">&#x27;false&#x27;</span></span>
+<span class="line"><span class="hl-literal">ExprName</span> = <span class="hl-string">&#x27;name&#x27;</span></span>
+<span class="line"><span class="hl-literal">ExprParen</span> = <span class="hl-string">&#x27;(&#x27;</span> Expr <span class="hl-string">&#x27;)&#x27;</span></span>
+<span class="line"><span class="hl-literal">ExprBinary</span> = Expr (<span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> | <span class="hl-string">&#x27;*&#x27;</span> | <span class="hl-string">&#x27;/&#x27;</span>) Expr</span>
+<span class="line"><span class="hl-literal">ExprCall</span> = Expr ArgList</span>
+<span class="line"></span>
+<span class="line"><span class="hl-literal">ArgList</span> = <span class="hl-string">&#x27;(&#x27;</span> Arg* <span class="hl-string">&#x27;)&#x27;</span></span>
+<span class="line"><span class="hl-literal">Arg</span> = Expr <span class="hl-string">&#x27;,&#x27;</span>?</span></code></pre>
+
+</figure>
+<p><span>The meta syntax here is similar to BNF, with two important differences:</span></p>
+<ul>
+<li>
+<span>the notation is better specified and more familiar (recursive regular expressions),</span>
+</li>
+<li>
+<span>it describes syntax </span><em><span>trees</span></em><span>, rather than strings (</span><em><span>sequences</span></em><span> of tokens).</span>
+</li>
+</ul>
+<p><span>Single quotes signify terminals: </span><code>'fn'</code><span> and </span><code>'return'</code><span> are keywords, </span><code>'name'</code><span> stands for any identifier token, like </span><code>foo</code><span>, and </span><code>'('</code><span> is punctuation.</span>
+<span>Unquoted names are non-terminals. For example, </span><code>x: i32,</code><span> would be an example of </span><code>Param</code><span>.</span>
+<span>Unquoted punctuation are meta symbols of ungrammar itself, semantics identical to regular expressions. Zero or more repetition is </span><code>*</code><span>, zero or one is </span><code>?</code><span>, </span><code>|</code><span> is alternation and </span><code>()</code><span> are used for grouping.</span></p>
+<p><span>The grammar doesn</span>&rsquo;<span>t nail the syntax precisely. For example, the rule for </span><code>Param</code><span>, </span><span class="display"><code>Param = 'name' ':' Type ','?</code><span> ,</span></span><span> says that </span><code>Param</code><span> syntax node has an optional comma, but there</span>&rsquo;<span>s nothing in the above </span><code>ungrammar</code><span> specifying whether the trailing commas are allowed.</span></p>
+<p><span>Overall, </span><code>L</code><span> has very little to it </span>&mdash;<span> a program is a series of function declarations, each function has a body which is a sequence of statements, the set of expressions is spartan, not even an </span><code>if</code><span>. Still, it</span>&rsquo;<span>ll take us some time to parse all that.</span>
+<span>But you can already try the end result in the text-box below.</span>
+<span>The syntax tree is updated automatically on typing.</span>
+<span>Do make mistakes to see how a partial tree is recovered.</span></p>
+<aside id="playground" style="min-height: 400px; min-width: 400px; ; display: flex; flex-direction: row;">
+<textarea class="input"  style="height: 400px; width: 50%; margin: 2px; padding: 2px; resize: none;">
+fn fib_rec(f1: u32,
+
+fn fib(n: u32) -> u32 {
+  fib_rec(1, 1, n)
+}
+</textarea>
+<textarea class="output" style="height: 400px; width: 50%; margin: 2px; padding: 2px; resize: none;" readonly=true>
+</textarea>
+</aside>
+</section>
+<section id="Designing-the-Tree">
+
+    <h2>
+    <a href="#Designing-the-Tree"><span>Designing the Tree</span> </a>
+    </h2>
+<p><span>A traditional AST for L might look roughly like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">File</span> {</span>
+<span class="line">  functions: <span class="hl-type">Vec</span>&lt;Function&gt;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Function</span> {</span>
+<span class="line">  name: <span class="hl-type">String</span>,</span>
+<span class="line">  params: <span class="hl-type">Vec</span>&lt;Param&gt;,</span>
+<span class="line">  return_type: <span class="hl-type">Option</span>&lt;TypeExpr&gt;,</span>
+<span class="line">  block: Block,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Extending this structure to be resilient is non-trivial. There are two problems: trivia and errors.</span></p>
+<p><span>For resilient parsing, we want the AST to contain every detail about the source text.</span>
+<span>We actually don</span>&rsquo;<span>t want to use an </span><em><span>abstract</span></em><span> syntax tree, and need a </span><em><span>concrete</span></em><span> one.</span>
+<span>In a traditional AST, the tree structure is rigidly defined </span>&mdash;<span> any syntax node has a fixed number of children.</span>
+<span>But there can be any number of comments and whitespace anywhere in the tree, and making space for them in the structure requires some fiddly data manipulation.</span>
+<span>Similarly, errors (e.g., unexpected tokens), can appear anywhere in the tree.</span></p>
+<p><span>One trick to handle these in the AST paradigm is to attach trivia and error tokens to other tokens.</span>
+<span>That is, for something like</span>
+<span class="display"><code>fn /* name of the function -&gt; */ f() {}</code><span> ,</span></span>
+<span>the </span><code>fn</code><span> and </span><code>f</code><span> tokens would be explicit parts of the AST, while the comment and surrounding whitespace would belong to the collection of trivia tokens hanging off the </span><code>fn</code><span> token.</span></p>
+<p><span>One complication here is that it</span>&rsquo;<span>s not always just tokens that can appear anywhere, sometimes you can have full trees like that.</span>
+<span>For example, comments might support markdown syntax, and you might actually want to parse that properly (e.g., to resolve links to declarations).</span>
+<span>Syntax errors can also span whole subtrees.</span>
+<span>For example, when parsing </span><code>pub(crate) nope</code><span> in Rust, it would be smart to parse </span><code>pub(crate)</code><span> as a visibility modifier, and nest it into a bigger </span><code>Error</code><span> node.</span></p>
+<p><span>SwiftSyntax meticulously adds error placeholders between any two fields of an AST node, giving rise to</span>
+<span class="display"><code>unexpectedBetweenModifiersAndDeinitKeyword</code></span>
+<span>and such (</span><a href="https://github.com/apple/swift-syntax/blob/66450960b1ed88b842d63f7a38254aaba08bbd4d/Sources/SwiftSyntax/generated/syntaxNodes/SyntaxDeclNodes.swift#L1368"><span>source</span></a><span>, </span><a href="https://swiftpackageindex.com/apple/swift-syntax/508.0.1/documentation/swiftsyntax/classdeclsyntax#instance-properties"><span>docs</span></a><span>).</span></p>
+<p><span>An alternative approach, used by IntelliJ and rust-analyzer, is to treat the syntax tree as a somewhat dynamically-typed data structure:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">TokenKind</span> {</span>
+<span class="line">  ErrorToken, LParen, RParen, <span class="hl-built_in">Eq</span>,</span>
+<span class="line">  ...</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Token</span> {</span>
+<span class="line">  kind: TokenKind,</span>
+<span class="line">  text: <span class="hl-type">String</span>,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">TreeKind</span> {</span>
+<span class="line">  ErrorTree, File, <span class="hl-built_in">Fn</span>, Param,</span>
+<span class="line">  ...</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Tree</span> {</span>
+<span class="line">  kind: TreeKind,</span>
+<span class="line">  children: <span class="hl-type">Vec</span>&lt;Child&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Child</span> {</span>
+<span class="line">  <span class="hl-title function_ invoke__">Token</span>(Token),</span>
+<span class="line">  <span class="hl-title function_ invoke__">Tree</span>(Tree),</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This structure does not enforce any constraints on the shape of the syntax tree at all, and so it naturally accommodates errors anywhere.</span>
+<span>It is possible to layer a well-typed API on top of this dynamic foundation.</span>
+<span>An extra benefit of this representation is that you can use the same tree </span><em><span>type</span></em><span> for different languages; this is a requirement for universal tools.</span></p>
+<p><span>Discussing specifics of syntax tree representation goes beyond this article, as the topic is vast and lacks a clear winning solution.</span>
+<span>To learn about it, take a look at Roslyn, SwiftSyntax, rowan and IntelliJ.</span></p>
+<p><span>To simplify things, we</span>&rsquo;<span>ll ignore comments and whitespace, though you</span>&rsquo;<span>ll absolutely want those in a real implementation.</span>
+<span>One approach would be to do the parsing without comments, like we do here, and then attach comments to the nodes in a separate pass.</span>
+<span>Attaching comments needs some heuristics </span>&mdash;<span> for example, non-doc comments generally want to be a part of the following syntax node.</span></p>
+<p><span>Another design choice is handling of error messages.</span>
+<span>One approach is to treat error messages as properties of the syntax tree itself, by either inferring them from the tree structure, or just storing them inline.</span>
+<span>Alternatively, errors can be considered to be a side-effect of the parsing process (that way, trees constructed manually during, eg, refactors, won</span>&rsquo;<span>t carry any error messages, even if they are invalid).</span></p>
+<p><span>Here</span>&rsquo;<span>s the full set of token and tree kinds for our language L:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">TokenKind</span> {</span>
+<span class="line">  ErrorToken, Eof,</span>
+<span class="line"></span>
+<span class="line">  LParen, RParen, LCurly, RCurly,</span>
+<span class="line">  <span class="hl-built_in">Eq</span>, Semi, Comma, Colon, Arrow,</span>
+<span class="line">  Plus, Minus, Star, Slash,</span>
+<span class="line"></span>
+<span class="line">  FnKeyword, LetKeyword, ReturnKeyword,</span>
+<span class="line">  TrueKeyword, FalseKeyword,</span>
+<span class="line"></span>
+<span class="line">  Name, Int,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">TreeKind</span> {</span>
+<span class="line">  ErrorTree,</span>
+<span class="line">  File, <span class="hl-built_in">Fn</span>, TypeExpr,</span>
+<span class="line">  ParamList, Param,</span>
+<span class="line">  Block,</span>
+<span class="line">  StmtLet, StmtReturn, StmtExpr,</span>
+<span class="line">  ExprLiteral, ExprName, ExprParen,</span>
+<span class="line">  ExprBinary, ExprCall,</span>
+<span class="line">  ArgList, Arg,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Things to note:</span></p>
+<ul>
+<li>
+<span>explicit </span><code>Error</code><span> kinds;</span>
+</li>
+<li>
+<span>no whitespace or comments, as an unrealistic simplification;</span>
+</li>
+<li>
+<code>Eof</code><span> virtual token simplifies parsing, removing the need to handle </span><code>Option&lt;Token&gt;</code><span>;</span>
+</li>
+<li>
+<span>punctuators are named after what they are, rather than after what they usually mean: </span><code>Star</code><span>, rather than </span><code>Mult</code><span>;</span>
+</li>
+<li>
+<span>a good set of name for various kinds of braces is </span><span class="display"><code>{L,R}{Paren,Curly,Brack,Angle}</code><span>.</span></span>
+</li>
+</ul>
+</section>
+<section id="Lexer">
+
+    <h2>
+    <a href="#Lexer"><span>Lexer</span> </a>
+    </h2>
+<p><span>Won</span>&rsquo;<span>t be covering lexer here, let</span>&rsquo;<span>s just say we have </span><span class="display"><code>fn lex(text: &amp;str) -&gt; Vec&lt;Token&gt;</code><span>,</span></span><span> function. Two points worth mentioning:</span></p>
+<ul>
+<li>
+<span>Lexer itself should be resilient, but that</span>&rsquo;<span>s easy </span>&mdash;<span> produce an </span><code>Error</code><span> token for anything which isn</span>&rsquo;<span>t a valid token.</span>
+</li>
+<li>
+<span>Writing lexer by hand is somewhat tedious, but is very simple relative to everything else.</span>
+<span>If you are stuck in an analysis-paralysis picking a lexer generator, consider cutting the Gordian knot and hand-writing.</span>
+</li>
+</ul>
+</section>
+<section id="Parser">
+
+    <h2>
+    <a href="#Parser"><span>Parser</span> </a>
+    </h2>
+<p><span>With homogenous syntax trees, the task of parsing admits an elegant formalization </span>&mdash;<span> we want to insert extra parenthesis into a stream of tokens.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">+-Fun</span>
+<span class="line">|      +-Param</span>
+<span class="line">|      |</span>
+<span class="line">[fn f( [x: Int] ) {}]</span>
+<span class="line">     |            |</span>
+<span class="line">     |            +-Block</span>
+<span class="line">     +-ParamList</span></code></pre>
+
+</figure>
+<p><span>Note how the sequence of tokens with extra parenthesis is still a flat sequence.</span>
+<span>The parsing will be two-phase:</span></p>
+<ul>
+<li>
+<span>in the first phase, the parser emits a flat list of events,</span>
+</li>
+<li>
+<span>in the second phase, the list is converted to a tree.</span>
+</li>
+</ul>
+<p><span>Here</span>&rsquo;<span>s the basic setup for the parser:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Event</span> {</span>
+<span class="line">  Open { kind: TreeKind }, <i class="callout" data-value="2"></i></span>
+<span class="line">  Close,</span>
+<span class="line">  Advance,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">MarkOpened</span> {</span>
+<span class="line">  index: <span class="hl-type">usize</span>,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Parser</span> {</span>
+<span class="line">  tokens: <span class="hl-type">Vec</span>&lt;Token&gt;,</span>
+<span class="line">  pos: <span class="hl-type">usize</span>,</span>
+<span class="line">  fuel: Cell&lt;<span class="hl-type">u32</span>&gt;, <i class="callout" data-value="4"></i></span>
+<span class="line">  events: <span class="hl-type">Vec</span>&lt;Event&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Parser</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">open</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> MarkOpened { <i class="callout" data-value="1"></i></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">mark</span> = MarkOpened { index: <span class="hl-keyword">self</span>.events.<span class="hl-title function_ invoke__">len</span>() };</span>
+<span class="line">    <span class="hl-keyword">self</span>.events.<span class="hl-title function_ invoke__">push</span>(Event::Open { kind: TreeKind::ErrorTree });</span>
+<span class="line">    mark</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">close</span>(  <i class="callout" data-value="1"></i></span>
+<span class="line">    &amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>,</span>
+<span class="line">    m: MarkOpened,</span>
+<span class="line">    kind: TreeKind, <i class="callout" data-value="2"></i></span>
+<span class="line">  ) {</span>
+<span class="line">    <span class="hl-keyword">self</span>.events[m.index] = Event::Open { kind };</span>
+<span class="line">    <span class="hl-keyword">self</span>.events.<span class="hl-title function_ invoke__">push</span>(Event::Close);</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">advance</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>) { <i class="callout" data-value="1"></i></span>
+<span class="line">    <span class="hl-built_in">assert!</span>(!<span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">eof</span>());</span>
+<span class="line">    <span class="hl-keyword">self</span>.fuel.<span class="hl-title function_ invoke__">set</span>(<span class="hl-number">256</span>); <i class="callout" data-value="4"></i></span>
+<span class="line">    <span class="hl-keyword">self</span>.events.<span class="hl-title function_ invoke__">push</span>(Event::Advance);</span>
+<span class="line">    <span class="hl-keyword">self</span>.pos += <span class="hl-number">1</span>;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">eof</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">bool</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span>.pos == <span class="hl-keyword">self</span>.tokens.<span class="hl-title function_ invoke__">len</span>()</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">nth</span>(&amp;<span class="hl-keyword">self</span>, lookahead: <span class="hl-type">usize</span>) <span class="hl-punctuation">-&gt;</span> TokenKind { <i class="callout" data-value="3"></i></span>
+<span class="line">    <span class="hl-keyword">if</span> <span class="hl-keyword">self</span>.fuel.<span class="hl-title function_ invoke__">get</span>() == <span class="hl-number">0</span> { <i class="callout" data-value="4"></i></span>
+<span class="line">      <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;parser is stuck&quot;</span>)</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">self</span>.fuel.<span class="hl-title function_ invoke__">set</span>(<span class="hl-keyword">self</span>.fuel.<span class="hl-title function_ invoke__">get</span>() - <span class="hl-number">1</span>);</span>
+<span class="line">    <span class="hl-keyword">self</span>.tokens.<span class="hl-title function_ invoke__">get</span>(<span class="hl-keyword">self</span>.pos + lookahead)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">map_or</span>(TokenKind::Eof, |it| it.kind)</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">at</span>(&amp;<span class="hl-keyword">self</span>, kind: TokenKind) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">bool</span> { <i class="callout" data-value="3"></i></span>
+<span class="line">    <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">nth</span>(<span class="hl-number">0</span>) == kind</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">eat</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>, kind: TokenKind) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">bool</span> { <i class="callout" data-value="3"></i></span>
+<span class="line">    <span class="hl-keyword">if</span> <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">at</span>(kind) {</span>
+<span class="line">      <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">advance</span>();</span>
+<span class="line">      <span class="hl-literal">true</span></span>
+<span class="line">    } <span class="hl-keyword">else</span> {</span>
+<span class="line">      <span class="hl-literal">false</span></span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">expect</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>, kind: TokenKind) {</span>
+<span class="line">    <span class="hl-keyword">if</span> <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">eat</span>(kind) {</span>
+<span class="line">      <span class="hl-keyword">return</span>;</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-comment">// <span class="hl-doctag">TODO:</span> Error reporting.</span></span>
+<span class="line">    eprintln!(<span class="hl-string">&quot;expected {kind:?}&quot;</span>);</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">advance_with_error</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>, error: &amp;<span class="hl-type">str</span>) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line">    <span class="hl-comment">// <span class="hl-doctag">TODO:</span> Error reporting.</span></span>
+<span class="line">    eprintln!(<span class="hl-string">&quot;{error}&quot;</span>);</span>
+<span class="line">    <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">advance</span>();</span>
+<span class="line">    <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">close</span>(m, ErrorTree);</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<p><code>open</code><span>, </span><code>advance</code><span>, and </span><code>close</code><span> form the basis for constructing the stream of events.</span></p>
+</li>
+<li>
+<p><span>Note how </span><code>kind</code><span> is stored in the </span><code>Open</code><span> event, but is supplied with the </span><code>close</code><span> method.</span>
+<span>This is required for flexibility </span>&mdash;<span> sometimes it</span>&rsquo;<span>s possible to decide on the type of syntax node only after it is parsed.</span>
+<span>The way this works is that the </span><code>open</code><span> method returns a </span><code>Mark</code><span> which is subsequently passed to </span><code>close</code><span> to modify the corresponding </span><code>Open</code><span> event.</span></p>
+</li>
+<li>
+<p><span>There</span>&rsquo;<span>s a set of short, convenient methods to navigate through the sequence of tokens:</span></p>
+<ul>
+<li>
+<code>nth</code><span> is the lookahead method. Note how it doesn</span>&rsquo;<span>t return an </span><code>Option</code><span>, and uses </span><code>Eof</code><span> special value for </span>&ldquo;<span>out of bounds</span>&rdquo;<span> indexes.</span>
+<span>This simplifies the call-site, </span>&ldquo;<span>no more tokens</span>&rdquo;<span> and </span>&ldquo;<span>token of a wrong kind</span>&rdquo;<span> are always handled the same.</span>
+</li>
+<li>
+<code>at</code><span> is a convenient specialization to check for a specific next token.</span>
+</li>
+<li>
+<code>eat</code><span> is </span><code>at</code><span> combined with consuming the next token.</span>
+</li>
+<li>
+<code>expect</code><span> is </span><code>eat</code><span> combined with error reporting.</span>
+</li>
+</ul>
+<p><span>These methods are not a very orthogonal basis, but they are a convenience basis for parsing.</span>
+<span>Finally, </span><code>advance_with_error</code><span> advanced over any token, but also wraps it into an error node.</span></p>
+</li>
+<li>
+<p><span>When writing parsers by hand, it</span>&rsquo;<span>s very easy to accidentally write the code which loops or recurses forever.</span>
+<span>To simplify debugging, it</span>&rsquo;<span>s helpful to add an explicit notion of </span>&ldquo;<span>fuel</span>&rdquo;<span>, which is replenished every time the parser makes progress,</span>
+<span>and is spent every time it does not.</span></p>
+</li>
+</ol>
+<p><span>The function to transform a flat list of events into a tree is a bit involved.</span>
+<span>It juggles three things: an iterator of events, an iterator of tokens, and a stack of partially constructed nodes (we expect the stack to contain just one node at the end).</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Parser</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">build_tree</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> Tree {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">tokens</span> = <span class="hl-keyword">self</span>.tokens.<span class="hl-title function_ invoke__">into_iter</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">events</span> = <span class="hl-keyword">self</span>.events;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">stack</span> = <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// Special case: pop the last `Close` event to ensure</span></span>
+<span class="line">    <span class="hl-comment">// that the stack is non-empty inside the loop.</span></span>
+<span class="line">    <span class="hl-built_in">assert!</span>(matches!(events.<span class="hl-title function_ invoke__">pop</span>(), <span class="hl-title function_ invoke__">Some</span>(Event::Close)));</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">event</span> <span class="hl-keyword">in</span> events {</span>
+<span class="line">      <span class="hl-keyword">match</span> event {</span>
+<span class="line">        <span class="hl-comment">// Starting a new node; just push an empty tree to the stack.</span></span>
+<span class="line">        Event::Open { kind } =&gt; {</span>
+<span class="line">          stack.<span class="hl-title function_ invoke__">push</span>(Tree { kind, children: <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>() })</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-comment">// A tree is done.</span></span>
+<span class="line">        <span class="hl-comment">// Pop it off the stack and append to a new current tree.</span></span>
+<span class="line">        Event::Close =&gt; {</span>
+<span class="line">          <span class="hl-keyword">let</span> <span class="hl-variable">tree</span> = stack.<span class="hl-title function_ invoke__">pop</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">          stack</span>
+<span class="line">            .<span class="hl-title function_ invoke__">last_mut</span>()</span>
+<span class="line">            <span class="hl-comment">// If we don&#x27;t pop the last `Close` before this loop,</span></span>
+<span class="line">            <span class="hl-comment">// this unwrap would trigger for it.</span></span>
+<span class="line">            .<span class="hl-title function_ invoke__">unwrap</span>()</span>
+<span class="line">            .children</span>
+<span class="line">            .<span class="hl-title function_ invoke__">push</span>(Child::<span class="hl-title function_ invoke__">Tree</span>(tree));</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-comment">// Consume a token and append it to the current tree</span></span>
+<span class="line">        Event::Advance =&gt; {</span>
+<span class="line">          <span class="hl-keyword">let</span> <span class="hl-variable">token</span> = tokens.<span class="hl-title function_ invoke__">next</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">          stack</span>
+<span class="line">            .<span class="hl-title function_ invoke__">last_mut</span>()</span>
+<span class="line">            .<span class="hl-title function_ invoke__">unwrap</span>()</span>
+<span class="line">            .children</span>
+<span class="line">            .<span class="hl-title function_ invoke__">push</span>(Child::<span class="hl-title function_ invoke__">Token</span>(token));</span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// Our parser will guarantee that all the trees are closed</span></span>
+<span class="line">    <span class="hl-comment">// and cover the entirety of tokens.</span></span>
+<span class="line">    <span class="hl-built_in">assert!</span>(stack.<span class="hl-title function_ invoke__">len</span>() == <span class="hl-number">1</span>);</span>
+<span class="line">    <span class="hl-built_in">assert!</span>(tokens.<span class="hl-title function_ invoke__">next</span>().<span class="hl-title function_ invoke__">is_none</span>());</span>
+<span class="line"></span>
+<span class="line">    stack.<span class="hl-title function_ invoke__">pop</span>().<span class="hl-title function_ invoke__">unwrap</span>()</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Grammar">
+
+    <h2>
+    <a href="#Grammar"><span>Grammar</span> </a>
+    </h2>
+<p><span>We are finally getting to the actual topic of resilient parser.</span>
+<span>Now we will write a full grammar for L as a sequence of functions.</span>
+<span>Usually both atomic parser operations, like </span><code>fn advance</code><span>, and grammar productions, like </span><code>fn parse_fn</code><span> are implemented as methods on the </span><code>Parser</code><span> struct.</span>
+<span>I prefer to separate the two and to use free functions for the latter category, as the code is a bit more readable that way.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with parsing the top level.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> TokenKind::*;</span>
+<span class="line"><span class="hl-keyword">use</span> TreeKind::*;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// File = Fn*</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">file</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>(); <i class="callout" data-value="1"></i></span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">while</span> !p.<span class="hl-title function_ invoke__">eof</span>() { <i class="callout" data-value="2"></i></span>
+<span class="line">    <span class="hl-keyword">if</span> p.<span class="hl-title function_ invoke__">at</span>(FnKeyword) {</span>
+<span class="line">      <span class="hl-title function_ invoke__">func</span>(p)</span>
+<span class="line">    } <span class="hl-keyword">else</span> {</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">advance_with_error</span>(<span class="hl-string">&quot;expected a function&quot;</span>); <i class="callout" data-value="3"></i></span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, File);  <i class="callout" data-value="1"></i></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<p><span>Wrap the whole thing into a </span><code>File</code><span> node.</span></p>
+</li>
+<li>
+<p><span>Use the </span><code>while</code><span> loop to parse a file as a series of functions.</span>
+<span>Importantly, the entirety of the file is parsed; we break out of the loop only when the eof is reached.</span></p>
+</li>
+<li>
+<p><span>To not get stuck in this loop, it</span>&rsquo;<span>s crucial that every iteration consumes at least one token.</span>
+<span>If the token is </span><code>fn</code><span>, we</span>&rsquo;<span>ll parse at least a part of a function.</span>
+<span>Otherwise, we consume the token and wrap it into an error node.</span></p>
+</li>
+</ol>
+<p><span>Lets parse functions now:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// Fn = &#x27;fn&#x27; &#x27;name&#x27; ParamList (&#x27;-&gt;&#x27; TypeExpr)? Block</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">func</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-built_in">assert!</span>(p.<span class="hl-title function_ invoke__">at</span>(FnKeyword)); <i class="callout" data-value="1"></i></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>(); <i class="callout" data-value="2"></i></span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(FnKeyword);</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(Name);</span>
+<span class="line">  <span class="hl-keyword">if</span> p.<span class="hl-title function_ invoke__">at</span>(LParen) { <i class="callout" data-value="3"></i></span>
+<span class="line">    <span class="hl-title function_ invoke__">param_list</span>(p);</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">if</span> p.<span class="hl-title function_ invoke__">eat</span>(Arrow) {</span>
+<span class="line">    <span class="hl-title function_ invoke__">type_expr</span>(p);</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">if</span> p.<span class="hl-title function_ invoke__">at</span>(LCurly) { <i class="callout" data-value="3"></i></span>
+<span class="line">    <span class="hl-title function_ invoke__">block</span>(p);</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, <span class="hl-built_in">Fn</span>); <i class="callout" data-value="2"></i></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<p><span>When parsing a function, we assert that the current token is </span><code>fn</code><span>.</span>
+<span>There</span>&rsquo;<span>s some duplication with the </span><span class="display"><code>if p.at(FnKeyword)</code><span> ,</span></span><span> check at the call-site, but this duplication actually helps readability.</span></p>
+</li>
+<li>
+<p><span>Again, we surround the body of the function with </span><code>open</code><span>/</span><code>close</code><span> pair.</span></p>
+</li>
+<li>
+<p><span>Although parameter list and function body are mandatory, we precede them with an </span><code>at</code><span> check.</span>
+<span>We can still report the syntax error by analyzing the structure of the syntax tree (or we can report it as a side effect of parsing in the </span><code>else</code><span> branch if we want).</span>
+<span>It wouldn</span>&rsquo;<span>t be wrong to just remove the </span><code>if</code><span> altogether and try to parse </span><code>param_list</code><span> unconditionally, but the </span><code>if</code><span> helps with reducing cascading errors.</span></p>
+</li>
+</ol>
+<p><span>Now, the list of parameters:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// ParamList = &#x27;(&#x27; Param* &#x27;)&#x27;</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">param_list</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-built_in">assert!</span>(p.<span class="hl-title function_ invoke__">at</span>(LParen));</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(LParen); <i class="callout" data-value="1"></i></span>
+<span class="line">  <span class="hl-keyword">while</span> !p.<span class="hl-title function_ invoke__">at</span>(RParen) &amp;&amp; !p.<span class="hl-title function_ invoke__">eof</span>() { <i class="callout" data-value="2"></i></span>
+<span class="line">    <span class="hl-keyword">if</span> p.<span class="hl-title function_ invoke__">at</span>(Name) { <i class="callout" data-value="3"></i></span>
+<span class="line">      <span class="hl-title function_ invoke__">param</span>(p);</span>
+<span class="line">    } <span class="hl-keyword">else</span> {</span>
+<span class="line">      <span class="hl-keyword">break</span>; <i class="callout" data-value="3"></i></span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(RParen); <i class="callout" data-value="1"></i></span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, ParamList);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<span>Inside, we have a standard code shape for parsing a bracketed list.</span>
+<span>It can be extracted into a high-order function, but typing out the code manually is not a problem either.</span>
+<span>This bit of code starts and ends with consuming the corresponding parenthesis.</span>
+</li>
+<li>
+<span>In the happy case, we loop until the closing parenthesis.</span>
+<span>However, it could also be the case that there</span>&rsquo;<span>s no closing parenthesis at all, so we add an </span><code>eof</code><span> condition as well.</span>
+<span>Generally, every loop we write would have </span><code>&amp;&amp; !p.eof()</code><span> tackled on.</span>
+</li>
+<li>
+<span>As with any loop, we need to ensure that each iteration consumes at least one token to not get stuck.</span>
+<span>If the current token is an identifier, everything is ok, as we</span>&rsquo;<span>ll parse at least some part of the parameter.</span>
+</li>
+</ol>
+<p><span>Parsing parameter is almost nothing new at this point:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// Param = &#x27;name&#x27; &#x27;:&#x27; TypeExpr &#x27;,&#x27;?</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">param</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-built_in">assert!</span>(p.<span class="hl-title function_ invoke__">at</span>(Name));</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(Name);</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(Colon);</span>
+<span class="line">  <span class="hl-title function_ invoke__">type_expr</span>(p);</span>
+<span class="line">  <span class="hl-keyword">if</span> !p.<span class="hl-title function_ invoke__">at</span>(RParen) { <i class="callout" data-value="1"></i></span>
+<span class="line">    p.<span class="hl-title function_ invoke__">expect</span>(Comma);</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, Param);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<span>This is the only interesting bit.</span>
+<span>To parse a comma-separated list of parameters with a trailing comma, it</span>&rsquo;<span>s enough to check if the following token after parameter is </span><code>)</code><span>.</span>
+<span>This correctly handles all three cases:</span>
+<ul>
+<li>
+<span>if the next token is </span><code>)</code><span>, we are at the end of the list, and no comma is required;</span>
+</li>
+<li>
+<span>if the next token is </span><code>,</code><span>, we correctly advance past it;</span>
+</li>
+<li>
+<span>finally, if the next token is anything else, then it</span>&rsquo;<span>s not a </span><code>)</code><span>, so we are not at the last element of the list and correctly emit an error.</span>
+</li>
+</ul>
+</li>
+</ol>
+<p><span>Parsing types is trivial:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// TypeExpr = &#x27;name&#x27;</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">type_expr</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(Name);</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, TypeExpr);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The notable aspect here is naming.</span>
+<span>The production is deliberately named </span><code>TypeExpr</code><span>, rather than </span><code>Type</code><span>, to avoid confusion down the line.</span>
+<span>Consider </span><span class="display"><code>fib(92)</code><span> .</span></span>
+<span>It is an </span><em><span>expression</span></em><span>, which evaluates to a </span><em><span>value</span></em><span>.</span>
+<span>The same thing happens with types.</span>
+<span>For example, </span><span class="display"><code>Foo&lt;Int&gt;</code></span><span> is not a type yet, it</span>&rsquo;<span>s an expression which can be </span>&ldquo;<span>evaluated</span>&rdquo;<span> (at compile time) to a type (if </span><code>Foo</code><span> is a type alias, the result might be something like </span><code>Pair&lt;Int, Int&gt;</code><span>).</span></p>
+<p><span>Parsing a block gets a bit more involved:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// Block = &#x27;{&#x27; Stmt* &#x27;}&#x27;</span></span>
+<span class="line"><span class="hl-comment">//</span></span>
+<span class="line"><span class="hl-comment">// Stmt =</span></span>
+<span class="line"><span class="hl-comment">//   StmtLet</span></span>
+<span class="line"><span class="hl-comment">// | StmtReturn</span></span>
+<span class="line"><span class="hl-comment">// | StmtExpr</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">block</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-built_in">assert!</span>(p.<span class="hl-title function_ invoke__">at</span>(LCurly));</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(LCurly);</span>
+<span class="line">  <span class="hl-keyword">while</span> !p.<span class="hl-title function_ invoke__">at</span>(RCurly) &amp;&amp; !p.<span class="hl-title function_ invoke__">eof</span>() {</span>
+<span class="line">    <span class="hl-keyword">match</span> p.<span class="hl-title function_ invoke__">nth</span>(<span class="hl-number">0</span>) {</span>
+<span class="line">      LetKeyword =&gt; <span class="hl-title function_ invoke__">stmt_let</span>(p),</span>
+<span class="line">      ReturnKeyword =&gt; <span class="hl-title function_ invoke__">stmt_return</span>(p),</span>
+<span class="line">      _ =&gt; <span class="hl-title function_ invoke__">stmt_expr</span>(p),</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(RCurly);</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, Block);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Block can contain many different kinds of statements, so we branch on the first token in the loop</span>&rsquo;<span>s body.</span>
+<span>As usual, we need to maintain an invariant that the body consumes at least one token.</span>
+<span>For </span><code>let</code><span> and </span><code>return</code><span> statements that</span>&rsquo;<span>s easy, they consume the fixed first token.</span>
+<span>For the expression statement (things like </span><code>1 + 1;</code><span>) it gets more interesting, as an expression can start with many different tokens.</span>
+<span>For the time being, we</span>&rsquo;<span>ll just kick the can down the road and require </span><code>stmt_expr</code><span> to deal with it (that is, to guarantee that at least one token is consumed).</span></p>
+<p><span>Statements themselves are straightforward:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// StmtLet = &#x27;let&#x27; &#x27;name&#x27; &#x27;=&#x27; Expr &#x27;;&#x27;</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">stmt_let</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-built_in">assert!</span>(p.<span class="hl-title function_ invoke__">at</span>(LetKeyword));</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(LetKeyword);</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(Name);</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(<span class="hl-built_in">Eq</span>);</span>
+<span class="line">  <span class="hl-title function_ invoke__">expr</span>(p);</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(Semi);</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, StmtLet);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// StmtReturn = &#x27;return&#x27; Expr &#x27;;&#x27;</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">stmt_return</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-built_in">assert!</span>(p.<span class="hl-title function_ invoke__">at</span>(ReturnKeyword));</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(ReturnKeyword);</span>
+<span class="line">  <span class="hl-title function_ invoke__">expr</span>(p);</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(Semi);</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, StmtReturn);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// StmtExpr = Expr &#x27;;&#x27;</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">stmt_expr</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-title function_ invoke__">expr</span>(p);</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(Semi);</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, StmtExpr);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Again, for </span><code>stmt_expr</code><span>, we push </span>&ldquo;<span>must consume a token</span>&rdquo;<span> invariant onto </span><code>expr</code><span>.</span></p>
+<p><span>Expressions are tricky.</span>
+<span>They always are.</span>
+<span>For starters, let</span>&rsquo;<span>s handle just the clearly-delimited cases, like literals and parenthesis:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-title function_ invoke__">expr_delimited</span>(p)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_delimited</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line">  <span class="hl-keyword">match</span> p.<span class="hl-title function_ invoke__">nth</span>(<span class="hl-number">0</span>) {</span>
+<span class="line">    <span class="hl-comment">// ExprLiteral = &#x27;int&#x27; | &#x27;true&#x27; | &#x27;false&#x27;</span></span>
+<span class="line">    Int | TrueKeyword | FalseKeyword =&gt; {</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">advance</span>();</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">close</span>(m, ExprLiteral)</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// ExprName = &#x27;name&#x27;</span></span>
+<span class="line">    Name =&gt; {</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">advance</span>();</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">close</span>(m, ExprName)</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// ExprParen   = &#x27;(&#x27; Expr &#x27;)&#x27;</span></span>
+<span class="line">    LParen =&gt; {</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">expect</span>(LParen);</span>
+<span class="line">      <span class="hl-title function_ invoke__">expr</span>(p);</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">expect</span>(RParen);</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">close</span>(m, ExprParen)</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    _ =&gt; {</span>
+<span class="line">      <span class="hl-keyword">if</span> !p.<span class="hl-title function_ invoke__">eof</span>() {</span>
+<span class="line">        p.<span class="hl-title function_ invoke__">advance</span>();</span>
+<span class="line">      }</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">close</span>(m, ErrorTree)</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>In the catch-all arm, we take care to consume the token, to make sure that the statement loop in </span><code>block</code><span> can always make progress.</span></p>
+<p><span>Next expression to handle would be </span><code>ExprCall</code><span>.</span>
+<span>This requires some preparation.</span>
+<span>Consider this example: </span><span class="display"><code>f(1)(2)</code><span> .</span></span></p>
+<p><span>We want the following parenthesis structure here:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">+-ExprCall</span>
+<span class="line">|</span>
+<span class="line">|   +-ExprName</span>
+<span class="line">|   |       +-ArgList</span>
+<span class="line">|   |       |</span>
+<span class="line">[ [ [f](1) ](2) ]</span>
+<span class="line">  |    |</span>
+<span class="line">  |    +-ArgList</span>
+<span class="line">  |</span>
+<span class="line">  +-ExprCall</span></code></pre>
+
+</figure>
+<p><span>The problem is, when the parser is at </span><code>f</code><span>, it doesn</span>&rsquo;<span>t yet know how many </span><code>Open</code><span> events it should emit.</span></p>
+<p><span>We solve the problem by adding an API to go back and inject a new </span><code>Open</code><span> event into the middle of existing events.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">MarkOpened</span> {</span>
+<span class="line">  index: <span class="hl-type">usize</span>,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">MarkClosed</span> {</span>
+<span class="line">  index: <span class="hl-type">usize</span>,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Parser</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">open</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> MarkOpened {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">mark</span> = MarkOpened { index: <span class="hl-keyword">self</span>.events.<span class="hl-title function_ invoke__">len</span>() };</span>
+<span class="line">    <span class="hl-keyword">self</span>.events.<span class="hl-title function_ invoke__">push</span>(Event::Open { kind: TreeKind::ErrorTree });</span>
+<span class="line">    mark</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">close</span>(</span>
+<span class="line">    &amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>,</span>
+<span class="line">    m: MarkOpened,</span>
+<span class="line">    kind: TreeKind,</span>
+<span class="line">  ) <span class="hl-punctuation">-&gt;</span> MarkClosed { <i class="callout" data-value="1"></i></span>
+<span class="line">    <span class="hl-keyword">self</span>.events[m.index] = Event::Open { kind };</span>
+<span class="line">    <span class="hl-keyword">self</span>.events.<span class="hl-title function_ invoke__">push</span>(Event::Close);</span>
+<span class="line">    MarkClosed { index: m.index }</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">open_before</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>, m: MarkClosed) <span class="hl-punctuation">-&gt;</span> MarkOpened { <i class="callout" data-value="2"></i></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">mark</span> = MarkOpened { index: m.index };</span>
+<span class="line">    <span class="hl-keyword">self</span>.events.<span class="hl-title function_ invoke__">insert</span>(</span>
+<span class="line">      m.index,</span>
+<span class="line">      Event::Open { kind: TreeKind::ErrorTree },</span>
+<span class="line">    );</span>
+<span class="line">    mark</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<p><span>Here we adjust </span><code>close</code><span> to also return a </span><code>MarkClosed</code><span>, such that we can go back and add a new event before it.</span></p>
+</li>
+<li>
+<p><span>The new API. It is like </span><code>open</code><span>, but also takes a </span><code>MarkClosed</code><span> which carries an index of an </span><code>Open</code><span> event in front of which we are to inject a new </span><code>Open</code><span>.</span>
+<span>In the current implementation, for simplicity, we just inject into the middle of the vector, which is an O(N) operation worst-case.</span>
+<span>A proper solution here would be to use an index-based linked list.</span>
+<span>That is, </span><code>open_before</code><span> can push the new open event to the end of the list, and also mark the old event with a pointer to the freshly inserted one.</span>
+<span>To store a pointer, an extra field is needed:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Event</span> {</span>
+<span class="line">  Open {</span>
+<span class="line">    kind: TreeKind,</span>
+<span class="line">    <span class="hl-comment">// Points forward into a list at the Open event</span></span>
+<span class="line">    <span class="hl-comment">// which logically happens before this one.</span></span>
+<span class="line">    open_before: <span class="hl-type">Option</span>&lt;<span class="hl-type">usize</span>&gt;,</span>
+<span class="line">  },</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The loop in </span><code>build_tree</code><span> needs to follow the </span><code>open_before</code><span> links.</span></p>
+</li>
+</ol>
+<p><span>With this new API, we can parse function calls:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_delimited</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) <span class="hl-punctuation">-&gt;</span> MarkClosed { <i class="callout" data-value="1"></i></span>
+<span class="line">  ...</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lhs</span> = <span class="hl-title function_ invoke__">expr_delimited</span>(p); <i class="callout" data-value="1"></i></span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// ExprCall = Expr ArgList</span></span>
+<span class="line">  <span class="hl-keyword">while</span> p.<span class="hl-title function_ invoke__">at</span>(LParen) { <i class="callout" data-value="2"></i></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open_before</span>(lhs);</span>
+<span class="line">    <span class="hl-title function_ invoke__">arg_list</span>(p);</span>
+<span class="line">    lhs = p.<span class="hl-title function_ invoke__">close</span>(m, ExprCall);</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// ArgList = &#x27;(&#x27; Arg* &#x27;)&#x27;</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">arg_list</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-built_in">assert!</span>(p.<span class="hl-title function_ invoke__">at</span>(LParen));</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(LParen);</span>
+<span class="line">  <span class="hl-keyword">while</span> !p.<span class="hl-title function_ invoke__">at</span>(RParen) &amp;&amp; !p.<span class="hl-title function_ invoke__">eof</span>() { <i class="callout" data-value="3"></i></span>
+<span class="line">    <span class="hl-title function_ invoke__">arg</span>(p);</span>
+<span class="line">  }</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(RParen);</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, ArgList);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Arg = Expr &#x27;,&#x27;?</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">arg</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-title function_ invoke__">expr</span>(p);</span>
+<span class="line">  <span class="hl-keyword">if</span> !p.<span class="hl-title function_ invoke__">at</span>(RParen) { <i class="callout" data-value="4"></i></span>
+<span class="line">    p.<span class="hl-title function_ invoke__">expect</span>(Comma);</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, Arg);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<p><code>expr_delimited</code><span> now returns a </span><code>MarkClosed</code><span> rather than </span><code>()</code><span>.</span>
+<span>No code changes are required for this, as </span><code>close</code><span> calls are already in the tail position.</span></p>
+</li>
+<li>
+<p><span>To parse function calls, we check whether we are at </span><code>(</code><span> and use </span><code>open_before</code><span> API if that is the case.</span></p>
+</li>
+<li>
+<p><span>Parsing argument list should be routine by now.</span>
+<span>Again, as an expression can start with many different tokens, we don</span>&rsquo;<span>t add an </span><code>if p.at</code><span> check to the loop</span>&rsquo;<span>s body, and require </span><code>arg</code><span> to consume at least one token.</span></p>
+</li>
+<li>
+<p><span>Inside </span><code>arg</code><span>, we use an already familiar construct to parse an optionally trailing comma.</span></p>
+</li>
+</ol>
+<p><span>Now only binary expressions are left.</span>
+<span>We will use a Pratt parser for those.</span>
+<span>This is genuinely tricky code, so I have a dedicated article explaining how it all works:</span></p>
+<p><span class="display"><a href="https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html"><em><span>Simple but Powerful Pratt Parsing</span></em></a><span> .</span></span></p>
+<p><span>Here, I</span>&rsquo;<span>ll just dump a pageful of code without much explanation:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-title function_ invoke__">expr_rec</span>(p, Eof); <i class="callout" data-value="2"></i></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_rec</span>(p: &amp;<span class="hl-keyword">mut</span> Parser, left: TokenKind) { <i class="callout" data-value="1"></i></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lhs</span> = <span class="hl-title function_ invoke__">expr_delimited</span>(p);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">while</span> p.<span class="hl-title function_ invoke__">at</span>(LParen) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open_before</span>(lhs);</span>
+<span class="line">    <span class="hl-title function_ invoke__">arg_list</span>(p);</span>
+<span class="line">    lhs = p.<span class="hl-title function_ invoke__">close</span>(m, ExprCall);</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">loop</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">right</span> = p.<span class="hl-title function_ invoke__">nth</span>(<span class="hl-number">0</span>);</span>
+<span class="line">    <span class="hl-keyword">if</span> <span class="hl-title function_ invoke__">right_binds_tighter</span>(left, right) { <i class="callout" data-value="1"></i></span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open_before</span>(lhs);</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">advance</span>();</span>
+<span class="line">      <span class="hl-title function_ invoke__">expr_rec</span>(p, right);</span>
+<span class="line">      lhs = p.<span class="hl-title function_ invoke__">close</span>(m, ExprBinary);</span>
+<span class="line">    } <span class="hl-keyword">else</span> {</span>
+<span class="line">      <span class="hl-keyword">break</span>;</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">right_binds_tighter</span>( <i class="callout" data-value="1"></i></span>
+<span class="line">  left: TokenKind,</span>
+<span class="line">  right: TokenKind,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">bool</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">tightness</span>(kind: TokenKind) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;<span class="hl-type">usize</span>&gt; {</span>
+<span class="line">    [</span>
+<span class="line">      <span class="hl-comment">// Precedence table:</span></span>
+<span class="line">      [Plus, Minus].<span class="hl-title function_ invoke__">as_slice</span>(),</span>
+<span class="line">      &amp;[Star, Slash],</span>
+<span class="line">    ]</span>
+<span class="line">    .<span class="hl-title function_ invoke__">iter</span>()</span>
+<span class="line">    .<span class="hl-title function_ invoke__">position</span>(|level| level.<span class="hl-title function_ invoke__">contains</span>(&amp;kind))</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(right_tightness) = <span class="hl-title function_ invoke__">tightness</span>(right) <span class="hl-keyword">else</span> { <i class="callout" data-value="3"></i></span>
+<span class="line">    <span class="hl-keyword">return</span> <span class="hl-literal">false</span></span>
+<span class="line">  };</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(left_tightness) = <span class="hl-title function_ invoke__">tightness</span>(left) <span class="hl-keyword">else</span> {</span>
+<span class="line">    <span class="hl-built_in">assert!</span>(left == Eof);</span>
+<span class="line">    <span class="hl-keyword">return</span> <span class="hl-literal">true</span>;</span>
+<span class="line">  };</span>
+<span class="line"></span>
+<span class="line">  right_tightness &gt; left_tightness</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<p><span>In this version of pratt, rather than passing numerical precedence, I pass the actual token (learned that from </span><a href="https://www.scattered-thoughts.net/writing/better-operator-precedence/"><span>jamii</span>&rsquo;<span>s post</span></a><span>).</span>
+<span>So, to determine whether to break or recur in the Pratt loop, we ask which of the two tokens binds tighter and act accordingly.</span></p>
+</li>
+<li>
+<p><span>When we start parsing an expression, we don</span>&rsquo;<span>t have an operator to the left yet, so I just pass </span><code>Eof</code><span> as a dummy token.</span></p>
+</li>
+<li>
+<p><span>The code naturally handles the case when the next token is not an operator (that is, when expression is complete, or when there</span>&rsquo;<span>s some syntax error).</span></p>
+</li>
+</ol>
+<p><span>And that</span>&rsquo;<span>s it! We have parsed the entirety of L!</span></p>
+</section>
+<section id="Basic-Resilience">
+
+    <h2>
+    <a href="#Basic-Resilience"><span>Basic Resilience</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s see how resilient our basic parser is.</span>
+<span>Let</span>&rsquo;<span>s check our motivational example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">fib_rec</span>(f1: <span class="hl-type">u32</span>,</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">fib</span>(n: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">  <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">fib_rec</span>(<span class="hl-number">1</span>, <span class="hl-number">1</span>, n);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, the syntax tree our parser produces is surprisingly exactly what we want:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">File</span>
+<span class="line">  Fn</span>
+<span class="line">    <span class="hl-string">&#x27;fn&#x27;</span></span>
+<span class="line">    <span class="hl-string">&#x27;fib_rec&#x27;</span></span>
+<span class="line">    ParamList</span>
+<span class="line">      <span class="hl-string">&#x27;(&#x27;</span></span>
+<span class="line">      (Param <span class="hl-string">&#x27;f1&#x27;</span> <span class="hl-string">&#x27;:&#x27;</span> (TypeExpr <span class="hl-string">&#x27;u32&#x27;</span>) <span class="hl-string">&#x27;,&#x27;</span>)</span>
+<span class="line">    error: expected RParen</span>
+<span class="line"></span>
+<span class="line">  Fn</span>
+<span class="line">    <span class="hl-string">&#x27;fn&#x27;</span></span>
+<span class="line">    <span class="hl-string">&#x27;fib&#x27;</span></span>
+<span class="line">    ...</span></code></pre>
+
+</figure>
+<p><span>For the first incomplete function, we get </span><code>Fn</code><span>, </span><code>Param</code><span> and </span><code>ParamList</code><span>, as we should.</span>
+<span>The second function is parsed without any errors.</span></p>
+<p><span>Curiously, we get this great result without much explicit effort to make parsing resilient, it</span>&rsquo;<span>s a natural outcome of just not failing in the presence of errors.</span>
+<span>The following ingredients help us:</span></p>
+<ul>
+<li>
+<span>homogeneous syntax tree supports arbitrary malformed code,</span>
+</li>
+<li>
+<span>any syntactic construct is parsed left-to-right, and valid prefixes are always recognized,</span>
+</li>
+<li>
+<span>our top-level loop in </span><code>file</code><span> is greedy: it either parses a function, or skips a single token and tries to parse a function again.</span>
+<span>That way, if there</span>&rsquo;<span>s a valid function somewhere, it will be recognized.</span>
+</li>
+</ul>
+<p><span>Thinking about the last case both reveals the limitations of our current code, and shows avenues for improvement.</span>
+<span>In general, parsing works as a series of nested loops:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">loop</span> { <span class="hl-comment">// parse a list of functions</span></span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">loop</span> { <span class="hl-comment">// parse a list of statements inside a function</span></span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">loop</span> { <span class="hl-comment">// parse a list of expressions</span></span>
+<span class="line"></span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>If something goes wrong inside a loop, our choices are:</span></p>
+<ul>
+<li>
+<span>skip a token, and continue with the next iteration of the current loop,</span>
+</li>
+<li>
+<span>break out of the inner loop, and let the outer loop handle recovery.</span>
+</li>
+</ul>
+<p><span>The top-most loop must use the </span>&ldquo;<span>skip a token</span>&rdquo;<span> solution, because it needs to consume all of the input tokens.</span></p>
+</section>
+<section id="Improving-Resilience">
+
+    <h2>
+    <a href="#Improving-Resilience"><span>Improving Resilience</span> </a>
+    </h2>
+<p><span>Right now, each loop either always skips, or always breaks.</span>
+<span>This is not optimal.</span>
+<span>Consider this example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f1</span>(x: <span class="hl-type">i32</span>,</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f2</span>(x: <span class="hl-type">i32</span>,, z: <span class="hl-type">i32</span>) {}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f3</span>() {}</span></code></pre>
+
+</figure>
+<p><span>Here, for </span><code>f1</code><span> we want to break out of </span><code>param_list</code><span> loop, and our code does just that.</span>
+<span>For </span><code>f2</code><span> though, the error is a duplicated comma (the user will add a new parameter between </span><code>x</code><span> and </span><code>z</code><span> shortly), so we want to skip here.</span>
+<span>We don</span>&rsquo;<span>t, and, as a result, the syntax tree for </span><code>f2</code><span> is a train wreck:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Fn</span>
+<span class="line">  <span class="hl-string">&#x27;fn&#x27;</span></span>
+<span class="line">  <span class="hl-string">&#x27;f2&#x27;</span></span>
+<span class="line">  ParamList</span>
+<span class="line">    <span class="hl-string">&#x27;(&#x27;</span></span>
+<span class="line">    (Param <span class="hl-string">&#x27;x&#x27;</span> <span class="hl-string">&#x27;:&#x27;</span> (TypeExpr <span class="hl-string">&#x27;i32&#x27;</span>) <span class="hl-string">&#x27;,&#x27;</span>)</span>
+<span class="line">(ErrorTree <span class="hl-string">&#x27;,&#x27;</span>)</span>
+<span class="line">(ErrorTree <span class="hl-string">&#x27;z&#x27;</span>)</span>
+<span class="line">(ErrorTree <span class="hl-string">&#x27;:&#x27;</span>)</span>
+<span class="line">(ErrorTree <span class="hl-string">&#x27;i32&#x27;</span>)</span>
+<span class="line">(ErrorTree <span class="hl-string">&#x27;)&#x27;</span>)</span>
+<span class="line">(ErrorTree <span class="hl-string">&#x27;{&#x27;</span>)</span>
+<span class="line">(ErrorTree <span class="hl-string">&#x27;}&#x27;</span>)</span></code></pre>
+
+</figure>
+<p><span>For parameters, it is reasonable to skip tokens until we see something which implies the end of the parameter list.</span>
+<span>For example, if we are parsing a list of parameters and see an </span><code>fn</code><span> token, then we</span>&rsquo;<span>d better stop.</span>
+<span>If we see some less salient token, it</span>&rsquo;<span>s better to gobble it up.</span>
+<span>Let</span>&rsquo;<span>s implement the idea:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line hl-line"><span class="hl-keyword">const</span> PARAM_LIST_RECOVERY: &amp;[TokenKind] = &amp;[Arrow, LCurly, FnKeyword];</span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">param_list</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-built_in">assert!</span>(p.<span class="hl-title function_ invoke__">at</span>(LParen));</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(LParen);</span>
+<span class="line">  <span class="hl-keyword">while</span> !p.<span class="hl-title function_ invoke__">at</span>(RParen) &amp;&amp; !p.<span class="hl-title function_ invoke__">eof</span>() {</span>
+<span class="line">    <span class="hl-keyword">if</span> p.<span class="hl-title function_ invoke__">at</span>(Name) {</span>
+<span class="line">      <span class="hl-title function_ invoke__">param</span>(p);</span>
+<span class="line">    } <span class="hl-keyword">else</span> {</span>
+<span class="line hl-line">      <span class="hl-keyword">if</span> p.<span class="hl-title function_ invoke__">at_any</span>(PARAM_LIST_RECOVERY) {</span>
+<span class="line hl-line">        <span class="hl-keyword">break</span>;</span>
+<span class="line hl-line">      }</span>
+<span class="line hl-line">      p.<span class="hl-title function_ invoke__">advance_with_error</span>(<span class="hl-string">&quot;expected parameter&quot;</span>);</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(RParen);</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, ParamList);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, we use </span><code>at_any</code><span> helper function, which is like </span><code>at</code><span>, but takes a list of tokens.</span>
+<span>The real implementation would use bitsets for this purpose.</span></p>
+<p><span>The example now parses correctly:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">File</span>
+<span class="line">  Fn</span>
+<span class="line">    <span class="hl-string">&#x27;fn&#x27;</span></span>
+<span class="line">    <span class="hl-string">&#x27;f1&#x27;</span></span>
+<span class="line">    ParamList</span>
+<span class="line">      <span class="hl-string">&#x27;(&#x27;</span></span>
+<span class="line">      (Param <span class="hl-string">&#x27;x&#x27;</span> <span class="hl-string">&#x27;:&#x27;</span> (TypeExpr <span class="hl-string">&#x27;i32&#x27;</span>) <span class="hl-string">&#x27;,&#x27;</span>)</span>
+<span class="line">      error: expected RParen</span>
+<span class="line">  Fn</span>
+<span class="line">    <span class="hl-string">&#x27;fn&#x27;</span></span>
+<span class="line">    <span class="hl-string">&#x27;f2&#x27;</span></span>
+<span class="line">    ParamList</span>
+<span class="line">      <span class="hl-string">&#x27;(&#x27;</span></span>
+<span class="line">      (Param <span class="hl-string">&#x27;x&#x27;</span> <span class="hl-string">&#x27;:&#x27;</span> (TypeExpr <span class="hl-string">&#x27;i32&#x27;</span>) <span class="hl-string">&#x27;,&#x27;</span>)</span>
+<span class="line">      ErrorTree</span>
+<span class="line">        error: expected parameter</span>
+<span class="line">        <span class="hl-string">&#x27;,&#x27;</span></span>
+<span class="line">      (Param <span class="hl-string">&#x27;z&#x27;</span> <span class="hl-string">&#x27;:&#x27;</span> (TypeExpr <span class="hl-string">&#x27;i32&#x27;</span>))</span>
+<span class="line">      <span class="hl-string">&#x27;)&#x27;</span></span>
+<span class="line">    (Block <span class="hl-string">&#x27;{&#x27;</span> <span class="hl-string">&#x27;}&#x27;</span>)</span>
+<span class="line">  Fn</span>
+<span class="line">    <span class="hl-string">&#x27;fn&#x27;</span></span>
+<span class="line">    <span class="hl-string">&#x27;f3&#x27;</span></span>
+<span class="line">    (ParamList <span class="hl-string">&#x27;(&#x27;</span> <span class="hl-string">&#x27;)&#x27;</span>)</span>
+<span class="line">    (Block <span class="hl-string">&#x27;{&#x27;</span> <span class="hl-string">&#x27;}&#x27;</span>)</span></code></pre>
+
+</figure>
+<p><span>What is a reasonable </span><code>RECOVERY</code><span> set in a general case?</span>
+<span>I don</span>&rsquo;<span>t know the answer to this question, but </span><dfn>follow</dfn><span> sets from formal grammar theory give a good intuition.</span>
+<span>We don</span>&rsquo;<span>t want </span><em><span>exactly</span></em><span> the </span><dfn>follow</dfn><span> set: for </span><code>ParamList</code><span>, </span><code>{</code><span> is in </span><dfn>follow</dfn><span>, and we do want it to be a part of the recovery set, but </span><code>fn</code><span> is </span><em><span>not</span></em><span> in </span><dfn>follow</dfn><span>, and yet it is important to recover on it.</span>
+<code>fn</code><span> is included because it</span>&rsquo;<span>s in the </span><dfn>follow</dfn><span> for </span><code>Fn</code><span>, and </span><code>ParamList</code><span> is a child of </span><code>Fn</code><span>: we also want to recursively include ancestor </span><dfn>follow</dfn><span> sets into the recovery set.</span></p>
+<p><span>For expressions and statements, we have the opposite problem </span>&mdash;<span> </span><code>block</code><span> and </span><code>arg_list</code><span> loops eagerly consume erroneous tokens, but sometimes it would be wise to break out of the loop instead.</span></p>
+<p><span>Consider this example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>() {</span>
+<span class="line">  <span class="hl-title function_ invoke__">g</span>(<span class="hl-number">1</span>,</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">x</span> =</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">g</span>() {}</span></code></pre>
+
+</figure>
+<p><span>It gives another train wreck syntax tree, where the </span><code>g</code><span> function is completely missed:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">File</span>
+<span class="line">  Fn</span>
+<span class="line">    <span class="hl-string">&#x27;fn&#x27;</span></span>
+<span class="line">    <span class="hl-string">&#x27;f&#x27;</span></span>
+<span class="line">    (ParamList <span class="hl-string">&#x27;(&#x27;</span> <span class="hl-string">&#x27;)&#x27;</span>)</span>
+<span class="line">    Block</span>
+<span class="line">      <span class="hl-string">&#x27;{&#x27;</span></span>
+<span class="line">      StmtExpr</span>
+<span class="line">        ExprCall</span>
+<span class="line">          (ExprName <span class="hl-string">&#x27;g&#x27;</span>)</span>
+<span class="line">          ArgList</span>
+<span class="line">            <span class="hl-string">&#x27;(&#x27;</span></span>
+<span class="line">            (Arg (ExprLiteral <span class="hl-string">&#x27;1&#x27;</span>) <span class="hl-string">&#x27;,&#x27;</span>)</span>
+<span class="line">            (Arg (ErrorTree <span class="hl-string">&#x27;let&#x27;</span>))</span>
+<span class="line">            (Arg (ExprName <span class="hl-string">&#x27;x&#x27;</span>))</span>
+<span class="line">            (Arg (ErrorTree <span class="hl-string">&#x27;=&#x27;</span>))</span>
+<span class="line">            (Arg (ErrorTree <span class="hl-string">&#x27;}&#x27;</span>))</span>
+<span class="line">            (Arg (ErrorTree <span class="hl-string">&#x27;fn&#x27;</span>))</span>
+<span class="line">            Arg</span>
+<span class="line">              ExprCall</span>
+<span class="line">                (ExprName <span class="hl-string">&#x27;g&#x27;</span>)</span>
+<span class="line">                (ArgList <span class="hl-string">&#x27;(&#x27;</span> <span class="hl-string">&#x27;)&#x27;</span>)</span>
+<span class="line">            (Arg (ErrorTree <span class="hl-string">&#x27;{&#x27;</span>))</span>
+<span class="line">            (Arg (ErrorTree <span class="hl-string">&#x27;}&#x27;</span>))</span></code></pre>
+
+</figure>
+<p><span>Recall that the root cause here is that we require </span><code>expr</code><span> to consume at least one token, because it</span>&rsquo;<span>s not immediately obvious which tokens can start an expression.</span>
+<span>It</span>&rsquo;<span>s not immediately obvious, but easy to compute </span>&mdash;<span> that</span>&rsquo;<span>s exactly </span><dfn>first</dfn><span> set from formal grammars.</span></p>
+<p><span>Using it, we get:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line hl-line"><span class="hl-keyword">const</span> STMT_RECOVERY: &amp;[TokenKind] = &amp;[FnKeyword];</span>
+<span class="line hl-line"><span class="hl-keyword">const</span> EXPR_FIRST: &amp;[TokenKind] =</span>
+<span class="line hl-line">  &amp;[Int, TrueKeyword, FalseKeyword, Name, LParen];</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">block</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-built_in">assert!</span>(p.<span class="hl-title function_ invoke__">at</span>(LCurly));</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(LCurly);</span>
+<span class="line">  <span class="hl-keyword">while</span> !p.<span class="hl-title function_ invoke__">at</span>(RCurly) &amp;&amp; !p.<span class="hl-title function_ invoke__">eof</span>() {</span>
+<span class="line">    <span class="hl-keyword">match</span> p.<span class="hl-title function_ invoke__">nth</span>(<span class="hl-number">0</span>) {</span>
+<span class="line">      LetKeyword =&gt; <span class="hl-title function_ invoke__">stmt_let</span>(p),</span>
+<span class="line">      ReturnKeyword =&gt; <span class="hl-title function_ invoke__">stmt_return</span>(p),</span>
+<span class="line">      _ =&gt; {</span>
+<span class="line hl-line">        <span class="hl-keyword">if</span> p.<span class="hl-title function_ invoke__">at_any</span>(EXPR_FIRST) {</span>
+<span class="line hl-line">          <span class="hl-title function_ invoke__">stmt_expr</span>(p)</span>
+<span class="line hl-line">        } <span class="hl-keyword">else</span> {</span>
+<span class="line hl-line">          <span class="hl-keyword">if</span> p.<span class="hl-title function_ invoke__">at_any</span>(STMT_RECOVERY) {</span>
+<span class="line hl-line">            <span class="hl-keyword">break</span>;</span>
+<span class="line hl-line">          }</span>
+<span class="line hl-line">          p.<span class="hl-title function_ invoke__">advance_with_error</span>(<span class="hl-string">&quot;expected statement&quot;</span>);</span>
+<span class="line hl-line">        }</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(RCurly);</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, Block);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">arg_list</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">  <span class="hl-built_in">assert!</span>(p.<span class="hl-title function_ invoke__">at</span>(LParen));</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(LParen);</span>
+<span class="line">  <span class="hl-keyword">while</span> !p.<span class="hl-title function_ invoke__">at</span>(RParen) &amp;&amp; !p.<span class="hl-title function_ invoke__">eof</span>() {</span>
+<span class="line hl-line">    <span class="hl-keyword">if</span> p.<span class="hl-title function_ invoke__">at_any</span>(EXPR_FIRST) {</span>
+<span class="line hl-line">      <span class="hl-title function_ invoke__">arg</span>(p);</span>
+<span class="line hl-line">    } <span class="hl-keyword">else</span> {</span>
+<span class="line hl-line">        <span class="hl-keyword">break</span>;</span>
+<span class="line hl-line">    }</span>
+<span class="line">  }</span>
+<span class="line">  p.<span class="hl-title function_ invoke__">expect</span>(RParen);</span>
+<span class="line"></span>
+<span class="line">  p.<span class="hl-title function_ invoke__">close</span>(m, ArgList);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This fixes the syntax tree:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">File</span>
+<span class="line">  Fn</span>
+<span class="line">    <span class="hl-string">&#x27;fn&#x27;</span></span>
+<span class="line">    <span class="hl-string">&#x27;f&#x27;</span></span>
+<span class="line">    (ParamList <span class="hl-string">&#x27;(&#x27;</span> <span class="hl-string">&#x27;)&#x27;</span>)</span>
+<span class="line">    Block</span>
+<span class="line">      <span class="hl-string">&#x27;{&#x27;</span></span>
+<span class="line">      StmtExpr</span>
+<span class="line">        ExprCall</span>
+<span class="line">          (ExprName <span class="hl-string">&#x27;g&#x27;</span>)</span>
+<span class="line">          ArgList</span>
+<span class="line">            <span class="hl-string">&#x27;(&#x27;</span></span>
+<span class="line">            (Arg (ExprLiteral <span class="hl-string">&#x27;1&#x27;</span> <span class="hl-string">&#x27;,&#x27;</span>))</span>
+<span class="line">      StmtLet</span>
+<span class="line">        <span class="hl-string">&#x27;let&#x27;</span></span>
+<span class="line">        <span class="hl-string">&#x27;x&#x27;</span></span>
+<span class="line">        <span class="hl-string">&#x27;=&#x27;</span></span>
+<span class="line">        (ErrorTree <span class="hl-string">&#x27;}&#x27;</span>)</span>
+<span class="line">  Fn</span>
+<span class="line">    <span class="hl-string">&#x27;fn&#x27;</span></span>
+<span class="line">    <span class="hl-string">&#x27;g&#x27;</span></span>
+<span class="line">    (ParamList <span class="hl-string">&#x27;(&#x27;</span> <span class="hl-string">&#x27;)&#x27;</span>)</span>
+<span class="line">    (Block <span class="hl-string">&#x27;{&#x27;</span> <span class="hl-string">&#x27;}&#x27;</span>)</span></code></pre>
+
+</figure>
+<p><span>There</span>&rsquo;<span>s only one issue left.</span>
+<span>Our </span><code>expr</code><span> parsing is still greedy, so, in a case like this</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">x</span> = <span class="hl-number">1</span> +</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">y</span> = <span class="hl-number">2</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>the </span><code>let</code><span> will be consumed as a right-hand-side operand of </span><code>+</code><span>.</span>
+<span>Now that the callers of </span><code>expr</code><span> contain a check for </span><code>EXPR_FIRST</code><span>, we no longer need this greediness and can return </span><code>None</code><span> if no expression can be parsed:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line hl-line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_delimited</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;MarkClosed&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">result</span> = <span class="hl-keyword">match</span> p.<span class="hl-title function_ invoke__">nth</span>(<span class="hl-number">0</span>) {</span>
+<span class="line">    <span class="hl-comment">// ExprLiteral = &#x27;int&#x27; | &#x27;true&#x27; | &#x27;false&#x27;</span></span>
+<span class="line">    Int | TrueKeyword | FalseKeyword =&gt; {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">advance</span>();</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">close</span>(m, ExprLiteral)</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// ExprName = &#x27;name&#x27;</span></span>
+<span class="line">    Name =&gt; {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">advance</span>();</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">close</span>(m, ExprName)</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// ExprParen   = &#x27;(&#x27; Expr &#x27;)&#x27;</span></span>
+<span class="line">    LParen =&gt; {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = p.<span class="hl-title function_ invoke__">open</span>();</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">expect</span>(LParen);</span>
+<span class="line">      <span class="hl-title function_ invoke__">expr</span>(p);</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">expect</span>(RParen);</span>
+<span class="line">      p.<span class="hl-title function_ invoke__">close</span>(m, ExprParen)</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    _ =&gt; {</span>
+<span class="line hl-line">      <span class="hl-built_in">assert!</span>(!p.<span class="hl-title function_ invoke__">at_any</span>(EXPR_FIRST));</span>
+<span class="line hl-line">      <span class="hl-keyword">return</span> <span class="hl-literal">None</span>;</span>
+<span class="line">    }</span>
+<span class="line">  };</span>
+<span class="line">  <span class="hl-title function_ invoke__">Some</span>(result)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_rec</span>(p: &amp;<span class="hl-keyword">mut</span> Parser, left: TokenKind) {</span>
+<span class="line hl-line">  <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(<span class="hl-keyword">mut</span> lhs) = <span class="hl-title function_ invoke__">expr_delimited</span>(p) <span class="hl-keyword">else</span> {</span>
+<span class="line hl-line">    <span class="hl-keyword">return</span>;</span>
+<span class="line hl-line">  };</span>
+<span class="line">  ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This gives the following syntax tree:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">File</span>
+<span class="line">  Fn</span>
+<span class="line">    <span class="hl-string">&#x27;fn&#x27;</span></span>
+<span class="line">    <span class="hl-string">&#x27;f&#x27;</span></span>
+<span class="line">    (ParamList <span class="hl-string">&#x27;(&#x27;</span> <span class="hl-string">&#x27;)&#x27;</span>)</span>
+<span class="line">    Block</span>
+<span class="line">      <span class="hl-string">&#x27;{&#x27;</span></span>
+<span class="line">      StmtLet</span>
+<span class="line">        <span class="hl-string">&#x27;let&#x27;</span></span>
+<span class="line">        <span class="hl-string">&#x27;x&#x27;</span></span>
+<span class="line">        <span class="hl-string">&#x27;=&#x27;</span></span>
+<span class="line">        (ExprBinary (ExprLiteral <span class="hl-string">&#x27;1&#x27;</span>) <span class="hl-string">&#x27;+&#x27;</span>)</span>
+<span class="line">      StmtLet</span>
+<span class="line">        <span class="hl-string">&#x27;let&#x27;</span></span>
+<span class="line">        <span class="hl-string">&#x27;y&#x27;</span></span>
+<span class="line">        <span class="hl-string">&#x27;=&#x27;</span></span>
+<span class="line">        (ExprLiteral <span class="hl-string">&#x27;2&#x27;</span>)</span>
+<span class="line">      <span class="hl-string">&#x27;}&#x27;</span></span></code></pre>
+
+</figure>
+<p><span>And this concludes the tutorial!</span>
+<span>You are now capable of implementing an IDE-grade parser for a real programming language from scratch.</span></p>
+<p><span>Summarizing:</span></p>
+<ul>
+<li>
+<p><span>Resilient parsing means recovering as much syntactic structure from erroneous code as possible.</span></p>
+</li>
+<li>
+<p><span>Resilient parsing is important for IDEs and language servers, who</span>&rsquo;<span>s job mostly ends when the code does not have errors any more.</span></p>
+</li>
+<li>
+<p><span>Resilient parsing is related, but distinct from error recovery and repair.</span>
+<span>Rather than guessing what the user meant to write, the parser tries to make sense of what is actually written.</span></p>
+</li>
+<li>
+<p><span>Academic literature tends to focus on error repair, and mostly ignores pure resilience.</span></p>
+</li>
+<li>
+<p><span>The biggest challenge of resilient parsing is the design of a syntax tree data structure.</span>
+<span>It should provide convenient and type-safe access to well-formed syntax trees, while allowing arbitrary malformed trees.</span></p>
+</li>
+<li>
+<p><span>One possible design here is to make the underlying tree a dynamically-typed data structure (like JSON), and layer typed accessors on top (not covered in this article).</span></p>
+</li>
+<li>
+<p><span>LL style parsers are a good fit for resilient parsing.</span>
+<span>Because code is written left-to-right, it</span>&rsquo;<span>s important that the parser recognizes well-formed prefixes of incomplete syntactic constructs, and LL does just that.</span></p>
+</li>
+<li>
+<p><span>Ultimately, parsing works as a stack of nested </span><code>for</code><span> loops.</span>
+<span>Inside a single </span><code>for</code><span> loop, on each iteration, we need to decide between:</span></p>
+<ul>
+<li>
+<span>trying to parse a sequence element,</span>
+</li>
+<li>
+<span>skipping over an unexpected token,</span>
+</li>
+<li>
+<span>breaking out of the nested loop and delegating recovery to the parent loop.</span>
+</li>
+</ul>
+</li>
+<li>
+<p><dfn>first</dfn><span>, </span><dfn>follow</dfn><span> and recovery sets help making a specific decision.</span></p>
+</li>
+<li>
+<p><span>In any case, if a loop tries to parse an item, item parsing </span><em><span>must</span></em><span> consume at least one token (if only to report an error).</span></p>
+</li>
+</ul>
+<script type="module" src="/assets/resilient-parsing/main.js"></script>
+<p><span>Source code for the article is here: </span><span class="display"><a href="https://github.com/matklad/resilient-ll-parsing/blob/master/src/lib.rs#L44" class="url">https://github.com/matklad/resilient-ll-parsing/blob/master/src/lib.rs#L44</a><span> .</span></span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-05-21-resilient-ll-parsing-tutorial.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

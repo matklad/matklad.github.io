@@ -1,0 +1,307 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Typed Key Pattern</title>
+  <meta name="description" content="In this post, I'll talk about a pattern for extracting values from a
+weakly typed map. This pattern applies to all statically typed
+languages, and even to dynamically typed ones, but the post is rather
+Rust-specific.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2018/05/24/typed-key-pattern.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Typed Key Pattern</span> <time datetime="2018-05-24">May 24, 2018</time></h1>
+<p><span>In this post, I</span>&rsquo;<span>ll talk about a pattern for extracting values from a</span>
+<span>weakly typed map. This pattern applies to all statically typed</span>
+<span>languages, and even to dynamically typed ones, but the post is rather</span>
+<span>Rust-specific.</span></p>
+<p><span>I</span>&rsquo;<span>ve put together a small crate which implements the pattern:</span><br>
+<a href="https://github.com/matklad/typed_key" class="url">https://github.com/matklad/typed_key</a></p>
+<p><span>If you want to skip all the</span>
+<span>blah-blah-blah, you can dig right into the code &amp; docs :)</span></p>
+<section id="The-problem">
+
+    <h2>
+    <a href="#The-problem"><span>The problem</span> </a>
+    </h2>
+<p><span>You have an untyped </span><code>Map&lt;String, Object&gt;</code><span> and you need to get a typed</span>
+<code>Foo</code><span> out of it by the </span><code>"foo"</code><span> key. The untyped map is often some kind</span>
+<span>of configuration, like a JSON file, but it can be a real map with</span>
+<span>type-erased </span><code>Any</code><span> objects as well.</span></p>
+<p><span>In the common case of statically known configuration, the awesome</span>
+<span>solution that Rust offers is </span><a href="https://crates.io/crates/serde"><span>serde</span></a><span>. You stick </span><code>derive(Deserialize)</code>
+<span>in front of the </span><code>Config</code><span> struct and read it from JSON, YML, TOML or</span>
+<span>even just </span><a href="https://github.com/softprops/envy"><span>environment variables</span></a><span>!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Deserialize)]</span></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Config</span> {</span>
+<span class="line">    foo: Foo</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">parse_config</span>(data: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Result</span>&lt;Config&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">config</span> = serde_json::<span class="hl-title function_ invoke__">from_str</span>(data)?;</span>
+<span class="line">    <span class="hl-title function_ invoke__">Ok</span>(config)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>However, occasionally you can</span>&rsquo;<span>t use serde. Some of the cases where</span>
+<span>this might happen are:</span></p>
+<ul>
+<li>
+<p><span>merging configuration from several sources, which requires writing a</span>
+<span>non-trivial serde deserializer,</span></p>
+</li>
+<li>
+<p><span>lazy deserialization, when you don</span>&rsquo;<span>t want to care about invalid values</span>
+<span>until you actually use them,</span></p>
+</li>
+<li>
+<p><span>extensible plugin architecture, where various independent modules</span>
+<span>contribute options to a shared global config, and so the shape of</span>
+<span>the config is not known upfront.</span></p>
+</li>
+<li>
+<p><span>you are working with </span><code>Any</code><span> objects or otherwise don</span>&rsquo;<span>t do</span>
+<span>serialization per se.</span></p>
+</li>
+</ul>
+</section>
+<section id="Typical-solutions">
+
+    <h2>
+    <a href="#Typical-solutions"><span>Typical solutions</span> </a>
+    </h2>
+<p><span>The simplest approach here is to just grab an untyped object using a</span>
+<span>string literal and specify its type on the call site:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Config</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">get</span>&lt;T: Deserialize&gt;(&amp;<span class="hl-keyword">self</span>, key: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Result</span>&lt;T&gt; {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">json_value</span> = <span class="hl-keyword">self</span>.map.<span class="hl-title function_ invoke__">get</span>(<span class="hl-string">&quot;key&quot;</span>)</span>
+<span class="line">            .<span class="hl-title function_ invoke__">ok_or_else</span>(|| bail!(<span class="hl-string">&quot;key is missing: `{}`&quot;</span>, key))?;</span>
+<span class="line">        <span class="hl-title function_ invoke__">Ok</span>(T::<span class="hl-title function_ invoke__">deserialize</span>(json_value)?)</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">...</span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">foo</span> = config.get::&lt;Foo&gt;(<span class="hl-string">&quot;foo&quot;</span>)?;</span></code></pre>
+
+</figure>
+<p><span>I actually think that this is a fine approach as long as such snippets</span>
+<span>are confined within a single module.</span></p>
+<p><span>One possible way to make it better is to extract </span><code>"foo"</code><span> constant to a</span>
+<span>variable:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> FOO: &amp;<span class="hl-type">str</span> = <span class="hl-string">&quot;foo&quot;</span>;</span>
+<span class="line"></span>
+<span class="line">...</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">foo</span> = config.get::&lt;Foo&gt;(FOO)?;</span></code></pre>
+
+</figure>
+<p><span>This does bring certain benefits:</span></p>
+<ul>
+<li>
+<p><span>fewer places to make a typo in,</span></p>
+</li>
+<li>
+<p><span>behavior is moved from the code (</span><code>.get("foo")</code><span>) into data (</span><code>const FOO</code><span>), which</span>
+<span>makes it easier to reason about the code (at a glance, you can see all available</span>
+<span>config option and get an idea why they might be useful),</span></p>
+</li>
+<li>
+<p><span>there</span>&rsquo;<span>s now an obvious place to document keys: write a doc-comment for a</span>
+<span>constant.</span></p>
+</li>
+</ul>
+<p><span>While great in theory, I personally feel that this usually brings little</span>
+<span>tangible benefit in most cases, especially if some constants are used only once.</span>
+<span>This is the case where the implementation, a literal </span><code>"foo"</code><span>, is more clear than</span>
+<span>the abstraction, a constant </span><code>FOO</code><span>.</span></p>
+</section>
+<section id="Adding-types">
+
+    <h2>
+    <a href="#Adding-types"><span>Adding types</span> </a>
+    </h2>
+<p><span>However, the last pattern can become much more powerful and</span>
+<span>interesting if we associate types with string constants. The idea is</span>
+<span>to encode that the </span><code>"foo"</code><span> key can be used to extract an object of</span>
+<span>type </span><code>Foo</code><span>, and make it impossible to use it for, say,</span>
+<code>Vec&lt;String&gt;</code><span>. To do this, we</span>&rsquo;<span>ll need a pinch of</span>
+<a href="https://doc.rust-lang.org/beta/std/marker/struct.PhantomData.html"><code>PhantomData</code></a><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Key</span>&lt;T&gt; {</span>
+<span class="line">    name: &amp;<span class="hl-symbol">&#x27;static</span> <span class="hl-type">str</span>,</span>
+<span class="line">    marker: PhantomData&lt;T&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span>&lt;T&gt; Key&lt;T&gt; {</span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">const</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">new</span>(name: &amp;<span class="hl-symbol">&#x27;static</span> <span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> Key&lt;T&gt; {</span>
+<span class="line">        Key { name, marker: PhantomData }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">name</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> &amp;<span class="hl-symbol">&#x27;static</span> <span class="hl-type">str</span> {</span>
+<span class="line">        <span class="hl-keyword">self</span>.name</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Now, we can add type knowledge to the </span><code>"foo"</code><span> literal:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> FOO: Key&lt;Foo&gt; = Key::<span class="hl-title function_ invoke__">new</span>(<span class="hl-string">&quot;foo&quot;</span>);</span></code></pre>
+
+</figure>
+<p><span>And we can take advantage of this in the </span><code>get</code><span> method:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Config</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">get</span>&lt;T: Deserialize&gt;(&amp;<span class="hl-keyword">self</span>, key: Key&lt;T&gt;) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Result</span>&lt;T&gt; {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">json_value</span> = <span class="hl-keyword">self</span>.map.<span class="hl-title function_ invoke__">get</span>(key.<span class="hl-title function_ invoke__">name</span>())</span>
+<span class="line">            .<span class="hl-title function_ invoke__">ok_or_else</span>(|| bail!(<span class="hl-string">&quot;key is missing: `{}`&quot;</span>, key))?;</span>
+<span class="line">        <span class="hl-title function_ invoke__">Ok</span>(T::<span class="hl-title function_ invoke__">deserialize</span>(json_value)?)</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">...</span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">foo</span> = config.<span class="hl-title function_ invoke__">get</span>(FOO)?;</span></code></pre>
+
+</figure>
+<p><span>Note how we were able to get rid of the turbofish at the call-site!</span>
+<span>Moreover, the understandably aspect of the previous pattern is also</span>
+<span>enhanced: if you know both the type and the name of the config option,</span>
+<span>you can pretty reliably predict how it is going to be used.</span></p>
+</section>
+<section id="Pattern-in-the-wild">
+
+    <h2>
+    <a href="#Pattern-in-the-wild"><span>Pattern in the wild</span> </a>
+    </h2>
+<p><span>I</span>&rsquo;<span>ve first encountered this pattern in </span><a href="https://github.com/JetBrains/intellij-community/blob/16bfca92199dca383b66c69c3427b4639ea8e213/platform/util/src/com/intellij/openapi/util/Key.java"><span>IntelliJ</span></a><span> code. It uses</span>
+<a href="https://github.com/JetBrains/intellij-community/blob/16bfca92199dca383b66c69c3427b4639ea8e213/platform/util/src/com/intellij/openapi/util/UserDataHolder.java"><code>UserDataHolder</code></a><span>, which is basically </span><code>Map&lt;String, Object&gt;</code><span>, everywhere.</span>
+<span>It helps plugin authors to extend built-in objects in crazy ways but is rather</span>
+<span>hard to reason about, and type-safety improves the situation a lot. I</span>&rsquo;<span>ve also</span>
+<span>changed Exonum</span>&rsquo;<span>s config to employ this pattern in this </span><a href="https://github.com/exonum/exonum/pull/417"><span>PR</span></a><span>. It also was a</span>
+<span>case of plugin extensible, where an upfront definition of all configuration</span>
+<span>option is impossible.</span></p>
+<p><span>Finally, I</span>&rsquo;<span>ve written a small crate for this </span><a href="https://crates.io/crates/typed_key"><code>typed_key</code></a><span> :)</span></p>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/8ls25e/blog_post_typed_key_pattern/"><span>/r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2018-05-24-typed-key-pattern.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

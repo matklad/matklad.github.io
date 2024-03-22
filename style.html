@@ -1,0 +1,324 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>matklad</title>
+  <meta name="description" content="Yet another programming blog by Alex Kladov aka matklad.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/style">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  
+<h1><span>Programming Style</span> </h1>
+<p><span>Congratulations, you</span>&rsquo;<span>ve found a secret level!</span></p>
+<p><span>This is a super work-in-progress page which collects various rules-of-thumb I use.</span>
+<span>The primary goal so far is to collect the rules for myself, that</span>&rsquo;<span>s why I don</span>&rsquo;<span>t link to this page from anywhere yet.</span></p>
+<section id="General">
+
+    <h2>
+    <a href="#General"><span>General</span> </a>
+    </h2>
+<section id="Naming">
+
+    <h3>
+    <a href="#Naming"><span>Naming</span> </a>
+    </h3>
+<p><span>Prefer full names except for extremely common cases (</span><code>ctx</code><span> for context), or equal-length pairs</span>
+<span>(</span><code>next/prev</code><span>). Use consistent names. Naming variables after types (</span><code>let thing: Thing</code><span>) is a way</span>
+<span>to achieve global consistency with little coordination.</span></p>
+<p><span>Build  a vocabulary of standard names and re-use it:</span></p>
+<dl>
+<dt><code>ctx</code></dt>
+<dd>
+<p>&ldquo;<span>context</span>&rdquo;<span> of an operation. Typically holds something mutable. Read-only</span>
+<span>context is named </span><code>params</code><span>.</span></p>
+</dd>
+<dt><code>params</code></dt>
+<dd>
+<p><span>A bag of named arguments. Unlike </span><code>config</code><span>, might hold not only pod types.</span></p>
+</dd>
+<dt><code>config</code></dt>
+<dd>
+<p><span>Generally user-specified POD parameters.</span></p>
+</dd>
+<dt><code>sink</code></dt>
+<dd>
+<p>&ldquo;<span>output</span>&rdquo;<span> of an internal iterator, typically </span><code>sink: &amp;mut FnMut(T)</code><span> or </span><code>sink: &amp;mut Vec&lt;T&gt;</code><span>.</span></p>
+</dd>
+<dt><code>lhs</code><span>, </span><code>rhs</code></dt>
+<dd>
+<p><span>operands of a binary operator.</span></p>
+</dd>
+<dt><code>fuel</code></dt>
+<dd>
+<p><span>Recursion and infinite loop guards</span></p>
+</dd>
+<dt><code>result</code></dt>
+<dd>
+<p><span>A </span>&ldquo;<span>return</span>&rdquo;<span> variable.</span></p>
+</dd>
+<dt><code>line_index</code><span>, </span><code>line_number</code></dt>
+<dd>
+<p><span>Index is unambiguously zero-based. By convention, number is one-based.</span></p>
+</dd>
+</dl>
+<p><span>Equisized pairs;</span></p>
+<ul>
+<li>
+<span>add/sub, mul/div</span>
+</li>
+<li>
+<span>lhs/rhs</span>
+</li>
+<li>
+<span>s/e</span>
+</li>
+<li>
+<span>next/prev</span>
+</li>
+<li>
+<span>source/target</span>
+</li>
+<li>
+<span>src/dst</span>
+</li>
+<li>
+<span>index/count</span>
+</li>
+<li>
+<span>insert/remove</span>
+</li>
+<li>
+<span>beg/end</span>
+</li>
+</ul>
+</section>
+<section id="Explicit-Data-Tables">
+
+    <h3>
+    <a href="#Explicit-Data-Tables"><span>Explicit Data Tables</span> </a>
+    </h3>
+<p><span>Remove code duplication by extracting commonalities into tabular data</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">// GOOD</span>
+<span class="line">const cases = ["foo", "bar", "baz"];</span>
+<span class="line">for case in cases {</span>
+<span class="line">    if x == case {</span>
+<span class="line"></span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">// BAD</span>
+<span class="line">if x == "foo" {</span>
+<span class="line"></span>
+<span class="line">} else if x == "bar" {</span>
+<span class="line"></span>
+<span class="line">} else if x == "baz" {</span>
+<span class="line"></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Bulk-IO">
+
+    <h3>
+    <a href="#Bulk-IO"><span>Bulk IO</span> </a>
+    </h3>
+<p><span>Avoid opening file descriptors in favor of bulk operations. To write data to a file, you need to</span>
+<span>follow a lifecycle: open file descriptor, issue write syscalls, close file descriptor. Lifecycle</span>
+<span>handling requires complicated type-system machinery and is bettre avoided. Usually, standard library</span>
+<span>provides something like </span><code>std::fs::read_to_string</code><span> which encapsulates lifecycle management.</span></p>
+</section>
+</section>
+<section id="Rust">
+
+    <h2>
+    <a href="#Rust"><span>Rust</span> </a>
+    </h2>
+<section id="No-Self-Types">
+
+    <h3>
+    <a href="#No-Self-Types"><span>No Self Types</span> </a>
+    </h3>
+<p><span>Write types out explicitly, avoid </span><code>Self</code><span> alias if possible:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// Good</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Diagnostic</span> {</span>
+<span class="line">    <span class="hl-keyword">pub</span> code: DiagnosticCode,</span>
+<span class="line">    <span class="hl-keyword">pub</span> text: <span class="hl-type">String</span>,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Diagnostic</span> {</span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">new</span>(code: DiagnosticCode, text: <span class="hl-type">String</span>) <span class="hl-punctuation">-&gt;</span> Diagnostic {</span>
+<span class="line">        Diagnostic { code, text }</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Bad</span></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Diagnostic</span> {</span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">new</span>(code: DiagnosticCode, text: <span class="hl-type">String</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-keyword">Self</span> {</span>
+<span class="line">        <span class="hl-keyword">Self</span> { code, text }</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><strong><span>Rationale:</span></strong><span> reducing cognitive load, optimizing for the reader.</span>
+<span>Resolving </span><code>Self</code><span> is a small mental effort, it can be avoided.</span></p>
+</section>
+<section id="Prefer-new-Over-default">
+
+    <h3>
+    <a href="#Prefer-new-Over-default"><span>Prefer new Over default</span> </a>
+    </h3>
+<p><span>Use </span><code>new</code><span> over </span><code>default</code><span> to construct instances.</span></p>
+<p><strong><span>Rationale:</span></strong><span> new is too ingrained.</span></p>
+</section>
+<section id="Blank-Line-Between-Declarations">
+
+    <h3>
+    <a href="#Blank-Line-Between-Declarations"><span>Blank Line Between Declarations</span> </a>
+    </h3>
+<p><span>Leave blank line between top-level declarations:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// Good</span></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Foo</span> {</span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">foo</span>() {</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">bar</span>() {</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Bad</span></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Foo</span> {</span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">foo</span>() {</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">bar</span>() {</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><strong><span>Rationale:</span></strong><span> consistency.</span>
+<span>Omitting blank line leads to somewhat terser code, but is very hard to do consistently.</span></p>
+</section>
+<section id="Derive-Order">
+
+    <h3>
+    <a href="#Derive-Order"><span>Derive Order</span> </a>
+    </h3>
+<p><span>Use the following order of derives:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]</span></span></code></pre>
+
+</figure>
+<p><strong><span>Rationale:</span></strong><span> consistency.</span>
+<span>Debug comes last because it is the most often added item.o</span></p>
+</section>
+</section>
+
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/style.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

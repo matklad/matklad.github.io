@@ -1,0 +1,173 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unified Versus Split Diff</title>
+  <meta name="description" content="Which is better for code reviews, a unified diff or a split diff?">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/10/23/unified-vs-split-diff.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Unified Versus Split Diff</span> <time datetime="2023-10-23">Oct 23, 2023</time></h1>
+<p><span>Which is better for code reviews, a unified diff or a split diff?</span></p>
+<p><span>A split diff looks like this for me:</span></p>
+
+<figure>
+
+<img alt="" src="https://user-images.githubusercontent.com/1711539/277481233-026508cf-47ed-4897-934a-fee18b708553.png">
+</figure>
+<p><span>And this is a unified one:</span></p>
+
+<figure>
+
+<img alt="" src="https://user-images.githubusercontent.com/1711539/277481510-12ee62af-0305-412b-9f37-57a37744751b.png">
+</figure>
+<p><span>If the changes are simple and small, both views are good. But for larger, more complex changes</span>
+<span>neither works for me.</span></p>
+<p><span>For a large change, I don</span>&rsquo;<span>t want to do a </span>&ldquo;<span>diff review</span>&rdquo;<span>, I want to do a proper code review of a</span>
+<span>codebase at a particular instant in time, paying specific attention to the recently changed areas,</span>
+<span>but mostly just doing general review, as if I am writing the code. I need to run tests, use goto</span>
+<span>definition and other editor navigation features, apply local changes to check if some things could</span>
+<span>have been written differently, look at the wider context to notice things that </span><em><span>should</span></em><span> have been</span>
+<span>changed, and in general notice anything that might be not quite right with the codebase,</span>
+<span>irrespective of the historical path to the current state of the code.</span></p>
+<p><span>So, for me, the ideal diff view would look rather like this:</span></p>
+
+<figure>
+
+<img alt="" src="https://user-images.githubusercontent.com/1711539/277485436-5e9ff9d5-325b-4e2c-8285-4acb6a8c088b.png">
+</figure>
+<p><span>On the left, the current state of the code (which is also the on-disk state), with changes subtly</span>
+<span>highlighted in the margins. On the right, the unified diff for the portion of the codebase currently</span>
+<span>visible on the left.</span></p>
+<p><span>Sadly, this format of review isn</span>&rsquo;<span>t well supported by the tools </span>&mdash;<span> everyone seems to be happy</span>
+<span>reviewing diffs, rather than the actual code?</span></p>
+<p><span>I have a low-tech and pretty inefficient workflow for this style of review. A </span><a href="https://github.com/matklad/config/blob/master/xtool/src/gpr.rs"><code>gpr</code>
+<span>script</span></a><span> for checking out a pull</span>
+<span>request locally:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> gpr 1234 --review</span></code></pre>
+
+</figure>
+<p><span>Internally, it does roughly</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> git fetch upstream refs/pull/1234/head</span>
+<span class="line"><span class="hl-title function_">$</span> git switch --detach FETCH_HEAD</span>
+<span class="line"><span class="hl-title function_">$</span> git reset $(git merge-base HEAD main)</span></code></pre>
+
+</figure>
+<p><span>The last line is the key </span>&mdash;<span> it erases all the commits from the pull request, but keeps all of the</span>
+<span>changes. This lets me abuse my workflow for staging&amp;committing to do a code review </span>&mdash;
+<a href="https://github.com/kahole/edamagit"><span>edamagit</span></a><span> shows the list of changed files, I get </span>&ldquo;<span>go to</span>
+<span>next/previous change</span>&rdquo;<span> shortcuts in the editor, I can even use the staging area to mark hunks I have</span>
+<span>reviewed.</span></p>
+<p><span>The only thing I </span><em><span>don</span>&rsquo;<span>t</span></em><span> get is automatic synchronization between magit status buffer, and the file</span>
+<span>that</span>&rsquo;<span>s currently open in the editor. That is, to view the current file and the diff on the side, I</span>
+<span>have to manually open the diff and scroll it to the point I am currently looking at.</span></p>
+<p><span>I wish it was easier to get this close to the code without building custom ad-hoc tools!</span></p>
+<p><span>P.S. This post talks about how to review code, but reviewing the code is not necessary the primary</span>
+<span>goal of code review. See this related post:</span>
+<a href="https://matklad.github.io/2021/01/03/two-kinds-of-code-review.html"><em><span>Two Kinds of Code Review</span></em></a><span>.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-10-23-unified-vs-split-diff.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

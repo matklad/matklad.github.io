@@ -1,0 +1,334 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exceptions vs Structured Concurrency</title>
+  <meta name="description" content="This is partially a mild instance of xkcd://386 with
+respect to the great don't
+panic post by
+@vorner (yes, it's 2 am here) and partially a
+discussion of error-handling in the framework of structured concurrency, which
+was recently popularized by @njsmith.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2018/07/24/exceptions-in-structured-concurrency.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Exceptions vs Structured Concurrency</span> <time datetime="2018-07-24">Jul 24, 2018</time></h1>
+<p><span>This is partially a mild instance of </span><a href="https://xkcd.com/386/"><span>xkcd://386</span></a><span> with</span>
+<span>respect to the great </span><a href="https://vorner.github.io/2018/07/22/dont_panic.html"><span>don</span>&rsquo;<span>t</span>
+<span>panic</span></a><span> post by</span>
+<a href="https://github.com/vorner/"><span>@vorner</span></a><span> (yes, it</span>&rsquo;<span>s 2 am here) and partially a</span>
+<span>discussion of error-handling in the framework of structured concurrency, which</span>
+<span>was recently popularized by </span><a href="https://github.com/njsmith/"><span>@njsmith</span></a><span>.</span></p>
+<section id="Panics">
+
+    <h2>
+    <a href="#Panics"><span>Panics</span> </a>
+    </h2>
+<p><span>In the blog post, @vorner argues that unwinding sometimes may do more</span>
+<span>harm than good, if it manages to break some unsafe invariants,</span>
+<span>cross FFI boundary or put the application into an impossible state. I</span>
+<span>fully agree that these all are indeed significant dangers of panics.</span></p>
+<p><span>However, I don</span>&rsquo;<span>t think that just disabling unwinding and using </span><code>panic
+= "abort"</code><span> is the proper fix to the problem for the majority of use</span>
+<span>cases. A lot of programs work in a series of requests and responses</span>
+<span>(often implicit), and I argue that for this pattern it is desirable to</span>
+<span>be able to handle bugs in requests gracefully.</span></p>
+<p><span>I</span>&rsquo;<span>ve spent quite some time working on an</span>
+<a href="https://github.com/intellij-rust/intellij-rust"><span>IDE</span></a><span>, and, although it might not</span>
+<span>be apparent on the first sight, IDEs are also based on requests/responses:</span></p>
+<ul>
+<li>
+<span>users types a character, IDE updates its internal data structures</span>
+</li>
+<li>
+<span>users requests completion, IDE runs some calculations on the data</span>
+<span>and gives results</span>
+</li>
+</ul>
+<p><span>As IDEs are large and have a huge number of features, it is inevitable</span>
+<span>that some not very important linting inspection will fail due to index</span>
+<span>out of bounds access on this particular macro invocation in this</span>
+<span>particular project. Killing the whole IDE process would definitely be</span>
+<span>a bad user experience. On the other hand, just showing a non-modal</span>
+<span>popup </span>&ldquo;<span>Something went wrong, would you like to submit a bug report</span>&rdquo;<span> is</span>
+<span>usually only a minor irritation: errors are more common in the</span>
+<span>numerous </span>&ldquo;<span>additional</span>&rdquo;<span> features, while the smaller core tends to be</span>
+<span>more correct.</span></p>
+<p><span>I do think that this pattern of </span>&ldquo;<span>show error message and chug along</span>&rdquo;<span> is</span>
+<span>applicable to a significant number of applications. Of course, even in</span>
+<span>this setting a bug in the code can in theory have dire consequences,</span>
+<span>but in practice this is mitigated by the following:</span></p>
+<ul>
+<li>
+<p><span>Majority of requests are readonly and can</span>&rsquo;<span>t corrupt data.</span></p>
+</li>
+<li>
+<p><span>The low-level implementation of write requests usually has a</span>
+<span>relatively bug-free transnational semantics, so bugs in write</span>
+<span>requests which lead to transaction aborts don</span>&rsquo;<span>t corrupt data as</span>
+<span>well.</span></p>
+</li>
+<li>
+<p><span>Most applications have some kind of backup/undo functionality, and</span>
+<span>even if a bug leads to a commit of invalid data, user often can</span>
+<span>restore good state (of course this works only for relatively</span>
+<span>unimportant data).</span></p>
+</li>
+</ul>
+<p><span>However, @vorner identifies a very interesting specific problem with</span>
+<span>unwinding which I feel we should really try to solve better: if you</span>
+<span>have a bunch of threads running, and one of them catches fire, what</span>
+<span>happens? It turns out that often nothing particular happens: some more</span>
+<span>threads might die from the poisoned mutexes and closed channels, but</span>
+<span>other treads might continue, and, as a result the application will</span>
+<span>exist in a half-dead state for indefinite period of time.</span></p>
+</section>
+<section id="Structured-Concurrency">
+
+    <h2>
+    <a href="#Structured-Concurrency"><span>Structured Concurrency</span> </a>
+    </h2>
+<p><span>At this point, some of you might be silently screaming </span>&ldquo;<span>Erlang!</span>&rdquo;<span>:</span></p>
+
+<figure>
+
+<img alt="Destroy one of my processes &amp; I will only grow stronger" src="/assets/PPerlang.png">
+</figure>
+<p><strong><strong><span>Source: </span><a href="http://leftoversalad.com/c/015_programmingpeople/" class="url">http://leftoversalad.com/c/015_programmingpeople/</a></strong></strong></p>
+<p><span>You are right! Erlang and especially OTP behaviors are great for managing errors</span>
+<span>at scale. However a full actor system might be an overkill if all you want is</span>
+<span>just an OS thread.</span></p>
+<p><span>If you haven</span>&rsquo;<span>t done this already, pack some snacks, prepare lots of coffee/tea</span>
+<span>and do read the </span><a href="https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/"><span>structured</span>
+<span>concurrency</span></a>
+<span>blog post. The crux of the pattern is to avoid fire and forget concurrency:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::thread;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">unstructured</span>() {</span>
+<span class="line">    thread::<span class="hl-title function_ invoke__">spawn</span>(|| {</span>
+<span class="line">        <span class="hl-title function_ invoke__">do_stuff</span>()</span>
+<span class="line">    });</span>
+<span class="line">    <span class="hl-comment">// The thread is &quot;leaked&quot; out of `unstructured` function</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Instead, each thread should be confined to some lexical scope and</span>
+<span>never escape it:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">extern</span> <span class="hl-keyword">crate</span> crossbeam;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">structured</span>() {</span>
+<span class="line">    crossbeam::<span class="hl-title function_ invoke__">scope</span>(|scope| {</span>
+<span class="line">        scope.<span class="hl-title function_ invoke__">spawn</span>(|| {</span>
+<span class="line">            <span class="hl-title function_ invoke__">do_stuff</span>()</span>
+<span class="line">        })</span>
+<span class="line">    });</span>
+<span class="line">    <span class="hl-comment">// The thread is finished and joined at this point.</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The benefit of this organization is that all threads form a tree,</span>
+<span>which gives you greater control, because you know for sure which parts</span>
+<span>are sequential and which are concurrent. Concurrency is explicitly</span>
+<span>scoped.</span></p>
+</section>
+<section id="Panics-and-Structured-Concurrency">
+
+    <h2>
+    <a href="#Panics-and-Structured-Concurrency"><span>Panics and Structured Concurrency</span> </a>
+    </h2>
+<p><span>And we have a really, really interesting API design problem if we</span>
+<span>combine structured concurrency and unwinding. What should be the</span>
+<span>behavior of the following program?</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">everything_is_terrible</span>() {</span>
+<span class="line">    crossbeam::<span class="hl-title function_ invoke__">scope</span>(|scope| {</span>
+<span class="line">        scope.<span class="hl-title function_ invoke__">spawn</span>(|| <span class="hl-title function_ invoke__">do_work</span>());</span>
+<span class="line">        scope.<span class="hl-title function_ invoke__">spawn</span>(|| <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;this hurts&quot;</span>));</span>
+<span class="line">    });</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Now, for </span><code>crossbeam</code><span> specifically there</span>&rsquo;<span>s little choice here due to</span>
+<span>the boring requirement for memory safety. But let</span>&rsquo;<span>s pretend for now</span>
+<span>that this is a garbage collected language.</span></p>
+<p><span>So, we have two concurrent threads in a single scope, one of which is</span>
+<span>currently running and another one is, unfortunately, dead.</span></p>
+<p><span>The most obvious choice is to wait for the running thread to finish</span>
+<span>(we don</span>&rsquo;<span>t want to let it escape the scope) and then to reraise the</span>
+<span>panic at scope exit. The problem with this approach is that there</span>&rsquo;<span>s a</span>
+<span>potentially unbounded window between the instant the panic is created,</span>
+<span>and its propagation.</span></p>
+<p><span>This is not a theoretical concern: some time ago a friend of mine had</span>
+<span>a fascinating debugging session with a Python machine learning</span>
+<span>application. The program was processing a huge amount of data, so, to</span>
+<span>speed things up, it partitioned the data and spawned a thread per</span>
+<span>partition (actual processing was in native code, so GIL was avoided):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">with</span> ThreadPoolExecutor() <span class="hl-keyword">as</span> executor:</span>
+<span class="line">    futures = []</span>
+<span class="line">    <span class="hl-keyword">for</span> task_type, hosts <span class="hl-keyword">in</span> <span class="hl-built_in">reversed</span>(tasks):</span>
+<span class="line">        <span class="hl-keyword">for</span> task_id, _host <span class="hl-keyword">in</span> <span class="hl-built_in">enumerate</span>(hosts):</span>
+<span class="line">            futures.append(</span>
+<span class="line">                executor.submit(func, task_type, task_id))</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment"># Re-raise the exception.</span></span>
+<span class="line">    <span class="hl-keyword">for</span> future <span class="hl-keyword">in</span> as_completed(futures):</span>
+<span class="line">        future.result()</span></code></pre>
+
+</figure>
+<p><span>The observed behavior was that a singe thread died, but no exception</span>
+<span>or stack trace were printed anywhere. This was because the </span><code>executor</code>
+<span>was waiting for all other threads before propagating the</span>
+<span>exception. Although technically the exception was not lost, in</span>
+<span>practice you</span>&rsquo;<span>d have to wait for several hours to actually see it!</span></p>
+<p><span>The Trio library uses an</span>
+<a href="https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/#automated-error-propagation-works"><span>interesting</span>
+<span>refinement</span></a><span> of this strategy: when one of the tasks in scope fails, all others</span>
+<span>are immediately cancelled, and then awaited for. I think this should work well</span>
+<span>for Trio, because it has first-class support for cancellation; </span><strong><span>any</span></strong><span> async</span>
+<span>operation is a cancellation point. So all children tasks will be cancelled in a</span>
+<span>timely manner, although I wouldn</span>&rsquo;<span>t be surprised if there are some pathological</span>
+<span>cases where exception propagation is delayed.</span></p>
+<p><span>Unfortunately, this solution does</span>&rsquo;<span>t work for native threads, because</span>
+<span>there are just no good cancellation points. And I don</span>&rsquo;<span>t know of any</span>
+<span>approach that would work :(</span></p>
+<p><span>One vague idea I have is inspired by handling of orphaned processes in</span>
+<span>Unix: if a thread in a scope dies, the scope is teared down</span>
+<span>immediately, and all the running processes are attached to the value</span>
+<span>that is thrown. If anyone wants to handle the failure, they </span><strong><span>must</span></strong>
+<span>wait for all attached threads to finish first. This way, the initial</span>
+<span>panic and all in-progress threads could be propagated to the top-level</span>
+<code>init</code><span> scope, which then can attempt either a clean exit by waiting</span>
+<span>for all children, or do a </span><code>process::abort</code><span>.</span></p>
+<p><span>However this attachment to the parent violates the property that a</span>
+<span>thread never leaves its original scope. Because crossbeam relies on</span>
+<span>this property for memory safety, this approach is just not applicable</span>
+<span>for threads which share stack data.</span></p>
+<p><span>It</span>&rsquo;<span>s already 4 am here, so I really should be wrapping the post up :)</span>
+<span>So, a challenge: design a Rust library for scoped concurrency based on</span>
+<span>native OS threads that:</span></p>
+<ul>
+<li>
+<span>never looses a thread or a panic,</span>
+</li>
+<li>
+<span>immediately propagates panics,</span>
+</li>
+<li>
+<span>allows to (optionally?) share stack data between the threads.</span>
+</li>
+</ul>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/91d0u2/blog_post_exceptions_versus_structured_concurrency/"><span>r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2018-07-24-exceptions-in-structured-concurrency.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

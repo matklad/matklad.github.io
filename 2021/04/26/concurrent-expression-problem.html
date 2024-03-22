@@ -1,0 +1,218 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Concurrent Expression Problem</title>
+  <meta name="description" content="I am struggling with designing concurrent code.
+In this post, I want to share a model problem which exemplifies some of the issues.
+It is reminiscent of the famous expression problem in that there's a two dimensional design grid, and a win along one dimension translates to a loss along the other.
+If you want a refresher on the expression problem (not required to understand this article), take a look at this post.
+It's not canonical, but I like it.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2021/04/26/concurrent-expression-problem.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Concurrent Expression Problem</span> <time datetime="2021-04-26">Apr 26, 2021</time></h1>
+<p><span>I am struggling with designing concurrent code.</span>
+<span>In this post, I want to share a model problem which exemplifies some of the issues.</span>
+<span>It is reminiscent of the famous expression problem in that there</span>&rsquo;<span>s a two dimensional design grid, and a win along one dimension translates to a loss along the other.</span>
+<span>If you want a refresher on the expression problem (not required to understand this article), take a look at </span><a href="https://www.tedinski.com/2018/02/27/the-expression-problem.html"><span>this post</span></a><span>.</span>
+<span>It</span>&rsquo;<span>s not canonical, but I like it.</span></p>
+<p><span>Without further ado, concurrent expression problem:</span></p>
+
+<aside class="block">
+
+<p><span>Define a set of concurrent activities which interact with shared mutable state with invariants, such that it is easy to introduce new activities and additional invariants.</span></p>
+
+</aside>
+  <p><span>I am not sure that</span>&rsquo;<span>s exactly the right formulation, I feel like I am straining it a bit to fit the expression problem shape.</span>
+<span>The explanation that follows matters more.</span></p>
+<p><span>I think there are two ways to code the system described.</span>
+<span>The first approach is to us a separate thread / goroutine / async task for each concurrent activity, with some synchronization around the access to the shared state.</span>
+<span>The alternative approach is to write an explicit state machine / actor loop to receive the next event and process it.</span></p>
+<p><span>In the first scheme, adding new activities is easy, as you just write straight-line code with maybe some </span><code>.await</code><span>s here and there.</span>
+<span>In the second scheme, it</span>&rsquo;<span>s easy to check and act on invariants, as there is only a single place where the state is modified.</span></p>
+<p><span>Let</span>&rsquo;<span>s take a look at a concrete example.</span>
+<span>We</span>&rsquo;<span>ll be using a pseudo code for a language with cooperative concurrency and explicit yield points (think Python with async/await).</span></p>
+<p><span>The state consists of two counters.</span>
+<span>One activity decrements the first counter every second.</span>
+<span>The other activity does the same to the other counter.</span>
+<span>When </span><em><span>both</span></em><span> counters reach zero, we want to print something.</span></p>
+<p><span>The first approach would look roughly like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">State</span> { c1: <span class="hl-type">u32</span>, c2: <span class="hl-type">u32</span> }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">act1</span>(state: State) {</span>
+<span class="line">  <span class="hl-keyword">while</span> state.c1 &gt; <span class="hl-number">0</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">sleep</span>(<span class="hl-number">1</span>).<span class="hl-keyword">await</span>;</span>
+<span class="line">    state.c1 -= <span class="hl-number">1</span>;</span>
+<span class="line">    <span class="hl-keyword">if</span> state.c1 == <span class="hl-number">0</span> &amp;&amp; state.c2 == <span class="hl-number">0</span> {</span>
+<span class="line">      <span class="hl-title function_ invoke__">print</span>(<span class="hl-string">&quot;both are zero&quot;</span>)</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">act2</span>(state: State) {</span>
+<span class="line">  <span class="hl-keyword">while</span> state.c2 &gt; <span class="hl-number">0</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">sleep</span>(<span class="hl-number">1</span>).<span class="hl-keyword">await</span>;</span>
+<span class="line">    state.c2 -= <span class="hl-number">1</span>;</span>
+<span class="line">    <span class="hl-keyword">if</span> state.c1 == <span class="hl-number">0</span> &amp;&amp; state.c2 == <span class="hl-number">0</span> {</span>
+<span class="line">      <span class="hl-title function_ invoke__">print</span>(<span class="hl-string">&quot;both are zero&quot;</span>)</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And the second one like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">run</span>(state: State) {</span>
+<span class="line">  <span class="hl-keyword">loop</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">event</span> = <span class="hl-title function_ invoke__">next_event</span>().<span class="hl-keyword">await</span>;</span>
+<span class="line">    <span class="hl-keyword">match</span> event {</span>
+<span class="line">      Event::Dec1 =&gt; {</span>
+<span class="line">        state.c1 -= <span class="hl-number">1</span>;</span>
+<span class="line">        <span class="hl-keyword">if</span> state.c1 &gt; <span class="hl-number">0</span> {</span>
+<span class="line">          <span class="hl-title function_ invoke__">send_event_with_delay</span>(Event::Dec1, <span class="hl-number">1</span>)</span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line">      Event::Dec2 =&gt; {</span>
+<span class="line">        state.c2 -= <span class="hl-number">1</span>;</span>
+<span class="line">        <span class="hl-keyword">if</span> state.c2 &gt; <span class="hl-number">0</span> {</span>
+<span class="line">          <span class="hl-title function_ invoke__">send_event_with_delay</span>(Event::Dec2, <span class="hl-number">1</span>)</span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">if</span> state.c1 == <span class="hl-number">0</span> &amp;&amp; state.c2 == <span class="hl-number">0</span> {</span>
+<span class="line">      <span class="hl-title function_ invoke__">print</span>(<span class="hl-string">&quot;both are zero&quot;</span>)</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>It</span>&rsquo;<span>s much easier to see what the concurrent activities are in the first case.</span>
+<span>It</span>&rsquo;<span>s more clear how the overall state evolves in the second case.</span></p>
+<p><span>The second approach also gives you more control </span>&mdash;<span> if several events are ready, you can process them in the order of priority (usually it makes sense to prioritize writes over reads).</span>
+<span>You can trivially add some logging at the start and end of the loop to collect data about slow events and overall latency.</span>
+<span>But the hit to the programming model is big.</span>
+<span>If you are new to the code and don</span>&rsquo;<span>t know which conceptual activities are there, it</span>&rsquo;<span>s hard to figure out that just from the code.</span>
+<span>The core issue is that causal links between asynchronous events are not reified in the code:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">match</span> {</span>
+<span class="line">  Event::X =&gt; { <span class="hl-title function_ invoke__">do_x</span>() },</span>
+<span class="line">  Event::Y =&gt; { <span class="hl-title function_ invoke__">do_y</span>() },</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// vs</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">do_xy</span>() {</span>
+<span class="line">  <span class="hl-title function_ invoke__">do_x</span>().<span class="hl-keyword">await</span>;</span>
+<span class="line">  <span class="hl-title function_ invoke__">do_y</span>().<span class="hl-keyword">await</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2021-04-26-concurrent-expression-problem.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,244 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Three Different Cuts</title>
+  <meta name="description" content="In this post, we'll look at how Rust, Go, and Zig express the signature of function cut --- the power tool of string manipulation.
+Cut takes a string and a pattern, and splits the string around the first occurrence of the pattern:
+cut("life", "if") = ("l", "e").">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/07/16/three-different-cuts.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Three Different Cuts</span> <time datetime="2023-07-16">Jul 16, 2023</time></h1>
+<p><span>In this post, we</span>&rsquo;<span>ll look at how Rust, Go, and Zig express the signature of function </span><code>cut</code><span> </span>&mdash;<span> the power tool of string manipulation.</span>
+<span>Cut takes a string and a pattern, and splits the string around the first occurrence of the pattern:</span>
+<span class="display"><code>cut("life", "if") = ("l", "e")</code><span>.</span></span></p>
+<p><span>At a glance, it seems like a non-orthogonal jumbling together of searching and slicing.</span>
+<span>However, in practice a lot of ad-hoc string processing can be elegantly expressed via </span><code>cut</code><span>.</span></p>
+<p><span>A lot of things are </span><code>key=value</code><span> pairs, and cut fits perfectly there.</span>
+<span>What</span>&rsquo;<span>s more, many more complex sequencies, like</span>
+<span class="display"><code>--arg=key=value</code><span>,</span></span>
+<span>can be viewed as nested pairs.</span>
+<span>You can cut around </span><code>=</code><span> once to get </span><code>--arg</code><span> and </span><code>key=value</code><span>, and then cut the second time to separate </span><code>key</code><span> from </span><code>value</code><span>.</span></p>
+<p><span>In Rust, this function looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">split_once</span>&lt;<span class="hl-symbol">&#x27;a</span>, P&gt;(</span>
+<span class="line">  &amp;<span class="hl-symbol">&#x27;a</span> <span class="hl-keyword">self</span>,</span>
+<span class="line">  delimiter: P,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;(&amp;<span class="hl-symbol">&#x27;a</span> <span class="hl-type">str</span>, &amp;<span class="hl-symbol">&#x27;a</span> <span class="hl-type">str</span>)&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  P: Pattern&lt;<span class="hl-symbol">&#x27;a</span>&gt;,</span>
+<span class="line">{</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Rust</span>&rsquo;<span>s </span><code>Option</code><span> is a good fit for the result type, it clearnly describes the behavior of the function when the pattern isn</span>&rsquo;<span>t found in the string at all.</span>
+<span>Lifetime </span><code>'a</code><span> expresses the relationship between the result and the input </span>&mdash;<span> both pieces of result are substrings of </span><code>&amp;'a self</code><span>, so, as long as they are used, the original string must be kept alive as well.</span>
+<span>Finally, the separator isn</span>&rsquo;<span>t another string, but a generic </span><code>P: Pattern</code><span>.</span>
+<span>This gives a somewhat crowded signature, but allows using strings, single characters, and even </span><code class="display">fn(c: char) -&gt; bool</code><span> functions as patterns.</span></p>
+<p><span>When using the function, there are is a multitude of ways to access the result:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// Propagate `None` upwards:</span></span>
+<span class="line"><span class="hl-keyword">let</span> (prefix, suffix) = line.<span class="hl-title function_ invoke__">split_once</span>(<span class="hl-string">&quot;=&quot;</span>)?;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Handle `None` in an ad-hoc way:</span></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">Some</span>((prefix, suffix)) = line.<span class="hl-title function_ invoke__">split_once</span>(<span class="hl-string">&quot;=&quot;</span>) <span class="hl-keyword">else</span> {</span>
+<span class="line">    <span class="hl-keyword">return</span></span>
+<span class="line">};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Ignore `None`:</span></span>
+<span class="line"><span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>((prefix, suffix)) = line.<span class="hl-title function_ invoke__">split_once</span>(<span class="hl-string">&quot;=&quot;</span>) {</span>
+<span class="line">    ...</span>
+<span class="line">};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Handle `Some` and `None` in a symmetric way:</span></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">result</span> = <span class="hl-keyword">match</span> line.<span class="hl-title function_ invoke__">split_once</span>(<span class="hl-string">&quot;=&quot;</span>) {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Some</span>((prefix, suffix)) =&gt; { ... }</span>
+<span class="line">    <span class="hl-literal">None</span> =&gt; { ... }</span>
+<span class="line">};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Access only one component of the result:</span></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">suffix</span> = line.<span class="hl-title function_ invoke__">split_once</span>(<span class="hl-string">&quot;=&quot;</span>)?.<span class="hl-number">1</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Use high-order functions to extract key with a default:</span></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">key</span> = line.<span class="hl-title function_ invoke__">split_once</span>(<span class="hl-string">&quot;=&quot;</span>)</span>
+<span class="line">    .<span class="hl-title function_ invoke__">map</span>(|(key, _value)| key)</span>
+<span class="line">    .<span class="hl-title function_ invoke__">unwrap_or</span>(line);</span></code></pre>
+
+</figure>
+<p><span>Here</span>&rsquo;<span>s a Go equivalent:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-function"><span class="hl-keyword">func</span> <span class="hl-title">Cut</span><span class="hl-params">(s, sep <span class="hl-type">string</span>)</span></span> (before, after <span class="hl-type">string</span>, found <span class="hl-type">bool</span>) {</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>It has a better name!</span>
+<span>It</span>&rsquo;<span>s important that frequently used building-block functions have short, memorable names, and </span>&ldquo;<span>cut</span>&rdquo;<span> is just perfect for what the function does.</span>
+<span>Go doesn</span>&rsquo;<span>t have an </span><code>Option</code><span>, but it allows multiple return values, and any type in Go has a zero value, so a boolean flag can be used to signal </span><code>None</code><span>.</span>
+<span>Curiously if the </span><code>sep</code><span> is not found in </span><code>s</code><span>, </span><code>after</code><span> is set to </span><code>""</code><span>, but </span><code>before</code><span> is set to </span><code>s</code><span> (that is, the whole string).</span>
+<span>This is occasionally useful, and corresponds to the last Rust example.</span>
+<span>But it also isn</span>&rsquo;<span>t something immediately obvious from the signature, it</span>&rsquo;<span>s an extra detail to keep in mind.</span>
+<span>Which might be fine for a foundational function!</span>
+<span>Similarly to Rust, the resulting strings point to the same memory as </span><code>s</code><span>.</span>
+<span>There are no lifetimes, but a potential performance gotcha </span>&mdash;<span> if one of the resulting strings is alive, then the entire </span><code>s</code><span> can</span>&rsquo;<span>t be garbage collected.</span></p>
+<p><span>There isn</span>&rsquo;<span>t much in way of using the function in Go:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">prefix, suffix, ok = strings.Cut(line, <span class="hl-string">&quot;=&quot;</span>)</span>
+<span class="line"><span class="hl-keyword">if</span> !ok {</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Zig doesn</span>&rsquo;<span>t yet have an equivalent function in its standard library, but it probably will at some point, and the signature might look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> cut</span>(</span>
+<span class="line">    s: []<span class="hl-keyword">const</span> <span class="hl-type">u8</span>,</span>
+<span class="line">    sep: []<span class="hl-keyword">const</span> <span class="hl-type">u8</span></span>
+<span class="line">) ?<span class="hl-keyword">struct</span> { prefix: []<span class="hl-keyword">const</span> <span class="hl-type">u8</span>, suffix: []<span class="hl-keyword">const</span> <span class="hl-type">u8</span> } {</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Similarly to Rust, Zig can express optional values.</span>
+<span>Unlike Rust, the option is a built-in, rather than a user-defined type (Zig </span><em><span>can</span></em><span> express a generic user-defined option, but chooses not to).</span>
+<span>All types in Zig are strictly prefix, so leading </span><code>?</code><span> concisely signals optionality.</span>
+<span>Zig doesn</span>&rsquo;<span>t have first-class tuple types, but uses very concise and flexible type declaration syntax, so we can return a named tuple.</span>
+<span>Curiously, this anonymous struct is still a nominal, rather than a structural, type!</span>
+<span>Similarly to Rust, </span><code>prefix</code><span> and </span><code>suffix</code><span> borrow the same memory that </span><code>s</code><span> does.</span>
+<span>Unlike Rust, this isn</span>&rsquo;<span>t expressed in the signature </span>&mdash;<span> while in this case it is obvious that the lifetime would be bound to </span><code>s</code><span>, rather than </span><code>sep</code><span>, there are no type system guardrails here.</span></p>
+<p><span>Because </span><code>?</code><span> is a built-in type, we need some amount of special syntax to handle the result, but it curiously feels less special-case and more versatile than the Rust version.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// Propagate `null` upwards / handle `null` in an ad-hoc way.</span></span>
+<span class="line"><span class="hl-keyword">const</span> cut = mem.cut(line, <span class="hl-string">&quot;=&quot;</span>) <span class="hl-keyword">orelse</span> <span class="hl-keyword">return</span> <span class="hl-literal">null</span>;</span>
+<span class="line"><span class="hl-keyword">const</span> cut = mem.cut(line, <span class="hl-string">&quot;=&quot;</span>) <span class="hl-keyword">orelse</span> <span class="hl-keyword">return</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Ignore or handle `null`.</span></span>
+<span class="line"><span class="hl-keyword">if</span> (mem.cut(line, <span class="hl-string">&quot;=&quot;</span>)) <span class="hl-operator">|</span>cut<span class="hl-operator">|</span> {</span>
+<span class="line"></span>
+<span class="line">} <span class="hl-keyword">else</span> {</span>
+<span class="line"></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Go semantics: extract key with a default</span></span>
+<span class="line">let key = <span class="hl-keyword">if</span> (mem.cut(line, <span class="hl-string">&quot;=&quot;</span>)) <span class="hl-operator">|</span>cut<span class="hl-operator">|</span> cut.first <span class="hl-keyword">else</span> line;</span></code></pre>
+
+</figure>
+<p><span>Moral of the story?</span>
+<span>Work with the grain of the language </span>&mdash;<span> expressing the same concept in different languages usually requires a slightly different vocabulary.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-07-16-three-different-cuts.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,200 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Binary Privacy</title>
+  <meta name="description" content="This post documents one rule of thumb I find useful when coding:">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2022/05/29/binary-privacy.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Binary Privacy</span> <time datetime="2022-05-29">May 29, 2022</time></h1>
+<p><span>This post documents one rule of thumb I find useful when coding:</span></p>
+
+<aside class="block">
+
+<p><span>Either make all fields of a type public, or make none of them public</span></p>
+
+</aside>
+  <p><span>Being a rule-of-thumb, it naturally has exceptions, but those are relatively few.</span>
+<span>The primary context here is application development.</span>
+<span>Libraries with semver-constrained API have other guidelines </span>&mdash;<span> </span><a href="https://www.tedinski.com/2018/02/06/system-boundaries.html"><span>the rules are different at the boundaries</span></a><span>.</span></p>
+<p><span>This privacy rule is a manifestation of the fact that the two most popular </span><em><span>kinds</span></em><span> of entities in programs are:</span></p>
+<ul>
+<li>
+<span>Abstract data types </span>&mdash;<span> complex objects with opaque implementation which guard interior invariants and expose intentionally limited API to the outside world</span>
+</li>
+<li>
+<span>Data </span>&mdash;<span> relatively simple objects which group a bunch of related attributes together</span>
+</li>
+</ul>
+<p><span>If some fields of a type are private, it can</span>&rsquo;<span>t be data.</span>
+<span>If some fields of a type are public, it can </span><em><span>still</span></em><span> be an ADT, but the abstraction boundary will be a bit awkward.</span>
+<span>Better to just add getters for (usually few) fields which can be public, to make it immediately obvious what role is played by the type.</span></p>
+<p><span>An example of ADT would be </span><a href="https://github.com/rust-lang/rust-analyzer/blob/f94fa62d69faf5bd63b3772d3ec4f0c76cf2db57/crates/vfs/src/file_set.rs#L14"><code>FileSet</code></a><span> from rust-analyzer</span>&rsquo;<span>s virtual file system implementation.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">FileSet</span> {</span>
+<span class="line">  files: HashMap&lt;VfsPath, FileId&gt;,</span>
+<span class="line">  paths: HashMap&lt;FileId, VfsPath&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">FileSet</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">insert</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>, file_id: FileId, path: VfsPath) {</span>
+<span class="line">    <span class="hl-keyword">self</span>.files.<span class="hl-title function_ invoke__">insert</span>(path.<span class="hl-title function_ invoke__">clone</span>(), file_id);</span>
+<span class="line">    <span class="hl-keyword">self</span>.paths.<span class="hl-title function_ invoke__">insert</span>(file_id, path);</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">len</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span>.files.<span class="hl-title function_ invoke__">len</span>()</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">file_for_path</span>(</span>
+<span class="line">    &amp;<span class="hl-keyword">self</span>,</span>
+<span class="line">    path: &amp;VfsPath,</span>
+<span class="line">  ) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;FileId&gt; {</span>
+<span class="line">    <span class="hl-keyword">self</span>.files.<span class="hl-title function_ invoke__">get</span>(path).<span class="hl-title function_ invoke__">copied</span>()</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">path_for_file</span>(</span>
+<span class="line">    &amp;<span class="hl-keyword">self</span>,</span>
+<span class="line">    file: &amp;FileId,</span>
+<span class="line">  ) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;&amp;VfsPath&gt; {</span>
+<span class="line">    <span class="hl-keyword">self</span>.paths.<span class="hl-title function_ invoke__">get</span>(file)</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">iter</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-keyword">impl</span> <span class="hl-title class_">Iterator</span>&lt;Item = FileId&gt; + <span class="hl-symbol">&#x27;_</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span>.paths.<span class="hl-title function_ invoke__">keys</span>().<span class="hl-title function_ invoke__">copied</span>()</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This type maintains a bidirectional mapping between string paths and integral file ids.</span>
+<span>How exactly the mapping is maintained (hash map, search tree, trie?) is irrelevant, this implementation detail is abstracted away.</span>
+<span>Additionally, there</span>&rsquo;<span>s an invariant: </span><code>files</code><span> and </span><code>paths</code><span> fields are consistent, complimentary mappings.</span>
+<span>So this is the case where all fields are private and there</span>&rsquo;<span>s a bunch of accessor functions.</span></p>
+<p><span>An example of data would be </span><a href="https://github.com/rust-lang/rust-analyzer/blob/f94fa62d69faf5bd63b3772d3ec4f0c76cf2db57/crates/vfs/src/loader.rs#L26"><code>Directories</code></a><span> struct:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Debug, Clone, Default)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Directories</span> {</span>
+<span class="line">    <span class="hl-keyword">pub</span> extensions: <span class="hl-type">Vec</span>&lt;<span class="hl-type">String</span>&gt;,</span>
+<span class="line">    <span class="hl-keyword">pub</span> include: <span class="hl-type">Vec</span>&lt;AbsPathBuf&gt;,</span>
+<span class="line">    <span class="hl-keyword">pub</span> exclude: <span class="hl-type">Vec</span>&lt;AbsPathBuf&gt;,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This type specifies a set of paths to include in VFS, a sort-of simplified gitignore.</span>
+<span>This is an inert piece of data </span>&mdash;<span> a bunch of extensions, include paths and exclude paths.</span>
+<span>Any combination of the three is valid, so there</span>&rsquo;<span>s no need for privacy here.</span></p>
+<section id="Connections">
+
+    <h2>
+    <a href="#Connections"><span>Connections</span> </a>
+    </h2>
+<p><span>This rule is very mechanical, but it reflects a deeper distinction between flavors of types.</span>
+<span>For a more thorough treatment of the underlying phenomenon, see </span>&ldquo;<span>Be clear what kind of class you</span>&rsquo;<span>re writing</span>&rdquo;<span> chapter from Alexandrescu</span>&rsquo;<span>s </span>&ldquo;<span>C++ Coding Standards</span>&rdquo;<span> and</span>
+<a href="https://www.tedinski.com/2018/02/27/the-expression-problem.html">&ldquo;<span>The Expression Problem</span>&rdquo;</a><span> from ever thought-provoking Kaminski.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2022-05-29-binary-privacy.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

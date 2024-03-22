@@ -1,0 +1,287 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Almost Rules</title>
+  <meta name="description" content="This is going to be a philosophical post, vaguely about language design, and vaguely about Rust.
+If you've been following this blog for a while, you know that one theme I consistently hammer at is that of boundaries.
+This article is no exception!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2022/07/10/almost-rules.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Almost Rules</span> <time datetime="2022-07-10">Jul 10, 2022</time></h1>
+<p><span>This is going to be a philosophical post, vaguely about language design, and vaguely about Rust.</span>
+<span>If you</span>&rsquo;<span>ve been following this blog for a while, you know that one theme I consistently hammer at is that of boundaries.</span>
+<span>This article is no exception!</span></p>
+<p><span>Obligatory link to Ted Kaminski:</span></p>
+<p><a href="https://www.tedinski.com/2018/02/06/system-boundaries.html" class="url">https://www.tedinski.com/2018/02/06/system-boundaries.html</a></p>
+<p><span>The most important boundary for a software project is its external interface, that which the users directly interact with and which you give backwards compatibility guarantees for.</span>
+<span>For a web-service, this would be the URL scheme and the shape of JSON request and responses.</span>
+<span>For a command line application </span>&mdash;<span> the set and the meaning of command-line flags.</span>
+<span>For an OS kernel </span>&mdash;<span> the set of syscalls (Linux) or the blessed user-space libraries (Mac).</span>
+<span>And, for a programming language, this would be the definition of the language itself, its syntax and semantics.</span></p>
+<p><span>Sometimes, however, it is beneficial to install somewhat artificial, internal boundaries, a sort-of macro level layers pattern.</span>
+<span>Boundaries have a high cost.</span>
+<span>They prevent changes.</span>
+<span>But a skillfully placed internal (or even an artificial external) boundary can also help.</span></p>
+<p><span>It cuts the system in two, and, if the cut is relatively narrow in comparison to the overall size of the system (hourglass shape), this boundary becomes a great way to understand the system.</span>
+<span>Understanding </span><em><span>just</span></em><span> the boundary allows you to imagine how the subsystem beneath it </span><em><span>could</span></em><span> be implemented.</span>
+<span>Most of the time, your imaginary version would be pretty close to what actually happens, and this mental map would help you a great deal to peel off the layers of glue code and get a gut feeling for where the core logic is.</span></p>
+<p><span>Even if an internal boundary starts out in the right place, it, unlike an external one, is ever in danger of being violated.</span>
+&ldquo;<span>Internal boundary</span>&rdquo;<span> is a very non-physical thing, most of the time it</span>&rsquo;<span>s just informal rules like </span>&ldquo;<span>module A shall not import module B</span>&rdquo;<span>.</span>
+<span>It</span>&rsquo;<span>s very hard to notice that something is </span><em><span>not</span></em><span> being done!</span>
+<span>That</span>&rsquo;<span>s why, I think, larger companies can benefit from microservices architecture: in theory, if we </span><em><span>just</span></em><span> solve human coordination problem, a monolith can be architectured just as cleanly, while offering much better performance.</span>
+<span>In practice, at sufficient scale, maintaining good architecture across teams is hard, and becomes much easier if the intended internal boundaries are reified as processes.</span></p>
+<p><span>It</span>&rsquo;<span>s hard enough to protect from accidental breaching of internal boundaries.</span>
+<span>But there</span>&rsquo;<span>s a bigger problem: often, internal boundaries stand in the way of user-visible system features, and it takes a lot of authority to protect internal system</span>&rsquo;<span>s boundary at the cost of not shipping something.</span></p>
+<p><span>In this post, I</span>&rsquo;<span>d want to catalog some of the cases I</span>&rsquo;<span>ve seen in the Rust programming language where I think an internal boundaries were eroded with time.</span></p>
+<section id="Namespaces">
+
+    <h2>
+    <a href="#Namespaces"><span>Namespaces</span> </a>
+    </h2>
+<p><span>It</span>&rsquo;<span>s a somewhat obscure feature of Rust</span>&rsquo;<span>s name resolution, but various things that inhabit Rust</span>&rsquo;<span>s scopes (structs, modules, traits, variables) are split into three namespaces: types, values and macros.</span>
+<span>This allows to have two things with the same name in the same scope without causing conflicts:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">x</span> { }</span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">x</span>() {}</span></code></pre>
+
+</figure>
+<p><span>The above is legal Rust, because the </span><code>x</code><span> struct lives in the types namespace, while the </span><code>x</code><span> </span><em><span>function</span></em><span> lives in the values namespace.</span>
+<span>The namespaces are reflected syntactically: </span><code>.</code><span> is used to traverse value namespace, while </span><code>::</code><span> traverses types.</span></p>
+<p><span>Except that this is </span><em><span>almost</span></em><span> a rule.</span>
+<span>There are some cases where compiler gives up on clear syntax-driven namespacing rules and just does ad-hoc disambiguation.</span>
+<span>For example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::<span class="hl-type">str</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">s</span>: &amp;<span class="hl-type">str</span> = <span class="hl-type">str</span>::<span class="hl-title function_ invoke__">from_utf8</span>(<span class="hl-string">b&quot;hello&quot;</span>).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">  <span class="hl-type">str</span>::<span class="hl-title function_ invoke__">len</span>(s);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, the </span><code>str</code><span> in </span><code>&amp;str</code><span> and </span><code>str::len</code><span> is the </span><code>str</code><span> </span><em><span>type</span></em><span>, from the type namespace.</span>
+<span>The two other </span><code>str</code><span>s are the </span><code>str</code><span> </span><em><span>module</span></em><span>.</span>
+<span>In other words, the </span><code>str::len</code><span> is a method of a </span><code>str</code><span> type, while </span><code>str::from_utf8</code><span> is a free-standing function in the </span><code>str</code><span> module.</span>
+<span>Like types, modules inhabit the types namespace, so normally the code here would cause a compilation error.</span>
+<span>Compiler (and rust-analyzer) just hacks the primitive types case.</span></p>
+<p><span>Another recently added case is that of const generics.</span>
+<span>Previously, the </span><code>T</code><span> in </span><code>foo::&lt;T&gt;()</code><span> was a syntactically-unambiguous reference to something from the types namespace.</span>
+<span>Today, it can refer either to a type or to a value.</span>
+<span>This begs the question: is splitting type and value namespaces a good idea?</span>
+<span>If we have to disambiguate anyway, perhaps we could have just a single namespace and avoid introducing second lookup syntax?</span>
+<span>That is, just </span><code>use std.collections.HashMap;</code><span>.</span></p>
+<p><span>I </span><em><span>think</span></em><span> these namespace aspirations re-enact similar developments from C.</span>
+<span>I haven</span>&rsquo;<span>t double checked my history here, so take the following with the grain of salt and do your own research before quoting, but I </span><em><span>think</span></em><span> that C, in the initial versions, used to have very strict syntactic separation between types and values.</span>
+<span>That</span>&rsquo;<span>s why you are required to write </span><code>struct</code><span> when declaring a local variable of struct type:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-class"><span class="hl-keyword">struct</span> <span class="hl-title">foo</span> {</span> <span class="hl-type">int</span> a; };</span>
+<span class="line"></span>
+<span class="line"><span class="hl-type">int</span> <span class="hl-title function_">main</span><span class="hl-params">(<span class="hl-type">void</span>)</span> {</span>
+<span class="line">  <span class="hl-class"><span class="hl-keyword">struct</span> <span class="hl-title">foo</span> <span class="hl-title">x</span>;</span></span>
+<span class="line">  <span class="hl-keyword">return</span> <span class="hl-number">0</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The </span><code>struct</code><span> keyword tells the parser that it is parsing a type, and, therefore a declaration.</span>
+<span>But then at a latter point typedefs were added, and so the parser was taught to disambiguate types and values via the the lexer hack:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-class"><span class="hl-keyword">struct</span> <span class="hl-title">foo</span> {</span></span>
+<span class="line">  <span class="hl-type">int</span> a;</span>
+<span class="line">};</span>
+<span class="line"><span class="hl-keyword">typedef</span> <span class="hl-class"><span class="hl-keyword">struct</span> <span class="hl-title">foo</span> <span class="hl-title">bar</span>;</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-type">int</span> <span class="hl-title function_">main</span><span class="hl-params">(<span class="hl-type">void</span>)</span> {</span>
+<span class="line">  bar x;</span>
+<span class="line">  <span class="hl-keyword">return</span> <span class="hl-number">0</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Patterns-and-Expressions">
+
+    <h2>
+    <a href="#Patterns-and-Expressions"><span>Patterns and Expressions</span> </a>
+    </h2>
+<p><span>Rust has separate grammatical categories for patterns and expressions.</span>
+<span>It used to be the case that any utterance can be unambiguously classified, depending solely on the syntactic context, as either an expression or a pattern.</span>
+<span>But then a minor exception happened:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>(value: <span class="hl-type">Option</span>&lt;<span class="hl-type">i32</span>&gt;) {</span>
+<span class="line">  <span class="hl-keyword">match</span> value {</span>
+<span class="line">    <span class="hl-literal">None</span> =&gt; (),</span>
+<span class="line">    none =&gt; (),</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Syntactically, </span><code>None</code><span> and </span><code>none</code><span> are indistinguishable.</span>
+<span>But they play quite different roles: </span><code>None</code><span> refers to the </span><code>Option::None</code><span> constant, while </span><code>none</code><span> introduces a fresh binding into the scope.</span>
+<span>Swift elegantly disambiguates the two at the syntax level, by requiring a leading </span><code>.</code><span> for enum variants.</span>
+<span>Rust just hacks this at the name-resolution layer, by defaulting to a new binding unless there</span>&rsquo;<span>s a matching constant in the scope.</span></p>
+<p><span>Recently, the scope of the hack was increased greatly: with destructing assignment implemented, an expression can be re-classified as a pattern now:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> (<span class="hl-keyword">mut</span> a, <span class="hl-keyword">mut</span> b) = (<span class="hl-number">0</span>, <span class="hl-number">1</span>);</span>
+<span class="line">(a, b) = (b, a)</span></code></pre>
+
+</figure>
+<p><span>Syntactically, </span><code>=</code><span> is a binary expression, so both the left hand side and the right hand side are expressions.</span>
+<span>But now the </span><code>lhs</code><span> is re-interpreted as a pattern.</span></p>
+<p><span>So perhaps the syntactic boundary between expressions and patterns is a fake one, and we should have used unified expression syntax throughout?</span></p>
+</section>
+<section id="s-1">
+
+    <h2>
+    <a href="#s-1"><code>::&lt;&gt;</code> </a>
+    </h2>
+<p><span>A boundary which stands intact is the class of the grammar.</span>
+<span>Rust is still an </span><code>LL(k)</code><span> language: it can be parsed using a straightforward single-pass algorithm which doesn</span>&rsquo;<span>t require backtracking.</span>
+<span>The cost of this boundary is that we have to type </span><code>.collect::&lt;Vec&lt;_&gt;&gt;()</code><span> rather than </span><code>.collect&lt;Vec&lt;_&gt;&gt;()</code><span> (nowadays, I type just </span><code>.collect()</code><span> and use the light-bulb to fill-in the turbofish).</span></p>
+</section>
+<section id="0-0">
+
+    <h2>
+    <a href="#0-0"><code>().0.0</code> </a>
+    </h2>
+<p><span>Another recent development is the erosion of the boundary between the lexer and the parser.</span>
+<span>Rust has tuple structs, and uses </span><code>.0</code><span> cutesy syntax to access numbered field.</span>
+<span>This is problematic for nested tuple struct.</span>
+<span>They need syntax like </span><code>foo.1.2</code><span>, but to the lexer this string looks like three tokens: </span><code>foo</code><span>, </span><code>.</code><span>, </span><code>1.2</code><span>.</span>
+<span>That is, </span><code>1.2</code><span> is a floating point number, </span><code>6/5</code><span>.</span>
+<span>So, historically one had to write this expression as </span><code>foo.1 .2</code><span>, with a meaningful whitespace.</span></p>
+<p><span>Today, this is hacked in the parser, which takes the </span><code>1.2</code><span> token from the lexer, inspects its text and further breaks it up into </span><code>1</code><span>, </span><code>.</code><span> and </span><code>2</code><span> tokens.</span></p>
+<p><span>The last example is quite interesting: in Rust, unlike many programming languages, the separation between the lexer and the parser is not an arbitrary internal boundary, but is actually a part of an external, semver protected API.</span>
+<span>Tokens are the input to macros, so macro behavior depends on how exactly the input text is split into tokens.</span></p>
+<p><span>And there</span>&rsquo;<span>s a second boundary violation here: in theory, </span>&ldquo;<span>token</span>&rdquo;<span> as seen by a macro is just its text plus hygiene info.</span>
+<span>In practice though, to implement captures in macro by example (</span><code>$x:expr</code><span> things), a token could also be a fully-formed fragment of internal compiler</span>&rsquo;<span>s AST data structure.</span>
+<span>The API is carefully future proofed such that, as soon as the macro looks at such a magic token, it gets decomposed into underlying true tokens, but there are some examples where the internal details leak via changes in observable behavior.</span></p>
+</section>
+<section id="Lifetime-Parametricity">
+
+    <h2>
+    <a href="#Lifetime-Parametricity"><span>Lifetime Parametricity</span> </a>
+    </h2>
+<p><span>To end this on a more positive note, here</span>&rsquo;<span>s one pretty important internal boundary which is holding up pretty well.</span>
+<span>In Rust, lifetimes don</span>&rsquo;<span>t affect code generation.</span>
+<span>In fact, lifetimes are fully stripped from the data which is passed to codegen.</span>
+<span>This is pretty important: although the inferred lifetimes are opaque and hard to reason about, you can be sure that, for example, the exact location where a value is dropped is independent from the whims of the borrow checker.</span></p>
+<hr>
+<p><span>Conclusion: not really? It seems that we are generally overly-optimistic about internal boundaries, and they seem to crumble under the pressure of feature requests, unless the boundary in question is physically reified (please don</span>&rsquo;<span>t take this as an endorsement of microservice architecture for compilers).</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2022-07-10-almost-rules.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

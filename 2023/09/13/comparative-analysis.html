@@ -1,0 +1,196 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comparative Analysis</title>
+  <meta name="description" content="Most languages provide 6 comparison operators:">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/09/13/comparative-analysis.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Comparative Analysis</span> <time datetime="2023-09-13">Sep 13, 2023</time></h1>
+<p><span>Most languages provide 6 comparison operators:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">&lt;</span>
+<span class="line">&lt;=</span>
+<span class="line">&gt;</span>
+<span class="line">&gt;=</span>
+<span class="line">=</span>
+<span class="line">!=</span></code></pre>
+
+</figure>
+<p><span>That</span>&rsquo;<span>s too damn many of them! Some time ago I</span>&rsquo;<span>ve noticed that my code involving comparisons is often</span>
+<span>hard to understand, and hides bugs. I</span>&rsquo;<span>ve figured some rules of thumb to reduce complexity, which I</span>
+<span>want to share.</span></p>
+<p><span>The core idea is to canonicalize things. Both </span><code>x &lt; y</code><span> and </span><code>y &gt; x</code><span> mean the same, and, if you use</span>
+<span>them with roughly equal frequency, you need to spend extra mental capacity to fold the two versions</span>
+<span>into the single </span>&ldquo;<span>x tiny, y HUGE</span>&rdquo;<span> concept in your head.</span></p>
+<p><span>The </span><a href="https://en.wikipedia.org/wiki/Number_line"><span>number line</span></a><span> is a great intuition and visualization</span>
+<span>for comparisons. If you order things from small to big,</span>
+<span class="display"><code>A B C D</code><span>,</span></span>
+<span>you get intuitive concept of ordering without using comparison operators. You also plug into your</span>
+<span>existing intuition that the sort function arranges arrays in the ascending order.</span></p>
+<p><span>So, as a first order rule-of-thumb:</span>
+<span class="display"><strong><span>Strongly prefer </span><code>&lt;</code><span> and </span><code>&lt;=</code><span> over </span><code>&gt;</code><span> and </span><code>&gt;=</code></strong></span>
+<span>And, when using comparisons, use number line intuition.</span></p>
+<p><span>Some snippets:</span></p>
+<p><span>Checking if a point is inside the interval:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">lo &lt;= x <span class="hl-keyword">and</span> x &lt;= hi</span></code></pre>
+
+</figure>
+<p><span>Checking if a point is outside of the interval:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">x &lt; lo <span class="hl-keyword">or</span> hi &lt; x</span></code></pre>
+
+</figure>
+<p><span>Segment </span><code>a</code><span> is inside segment </span><code>b</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">b.start &lt;= a.start <span class="hl-keyword">and</span> a.end &lt;= b.end</span></code></pre>
+
+</figure>
+<p><span>Segments </span><code>a</code><span> and </span><code>b</code><span> are disjoint (either </span><code>a</code><span> is to the left of </span><code>b</code><span> or </span><code>a</code><span> is to the right of </span><code>b</code><span>):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">a.end &lt; b.start <span class="hl-keyword">or</span> b.end &lt; a.start</span></code></pre>
+
+</figure>
+<p><span>A particular common case for ordered comparisons is checking that an index is in bounds for an</span>
+<span>array. Here, the rule about number line works together with another important rule: </span><span class="display"><strong><span>State</span>
+<span>invariants positively</span></strong></span></p>
+<p><span>The indexing invariant is spelled as </span><span class="display"><code>index &lt; xs.len()</code><span>,</span></span></p>
+<p><span>and you should prefer to see it exactly that way in the source code. Concretely,</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">if</span> (index &gt;= xs.len) {</span>
+<span class="line"></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>is hard to get right, because is spells the converse of the invariant, and involves an extra mental</span>
+<span>negation (this is subtle </span>&mdash;<span> although there isn</span>&rsquo;<span>t a literal negation operator, you absolutely do</span>
+<span>think about this as a negation of the invariant). If possible, the code should be reshaped to</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">if</span> (index &lt; xs.len) {</span>
+<span class="line"></span>
+<span class="line">} <span class="hl-keyword">else</span> {</span>
+<span class="line"></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-09-13-comparative-analysis.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

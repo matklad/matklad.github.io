@@ -1,0 +1,258 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Why SAT Is Hard</title>
+  <meta name="description" content="An introductory post about complexity theory today!
+It is relatively well-known that there exist so-called NP-complete problems --- particularly hard problems, such that, if you solve one of them efficiently, you can solve all of them efficiently.
+I think I've learned relatively early that, e.g., SAT is such a hard problem.
+I've similarly learned a bunch of specific examples of equally hard problems, where solving one solves the other.
+However, why SAT is harder than any NP problem remained a mystery for a rather long time to me.
+It is a shame --- this fact is rather intuitive and easy to understand.
+This post is my attempt at an explanation.
+It assumes some familiarity with the space, but it's not going to be too technical or thorough.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/02/21/why-SAT-is-hard.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Why SAT Is Hard</span> <time datetime="2023-02-21">Feb 21, 2023</time></h1>
+<p><span>An introductory post about complexity theory today!</span>
+<span>It is relatively well-known that there exist so-called NP-complete problems </span>&mdash;<span> particularly hard problems, such that, if you solve one of them efficiently, you can solve </span><em><span>all</span></em><span> of them efficiently.</span>
+<span>I think I</span>&rsquo;<span>ve learned relatively early that, e.g., SAT is such a hard problem.</span>
+<span>I</span>&rsquo;<span>ve similarly learned a bunch of specific examples of equally hard problems, where solving one solves the other.</span>
+<span>However, why SAT is harder than </span><em><span>any</span></em><span> NP problem remained a mystery for a rather long time to me.</span>
+<span>It is a shame </span>&mdash;<span> this fact is rather intuitive and easy to understand.</span>
+<span>This post is my attempt at an explanation.</span>
+<span>It assumes </span><em><span>some</span></em><span> familiarity with the space, but it</span>&rsquo;<span>s not going to be too technical or thorough.</span></p>
+<section id="Summary">
+
+    <h2>
+    <a href="#Summary"><span>Summary</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s say you are solving some search problem, like </span>&ldquo;<span>find a path that visits every vertex in a graph once</span>&rdquo;<span>.</span>
+<span>It is often possible to write a naive algorithm for it, where we exhaustively check every possible prospective solution:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">for every possible path:</span>
+<span class="line">    if path visits every vertex once:</span>
+<span class="line">        return path</span>
+<span class="line">else:</span>
+<span class="line">    return "no solution"</span></code></pre>
+
+</figure>
+<p><span>Although </span><em><span>checking</span></em><span> each specific candidate is pretty fast, the whole algorithm is exponential, because there are too many (exponent of) candidates.</span>
+<span>Turns out, it is possible to write </span>&ldquo;<span>check if solution fits</span>&rdquo;<span> part as a SAT formula!</span>
+<span>And, if you have a magic algorithm which solves SAT, you can use that to find a candidate solution which would work instead of enumerating all solutions!</span></p>
+<p><span>In other words, solving SAT removes </span>&ldquo;<span>search</span>&rdquo;<span> from </span>&ldquo;<span>search and check</span>&rdquo;<span>.</span></p>
+<p><span>That</span>&rsquo;<span>s more or less everything I wanted to say today, but let</span>&rsquo;<span>s make this a tiny bit more formal.</span></p>
+</section>
+<section id="Background">
+
+    <h2>
+    <a href="#Background"><span>Background</span> </a>
+    </h2>
+<p><span>We will be discussing algorithms and their runtime.</span>
+<span>Big-O notation is a standard instrument for describing performance of algorithms, as it erases small differences which depend on a particular implementation of the algorithm.</span>
+<span>Both 2N + 1000 and 100N are O(N), linear.</span></p>
+<p><span>In this post we will be even </span><em><span>less</span></em><span> precise.</span>
+<span>We will talk about </span><dfn><span>polynomial time</span></dfn><span> </span>&mdash;<span> an algorithm is polynomial if it is O(N</span><sup><span>k</span></sup><span>) for some k.</span>
+<span>For example, N</span><sup><span>100</span></sup><span> is polynomial, while 2</span><sup><span>N</span></sup><span> is not.</span></p>
+<p><span>We will also be thinking about Turing machines (</span><dfn><span>TM</span></dfn><span>s) as our implementation device.</span>
+<span>Programming algorithms directly on Turing machines is cumbersome, but TMs have two advantages for our use case:</span></p>
+<ul>
+<li>
+<span>it</span>&rsquo;<span>s natural to define runtime of TM</span>
+</li>
+<li>
+<span>it</span>&rsquo;<span>s easy to simulate a TM as a part of some larger algorithm (an interpreter for a TM is a small program)</span>
+</li>
+</ul>
+<p><span>Finally, we will only think about problems with binary answers (</span><dfn><span>decision problem</span></dfn><span>).</span>
+&ldquo;<span>Is there a solution to this formula?</span>&rdquo;<span> rather than </span>&ldquo;<span>what is the solution to this formula?</span>&rdquo;<span>.</span>
+&ldquo;<span>Is there a path in the graph of length at least N?</span>&rdquo;<span> rather than </span>&ldquo;<span>what is the longest path in this graph?</span>&rdquo;<span>.</span></p>
+</section>
+<section id="Definitions">
+
+    <h2>
+    <a href="#Definitions"><span>Definitions</span> </a>
+    </h2>
+<p><span>Intuitively, a problem is NP if it</span>&rsquo;<span>s easy to check that a solution is valid (even if </span><em><span>finding</span></em><span> the solution might be hard).</span>
+<span>This intuition doesn</span>&rsquo;<span>t exactly work for yes/no problems we are considering.</span>
+<span>To fix this, we will also provide a </span>&ldquo;<span>hint</span>&rdquo;<span> for the checker.</span>
+<span>For example, if the problem is </span>&ldquo;<span>is there a path of length N in a given graph?</span>&rdquo;<span> the hint will be a path.</span></p>
+<p><span>A decision problem is </span><dfn><span>NP</span></dfn><span>, if there</span>&rsquo;<span>s an algorithm that can verify a </span>&ldquo;<span>yes</span>&rdquo;<span> answer in polynomial time, given a suitable hint.</span></p>
+<p><span>That is, for every input where the answer is </span>&ldquo;<span>yes</span>&rdquo;<span> (and only for those inputs) there should be a hint that makes our verifying algorithm answer </span>&ldquo;<span>yes</span>&rdquo;<span>.</span></p>
+<p><span>Boolean satisfiability, or </span><dfn><span>SAT</span></dfn><span> is a decision problem where an input is a boolean formula like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">(A and B and !C) or</span>
+<span class="line">(C and D) or</span>
+<span class="line">!B</span></code></pre>
+
+</figure>
+<p><span>and the answer is </span>&ldquo;<span>yes</span>&rdquo;<span> if the formula evaluates to true for some variable assignment.</span></p>
+<p><span>It</span>&rsquo;<span>s easy to see that SAT is NP: the hint is variable assignment which satisfies the formula, and verifier evaluates the formula.</span></p>
+</section>
+<section id="Sketch-of-a-Proof">
+
+    <h2>
+    <a href="#Sketch-of-a-Proof"><span>Sketch of a Proof</span> </a>
+    </h2>
+<p><span>Turns out, there is the </span>&ldquo;<span>hardest</span>&rdquo;<span> problem in NP </span>&mdash;<span> solving just that single problem in polynomial time automatically solves every other NP problem in polynomial time (we call such problems </span><span class="def"><span>NP-complete</span></span><span>).</span>
+<span>Moreover, there</span>&rsquo;<span>s actually a bunch of such problems, and SAT is one of them.</span>
+<span>Let</span>&rsquo;<span>s see why!</span></p>
+<p><span>First, let</span>&rsquo;<span>s define a (somewhat artificial) problem which is trivially NP-complete.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with this one: </span>&ldquo;<span>Given a Turing machine and an input for it of length N, will the machine output </span>&ldquo;<span>yes</span>&rdquo;<span> after N</span><sup><span>k</span></sup><span> steps?</span>&rdquo;
+<span>(here k is a fixed parameter; pedantically, I describe a family of problems, one for each k)</span></p>
+<p><span>This is </span><em><span>very</span></em><span> similar to a halting problem, but also much easier.</span>
+<span>We explicitly bound the runtime of the Turing machine by a polynomial, so we don</span>&rsquo;<span>t need to worry about </span>&ldquo;<span>looping forever</span>&rdquo;<span> case </span>&mdash;<span> that would be a </span>&ldquo;<span>no</span>&rdquo;<span> for us.</span>
+<span>The naive algorithm here works: we just run the given machine on a given input for a given amount of steps and look at the answer.</span></p>
+<p><span>Now, if we formulate the problem as </span>&ldquo;<em><span>Is</span></em><span> there an input </span><strong><strong><span>I</span></strong></strong><span> for a given Turing machine </span><strong><strong><span>M</span></strong></strong><span> such that </span><strong><strong><span>M(I)</span></strong></strong><span> answers </span>&ldquo;<span>yes</span>&rdquo;<span> after N</span><sup><span>k</span></sup><span> steps?</span>&rdquo;<span> we get our NP-complete problem.</span>
+<span>It</span>&rsquo;<span>s trivially NP </span>&mdash;<span> the hint is the input that makes the machine answer </span>&ldquo;<span>yes</span>&rdquo;<span>, and the verifier just runs our TM with this input for N</span><sup><span>k</span></sup><span> steps.</span>
+<span>It can also be used to efficiently solve any other NP problem (e.g. SAT).</span>
+<span>Indeed, we can use the verifying TM as </span><strong><strong><span>M</span></strong></strong><span>, and that way find if there</span>&rsquo;<span>s any hint that makes it answer </span>&ldquo;<span>yes</span>&rdquo;<span>.</span></p>
+<p><span>This is a bit circular and hard to wrap ones head around, but, at the same time, trivial.</span>
+<span>We essentially just carefully stare at the definition of an NP problem, specifically produce an algorithm that can solve any NP problem by directly using the definition, and notice that the resulting algorithm is also NP.</span>
+<span>Now there</span>&rsquo;<span>s no surprise that there exists the hardest NP problem </span>&mdash;<span> we essentially </span><em><span>defined</span></em><span> NP such that this is the case.</span></p>
+<p><span>What is still a bit mysterious is why non-weird problems like SAT also turn out to be NP-complete?</span>
+<span>This is because SAT is powerful enough to encode a Turing machine!</span></p>
+<p><em><span>First</span></em><span>, note that we can encode a state of a Turing machine as a set of boolean variables.</span>
+<span>We</span>&rsquo;<span>ll need a boolean variable T</span><sub><span>i</span></sub><span> for each position on a tape.</span>
+<span>The tape is in general infinite, but all our Turing machines run for polynomial (finite) time, so they use only a finite amount of cells, and it</span>&rsquo;<span>s enough to create variables only for those cells.</span>
+<span>Position of the head can also be described by a set of booleans variables.</span>
+<span>For example, we can have a P</span><sub><span>i</span></sub><span> </span>&ldquo;<span>is the head at a cell </span><code>i</code>&rdquo;<span> variable for each cell.</span>
+<span>Similarly, we can encode the finite number of states our machine can be in as a set of S</span><sub><span>i</span></sub><span> variables (is the machine in state </span><code>i</code><span>?).</span></p>
+<p><em><span>Second</span></em><span>, we can write a set of boolean equations which describe a single transition of our Turing machine.</span>
+<span>For example  the value of cell i at the second step T2</span><sub><span>i</span></sub><span> will depend on its value on the previous step T1</span><sub><span>i</span></sub><span>, whether the head was at </span><code>i</code><span> (P1</span><sub><span>i</span></sub><span>) and the rules of our specific states.</span>
+<span>For example, if our machine flips bits in state </span><code>0</code><span> and keeps them in state </span><code>1</code><span>, then the formula we get for each cell is</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">T2_i &lt;=&gt;</span>
+<span class="line">  (!P1_i and T1_i) # head is not on our cell, it can't change</span>
+<span class="line">or (P1_i and (</span>
+<span class="line">    S1_0 and !T1_i # flip case</span>
+<span class="line">or  S1_1 and T1_i  # keep case</span>
+<span class="line">))</span></code></pre>
+
+</figure>
+<p><span>We can write similar formulas for changes of P and S families of variables.</span></p>
+<p><em><span>Third</span></em><span>, after we wrote the transition formula for a single step, we can stack several such formulas on top of each other to get a formula for N steps.</span></p>
+<p><span>Now let</span>&rsquo;<span>s come back to our universal problem: </span>&ldquo;<span>is there an input which makes a given Turing machine answer </span>&ldquo;<span>yes</span>&rdquo;<span> in N</span><sup><span>k</span></sup><span> steps?</span>&rdquo;<span>.</span>
+<span>At this point, it</span>&rsquo;<span>s clear that we can replace a </span>&ldquo;<span>Turing machine with N</span><sup><span>k</span></sup><span> steps</span>&rdquo;<span> with our transition formula duplicated N</span><sup><span>k</span></sup><span> times.</span>
+<span>So, the question of existence of an input for a Turing machine reduces to the question of existence of a solution to a (big, but still polynomial) SAT formula.</span></p>
+<p><span>And this concludes the sketch!</span></p>
+</section>
+<section id="Summary-Again">
+
+    <h2>
+    <a href="#Summary-Again"><span>Summary, Again</span> </a>
+    </h2>
+<p><span>SAT is hard, because it allows encoding Turing machine transitions.</span>
+<span>We can</span>&rsquo;<span>t encode loops in SAT, but we can encode </span>&ldquo;<span>N steps of a Turing machine</span>&rdquo;<span> by repeating the same formula N times with small variations.</span>
+<span>So, if we know that a particular Turing machine runs in polynomial time, we </span><em><span>can</span></em><span> encode it by a polynomially-sized formula.</span>
+<span>(see also </span><a href="https://mochiro.moe/posts/09-meson-raytracer/"><span>pure meson ray-tracer</span></a><span> for a significantly more practical application of a similar idea).</span></p>
+<p><span>And that means that every problem that can be solved by a brute-force search over all solutions can be reduced to a SAT instance, by encoding the body of the search loop as a SAT formula!</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-02-21-why-SAT-is-hard.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

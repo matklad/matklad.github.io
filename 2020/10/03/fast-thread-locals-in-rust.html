@@ -1,0 +1,359 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fast Thread Locals In Rust</title>
+  <meta name="description" content="Rust thread-locals are slower than they could be.
+This is because they violate zero-cost abstraction principle, specifically the you don't pay for what you don't use part.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/10/03/fast-thread-locals-in-rust.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Fast Thread Locals In Rust</span> <time datetime="2020-10-03">Oct 3, 2020</time></h1>
+<p><span>Rust thread-locals are slower than they could be.</span>
+<span>This is because they violate zero-cost abstraction principle, specifically the </span>&ldquo;<span>you don</span>&rsquo;<span>t pay for what you don</span>&rsquo;<span>t use</span>&rdquo;<span> part.</span></p>
+<p><span>Rust</span>&rsquo;<span>s thread-local implementation(</span>
+<a href="https://github.com/rust-lang/rust/blob/6f56fbdc1c58992a9db630f5cd2ba9882d32e84b/library/std/src/thread/local.rs#L156-L188"><span>1</span></a><span>,</span>
+<a href="https://github.com/rust-lang/rust/blob/6f56fbdc1c58992a9db630f5cd2ba9882d32e84b/library/std/src/thread/local.rs#L445-L459"><span>2</span></a>
+<span>) comes with built-in support for laziness </span>&mdash;<span> thread locals are initialized on the first access.</span>
+<span>Sometimes this overhead is a big deal, as thread locals are a common tool for writing high-performance code.</span>
+<span>For example, allocator fast path often involves looking into thread-local heap.</span></p>
+<p><span>There</span>&rsquo;<span>s an unstable </span><code>#[thread_local]</code><span> attribute for a zero-cost implementation</span>
+<span>(see the </span><a href="https://github.com/rust-lang/rust/issues/29594"><span>tracking issue</span></a><span>).</span></p>
+<p><span>Let</span>&rsquo;<span>s see how much </span>&ldquo;<span>is thread local initialized?</span>&rdquo;<span> check costs by comparing these two programs:</span></p>
+
+<figure class="code-block">
+<figcaption class="title">./src/main.rs</figcaption>
+
+
+<pre><code><span class="line">thread_local! {</span>
+<span class="line">  <span class="hl-keyword">static</span> COUNTER: Cell&lt;<span class="hl-type">u32</span>&gt; = Cell::<span class="hl-title function_ invoke__">new</span>(<span class="hl-number">0</span>);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">const</span> STEPS: <span class="hl-type">u32</span> = <span class="hl-number">1_000_000_000</span>;</span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">sum_rust</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">step</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..STEPS {</span>
+<span class="line">    COUNTER.<span class="hl-title function_ invoke__">with</span>(|it| {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">inc</span> = step.<span class="hl-title function_ invoke__">wrapping_mul</span>(step) ^ step;</span>
+<span class="line">      it.<span class="hl-title function_ invoke__">set</span>(it.<span class="hl-title function_ invoke__">get</span>().<span class="hl-title function_ invoke__">wrapping_add</span>(inc))</span>
+<span class="line">    })</span>
+<span class="line">  }</span>
+<span class="line">  COUNTER.<span class="hl-title function_ invoke__">with</span>(|it| it.<span class="hl-title function_ invoke__">get</span>())</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">t</span> = Instant::<span class="hl-title function_ invoke__">now</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">r</span> = <span class="hl-title function_ invoke__">sum_rust</span>();</span>
+<span class="line">  eprintln!(<span class="hl-string">&quot;Rust:   {} {}ms&quot;</span>, r, t.<span class="hl-title function_ invoke__">elapsed</span>().<span class="hl-title function_ invoke__">as_millis</span>());</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+
+<figure class="code-block">
+<figcaption class="title">./src/main.c</figcaption>
+
+
+<pre><code><span class="line"><span class="hl-meta">#<span class="hl-keyword">define</span> _POSIX_C_SOURCE 200809L</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#<span class="hl-keyword">include</span> <span class="hl-string">&quot;inttypes.h&quot;</span></span></span>
+<span class="line"><span class="hl-meta">#<span class="hl-keyword">include</span> <span class="hl-string">&quot;stdint.h&quot;</span></span></span>
+<span class="line"><span class="hl-meta">#<span class="hl-keyword">include</span> <span class="hl-string">&quot;stdio.h&quot;</span></span></span>
+<span class="line"><span class="hl-meta">#<span class="hl-keyword">include</span> <span class="hl-string">&quot;threads.h&quot;</span></span></span>
+<span class="line"><span class="hl-meta">#<span class="hl-keyword">include</span> <span class="hl-string">&quot;time.h&quot;</span></span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">thread_local</span> <span class="hl-type">uint32_t</span> COUNTER = <span class="hl-number">0</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-type">const</span> <span class="hl-type">uint32_t</span> STEPS = <span class="hl-number">1000000000</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-type">uint32_t</span> <span class="hl-title function_">sum_c</span><span class="hl-params">()</span> {</span>
+<span class="line">  <span class="hl-keyword">for</span> (<span class="hl-type">uint32_t</span> step = <span class="hl-number">0</span>; step &lt; STEPS; step++) {</span>
+<span class="line">    <span class="hl-type">uint32_t</span> inc = (step * step) ^ step;</span>
+<span class="line">    COUNTER += inc;</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">return</span> COUNTER;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-type">uint64_t</span> <span class="hl-title function_">now_ms</span><span class="hl-params">()</span> {</span>
+<span class="line">  <span class="hl-class"><span class="hl-keyword">struct</span> <span class="hl-title">timespec</span> <span class="hl-title">spec</span>;</span></span>
+<span class="line">  clock_gettime(CLOCK_MONOTONIC, &amp;spec);</span>
+<span class="line">  <span class="hl-keyword">return</span> spec.tv_sec * <span class="hl-number">1000</span> + spec.tv_nsec / <span class="hl-number">1000000</span>;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-type">int</span> <span class="hl-title function_">main</span><span class="hl-params">(<span class="hl-type">void</span>)</span> {</span>
+<span class="line">  <span class="hl-type">uint64_t</span> t = now_ms();</span>
+<span class="line">  <span class="hl-type">uint32_t</span> r = sum_c();</span>
+<span class="line">  <span class="hl-built_in">printf</span>(<span class="hl-string">&quot;C:      %&quot;</span> PRIu32 <span class="hl-string">&quot; %&quot;</span>PRIu64<span class="hl-string">&quot;ms\n&quot;</span>, r, now_ms() - t);</span>
+<span class="line">  <span class="hl-keyword">return</span> <span class="hl-number">0</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>In this test, we declare an integer thread-local variable, and use it as an accumulator for the summation.</span></p>
+<p><span>We use non-trivial summation term: </span><code>(step * step) ^ step</code><span> </span>&mdash;<span> this is to prevent LLVM from evaluating the sum at compile time.</span>
+<span>If a term of a summation is a polynomial (like </span><code>1</code><span>, </span><code>step</code><span> or </span><code>step * step</code><span>), then the sum itself is a one degree higher polynomial, and LLVM can figure this out!</span>
+<span>We rely on wrapping overflow of </span><em><span>unsigned</span></em><span> integers in C, and use </span><code>wrapping_mul</code><span> and </span><code>wrapping_add</code><span> in Rust.</span>
+<span>To make sure that both programs are equivalent, we also print the result.</span></p>
+<p><span>One optimization we specifically don</span>&rsquo;<span>t protect from is caching thread-local access.</span>
+<span>That is, instead of doing a billion of thread-local loads and stores, the compiler could generate code to compute the sum into the local variable, and do a single store at the end.</span>
+<span>This is because </span>&ldquo;<span>can the compiler optimize thread-local access?</span>&rdquo;<span> is exactly the property we want to measure.</span></p>
+<p><span>There</span>&rsquo;<span>s no standard way to get monotonic wall-clock time in C, so the C version is not cross-platform.</span></p>
+<p><span>This code gives the following results on my machine:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo build --release -q        &amp;&amp; ./target/release/ftl</span>
+<span class="line"><span class="hl-output">Rust:   62565888 487ms</span></span>
+<span class="line"><span class="hl-title function_">$</span> clang -std=c17 -O3 ./src/main.c &amp;&amp; ./a.out</span>
+<span class="line"><span class="hl-output">C:      62565888 239ms</span></span></code></pre>
+
+</figure>
+<p><span>This benchmark doesn</span>&rsquo;<span>t allow to measure the cost of thread-local access per se, but the overall time is about 2x longer for Rust.</span></p>
+<p><span>Can we make Rust faster?</span>
+<span>I don</span>&rsquo;<span>t know how to do that, but I know how to cheat.</span>
+<span>We can apply a general Rust extension trick </span>&mdash;<span> write some C code and link it with Rust!</span></p>
+<p><span>Let</span>&rsquo;<span>s implement a simple C library which declares a thread-local and provides access to it:</span></p>
+
+<figure class="code-block">
+<figcaption class="title">../src/thread_local.c</figcaption>
+
+
+<pre><code><span class="line"><span class="hl-meta">#<span class="hl-keyword">include</span> <span class="hl-string">&quot;stdint.h&quot;</span></span></span>
+<span class="line"><span class="hl-meta">#<span class="hl-keyword">include</span> <span class="hl-string">&quot;threads.h&quot;</span></span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">thread_local</span> <span class="hl-type">uint32_t</span> COUNTER = <span class="hl-number">0</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-type">uint32_t</span>* <span class="hl-title function_">get_thread_local</span><span class="hl-params">()</span> {</span>
+<span class="line">  <span class="hl-keyword">return</span> &amp;COUNTER;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Link it with Rust:</span></p>
+
+<figure class="code-block">
+<figcaption class="title">../build.rs</figcaption>
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::{env, path::Path, process::Command};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">out_dir</span> = env::<span class="hl-title function_ invoke__">var</span>(<span class="hl-string">&quot;OUT_DIR&quot;</span>).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line"></span>
+<span class="line">  Command::<span class="hl-title function_ invoke__">new</span>(<span class="hl-string">&quot;clang&quot;</span>)</span>
+<span class="line">    .<span class="hl-title function_ invoke__">args</span>(&amp;[ <span class="hl-string">&quot;src/thread_local.c&quot;</span>, <span class="hl-string">&quot;-O3&quot;</span>, <span class="hl-string">&quot;-c&quot;</span>, <span class="hl-string">&quot;-o&quot;</span>])</span>
+<span class="line">    .<span class="hl-title function_ invoke__">arg</span>(&amp;<span class="hl-built_in">format!</span>(<span class="hl-string">&quot;{}/thread_local.o&quot;</span>, out_dir))</span>
+<span class="line">    .<span class="hl-title function_ invoke__">status</span>()</span>
+<span class="line">    .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">  Command::<span class="hl-title function_ invoke__">new</span>(<span class="hl-string">&quot;ar&quot;</span>)</span>
+<span class="line">    .<span class="hl-title function_ invoke__">args</span>(&amp;[<span class="hl-string">&quot;crus&quot;</span>, <span class="hl-string">&quot;libthread_local.a&quot;</span>, <span class="hl-string">&quot;thread_local.o&quot;</span>])</span>
+<span class="line">    .<span class="hl-title function_ invoke__">current_dir</span>(&amp;Path::<span class="hl-title function_ invoke__">new</span>(&amp;out_dir))</span>
+<span class="line">    .<span class="hl-title function_ invoke__">status</span>()</span>
+<span class="line">    .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;cargo:rustc-link-search=native={}&quot;</span>, out_dir);</span>
+<span class="line">  <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;cargo:rustc-link-lib=static=thread_local&quot;</span>);</span>
+<span class="line">  <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;cargo:rerun-if-changed=src/thread_local.c&quot;</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And use it:</span></p>
+
+<figure class="code-block">
+<figcaption class="title">../src/main.rs</figcaption>
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">with_counter</span>&lt;T&gt;(f: <span class="hl-keyword">impl</span> <span class="hl-title class_">FnOnce</span>(&amp;Cell&lt;<span class="hl-type">u32</span>&gt;) <span class="hl-punctuation">-&gt;</span> T) <span class="hl-punctuation">-&gt;</span> T {</span>
+<span class="line">  <span class="hl-keyword">extern</span> <span class="hl-string">&quot;C&quot;</span> { <span class="hl-keyword">fn</span> <span class="hl-title function_">get_thread_local</span>() <span class="hl-punctuation">-&gt;</span> *<span class="hl-keyword">mut</span> <span class="hl-type">u32</span>; }</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">counter</span> =</span>
+<span class="line">    <span class="hl-keyword">unsafe</span> { &amp;*(<span class="hl-title function_ invoke__">get_thread_local</span>() <span class="hl-keyword">as</span> *<span class="hl-keyword">mut</span> Cell&lt;<span class="hl-type">u32</span>&gt;) };</span>
+<span class="line">  <span class="hl-title function_ invoke__">f</span>(&amp;counter)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">sum_rust_c</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">step</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..STEPS {</span>
+<span class="line">    <span class="hl-title function_ invoke__">with_counter</span>(|it| {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">inc</span> = step.<span class="hl-title function_ invoke__">wrapping_mul</span>(step) ^ step;</span>
+<span class="line">      it.<span class="hl-title function_ invoke__">set</span>(it.<span class="hl-title function_ invoke__">get</span>().<span class="hl-title function_ invoke__">wrapping_add</span>(inc))</span>
+<span class="line">    })</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-title function_ invoke__">with_counter</span>(|it| it.<span class="hl-title function_ invoke__">get</span>())</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The result are underwhelming:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">C:               62565888 239ms</span>
+<span class="line">Rust:            62565888 485ms</span>
+<span class="line">Rust/C:          62565888 1198ms</span></code></pre>
+
+</figure>
+<p><span>This is expected </span>&mdash;<span> we replaced access to a thread local with a function call.</span>
+<span>As we are crossing the language boundary, the compiler can</span>&rsquo;<span>t inline it, which destroys performance.</span>
+<span>However, there</span>&rsquo;<span>s a way around that: Rust allows cross-language </span><strong><strong><span>L</span></strong></strong><span>ink </span><strong><strong><span>T</span></strong></strong><span>ime </span><strong><strong><span>O</span></strong></strong><span>ptimization (</span><a href="https://doc.rust-lang.org/rustc/linker-plugin-lto.html"><span>docs</span></a><span>).</span>
+<span>That is, Rust and C compilers can cooperate, to allow the linker to do inlining across the languages.</span></p>
+<p><span>This requires to manually align a bunch of stars:</span></p>
+<ul>
+<li>
+<p><span>The C compiler, the Rust compiler and the linker must use the same version of LLVM.</span>
+<span>As you might have noticed, this excludes gcc.</span>
+<span>I had luck with </span><code>rustc 1.46.0</code><span>, </span><code>clang 10.0.0</code><span>, and </span><code>LLD 10.0.0</code><span>.</span></p>
+</li>
+<li>
+<p><code>-flto=thin</code><span> in the  C compiler flags.</span></p>
+</li>
+<li>
+<p><code>RUSTFLAGS</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> export RUSTFLAGS=\</span>
+<span class="line">  "-Clinker-plugin-lto -Clinker=clang -Clink-arg=-fuse-ld=lld"</span></code></pre>
+
+</figure>
+</li>
+</ul>
+<p><span>Now, just recompiling the old code gives the same performance for C and Rust:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">C:               62565888 240ms</span>
+<span class="line">Rust:            62565888 495ms</span>
+<span class="line">Rust/C:          62565888 241ms</span></code></pre>
+
+</figure>
+<p><span>Interestingly, this is the same performance we get without any thread-locals at all:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">sum_local</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">counter</span> = <span class="hl-number">0u32</span>;</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">step</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..STEPS {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">inc</span> = step.<span class="hl-title function_ invoke__">wrapping_mul</span>(step) ^ step;</span>
+<span class="line">    counter = counter.<span class="hl-title function_ invoke__">wrapping_add</span>(inc)</span>
+<span class="line">  }</span>
+<span class="line">  counter</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>So, either the compiler/linker was able to lift thread-local access out of the loop, or its cost is masked by arithmetics.</span></p>
+<p><span>Full code for the benchmarks is available at </span><a href="https://github.com/matklad/ftl" class="url">https://github.com/matklad/ftl</a><span>.</span>
+<span>Note that this research only scratches the surface of the topic: thread locals are implemented differently on different OSes.</span>
+<span>Even on a single OS, there are be differences depending on compilation flags (dynamic libraries differ from static libraries, for example).</span>
+<span>Looking at the generated assembly could also be illuminating (code on </span><a href="https://godbolt.org/z/zMqdn4"><span>Compiler Explorer</span></a><span>).</span></p>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/j4iy50/blog_post_fast_thread_locals_in_rust/"><span>/r/rust</span></a><span>.</span></p>
+<p><strong><strong><span>Update(2023-12-18):</span></strong></strong><span> since writing this post, Rust gained an ability to opt-out of lazy</span>
+<span>initialization semantics by using a const block in the </span><code>thread_local</code><span> macro:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">thread_local! {</span>
+<span class="line">  <span class="hl-keyword">static</span> COUNTER: Cell&lt;<span class="hl-type">u32</span>&gt; = <span class="hl-keyword">const</span> { Cell::<span class="hl-title function_ invoke__">new</span>(<span class="hl-number">0</span>) };</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This remove the overhead measured in this article. Note that in this case </span><code>const {</code><span> is a feature of</span>
+<code>thread_local</code><span> </span><em><span>macro</span></em><span>. That is, </span><code>const {</code><span> is parsed specifically by the declarative macro</span>
+<span>machinery, it is </span><em><span>not</span></em><span> a part of a more general (currently unstable) </span>&ldquo;<span>const block</span>&rdquo;<span> syntax.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-10-03-fast-thread-locals-in-rust.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

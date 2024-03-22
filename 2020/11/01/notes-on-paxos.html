@@ -1,0 +1,1050 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notes on Paxos</title>
+  <meta name="description" content="These are my notes after learning the Paxos algorithm.
+The primary goal here is to sharpen my own understanding of the algorithm, but maybe someone will find this explanation of Paxos useful!
+This post assumes fluency with mathematical notation.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/11/01/notes-on-paxos.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Notes on Paxos</span> <time datetime="2020-11-01">Nov 1, 2020</time></h1>
+<p><span>These are my notes after learning the </span><a href="https://en.wikipedia.org/wiki/Paxos_%28computer_science%29"><span>Paxos</span></a><span> algorithm.</span>
+<span>The primary goal here is to sharpen my own understanding of the algorithm, but maybe someone will find this explanation of Paxos useful!</span>
+<span>This post assumes fluency with mathematical notation.</span></p>
+<p><span>I must confess it took me a long time to understand distributed consensus.</span>
+<span>I</span>&rsquo;<span>ve read a whole bunch of papers</span>
+<span>(</span><a href="https://lamport.azurewebsites.net/pubs/pubs.html#lamport-paxos"><span>Part Time Parliament</span></a><span>,</span>
+<a href="https://lamport.azurewebsites.net/pubs/pubs.html#paxos-simple"><span>Paxos Made Simple</span></a><span>,</span>
+<a href="http://pmg.csail.mit.edu/pubs/castro99practical-abstract.html"><span>Practical BFT</span></a><span>,</span>
+<a href="https://raft.github.io/"><span>In Search of an Understandable Consensus Algorithm</span></a><span>,</span>
+<a href="https://arxiv.org/abs/1802.07000"><span>CASPaxos: Replicated State Machines without logs</span></a><span>), but they didn</span>&rsquo;<span>t make sense.</span>
+<span>Or rather, nothing specific was unclear, but, at the same time, I was unable to answer the core question:</span></p>
+
+<aside class="block">
+
+<p><span>What breaks if this particular condition is removed?</span></p>
+
+</aside>
+  <p><span>That means that I didn</span>&rsquo;<span>t actually understand the algorithm.</span></p>
+<p><span>What finally made the whole thing click are</span></p>
+<ul>
+<li>
+<a href="https://lamport.azurewebsites.net/video/videos.html"><span>The TLA+ Video Course</span></a><span>.</span>
+</li>
+<li>
+<a href="https://lamport.azurewebsites.net/tla/paxos-algorithm.html"><span>The Paxos Algorithm or How to Win a Turing Award</span></a><span> lecture (I can</span>&rsquo;<span>t believe I actually was in St. Petersburg at that time and missed this!)</span>
+</li>
+</ul>
+<p><span>I now think that the thing is actually much simpler than it is made to believe :-)</span></p>
+<p><span>Buckle in, we are starting!</span></p>
+<section id="What-is-Paxos">
+
+    <h2>
+    <a href="#What-is-Paxos"><span>What is Paxos?</span> </a>
+    </h2>
+<p><span>Paxos is an algorithm for implementing distributed consensus.</span>
+<span>Suppose you have </span><code>N</code><span> machines which communicate over a faulty network.</span>
+<span>The network may delay, reorder, and lose messages (it can not corrupt them though).</span>
+<span>Some machines might die, and might return later.</span>
+<span>Due to network delays, </span>&ldquo;<span>machine is dead</span>&rdquo;<span> and </span>&ldquo;<span>machine is temporary unreachable</span>&rdquo;<span> are indistinguishable.</span>
+<span>What we want to do is to make machines agree on some value.</span>
+&ldquo;<span>Agree</span>&rdquo;<span> here means that if some machine says </span>&ldquo;<span>value is X</span>&rdquo;<span>, and another machine says </span>&ldquo;<span>value is Y</span>&rdquo;<span>, then X necessary is equal to Y.</span>
+<span>It is OK for machine to answer </span>&ldquo;<span>I don</span>&rsquo;<span>t know yet</span>&rdquo;<span>.</span></p>
+<p><span>The problem with this formulation is that Paxos is an elementary, but subtle algorithm.</span>
+<span>To understand it (at least for me), a precise, mathematical formulation is needed.</span>
+<span>So, let</span>&rsquo;<span>s try again.</span></p>
+<p><span>What is Paxos?</span>
+<span>Paxos is a theorem about sets!</span>
+<span>This is definitely mathematical, and is true (as long as you base math on set theory), but is not that helpful.</span>
+<span>So, let</span>&rsquo;<span>s try again.</span></p>
+<p><span>What is Paxos?</span>
+<span>Paxos is a theorem about nondeterministic state machines!</span></p>
+<p><span>A system is characterized by a state.</span>
+<span>The system evolves in discrete steps: each step takes system from </span><code>state</code><span> to </span><code>state'</code><span>.</span>
+<span>Transitions are non-deterministic: from a single current </span><code>s1</code><span>, you may get to different next states </span><code>s2</code><span> and </span><code>s3</code><span>.</span>
+<span>(non-determinism models a flaky network).</span>
+<span>An infinite sequence of system</span>&rsquo;<span>s states is called a behavior:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">state_0 → state_1 → ... → state_n → ...</span></code></pre>
+
+</figure>
+<p><span>Due to non-determinism, there</span>&rsquo;<span>s a potentially infinite number of possible behaviors.</span>
+<span>Nonetheless, depending on the transition function, we might be able to prove that some condition is true for any state in any behavior.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with a simple example, and also introduce some notation.</span>
+<span>I won</span>&rsquo;<span>t use TLA+, as I don</span>&rsquo;<span>t enjoy its concrete syntax.</span>
+<span>Instead, math will be set in monospaced unicode.</span></p>
+<p><span>The example models an integer counter.</span>
+<span>Each step the counter decrements or increments (non-deterministically), but never gets too big or too small</span></p>
+
+<figure class="code-block">
+<figcaption class="title">Counter</figcaption>
+
+
+<pre><code><span class="line">Sets:</span>
+<span class="line">  ℕ -- Natural numbers with zero</span>
+<span class="line"></span>
+<span class="line">Vars:</span>
+<span class="line">  counter ∈ ℕ</span>
+<span class="line"></span>
+<span class="line">Init ≡</span>
+<span class="line">  counter = 0</span>
+<span class="line"></span>
+<span class="line">Next ≡</span>
+<span class="line">    (counter &lt; 9 ∧ counter' = counter + 1)</span>
+<span class="line">  ∨ (counter &gt; 0 ∧ counter' = counter - 1)</span>
+<span class="line"></span>
+<span class="line">Theorem:</span>
+<span class="line">  ∀ i: 0 ≤ counter_i ≤ 9</span>
+<span class="line"></span>
+<span class="line">-- Notation</span>
+<span class="line">-- ≡: equals by definition</span>
+<span class="line">-- ∧: "and", conjunction</span>
+<span class="line">-- ∨: "or",  disjunction</span></code></pre>
+
+</figure>
+<p><span>The sate of the system is a single variable </span>&mdash;<span> </span><code>counter</code><span>.</span>
+<span>It holds a natural number.</span>
+<span>In general, we will represent a state of any system by a fixed set of variables.</span>
+<span>Even if the system logically consists of several components, we model it using a single unified state.</span></p>
+<p><span>The </span><code>Init</code><span> formula specifies the initial state, the </span><code>counter</code><span> is zero.</span>
+<span>Note that </span><code>=</code><span> is a mathematical equality, and not an assignment.</span>
+<code>Init</code><span> is a </span><em><span>predicate</span></em><span> on states.</span></p>
+<p><code>Init</code><span> is true for </span><code>{counter: 0}</code><span>.</span><br>
+<code>Init</code><span> is false for </span><code>{counter: 92}</code><span>.</span></p>
+<p><code>Next</code><span> defines a non-deterministic transition function.</span>
+<span>It is a predicate on pairs of states, </span><code>s1</code><span> and </span><code>s2</code><span>.</span>
+<code>counter</code><span> is a variable in the </span><code>s1</code><span> state, </span><code>counter'</code><span> is the corresponding variable in the </span><code>s2</code><span> state.</span>
+<span>In plain English, transition from </span><code>s1</code><span> to </span><code>s2</code><span> is valid if one of these is true:</span></p>
+<ul>
+<li>
+<span>Value of </span><code>counter</code><span> in </span><code>s1</code><span> is less than </span><code>9</code><span> and value of </span><code>counter</code><span> in </span><code>s2</code><span> is greater by 1.</span>
+</li>
+<li>
+<span>Value of </span><code>counter</code><span> in </span><code>s1</code><span> is greater than </span><code>0</code><span>, and value of </span><code>counter</code><span> in </span><code>s2</code><span> is smaller by 1.</span>
+</li>
+</ul>
+<p><code>Next</code><span> is true for </span><code>({counter: 5}, {counter: 6})</code><span>.</span><br>
+<code>Next</code><span> is false for </span><code>({counter: 5}, {counter: 5})</code><span>.</span></p>
+<p><span>Here are some behaviors of this system:</span></p>
+<ul>
+<li>
+<code>0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9</code>
+</li>
+<li>
+<code>0 → 1 → 0 → 1 → 0 → 1</code>
+</li>
+<li>
+<code>0 → 1 → 2 → 3 → 2 → 1 → 0</code>
+</li>
+</ul>
+<p><span>Here are some </span><strong><span>non</span></strong><span> behaviors of this system:</span></p>
+<ul>
+<li>
+<code>1 → 2 → 3 → 4 → 5</code><span>: </span><code>Init</code><span> does not hold for initial state</span>
+</li>
+<li>
+<code>0 → 2</code><span>: </span><code>Next</code><span> does not hold for </span><code>(0, 2)</code><span> pair</span>
+</li>
+<li>
+<code>0 → 1 → 0 → -1</code><span>: </span><code>Next</code><span> does not hold for </span><code>(0, -1)</code><span> pair</span>
+</li>
+</ul>
+<p>&ldquo;<span>behavior</span>&rdquo;<span> means that the initial state satisfies </span><code>Init</code><span>, and each transition satisfies </span><code>Next</code><span>.</span></p>
+<p><span>We can state and prove a theorem about this system: for every state in every behavior, the value of counter is between 0 and 9.</span>
+<span>Proof is by induction:</span></p>
+<ul>
+<li>
+<span>The condition is true in the initial state.</span>
+</li>
+<li>
+<span>If the condition is true for state </span><code>s1</code><span>, and </span><code>Next</code><span> holds for </span><code>(s1, s2)</code><span>, then the condition is true for </span><code>s2</code><span>.</span>
+</li>
+<li>
+<span>QED.</span>
+</li>
+</ul>
+<p><span>As usual with induction, sometimes we would want to prove a </span><em><span>stronger</span></em><span> property, because it gives us more powerful base for an induction step.</span></p>
+<p><span>To sum up, we define a non-deterministic state machine using two predicates </span><code>Init</code><span> and </span><code>Next</code><span>.</span>
+<code>Init</code><span> is a predicate on states which restricts possible initial states.</span>
+<code>Next</code><span> is a predicate on </span><em><span>pairs</span></em><span> of states, which defines a non-deterministic transition function.</span>
+<code>Vars</code><span> section describes the state as a fixed set of typed variables.</span>
+<code>Sets</code><span> defines auxiliary fixed sets, elements of which are values of variables.</span>
+<code>Theorem</code><span> section specifies a predicate on behaviors: </span><em><span>sequences</span></em><span> of steps evolving according to </span><code>Init</code><span> and </span><code>Next</code><span>.</span></p>
+<p><span>The theorem does not automatically follow from </span><code>Init</code><span> and </span><code>Next</code><span>, it needs to be proven.</span>
+<span>Alternatively, we can simulate a range of possible behaviors on a computer and check the theorem for the specific cases.</span>
+<span>If the set of reachable states is small enough (finite would be a good start), we can enumerate </span><em><span>all</span></em><span> behaviors and produce a brute force proof.</span>
+<span>If there are too many reachable states, we can</span>&rsquo;<span>t prove the theorem this way, but we often can prove it to be wrong, by finding a counter example.</span>
+<span>This is the idea behind model checking in general and TLA+ specifically.</span></p>
+</section>
+<section id="What-is-Consensus">
+
+    <h2>
+    <a href="#What-is-Consensus"><span>What is Consensus?</span> </a>
+    </h2>
+<p><span>Having mastered the basic vocabulary, let</span>&rsquo;<span>s start slowly building towards Paxos.</span>
+<span>We begin with defining what consensus is.</span>
+<span>As this is math, we</span>&rsquo;<span>ll do it using sets.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Sets:</span>
+<span class="line">  𝕍 -- Arbitrary set of values</span>
+<span class="line"></span>
+<span class="line">Vars:</span>
+<span class="line">  chosen ∈ 2^𝕍 -- Subset of values</span>
+<span class="line"></span>
+<span class="line">Theorem:</span>
+<span class="line">    ∀ i: |chosen_i| ≤ 1</span>
+<span class="line">  ∧ ∀ i, j: i ≤ j ∧ chosen_i ≠ {} ⇒ chosen_i = chosen_j</span>
+<span class="line"></span>
+<span class="line">-- Notation</span>
+<span class="line">-- {}:  empty set</span>
+<span class="line">-- 2^X: set of all subsets of X, powerset</span>
+<span class="line">-- |X|: cardinality (size) of the set</span></code></pre>
+
+</figure>
+<p><span>The state of the system is a set of chosen values.</span>
+<span>For this set to constitute consensus (over time) we need two conditions to hold:</span></p>
+<ul>
+<li>
+<span>at most one value is chosen</span>
+</li>
+<li>
+<span>if we choose a value at one point in time, we stick to it (math friendly: any two chosen values are equal to each other)</span>
+</li>
+</ul>
+<p><span>Here</span>&rsquo;<span>s the simplest possible implementation of consensus:</span></p>
+
+<figure class="code-block">
+<figcaption class="title">Consensus</figcaption>
+
+
+<pre><code><span class="line">Sets:</span>
+<span class="line">  𝕍 -- Arbitrary set of values</span>
+<span class="line"></span>
+<span class="line">Vars:</span>
+<span class="line">  chosen ∈ 2^𝕍 -- Subset of values</span>
+<span class="line"></span>
+<span class="line">Init ≡</span>
+<span class="line">  chosen = {}</span>
+<span class="line"></span>
+<span class="line">Next ≡</span>
+<span class="line">  chosen = {} ∧ ∃ v ∈ 𝕍: chosen' = {v}</span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line">Theorem:</span>
+<span class="line">    ∀ i: |chosen_i| ≤ 1</span>
+<span class="line">  ∧ ∀ i, j: i ≤ j ∧ (chosen_i ≠ {} ⇒ chosen_i = chosen_j)</span></code></pre>
+
+</figure>
+<p><span>In the initial state, the set of chosen values is empty.</span>
+<span>We can make a step if the current set of chosen values is empty, in which case we select an arbitrary value.</span></p>
+<p><span>This technically breaks our behavior theory: we require behaviors to be infinite, but, for this spec, we can only make a single step.</span>
+<span>The fix is to allow empty steps: a step which does not change the state at all is always valid.</span>
+<span>We call such steps </span>&ldquo;<span>stuttering steps</span>&rdquo;<span>.</span></p>
+<p><span>The proof of the first condition of the consensus theorem is a trivial induction.</span>
+<span>The proof of the second part is actually non-trivial, here</span>&rsquo;<span>s a sketch.</span>
+<span>Assume that </span><code>i</code><span> and </span><code>j</code><span> are indices, which violate the condition.</span>
+<span>They might be far from each other in state-space, so we can</span>&rsquo;<span>t immediately apply </span><code>Next</code><span>.</span>
+<span>So let</span>&rsquo;<span>s choose the </span><em><span>smallest</span></em><span> </span><code>j1 ∈ [i+1;j]</code><span> such that the condition is violated.</span>
+<span>Let </span><code>i1 = j1 - 1</code><span>.</span>
+<span>The condition is still violated for </span><code>(i1, j1)</code><span> pair, but this time they are subsequent steps, and we can show that </span><code>Next</code><span> does not hold for them, concluding the proof.</span></p>
+<p><span>Yay! We have a distributed consensus algorithm which works for 1 (one) machine:</span></p>
+
+<figure class="code-block">
+<figcaption class="title">Distributed Consensus For One Machine</figcaption>
+
+
+<pre><code><span class="line">Pick arbitrary value.</span></code></pre>
+
+</figure>
+</section>
+<section id="Simple-Voting">
+
+    <h2>
+    <a href="#Simple-Voting"><span>Simple Voting</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s try to extend this to a truly distributed case, where we have </span><code>N</code><span> machines (</span>&ldquo;<span>acceptors</span>&rdquo;<span>).</span>
+<span>We start with formalizing the naive consensus algorithm: let acceptors vote for values, and select the value which gets a majority of votes.</span></p>
+
+<figure class="code-block">
+<figcaption class="title">Majority Vote</figcaption>
+
+
+<pre><code><span class="line">Sets:</span>
+<span class="line">  𝕍 -- Arbitrary set of values</span>
+<span class="line">  𝔸 -- Finite set of acceptors</span>
+<span class="line"></span>
+<span class="line">Vars:</span>
+<span class="line">  votes ∈ 2^(𝔸×𝕍) -- Set of (acceptor, value) pairs</span>
+<span class="line"></span>
+<span class="line">Init ≡</span>
+<span class="line">  votes = {}</span>
+<span class="line"></span>
+<span class="line">Next ≡</span>
+<span class="line">  ∃ a ∈ 𝔸:</span>
+<span class="line">      ∃ v ∈ V: votes' = votes ∪ {(a, v)}</span>
+<span class="line">    ∧ ∀ v ∈ V: (a, v) ∉ votes</span>
+<span class="line"></span>
+<span class="line">chosen ≡</span>
+<span class="line">  {v ∈ V: |{a ∈ 𝔸: (a, v) ∈ votes}| &gt; |𝔸| / 2}</span></code></pre>
+
+</figure>
+<p><span>The state of the system is the set of all votes cast by all acceptors.</span>
+<span>We represent a vote as a pair of an acceptor and the value it voted for.</span>
+<span>Initially, the set of votes is empty.</span>
+<span>On each step, some acceptor casts a vote for some value (adds </span><code>(a, v)</code><span> pair to the set of votes), but only if it hasn</span>&rsquo;<span>t voted yet.</span>
+<span>Remember that </span><code>Next</code><span> is a predicate on pairs of states, so we check </span><code>votes</code><span> for existing vote, but add a new one to </span><code>votes'</code><span>.</span>
+<span>The value is chosen if the set of acceptors which voted for the value (</span><code>{a ∈ 𝔸: (a, v) ∈ votes}</code><span>) is at least half as large as the set of all acceptors.</span>
+<span>In other words, if a majority of acceptors has voted for the value.</span></p>
+
+<aside class="block">
+<div class="title">Quiz</div>
+<p><span>What would be the difference between</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">∃ a ∈ 𝔸:</span>
+<span class="line">    ∃ v ∈ V: votes' = votes ∪ {(a, v)}</span>
+<span class="line">  ∧ ∀ v ∈ V: (a, v) ∉ votes</span></code></pre>
+
+</figure>
+<p><span>and</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">∃ a ∈ 𝔸, v ∈ V:</span>
+<span class="line">    votes' = votes ∪ {(a, v)}</span>
+<span class="line">  ∧ ∀ (a1, v1) ∈ votes: a1 = a ⇒ v1 = v</span></code></pre>
+
+</figure>
+<p><span>?</span></p>
+
+<details>
+<summary>Spoiler</summary>
+<p><span>Trick question!</span></p>
+<p><span>They are equivalent.</span>
+<span>The first formula allows </span><code>a</code><span> to vote for </span><code>v</code><span> only if </span><code>a</code><span> hasn</span>&rsquo;<span>t voted before.</span>
+<span>The second formula allows </span><code>a</code><span> to vote for </span><code>v</code><span> only if all previous votes of </span><code>a</code><span> were cast for </span><code>v</code><span>.</span>
+<span>That is, if </span><code>a</code><span> hasn</span>&rsquo;<span>t voted yet, or if it has already voted for </span><code>v</code><span> (in which case this would be a stuttering step).</span></p>
+
+</details>
+  
+</aside>
+  <p><span>Let</span>&rsquo;<span>s prove consensus theorem for Majority Vote protocol.</span>
+<span>TYPE ERROR, DOES NOT COMPUTE.</span>
+<span>The consensus theorem is a predicate on behaviors of states consisting of </span><code>chosen</code><span> variable.</span>
+<span>Here, </span><code>chosen</code><span> isn</span>&rsquo;<span>t a variable, </span><code>votes</code><span> is!</span>
+<code>chosen</code><span> is a function which maps current state to some boolean.</span></p>
+<p><span>While it is intuitively clear what </span>&ldquo;<span>consensus theorem</span>&rdquo;<span> would look like for this case, let</span>&rsquo;<span>s make this precise.</span>
+<span>Let</span>&rsquo;<span>s </span><em><span>map</span></em><span> states with </span><code>votes</code><span> variable to states with </span><code>chosen</code><span> variable using the majority rule, </span><code>f</code><span>.</span>
+<span>This mapping naturally extends to a mapping between corresponding behaviors (sequences of steps):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">  f(votes_0   →   votes_1  → ...)</span>
+<span class="line">= f(votes_0)  → f(votes_1) → ...</span>
+<span class="line">=  chosen_0   →  chosen_1  → ...</span></code></pre>
+
+</figure>
+<p><span>Now we can precisely state that for every behavior </span><code>B</code><span> of majority voting spec, the theorem holds for </span><code>f(B)</code><span>.</span>
+<span>This yields a better way to prove this!</span>
+<span>Instead of proving the theorem directly (which would again require i1, j1 trick), we prove that our mapping </span><code>f</code><span> is a homomorphism.</span>
+<span>That is, we prove that if </span><code>votes_0 → votes_1 → ...</code><span> is a behavior of the majority voting spec, then </span><code>f(votes_0) → f(votes_1) → ...</code><span> is a behavior of the consensus spec.</span>
+<span>This lets us to re-use existing proof.</span></p>
+<p><span>The poof for initial step is trivial, but let</span>&rsquo;<span>s spell it out just to appreciate the amount of details a human mind can glance through</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">  f({votes: {}})</span>
+<span class="line">= {chosen: {v ∈ V: |{a ∈ 𝔸: (a, v) ∈ {}}| &gt; |𝔸| / 2}}</span>
+<span class="line">= {chosen: {v ∈ V: |{}| &gt; |𝔸| / 2}}</span>
+<span class="line">= {chosen: {v ∈ V: 0 &gt; |𝔸| / 2}}</span>
+<span class="line">= {chosen: {v ∈ V: FALSE}}</span>
+<span class="line">= {chosen: {}}</span></code></pre>
+
+</figure>
+<p><span>Let</span>&rsquo;<span>s show that if Majority Vote</span>&rsquo;<span>s </span><code>Next_m</code><span> holds for </span><code>(votes, votes')</code><span>, then Consensus</span>&rsquo;<span>s </span><code>Next_c</code><span> holds for </span><code>(f(votes), f(votes'))</code><span>.</span>
+<span>There</span>&rsquo;<span>s one obstacle on our way: this claim is false!</span>
+<span>Consider a case with three acceptors and two values: </span><code>𝔸 = {a1, a2, a3}</code><span>,  </span><code>𝕍 = {v1, v2}</code><span>.</span>
+<span>Consider these values of </span><code>votes</code><span> and </span><code>votes'</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">votes  = {(a1, v1), (a2, v1), (a1, v2)}</span>
+<span class="line">votes' = {(a1, v1), (a2, v1), (a1, v2), (a3, v2)}</span></code></pre>
+
+</figure>
+<p><span>If you just mechanically check </span><code>Next</code><span>, you see that it works!</span>
+<code>a3</code><span> hasn</span>&rsquo;<span>t cast its vote, so it can do this now.</span>
+<span>The problem is that </span><code>chosen(votes) = {v1}</code><span> and </span><code>chosen(votes') = {v1, v2}</code><span>.</span></p>
+<p><span>We are trying to prove too much!</span>
+<code>f</code><span> works correctly only for states reachable from </span><code>Init</code><span>, and the bad value of </span><code>votes</code><span> where </span><code>a1</code><span> votes twice is not reachable.</span></p>
+<p><span>So, we first should prove a lemma: each acceptor votes at most once.</span>
+<span>After that, we can prove </span><code>Next_m(votes, votes') = Next_c(f(votes), f(votes'))</code><span> under the assumption of at most once voting.</span>
+<span>Specifically, if </span><code>|f(votes')|</code><span> turns out to be larger than </span><code>1</code><span>, then we can pick two majorities which voted for different values, which allows to pin down a single acceptor which voted twice, which is a contradiction.</span>
+<span>The rest is left as an exercise for the reader :)</span></p>
+<p><span>So, majority vote indeed implements consensus.</span>
+<span>Let</span>&rsquo;<span>s look closer at the </span>&ldquo;<span>majority</span>&rdquo;<span> condition.</span>
+<span>It is clearly important.</span>
+<span>If we define </span><code>chosen</code><span> as</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">chosen ≡</span>
+<span class="line">  {v ∈ V: |{a ∈ 𝔸: (a, v) ∈ votes}| &gt; 0}</span></code></pre>
+
+</figure>
+<p><span>then its easy to construct a behavior with several chosen values.</span>
+<span>The property of majority we use is that any two majorities have at least one acceptor in common.</span>
+<span>But any other condition with this property would work as well as majority.</span>
+<span>For example, we can assign an integer weight to each acceptor, and require the sum of weights to be more than half.</span>
+<span>As a more specific example, consider a set of for acceptors </span><code>{a, b, c, d}</code><span>.</span></p>
+<p><span>Its majorities are:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">{a, b, c, d}</span>
+<span class="line">{a, b, c}</span>
+<span class="line">{a, b, d}</span>
+<span class="line">{a, c, d}</span>
+<span class="line">{b, c, d}</span></code></pre>
+
+</figure>
+<p><span>But the following set of sets would also satisfy non-empty intersection condition:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">{a, b, c, d}</span>
+<span class="line">{a, b, c}</span>
+<span class="line">{a, b, d}</span>
+<span class="line">{a, c}</span>
+<span class="line">{b, c}</span></code></pre>
+
+</figure>
+<p><span>Operationally, it is strictly better, as fewer are acceptors needed to reach a decision.</span></p>
+<p><span>So let</span>&rsquo;<span>s refine the protocol to a more general form.</span></p>
+
+<figure class="code-block">
+<figcaption class="title">Quorum Vote</figcaption>
+
+
+<pre><code><span class="line">Sets:</span>
+<span class="line">  𝕍       -- Arbitrary set of values</span>
+<span class="line">  𝔸       -- Finite set of acceptors</span>
+<span class="line">  ℚ ∈ 2^𝔸 -- Set of quorums</span>
+<span class="line"></span>
+<span class="line">Assume:</span>
+<span class="line">  ∀ q1, q2 ∈ ℚ: q1 ∩ q2 ≠ {}</span>
+<span class="line"></span>
+<span class="line">Vars:</span>
+<span class="line">  votes ∈ 2^(𝔸×𝕍) -- Set of (acceptor, value) pairs</span>
+<span class="line"></span>
+<span class="line">Init ≡</span>
+<span class="line">  votes = {}</span>
+<span class="line"></span>
+<span class="line">Next ≡</span>
+<span class="line">  ∃ a ∈ 𝔸:</span>
+<span class="line">      ∃ v ∈ V: votes' = votes ∪ {(a, v)}</span>
+<span class="line">    ∧ ∀ v ∈ V: (a, v) ∉ votes</span>
+<span class="line"></span>
+<span class="line">chosen ≡</span>
+<span class="line">  {v ∈ V: ∃ q ∈ ℚ: AllVotedFor(q, v)}</span>
+<span class="line"></span>
+<span class="line">AllVotedFor(q, v) ≡</span>
+<span class="line">  ∀ a ∈ q: (a, v) ∈ votes</span></code></pre>
+
+</figure>
+<p><span>We require to specify a set of quorums </span>&mdash;<span> set a of subsets of acceptors such that every two quorums have at least one acceptor in common.</span>
+<span>The value is chosen if there exists a quorum such that its every member voted for the value.</span></p>
+<p><span>There</span>&rsquo;<span>s one curious thing worth noting here.</span>
+<span>Consensus is a property of the whole system, there</span>&rsquo;<span>s no single </span>&ldquo;<span>place</span>&rdquo;<span> where we can point to and say </span>&ldquo;<span>hey, this is it, this is consensus</span>&rdquo;<span>.</span>
+<span>Imagine 3 acceptors, sitting on Earth, Venus, and Mars, and choosing between values </span><code>v1</code><span> and </span><code>v2</code><span>.</span>
+<span>They can execute Quorum Vote algorithm without communicating with each other at all.</span>
+<span>They will necessary reach consensus without knowing which specific value they agreed on!</span>
+<span>An external observer can then travel to the three planets, collect the votes and discover the chosen value, but this feature isn</span>&rsquo;<span>t built into the algorithm itself.</span></p>
+<p><span>OK, so we</span>&rsquo;<span>ve just described an algorithm for finding consensus among </span><code>N</code><span> machines, proved the consensus theorem for it, and noted that it has staggering communication efficiency: </span><em><em><span>zero</span></em></em><span> messages.</span>
+<span>Should we collect our Turing Award?</span></p>
+<p><span>Well, no, there</span>&rsquo;<span>s a big problem with Quorum Vote </span>&mdash;<span> it can get stuck.</span>
+<span>Specifically, if there are three values, and the votes are evenly split between them, then no value is chosen, and only stuttering steps are possible.</span>
+<span>If you can vote for different values, it might happen that neither value receives a majority of votes.</span>
+<span>Voting satisfies the safety property, but not the liveness property </span>&mdash;<span> the algorithm can get stuck even if all machines are on-line and communication is perfect.</span></p>
+<p><span>There is a simple fix to the problem, with a rich historical tradition among many </span>&ldquo;<span>democratic</span>&rdquo;<span> governments.</span>
+<span>Let</span>&rsquo;<span>s have a vote, and let</span>&rsquo;<span>s pick the value chosen by the majority, but let</span>&rsquo;<span>s allow to vote only for a single candidate value:</span></p>
+
+<figure class="code-block">
+<figcaption class="title">Rigged Quorum Vote</figcaption>
+
+
+<pre><code><span class="line">Sets:</span>
+<span class="line">  𝕍       -- Arbitrary set of values</span>
+<span class="line">  𝔸       -- Finite set of acceptors</span>
+<span class="line">  ℚ ∈ 2^𝔸 -- Set of quorums</span>
+<span class="line"></span>
+<span class="line">Assume:</span>
+<span class="line">  ∀ q1, q2 ∈ ℚ: q1 ∩ q2 ≠ {}</span>
+<span class="line"></span>
+<span class="line">Vars:</span>
+<span class="line">  votes ∈ 2^(𝔸×𝕍) -- Set of (acceptor, value) pairs</span>
+<span class="line"></span>
+<span class="line">Init ≡</span>
+<span class="line">  votes = {}</span>
+<span class="line"></span>
+<span class="line">Next ≡</span>
+<span class="line">  ∃ a ∈ 𝔸, v ∈ V:</span>
+<span class="line">      ∀ (a1, v1) ∈ votes: v1 = v</span>
+<span class="line">    ∧ votes' = votes ∪ {(a, v)}</span>
+<span class="line"></span>
+<span class="line">chosen ≡</span>
+<span class="line">  {v ∈ V: ∃ q ∈ ℚ: AllVotedFor(q, v)}</span>
+<span class="line"></span>
+<span class="line">AllVotedFor(q, v) ≡</span>
+<span class="line">  ∀ a ∈ q: (a, v) ∈ votes</span></code></pre>
+
+</figure>
+<p><span>The new condition says that an acceptor is only allowed to cast a vote if all other votes are for the same value.</span>
+<span>As a special case, if the set of votes is empty, the acceptor can vote for any value (but all other acceptors would have to vote for this value afterwards).</span></p>
+<p><span>From a mathematical point of view, this algorithm is perfect.</span>
+<span>From a practical stand point, not so much: an acceptor to cast the first vote somehow needs to make sure that it is indeed the first one.</span>
+<span>The obvious fix to this problem is to assign a unique integer number to each acceptor, call the highest-numbered acceptor </span>&ldquo;<span>leader</span>&rdquo;<span>, and allow only the leader to cast the first decisive vote.</span></p>
+<p><span>So acceptors first communicate with each other to figure out who the leader is, then the leader casts the vote, and the followers follow.</span>
+<span>But this also violates liveness: if the leader dies, then the followers would wait indefinitely.</span>
+<span>A fix for this problem is to let the second highest acceptor to take over the leadership if the leader perishes.</span>
+<span>But under our assumptions, it</span>&rsquo;<span>s impossible to distinguish between a situation when the leader is dead from a situation when it just has a </span><em><span>really</span></em><span> bad internet connection.</span>
+<span>So naively picking successor would lead to a split vote and a standstill again (power transitions are known to be problematic for authoritarian regimes in real life too!).</span>
+<span>If only there were some kind of </span>&hellip;<span> distributed consensus algorithm for picking the leader!</span></p>
+</section>
+<section id="Ballot-Voting">
+
+    <h2>
+    <a href="#Ballot-Voting"><span>Ballot Voting</span> </a>
+    </h2>
+<p><span>This is the place were we start discussing real Paxos :-)</span>
+<span>It starts with a </span>&ldquo;<span>ballot voting</span>&rdquo;<span> algorithm.</span>
+<span>This algorithm, just like the ones we</span>&rsquo;<span>ve already seen, does not define any messages.</span>
+<span>Rather, message passing is an implementation detail, so we</span>&rsquo;<span>ll get to it later.</span></p>
+<p><span>Recall that rigged voting requires all acceptors to vote for a single values.</span>
+<span>It is immune to split voting, but is susceptible to getting stuck when the leader goes offline.</span>
+<span>The idea behind ballot voting is to have many voting rounds, ballots.</span>
+<span>In each ballot, acceptors can vote only for a single value, so each ballot individually can get stuck.</span>
+<span>However, as we are running many ballots, some ballots will make progress.</span>
+<span>The value is chosen in a ballot if it is chosen by some quorum of acceptors.</span>
+<span>The value is chosen in an overall algorithm if it is chosen in some ballot.</span></p>
+<p><span>The Turing award question is: how do we make sure that no two ballots choose different values?</span>
+<span>Note that it is OK if two ballots choose the same value.</span></p>
+<p><span>Let</span>&rsquo;<span>s just brute force this question, really.</span>
+<span>First, assume that the ballots are ordered (for example, by numbering them with natural numbers).</span>
+<span>And let</span>&rsquo;<span>s say we want to pick some value </span><code>v</code><span> to vote for in ballot </span><code>b</code><span>.</span>
+<span>When </span><code>v</code><span> is safe?</span>
+<span>Well, when no other value </span><code>v1</code><span> can be chosen by any other ballot.</span>
+<span>Let</span>&rsquo;<span>s tighten this up a bit.</span></p>
+<p><span>Value </span><code>v</code><span> is safe at ballot </span><code>b</code><span> if any smaller ballot </span><code>b1</code><span> (</span><code>b1 &lt; b</code><span>) did not choose and will not choose any value other than </span><code>v</code><span>.</span></p>
+<p><span>So yeah, easy-peasy, we </span><em><span>just</span></em><span> need to predict which values will be chosen in the future, and we are done!</span>
+<span>We</span>&rsquo;<span>ll deal with it in a moment, but let</span>&rsquo;<span>s first convince ourselves that, if we only select safe values for voting, we won</span>&rsquo;<span>t violate consensus spec.</span></p>
+<p><span>So, when we select a safe value </span><code>v</code><span> to vote for in a particular ballot, it might get chosen in this ballot.</span>
+<span>We need to check that it won</span>&rsquo;<span>t conflict with any other value.</span>
+<span>For smaller ballots that</span>&rsquo;<span>s easy </span>&mdash;<span> it</span>&rsquo;<span>s the definition of safety condition.</span>
+<span>What if we conflict with some value </span><code>v1</code><span> chosen in a future ballot?</span>
+<span>Well, that value is also safe, so whoever chose </span><code>v1</code><span>, was sure that it won</span>&rsquo;<span>t conflict with </span><code>v</code><span>.</span></p>
+<p><span>How do we tackle the precognition problem?</span>
+<span>We</span>&rsquo;<span>ll ask acceptors to commit to </span><em><span>not</span></em><span> voting in certain ballots.</span>
+<span>For example, if you are looking for a safe value for ballot </span><code>b</code><span> and know that there</span>&rsquo;<span>s a quorum </span><code>q</code><span> such that each quorum member never voted in smaller ballots, and promised to never vote in smaller ballots, you can be sure that any value is safe.</span>
+<span>Indeed, any quorum in smaller ballots will have at least one member which would refuse to vote for any value.</span></p>
+<p><span>Ok, but what if there</span>&rsquo;<span>s some quorum member which has already voted for some </span><code>v1</code><span> in some ballot </span><code>b1 &lt; b</code><span>?</span>
+<span>(Take a deep breath, the next sentence is the kernel of the core idea of Paxos).</span>
+<span>Well, that means that </span><code>v1</code><span> was safe at </span><code>b1</code><span>, so, if there will be no votes between </span><code>b1</code><span> and </span><code>b</code><span>, </span><code>v1</code><span> is also safe at </span><code>b</code><span>!</span>
+<span>(Exhale).</span>
+<span>In other words, to pick a safe value at </span><code>b</code><span> we:</span></p>
+<ol>
+<li>
+<span>Take some quorum </span><code>q</code><span>.</span>
+</li>
+<li>
+<span>Make everyone in </span><code>q</code><span> promise to never vote in ballots earlier than </span><code>b</code><span>.</span>
+</li>
+<li>
+<span>Among all of the votes already cast by the quorum members we pick the one with the highest ballot number.</span>
+</li>
+<li>
+<span>If such vote exists, its value is a safe value.</span>
+</li>
+<li>
+<span>Otherwise, any value is safe.</span>
+</li>
+</ol>
+<p><span>To implement the </span>&ldquo;<span>never vote</span>&rdquo;<span> promise, each acceptor will maintain </span><code>maxBal</code><span> value.</span>
+<span>It will never vote in ballots smaller or equal to </span><code>maxBal</code><span>.</span></p>
+<p><span>Let</span>&rsquo;<span>s stop hand-waving and put this algorithm in math.</span>
+<span>Again, we are not thinking about messages yet, and just assume that each acceptor can observe the state of the whole system.</span></p>
+
+<figure class="code-block">
+<figcaption class="title">Ballot Vote</figcaption>
+
+
+<pre><code><span class="line">Sets:</span>
+<span class="line">  𝔹       -- Numbered set of ballots (for example, ℕ)</span>
+<span class="line">  𝕍       -- Arbitrary set of values</span>
+<span class="line">  𝔸       -- Finite set of acceptors</span>
+<span class="line">  ℚ ∈ 2^𝔸 -- Set of quorums</span>
+<span class="line"></span>
+<span class="line">Assume:</span>
+<span class="line">  ∀ q1, q2 ∈ ℚ: q1 ∩ q2 ≠ {}</span>
+<span class="line"></span>
+<span class="line">Vars:</span>
+<span class="line">  -- Set of (acceptor, ballot, value) triples</span>
+<span class="line">  votes ∈ 2^(𝔸×𝔹×𝕍)</span>
+<span class="line"></span>
+<span class="line">  -- Function that maps acceptors to ballot numbers or -1.</span>
+<span class="line">  -- maxBal :: 𝔸 -&gt; 𝔹 ∪ {-1}</span>
+<span class="line">  maxBal ∈ (𝔹 ∪ {-1})^𝔸</span>
+<span class="line"></span>
+<span class="line">Voted(a, b) ≡</span>
+<span class="line">  ∃ v ∈ 𝕍: (a, b, v) ∈ votes</span>
+<span class="line"></span>
+<span class="line">Safe(v, b) ≡</span>
+<span class="line">  ∃ q ∈ ℚ:</span>
+<span class="line">      ∀ a ∈ q: maxBal(a) ≥ b - 1</span>
+<span class="line">    ∧ ∃ b1 ∈ 𝔹 ∪ {-1}:</span>
+<span class="line">          ∀ b2 ∈ [b1+1; b-1], a ∈ q: ¬Voted(a, b2)</span>
+<span class="line">        ∧ b1 = -1 ∨ ∃ a ∈ q: (a, b1, v) ∈ votes</span>
+<span class="line"></span>
+<span class="line">AdvanceMaxBal(a, b) ≡</span>
+<span class="line">    maxBal(a) &lt; b</span>
+<span class="line">  ∧ votes' = votes</span>
+<span class="line">  ∧ maxBal' = λ a1 ∈ 𝔸: if a1 = a then b else maxBal(a1)</span>
+<span class="line"></span>
+<span class="line">Vote(a, b, v) ≡</span>
+<span class="line">    maxBal(a) &lt; b</span>
+<span class="line">  ∧ ∀ (a1, b1, v1) ∈ votes: b = b1 ⇒ v = v1</span>
+<span class="line">  ∧ Safe(v, b)</span>
+<span class="line">  ∧ votes' = votes ∪ (a, b, v)</span>
+<span class="line">  ∧ maxBal' = λ a1 ∈ 𝔸: if a1 = a then b else maxBal(a1)</span>
+<span class="line"></span>
+<span class="line">Init ≡</span>
+<span class="line">    votes = {}</span>
+<span class="line">  ∧ maxBal = λ a ∈ 𝔸: -1</span>
+<span class="line"></span>
+<span class="line">Next ≡</span>
+<span class="line">  ∃ a ∈ 𝔸, b ∈ 𝔹:</span>
+<span class="line">      AdvanceMaxBal(a, b)</span>
+<span class="line">    ∨ ∃ v ∈ 𝕍: Vote(a, b, v)</span>
+<span class="line"></span>
+<span class="line">chosen ≡</span>
+<span class="line">  {v ∈ V: ∃ q ∈ ℚ, b ∈ 𝔹: AllVotedFor(q, b, v)}</span>
+<span class="line"></span>
+<span class="line">AllVotedFor(q, b, v) ≡</span>
+<span class="line">  ∀ a ∈ q: (a, b, v) ∈ votes</span>
+<span class="line"></span>
+<span class="line">-- Notation</span>
+<span class="line">-- [b1;b2]: inclusive interval of ballots</span>
+<span class="line">--- Y^X: set of function from X to Y (f: X -&gt; Y)</span>
+<span class="line">-- λ x ∈ X: y: function that maps x to y</span>
+<span class="line">-- ¬: "not", negation</span>
+<span class="line">--</span>
+<span class="line">-- f' = λ x1 ∈ X: if x1 = x then y else f(x1):</span>
+<span class="line">-- A tedious way to write that f' is the same function as f,</span>
+<span class="line">-- except on x, where it returns y instead.</span>
+<span class="line">--</span>
+<span class="line">-- I am sorry! In my defense, TLA+ notation for this</span>
+<span class="line">--- is also horrible :-)</span></code></pre>
+
+</figure>
+<p><span>Let</span>&rsquo;<span>s unwrap this top-down.</span>
+<span>First, the </span><code>chosen</code><span> condition says that it is enough for some quorum to cast votes in some ballot for a value to be accepted.</span>
+<span>It</span>&rsquo;<span>s trivial to see that, if we fix the ballot, then any two quorums would vote for the same value </span>&mdash;<span> quorums intersect.</span>
+<span>Showing that quorums vote for the same value in different ballots is the tricky bit.</span></p>
+<p><span>The </span><code>Init</code><span> condition is simple </span>&mdash;<span> no votes, any acceptor can vote in any ballot (= any ballot with number larger than -1).</span></p>
+<p><span>The </span><code>Next</code><span> consists of two cases.</span>
+<span>On each step of the protocol, some acceptor either votes for some value in some ballot </span><code>∃ v ∈ 𝕍: Vote(a, b, v)</code><span>, or declares that it won</span>&rsquo;<span>t cast additional vote in small ballots </span><code>AdvanceMaxBal(a, b)</code><span>.</span>
+<span>Advancing ballot just sets </span><code>maxBal</code><span> for this acceptor (but takes care not to rewind older decisions).</span>
+<span>Casting a vote is more complicated and is predicated on three conditions:</span></p>
+<ul>
+<li>
+<span>We haven</span>&rsquo;<span>t forfeited our right to vote in this ballot.</span>
+</li>
+<li>
+<span>If there</span>&rsquo;<span>s some vote in this ballot already, we are voting for the same value.</span>
+</li>
+<li>
+<span>If there are no votes, then the value should be safe.</span>
+</li>
+</ul>
+<p><span>Note that the last two checks overlap a bit: if the set of votes cast in a ballot is not empty, we immediately know that the value is safe: somebody has proven this before.</span>
+<span>But it doesn</span>&rsquo;<span>t harm to check for safety again: a safe value can not become unsafe.</span></p>
+<p><span>Finally, the safety check.</span>
+<span>It is done in relation to some quorum </span>&mdash;<span> if </span><code>q</code><span> proves that </span><code>v</code><span> is safe, than members of this quorum would prevent any other value to be accepted in early ballots.</span>
+<span>To be able to do this, we first need to make sure that </span><code>q</code><span> indeed finalized their votes for ballots less than </span><code>b</code><span> (</span><code>maxBall</code><span> is at least </span><code>b - 1</code><span>).</span>
+<span>Then, we need to find the latest vote of </span><code>q</code><span>.</span>
+<span>There are two cases</span></p>
+<ul>
+<li>
+<span>No one in </span><code>q</code><span> ever voted (</span><code>b1 = -1</code><span>).</span>
+<span>In this case, there are no additional conditions on </span><code>v</code><span>, any value would work.</span>
+</li>
+<li>
+<span>Someone in </span><code>q</code><span> voted, and </span><code>b1</code><span> is the last ballot when someone voted.</span>
+<span>Then </span><code>v</code><span> must be the value voted for in </span><code>b1</code><span>.</span>
+<span>This implies </span><code>Safe(v, b1)</code><span>.</span>
+</li>
+</ul>
+<p><span>If all of these conditions are fulfilled, we cast our vote and advance </span><code>maxBall</code><span>.</span></p>
+<p><span>This is the hardest part of the article.</span>
+<span>Take time to fully understand Ballot Vote.</span></p>
+
+<aside class="block">
+<div class="title">Quiz</div>
+<p><span>What breaks if we don</span>&rsquo;<span>t advance </span><code>maxBall</code><span> in </span><code>Vote</code><span>?</span>
+<span>Ie, if we replace</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">maxBal' = λ a1 ∈ 𝔸: if a1 = a then b else maxBal(a1)</span></code></pre>
+
+</figure>
+<p><span>with just </span><code>maxBal' = maxBal</code><span>?</span></p>
+
+<details>
+<summary>Spoiler</summary>
+<p><span>Trick question!</span></p>
+<p><span>I believe that nothing really changes.</span>
+<span>Safety condition guarantees that no different value will be chosen in any </span><em><span>previous</span></em><span> ballot.</span>
+<span>However, by casting our own vote, we fix the outcome for the current ballot as well!</span>
+<span>If we don</span>&rsquo;<span>t set </span><code>maxBal</code><span>, we can re-enter </span><code>Vote</code><span> and vote the second time, but we</span>&rsquo;<span>ll necessary vote for the same value!</span></p>
+<p><span>Voting the second time for the same value is wasteful, and upping </span><code>maxBall</code><span> here reduces the state space, but it doesn</span>&rsquo;<span>t affect safety.</span></p>
+
+</details>
+  
+</aside>
+  <p><span>Rigorously proving that Ballot Voting satisfies Consensus would be tedious </span>&mdash;<span> the specification is large, and the proof would necessary use every single piece of the spec!</span>
+<span>But let</span>&rsquo;<span>s add some hand-waving.</span>
+<span>Again, we want to provide homomorphism from Ballot Voting to Consensus.</span>
+<span>Cases where the image of a step is a stuttering step (the set of chosen values is the same) are obvious.</span>
+<span>It</span>&rsquo;<span>s also obvious that the set of chosen values never decreases (we never remove votes, so a value can not become unchosen).</span>
+<span>It also increases by at most one value with each step.</span></p>
+<p><span>The complex case is to prove that, if currently only </span><code>v1</code><span> is chosen, no other </span><code>v2</code><span> can be chosen as a result of the current step.</span>
+<span>Suppose the contrary, let </span><code>v2</code><span> be the newly chosen value, and </span><code>v1</code><span> be a different value chosen some time ago.</span>
+<code>v1</code><span> and </span><code>v2</code><span> can</span>&rsquo;<span>t belong to the same ballot, because every ballot contains votes only for a single value (this needs proof!).</span>
+<span>Lets say they belong to </span><code>b1</code><span> and </span><code>b2</code><span>, and that </span><code>b1 &lt; b2</code><span>.</span>
+<span>Note that </span><code>v2</code><span> might belong to </span><code>b1</code><span> </span>&mdash;<span> nothing prevents smaller ballot from finishing later.</span>
+<span>When we chose </span><code>v2</code><span> for </span><code>b2</code><span>, it was safe.</span>
+<span>This means that some quorum either promised not to vote in </span><code>b1</code><span> (but then </span><code>v1</code><span> couldn</span>&rsquo;<span>t have been chosen in </span><code>b1</code><span>), or someone from the quorum voted for </span><code>v2</code><span> in </span><code>b1</code><span> (but then </span><code>v1 = v2</code><span> (proving this might require repeated application of safety condition)).</span></p>
+<p><span>Ok, but is this better than Majority Voting?</span>
+<span>Can Ballot Voting get stuck?</span>
+<span>No </span>&mdash;<span> if at least one quorum of machines is online, they can bump their </span><code>maxBall</code><span> to a ballot bigger than any existing one.</span>
+<span>After they do this, there necessary will be a safe value relative to this quorum, which they can then vote on.</span></p>
+<p><span>However, Ballot Voting is prone to a live lock </span>&mdash;<span> if acceptors continue to bump </span><code>maxBal</code><span> instead of voting, they</span>&rsquo;<span>ll never select any value.</span>
+<span>In fact, in the current formulation one needs to be pretty lucky to not get stuck.</span>
+<span>To finish voting, there needs to be a quorum which can vote in ballot </span><code>b</code><span>, but not in any smaller ballot, and in the above spec this can only happen by luck.</span></p>
+<p><span>It is impossible to completely eliminate live locks without assumptions about real time. However, when we implement Ballot Voting with real message passing, we try to reduce the probability of a live lock.</span></p>
+</section>
+<section id="Paxos-for-Real">
+
+    <h2>
+    <a href="#Paxos-for-Real"><span>Paxos for Real</span> </a>
+    </h2>
+<p><span>One final push left!</span>
+<span>Given the specification of Ballot Voting, how do we implement it using message passing?</span>
+<span>Specifically, how do we implement the logic for selecting the first (safe) value for the ballot?</span></p>
+<p><span>The idea is to have a designated leader for each ballot.</span>
+<span>As there are many ballots, we don</span>&rsquo;<span>t need a leader selection algorithm, and can just statically assign ballot leaders.</span>
+<span>For example, if there are N acceptors, acceptor 0 can lead ballots </span><code>0, N, 2N, …</code><span>, acceptor 1 can lead </span><code>1, N + 1, 2N + 1, …</code><span> etc.</span></p>
+<p><span>To select a value for ballot </span><code>b</code><span>, the ballot</span>&rsquo;<span>s leader broadcasts a message to initiate the ballot.</span>
+<span>Upon receiving this message, each acceptor advances its </span><code>maxBall</code><span> to </span><code>b - 1</code><span>, and sends the leader its latest vote, unless the acceptor has already made a promise to not vote in </span><code>b</code><span>.</span>
+<span>If the leader receives replies from some quorum, it can be sure that this quorum won</span>&rsquo;<span>t vote in smaller ballots.</span>
+<span>Besides, the leader knows quorum</span>&rsquo;<span>s votes, so it can pick a safe value.</span></p>
+<p><span>In other words, the practical trick for picking a safe value is to ask some quorum to abstain from voting in small ballots and to pick a value consistent with votes already cast.</span>
+<span>This is the first phase of Paxos, consisting of two message types, 1a and 1b.</span></p>
+<p><span>The second phase is to ask the quorum to cast the votes.</span>
+<span>The leader picks a safe value and broadcasts it for the quorum.</span>
+<span>Quorum members vote for the value, unless in the meantime they happened to promise to a leader of the bigger ballot to not vote.</span>
+<span>After a member voted, it broadcasts its vote.</span>
+<span>When a quorum of votes is observed, the value is chosen and the consensus is reached.</span>
+<span>This is the second phase of Paxos with messages 2a and 2b.</span></p>
+<p><span>Let</span>&rsquo;<span>s write this in math!</span>
+<span>To model message passing, we will use </span><code>msgs</code><span> variable: a set of messages which have ever been send.</span>
+<span>Sending a message is adding it to this set.</span>
+<span>Receiving a message is asserting that it is contained in the set.</span>
+<span>By not removing messages, we model reorderings and duplications.</span></p>
+<p><span>The messages themselves will be represented by records. For example, phase 1a message which initiates voting in ballot </span><code>b</code><span> will look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">{type: "1a", bal: b}</span></code></pre>
+
+</figure>
+<p><span>Another bit of state we</span>&rsquo;<span>ll need is </span><code>lastVote</code><span> </span>&mdash;<span> for each acceptor, what was the last ballot the acceptor voted in, together with the corresponding vote.</span>
+<span>It will be </span><code>null</code><span> if the acceptor hasn</span>&rsquo;<span>t voted.</span></p>
+<p><span>Without further ado,</span></p>
+
+<figure class="code-block">
+<figcaption class="title">Paxos</figcaption>
+
+
+<pre><code><span class="line">Sets:</span>
+<span class="line">  𝔹       -- Numbered set of ballots (for example, ℕ)</span>
+<span class="line">  𝕍       -- Arbitrary set of values</span>
+<span class="line">  𝔸       -- Finite set of acceptors</span>
+<span class="line">  ℚ ∈ 2^𝔸 -- Set of quorums</span>
+<span class="line"></span>
+<span class="line">  -- Sets of messages for each of the four subphases</span>
+<span class="line">  Msgs1a ≡ {type: {"1a"}, bal: 𝔹}</span>
+<span class="line"></span>
+<span class="line">  Msgs1b ≡ {type: {"1b"}, bal: 𝔹, acc: 𝔸,</span>
+<span class="line">            vote: {bal: 𝔹, val: 𝕍} ∪ {null}}</span>
+<span class="line"></span>
+<span class="line">  Msgs2a ≡ {type: {"2a"}, bal: 𝔹, val: 𝕍}</span>
+<span class="line"></span>
+<span class="line">  Msgs2b ≡ {type: {"2b"}, bal: 𝔹, val: 𝕍, acc: 𝔸}</span>
+<span class="line"></span>
+<span class="line">Assume:</span>
+<span class="line">  ∀ q1, q2 ∈ ℚ: q1 ∩ q2 ≠ {}</span>
+<span class="line"></span>
+<span class="line">Vars:</span>
+<span class="line">  -- Set of all messages sent so far</span>
+<span class="line">  msgs ∈ 2^(Msgs1a ∪ Msgs1b ∪ Msgs2a ∪ Msgs2b)</span>
+<span class="line"></span>
+<span class="line">  -- Function that maps acceptors to ballot numbers or -1</span>
+<span class="line">  -- maxBal :: 𝔸 -&gt; 𝔹 ∪ {-1}</span>
+<span class="line">  maxBal ∈ (𝔹 ∪ {-1})^𝔸</span>
+<span class="line"></span>
+<span class="line">  -- Function that maps acceptors to their last vote</span>
+<span class="line">  -- lastVote :: 𝔸 -&gt; {bal: 𝔹, val: 𝕍} ∪ {null}</span>
+<span class="line">  lastVote ∈ ({bal: 𝔹, val: 𝕍} ∪ {null})^𝔸</span>
+<span class="line"></span>
+<span class="line">Send(m) ≡ msgs' = msgs ∪ {m}</span>
+<span class="line"></span>
+<span class="line">Phase1a(b) ≡</span>
+<span class="line">    Send({type: "1a", bal: b})</span>
+<span class="line">  ∧ maxBal' = maxBal</span>
+<span class="line">  ∧ lastVote' = lastVote</span>
+<span class="line"></span>
+<span class="line">Phase1b(a) ≡</span>
+<span class="line">  ∃ m ∈ msgs:</span>
+<span class="line">      m.type = "1a" ∧ maxBal(a) &lt; m.bal</span>
+<span class="line">    ∧ maxBal' = λ a1 ∈ 𝔸: if a = a1</span>
+<span class="line">                            then m.bal - 1</span>
+<span class="line">                            else maxBal(a1)</span>
+<span class="line">    ∧ lastVote' = lastVote</span>
+<span class="line">    ∧ Send({type: "1b", bal: m.bal, acc: a, vote: lastVote(a)})</span>
+<span class="line"></span>
+<span class="line">Phase2a(b, v) ≡</span>
+<span class="line">   ¬∃ m ∈ msgs: m.type = "2a" ∧ m.bal = b</span>
+<span class="line">  ∧ ∃ q ∈ ℚ:</span>
+<span class="line">    let</span>
+<span class="line">      qmsgs  ≡ {m ∈ msgs: m.type = "1b" ∧ m.bal = b ∧ m.acc ∈ q}</span>
+<span class="line">      qvotes ≡ {m ∈ qmsgs: m.vote ≠ null}</span>
+<span class="line">    in</span>
+<span class="line">        ∀ a ∈ q: ∃ m ∈ qmsgs: m.acc = a</span>
+<span class="line">      ∧ (  qvotes = {}</span>
+<span class="line">         ∨ ∃ m ∈ qvotes:</span>
+<span class="line">               m.vote.val = v</span>
+<span class="line">             ∧ ∀ m1 ∈ qvotes: m1.vote.bal &lt;= m.vote.bal)</span>
+<span class="line">      ∧ Send({type: "2a", bal: b, val: v})</span>
+<span class="line">      ∧ maxBal' = maxBal</span>
+<span class="line">      ∧ lastVote' = lastVote</span>
+<span class="line"></span>
+<span class="line">Phase2b(a) ≡</span>
+<span class="line">  ∃ m ∈ msgs:</span>
+<span class="line">      m.type = "2a" ∧ maxBal(a) &lt; m.bal</span>
+<span class="line">    ∧ maxBal' = λ a1 ∈ 𝔸: if a = a1 then m.bal else maxBal(a1)</span>
+<span class="line">    ∧ lastVote' = λ a1 ∈ 𝔸: if a = a1</span>
+<span class="line">                              then {bal: m.bal, val: m.val}</span>
+<span class="line">                              else lastVote(a1)</span>
+<span class="line">    ∧ Send({type: "2b", bal: m.bal, val: m.val, acc: a})</span>
+<span class="line"></span>
+<span class="line">Init ≡</span>
+<span class="line">    msgs = {}</span>
+<span class="line">  ∧ maxBal   = λ a ∈ 𝔸: -1</span>
+<span class="line">  ∧ lastVote = λ a ∈ 𝔸: null</span>
+<span class="line"></span>
+<span class="line">Next ≡</span>
+<span class="line">    ∃ b ∈ 𝔹:</span>
+<span class="line">        Phase1a(b) ∨ ∃ v ∈ 𝕍: Phase2a(b, v)</span>
+<span class="line">  ∨ ∃ a ∈ 𝔸:</span>
+<span class="line">        Phase1b(a) ∨ Phase2b(a)</span>
+<span class="line"></span>
+<span class="line">chosen ≡</span>
+<span class="line">  {v ∈ V: ∃ q ∈ ℚ, b ∈ 𝔹: AllVotedFor(q, b, v)}</span>
+<span class="line"></span>
+<span class="line">AllVotedFor(q, b, v) ≡</span>
+<span class="line">  ∀ a ∈ q: (a, b, v) ∈ votes</span>
+<span class="line"></span>
+<span class="line">votes ≡</span>
+<span class="line">  let</span>
+<span class="line">    msgs2b ≡ {m ∈ msgs: m.type = "2b"}</span>
+<span class="line">  in</span>
+<span class="line">    {(m.acc, m.bal, m.val): m ∈ msgs2b}</span>
+<span class="line"></span>
+<span class="line">-- Notation</span>
+<span class="line">-- {f1: value1, f2: value}  -- a record with .f1 and .f2 fields</span>
+<span class="line">-- {f1: Set1, f2: Set2}     -- set of records</span>
+<span class="line">--- let name ≡ def in expr   -- local definition of name</span></code></pre>
+
+</figure>
+<p><span>Let</span>&rsquo;<span>s go through each of the phases.</span></p>
+<p><code>Phase1a</code><span> initiates ballot </span><code>b</code><span>.</span>
+<span>It is executed by the ballot</span>&rsquo;<span>s leader, but there</span>&rsquo;<span>s no need to model who exactly the leader is, as long as it is unique.</span>
+<span>This stage simply broadcasts 1a message.</span></p>
+<p><code>Phase1b</code><span> is executed by an acceptor </span><code>a</code><span>.</span>
+<span>If </span><code>a</code><span> receives </span><code>1a</code><span> message for ballot </span><code>b</code><span> and it can vote in </span><code>b</code><span>, then it replies with its </span><code>lastVote</code><span>.</span>
+<span>If it can</span>&rsquo;<span>t vote (it has already started some larger ballot), it simply doesn</span>&rsquo;<span>t respond.</span>
+<span>If enough acceptors don</span>&rsquo;<span>t respond, the ballot will get stuck, but some other ballot might succeed.</span></p>
+<p><code>Phase2a</code><span> is the tricky bit, it checks if the value </span><code>v</code><span> is save for ballot </span><code>b</code><span>.</span></p>
+<p><span>First, we need to make sure that we haven</span>&rsquo;<span>t already initiated </span><code>Phase2a</code><span> for this ballot.</span>
+<span>Otherwise, we might initiate </span><code>Phase2a</code><span> for different values.</span>
+<span>Here is the bit where it is important that the ballot</span>&rsquo;<span>s leader is stable.</span>
+<span>The leader needs to remember if it has already picked a safe value.</span></p>
+<p><span>Then, we collect 1b messages from some quorum (we need to make sure that every quorum member has send 1b message for this ballot).</span>
+<span>Value </span><code>v</code><span> is safe if the whole quorum didn</span>&rsquo;<span>t vote (</span><code>vote</code><span> is null), or if it is the value of the latest vote of some quorum member.</span>
+<span>We know that quorum members won</span>&rsquo;<span>t vote in earlier ballots, because they had increased </span><code>maxBal</code><span> before sending 1b messages.</span></p>
+<p><span>If the value indeed turns out to be safe, we broadcast 2a message for this ballot and value.</span></p>
+<p><span>Finally, in </span><code>Phase2b</code><span> an acceptor </span><code>a</code><span> votes for this value, if its </span><code>maxBall</code><span> is still good.</span>
+<span>The bookkeeping is updating </span><code>maxBal</code><span>, </span><code>lastVote</code><span>, and sending the 2b message.</span></p>
+<p><span>The set of 2b messages corresponds to the </span><code>votes</code><span> variable of the Ballot Voting specification.</span></p>
+</section>
+<section id="Notes-on-Notes">
+
+    <h2>
+    <a href="#Notes-on-Notes"><span>Notes on Notes</span> </a>
+    </h2>
+<p><span>There</span>&rsquo;<span>s a famous result called FLP impossibility: </span><a href="https://groups.csail.mit.edu/tds/papers/Lynch/jacm85.pdf"><span>Impossibility of Distributed Consensus with One Faulty Process</span></a><span>.</span>
+<span>But we</span>&rsquo;<span>ve just presented Paxos algorithm, which works as long as more than half of the processes are alive.</span>
+<span>What gives?</span>
+<span>FLP theorem states that there</span>&rsquo;<span>s no consensus algorithm </span><em><span>with finite behaviors</span></em><span>.</span>
+<span>Stated in a positive way, any asynchronous distributed consensus algorithm is prone to live-lock.</span>
+<span>This is indeed the case for Paxos.</span></p>
+<p><span>Liveness can be improved under partial synchronity assumptions.</span>
+<span>Ie, if we give each process a good enough clock, such that we can say things like </span>&ldquo;<span>if no process fails, Paxos completes in </span><code>t</code><span> seconds</span>&rdquo;<span>.</span>
+<span>If this is the case, we can fix live locking (ballots conflicting each other) by using naive leader selection algorithm to select the single acceptor which can initiate ballots.</span>
+<span>If we don</span>&rsquo;<span>t reach consensus after </span><code>t</code><span> seconds, we can infer that someone has failed and re-run naive leader selection.</span>
+<span>If we are unlucky, naive leader selection will produce two leaders, but this won</span>&rsquo;<span>t be a problem for safety.</span></p>
+<p><span>Paxos requires atomicity and durability to function correctly.</span>
+<span>For example, once the has leader picked safe value and has broadcasted a 2a message, it should persist the selected value.</span>
+<span>Otherwise, if it goes down and then resurrects, it might choose a different value.</span>
+<span>How to make a choice of value atomic and durable?</span>
+<span>Write it to a local database!</span>
+<span>How to make local transaction atomic and durable?</span>
+<span>Write it first into the write ahead log?</span>
+<span>How to write something to WAL?</span>
+<span>Using the </span><code>write</code><span> syscall/DMA.</span>
+<span>What happens if the power goes down exactly in the middle of the write operation?</span>
+<span>Well, we can write a chunk of bytes with a checksum!</span>
+<span>Even if the write itself is not atomic, a checksummed write is!</span>
+<span>If we read the record from disk and checksum matches, then the record is valid.</span></p>
+<p><span>I use slightly different definition of </span><code>maxBal</code><span> (less by one) than the one in the linked lecture, don</span>&rsquo;<span>t get confused about this!</span></p>
+<p><span>See </span><a href="https://github.com/matklad/paxosnotes" class="url">https://github.com/matklad/paxosnotes</a><span> for TLA specs.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-11-01-notes-on-paxos.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,276 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Git Things</title>
+  <meta name="description" content="A grab bag of less frequently talked about git adjacent points.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/12/31/git-things.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Git Things</span> <time datetime="2023-12-31">Dec 31, 2023</time></h1>
+<p><span>A grab bag of less frequently talked about git adjacent points.</span></p>
+<section id="Not-Rocket-Science-Rule-Applies-To-Merge-Commits">
+
+    <h2>
+    <a href="#Not-Rocket-Science-Rule-Applies-To-Merge-Commits"><span>Not Rocket Science Rule Applies To Merge Commits</span> </a>
+    </h2>
+<p><span>Should every commit pass the tests? If it should, then your </span><a href="https://graydon2.dreamwidth.org/1597.html"><span>not rocket science</span>
+<span>rule</span></a><span> implementation must be verifying this property. It</span>
+<span>probably doesn</span>&rsquo;<span>t, and only tests the final result of merging the feature branch into the main</span>
+<span>branch.</span></p>
+<p><span>That</span>&rsquo;<span>s why for typical project it is useful to </span><em><span>merge</span></em><span> pull requests into the main branch </span>&mdash;<span> the</span>
+<span>linear sequence of merge commits is a record of successful CI runs, and is a set of commits you want</span>
+<span>to </span><code>git bisect</code><span> over.</span></p>
+<p><span>Within a feature branch, not every commit necessary passes the tests (or even builds), and that is a</span>
+<span>useful property! Here</span>&rsquo;<span>s some ways this can be exploited:</span></p>
+<ul>
+<li>
+<p><span>When fixing a bug, add a failing test first, as a separate commit.</span>
+<span>That way it becomes easy to verify for anyone that the test indeed fails without the follow up</span>
+<span>fix.</span></p>
+<p><span>Related advice: often I see people commenting out tests that currently fail, or tests that are yet</span>
+<span>to be fixed in the future. That</span>&rsquo;<span>s bad, because commented-out code rots faster than the JavaScript</span>
+<span>framework of the day. Instead, adjust the asserts such that they lock down the current (wrong)</span>
+<span>behavior, and add a clear </span><code>// TODO:</code><span> comment explaining what would be the correct result. This</span>
+<span>prevents such tests from rotting and also catches cases where the behavior is fixed by an</span>
+<span>unrelated change.</span></p>
+</li>
+<li>
+<p><span>To refactor an API which has a lot of usages, split the work in two commits. In the first commit,</span>
+<span>change the API itself, but don</span>&rsquo;<span>t touch the usages. In the second commit, mechanically adjust all</span>
+<span>call sites.</span></p>
+<p><span>That way during review it is trivial to separate meaningful changes from a large, but trivial</span>
+<span>diff.</span></p>
+</li>
+<li>
+<p><code>git mv</code><span> is fake. For a long time, I believed that </span><code>git mv</code><span> adds some special bit of git metadata</span>
+<span>which tells it that the file was moved, such that it can be understood by </span><code>diff</code><span> or </span><code>blame</code><span>.</span>
+<span>That</span>&rsquo;<span>s not the case: </span><code>git mv</code><span> is essentially </span><code>mv</code><span> followed by </span><code>git add</code><span>. There</span>&rsquo;<span>s nothing in git to</span>
+<span>track that a file was moved specifically, the </span>&ldquo;<span>moved</span>&rdquo;<span> illusion is created by the diff tool when it</span>
+<span>heuristically compares repository state at two points in time.</span></p>
+<p><span>For this reason, if you want to reliably record file moves during refactors in git, you should do</span>
+<span>two commits: the first commit </span><em><span>just</span></em><span> moves the file without any changes, the second commit applies</span>
+<span>all the required fixups.</span></p>
+<p><span>Speaking of moves, consider adding this to your </span><code>gitconfig</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">[diff]</span>
+<span class="line">  colormoved = "default"</span>
+<span class="line">  colormovedws = "allow-indentation-change"</span></code></pre>
+
+</figure>
+<p><span>This way, moved lines will be colored differently in </span><code>diff</code><span>, so that code motions not confused</span>
+<span>with additions and deletions, and are easier to review. It is unclear to me why this isn</span>&rsquo;<span>t the</span>
+<span>default, and why this isn</span>&rsquo;<span>t an option in GitHub</span>&rsquo;<span>s UI.</span></p>
+</li>
+</ul>
+<p>&ldquo;<span>Merge into main, but rebase feature branches</span>&rdquo;<span> might be a hard rule to wrap your head around if you</span>
+<span>are new to git. Luckily, it</span>&rsquo;<span>s easy to use not-rocket-science rule to enforce this property. The</span>
+<span>history is as much a part of your project as is the source code. You can write a test that shells</span>
+<span>out to git and checks that the only merge commits in the history are those from the merge bot. While</span>
+<span>you are at it, it would be a good idea to test that no large large files are present in the</span>
+<span>repository </span>&mdash;<span> the size of a repository only grows, and you can</span>&rsquo;<span>t easily remove large blobs from the</span>
+<span>repo later on!</span></p>
+</section>
+<section id="Commit-Messages">
+
+    <h2>
+    <a href="#Commit-Messages"><span>Commit Messages</span> </a>
+    </h2>
+<p><span>Let me phrase this in the most inflammatory way possible :)</span></p>
+<p><span>If your project has great commit messages, with short and precise summary lines and long and</span>
+<span>detailed bodies, this probably means that your CI and code review process suck.</span></p>
+<p><span>Not all changes are equal. In a typical project, most of the changes that </span><em><span>should</span></em><span> be made are small</span>
+<span>and trivial </span>&mdash;<span> some renames, visibility tightening, </span>&ldquo;<span>attention to details</span>&rdquo;<span> polish in user-visible</span>
+<span>features.</span></p>
+<p><span>However, in a typical project, landing a trivial change is slow. How long would it take you to fix</span>
+<code>it's/its</code><span> typo in a comment? Probably 30 seconds to push the actual change, 30 minutes to get the</span>
+<span>CI results, and 3 hours for a review roundtrip.</span></p>
+<p><span>The fixed costs to making a change are tremendous. Main branch gatekeeping strongly incentivizes</span>
+<span>against trivial changes. As a result, such changes either are not being made, or are tacked onto</span>
+<span>larger changes as a drive by bonus. In any case, the total number of commits and PRs goes down. And</span>
+<span>you are crafting a novel of a commit message because you have to wait for your previous PR to land</span>
+<span>anyway.</span></p>
+<p><span>What can be done better?</span></p>
+<p><em><span>First</span></em><span>, make changes smaller and more frequent.</span>
+<span>Most likely, this is possible for you.</span>
+<span>At least, I tend to out-commit most colleagues (</span><a href="https://github.com/intellij-rust/intellij-rust/graphs/contributors"><span>example</span></a><span>).</span>
+<span>That</span>&rsquo;<span>s not because I am more productive </span>&mdash;<span> I just do work in smaller batches.</span></p>
+<p><em><span>Second</span></em><span>, make CI asynchronous.</span>
+<span>At no point in your workflow you should be waiting for CI to pass.</span>
+<span>You should flag a change for merging, move on to the next thing, and only get back if CI fails.</span>
+<span>This is something bors-ng does right </span>&mdash;<span> it</span>&rsquo;<span>s possible to </span><code>r+</code><span> a commit immediately on submission.</span>
+<span>This is something GitHub merge queue does wrong </span>&mdash;<span> it</span>&rsquo;<span>s impossible to add a PR to queue until checks on the PR itself are green.</span></p>
+<p><em><span>Third</span></em><span>, our review process is backwards. Review is done </span><em><span>before</span></em><span> code gets into main, but that</span>&rsquo;<span>s</span>
+<span>inefficient for most of the non-mission critical projects out there. A better approach is to</span>
+<span>optimistically merge most changes as soon as not-rocket-science allows it, and then later review the</span>
+<span>code in situ,  in the main branch. And instead of adding comments in web ui, just changing the code</span>
+<span>in-place, sending a new PR ccing the original author.</span></p>
+
+<figure class="blockquote">
+<blockquote><ol start="14">
+<li>
+<span>Maintainers SHALL NOT make value judgments on correct patches.</span>
+</li>
+<li>
+<span>Maintainers SHALL merge correct patches from other Contributors rapidly.</span>
+</li>
+</ol>
+<p>&hellip;</p>
+<ol start="18">
+<li>
+<span>Any Contributor who has value judgments on a patch SHOULD express these via their own patches.</span>
+</li>
+</ol>
+</blockquote>
+<figcaption><cite><a href="https://rfc.zeromq.org/spec/42/"><span>Collective Code Construction Contract</span></a></cite></figcaption>
+</figure>
+<p><span>I am skeptical that this exact workflow would</span>
+<span>ever fly, but I am cautiously optimistic about </span><a href="https://zed.dev"><span>Zed</span>&rsquo;<span>s</span></a><span> idea about just allowing</span>
+<span>two people to code in the same editor at the same time. I think that achieves a similar effect, and</span>
+<span>nicely dodges unease about allowing temporarily unreviewed code.</span></p>
+<p><span>Ok, back to git!</span></p>
+<p><em><span>First</span></em><span>, not every project needs a clean history. Have you ever looked at the git history of your</span>
+<span>personal blog or dotfiles? If you haven</span>&rsquo;<span>t, feel free to use a </span><code>.</code><span> as a commit message. I do that for</span>
+<span class="display"><a href="https://github.com/matklad/matklad.github.io" class="url">https://github.com/matklad/matklad.github.io</a><span>,</span></span>
+<span>it works fine so far.</span></p>
+<p><em><span>Second</span></em><span>, not every change needs a great commit message. If a change is really minor, I would say</span>
+<code>minor</code><span> is an okay commit message!</span></p>
+<p><em><span>Third</span></em><span>, some changes absolutely do require very detailed commit messages. If there </span><em><span>is</span></em><span> a context,</span>
+<span>by all means, include all of it into the commit message (and spill some as comments in the source</span>
+<span>code). And here</span>&rsquo;<span>s a tip for this case: </span><em><span>write the commit message first!</span></em></p>
+<p><span>When I work on a larger feature, I start with</span>
+<code class="display">git commit --allow-empty</code>
+<span>to type out what I set to do. Most of the time, by the third paragraph of the commit message I</span>
+<span>realize that there</span>&rsquo;<span>s a flaw in my plan and refine it. So, by the time I get to actually writing the</span>
+<span>code, I am already on the second iteration. And, when I am done, I just amend the commit with the</span>
+<span>actual changes, and the commit message is already there, needing only minor adjustments.</span></p>
+<p><span>And the last thing I want to touch about commit messages: </span><code>man git-commit</code><span> tells me that the summary</span>
+<span>line should be shorter than 50 characters. This feels obviously wrong, that</span>&rsquo;<span>s much too short!</span>
+<a href="https://www.kernel.org/doc/html/v4.10/process/submitting-patches.html"><span>Kernel docs</span></a><span> suggest a much</span>
+<span>more reasonable 70-75 limit! And indeed, looking at a some recent kernel commits, 50 is clearly not</span>
+<span>enough!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">&lt;---               50 characters              ---&gt;</span>
+<span class="line"></span>
+<span class="line">get_maintainer: remove stray punctuation when cleaning file emails</span>
+<span class="line">get_maintainer: correctly parse UTF-8 encoded names in files</span>
+<span class="line">locking/osq_lock: Clarify osq_wait_next()</span>
+<span class="line">locking/osq_lock: Clarify osq_wait_next() calling convention</span>
+<span class="line">locking/osq_lock: Move the definition of optimistic_spin_node into osq_lock.c</span>
+<span class="line">ftrace: Fix modification of direct_function hash while in use</span>
+<span class="line">tracing: Fix blocked reader of snapshot buffer</span>
+<span class="line">ring-buffer: Fix wake ups when buffer_percent is set to 100</span>
+<span class="line">platform/x86/intel/pmc: Move GBE LTR ignore to suspend callback</span>
+<span class="line">platform/x86/intel/pmc: Allow reenabling LTRs</span>
+<span class="line">platform/x86/intel/pmc: Add suspend callback</span>
+<span class="line">platform/x86: p2sb: Allow p2sb_bar() calls during PCI device probe</span>
+<span class="line"></span>
+<span class="line">&lt;---               50 characters              ---&gt;</span></code></pre>
+
+</figure>
+<p><span>Happy new year, dear reader!</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-12-31-git-things.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,208 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UNIX Structured Concurrency</title>
+  <meta name="description" content="A short note on a particular structured concurrency pattern for UNIX systems programming.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/10/11/unix-structured-concurrency.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>UNIX Structured Concurrency</span> <time datetime="2023-10-11">Oct 11, 2023</time></h1>
+<p><span>A short note on a particular structured concurrency pattern for UNIX systems programming.</span></p>
+<section id="The-pattern">
+
+    <h2>
+    <a href="#The-pattern"><span>The pattern</span> </a>
+    </h2>
+
+<aside class="block">
+
+<p><span>If you have a parent process and a child process, and want to ensure that, when the parent</span>
+<span>stops, the child is stopped as well, consider using </span>&ldquo;<span>stdin is closed</span>&rdquo;<span> as an exit condition in the child.</span></p>
+
+</aside>
+  <p><span>That is, in the child process (which you control), do a blocking read on </span><code>stdin</code><span>, and exit promptly</span>
+<span>if the read returned zero bytes.</span></p>
+<p><span>Example of the pattern from one of the side hacks:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() <span class="hl-punctuation">-&gt;</span> anyhow::<span class="hl-type">Result</span>&lt;()&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">args</span> = Args::<span class="hl-title function_ invoke__">parse</span>()?;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">token</span> = CancellationToken::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">_guard</span> = token.<span class="hl-title function_ invoke__">clone</span>().<span class="hl-title function_ invoke__">drop_guard</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">_watchdog_thread</span> = std::thread::<span class="hl-title function_ invoke__">spawn</span>({</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">token</span> = token.<span class="hl-title function_ invoke__">clone</span>();</span>
+<span class="line">    <span class="hl-keyword">move</span> || <span class="hl-title function_ invoke__">run_watchdog</span>(token)</span>
+<span class="line">  });</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">tcp_socket</span> = TcpListener::<span class="hl-title function_ invoke__">bind</span>(args.addr.sock)?;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">udp_socket</span> = UdpSocket::<span class="hl-title function_ invoke__">bind</span>(args.addr.sock)?;</span>
+<span class="line">  <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;listening on {}&quot;</span>, args.addr.sock);</span>
+<span class="line">  <span class="hl-title function_ invoke__">run</span>(args, &amp;token, tcp_socket, udp_socket)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">run_watchdog</span>(token: CancellationToken) {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">_guard</span> = token.<span class="hl-title function_ invoke__">drop_guard</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">stdin</span> = std::io::<span class="hl-title function_ invoke__">stdin</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">stdin</span> = stdin.<span class="hl-title function_ invoke__">lock</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">buf</span> = [<span class="hl-number">0</span>];</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = stdin.<span class="hl-title function_ invoke__">read</span>(&amp;<span class="hl-keyword">mut</span> buf).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">  <span class="hl-keyword">if</span> n != <span class="hl-number">0</span> {</span>
+<span class="line">    <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;unexpected input&quot;</span>);</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Context">
+
+    <h2>
+    <a href="#Context"><span>Context</span> </a>
+    </h2>
+<p><span>Two bits of background reading here:</span></p>
+<p><span>A famous </span><del><span>novel by Leo Tolstoy</span></del><span> blog post by njs:</span></p>
+<p><a href="https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/" class="url">https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/</a></p>
+<p><span>A less famous, but no less classic, gotchas.md from duct.py:</span></p>
+<p><a href="https://github.com/oconnor663/duct.py/blob/master/gotchas.md#killing-grandchild-processes" class="url">https://github.com/oconnor663/duct.py/blob/master/gotchas.md#killing-grandchild-processes</a></p>
+<p><span>It is often desirable to spawn a process, and make sure that, when the parent process exits, the</span>
+<span>child process is also killed. This can </span><em><span>not</span></em><span> be achieved using a pattern equivalent to</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">try {</span>
+<span class="line">    process = spawn(...)</span>
+<span class="line">} finally {</span>
+<span class="line">    _ = process.kill()</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The parent process itself might be abruptly killed, and the finally blocks / destructors / atexit</span>
+<span>hooks are not run in this case.</span></p>
+<p><span>The natural habitat for this pattern are integration tests, where you often spawn external processes</span>
+<span>in large amounts, and expect occasional abrupt crashes.</span></p>
+<p><span>Sadly, as far as I know, UNIX doesn</span>&rsquo;<span>t provide an easy mechanism to bind the lifetimes of two</span>
+<span>processes thusly. There</span>&rsquo;<span>s process group mechanism, but it is one-level deep and is mostly reserved</span>
+<span>for the shell. There</span>&rsquo;<span>s </span><del><span>docker</span></del><span> cgroups, but that</span>&rsquo;<span>s a Linux-specific mechanism which isn</span>&rsquo;<span>t usually</span>
+<span>exposed by cross-platform standard libraries of various languages.</span></p>
+<p><span>The trick is using closed stdin as the signal for exit, as that is evenly supported by all platforms,</span>
+<span>doesn</span>&rsquo;<span>t require much code, and will do nearly the right thing most of the time.</span></p>
+<p><span>The drawbacks of this pattern:</span></p>
+<ul>
+<li>
+<span>It</span>&rsquo;<span>s cooperative in the child (you must control the code of the child process to inject the exit</span>
+<span>logic)</span>
+</li>
+<li>
+<span>It</span>&rsquo;<span>s somewhat cooperative in the parent: while exiting on standard input EOF will do the right</span>
+<span>thing most of the time, there are exceptions. For example, reading from </span><code>/dev/null</code><span> returns 0 (as</span>
+<span>opposed to blocking), and daemon processes often have their stdin set to </span><code>/dev/null</code><span>. Sadly,</span>
+<span>there</span>&rsquo;<span>s no </span><code class="display">/dev/reads-and-writes-block-forever</code>
+</li>
+<li>
+<span>It is not actually structured. Ideally, parent</span>&rsquo;<span>s exit should block on all descendants exiting, but</span>
+<span>that</span>&rsquo;<span>s not the case in this pattern. Still, it</span>&rsquo;<span>s good enough for cleaning up in tests!</span>
+</li>
+</ul>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-10-11-unix-structured-concurrency.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

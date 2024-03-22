@@ -1,0 +1,605 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TypeScript is Surprisingly OK for Compilers</title>
+  <meta name="description" content="There are two main historical trends when choosing an implementation language for something
+compiler-shaped.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/08/17/typescript-is-surprisingly-ok-for-compilers.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>TypeScript is Surprisingly OK for Compilers</span> <time datetime="2023-08-17">Aug 17, 2023</time></h1>
+<p><span>There are two main historical trends when choosing an implementation language for something</span>
+<span>compiler-shaped.</span></p>
+<p><span>For more language-centric tasks, like a formal specification, or a toy hobby language, OCaml makes</span>
+<span>most sense. See, for example, </span><a href="https://plzoo.andrej.com"><span>plzoo</span></a><span> or </span><a href="https://github.com/WebAssembly/spec/tree/653938a88c6f40eb886d5980ca315136eb861d03/interpreter"><span>WebAssembly reference</span>
+<span>interpreter</span></a><span>.</span></p>
+<p><span>For something implementation-centric and production ready, C++ is often chosen: LLVM, clang, v8,</span>
+<span>HotSpot are all C++.</span></p>
+<p><span>These days, Rust is a great new addition to the landscape. It is influenced most directly by ML and</span>
+<span>C++, combines their strengths, and even brings something new of its own to the table, like seamless,</span>
+<span>safe multithreading. Still, Rust leans heavily towards production readiness side of the spectrum.</span>
+<span>While some aspects of it, like a </span>&ldquo;<span>just works</span>&rdquo;<span> build system, help with prototyping as well, there</span>&rsquo;<span>s</span>
+<span>still extra complexity tax due to the necessity to model physical layout of data. The usual advice,</span>
+<span>when you start building a compiler in Rust, is to avoid pointers and use indexes. Indexes are great!</span>
+<span>In large codebase, they allow greater decoupling (side tables can stay local to relevant modules),</span>
+<span>improved performance (an index is  </span><code>u32</code><span> and nudges you towards struct-of-arrays layouts), and more</span>
+<span>flexible computation strategies (indexes are easier to serialize or plug into incremental</span>
+<span>compilation framework). But they do make programming-in-the-small significantly more annoying, which</span>
+<span>is a deal-breaker for hobbyist tinkering.</span></p>
+<p><span>But OCaml is crufty! Is there something better? Today, I realized that TypeScript might actually be</span>
+<span>OK? It is not really surprising, given how the language works, but it never occured to me to think</span>
+<span>about TypeScript as an ML equivalent before.</span></p>
+<p><span>So, let</span>&rsquo;<span>s write a tiny-tiny typechecker in TS!</span></p>
+<p><span>Of course, we start with </span><a href="https://deno.land"><span>deno</span></a><span>. See </span><a href="https://matklad.github.io/2023/02/12/a-love-letter-to-deno.html"><em><span>A Love Letter to</span>
+<span>Deno</span></em></a><span> for more details, but the</span>
+<span>TL;DR is that deno provides out-of-the-box experience for TypeScript. This is a pain point for</span>
+<span>OCaml, and something that Rust does better than either OCaml or C++. But deno does this better than</span>
+<span>Rust! It</span>&rsquo;<span>s just a single binary, it comes with linting and formatting, there</span>&rsquo;<span>s no compilation step,</span>
+<span>and there are built-in task runner and watch mode. A dream setup for quick PLT hacks!</span></p>
+<p><span>And then there</span>&rsquo;<span>s TypeScript itself, with its sufficiently flexible, yet light-ceremony type system.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with defining an AST. As we are hacking, we won</span>&rsquo;<span>t bother with making it an IDE-friendly</span>
+<span>concrete syntax tree, or incremental-friendly </span>&ldquo;<span>only store relative offsets</span>&rdquo;<span> tree, and will just tag</span>
+<span>AST nodes with locations in file:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">interface</span> <span class="hl-title class_">Location</span> {</span>
+<span class="line">  <span class="hl-attr">file</span>: <span class="hl-built_in">string</span>;</span>
+<span class="line">  <span class="hl-attr">line</span>: <span class="hl-built_in">number</span>;</span>
+<span class="line">  <span class="hl-attr">column</span>: <span class="hl-built_in">number</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Even here, we already see high-level nature of TypeScript </span>&mdash;<span> string is just a </span><code>string</code><span>, there</span>&rsquo;<span>s no</span>
+<span>thinking about </span><code>usize</code><span> vs </span><code>u32</code><span> as numbers are just </span><code>number</code><span>s.</span></p>
+<p><span>Usually, an expression is defined as a sum-type. As we want to tag each expression with a location,</span>
+<span>that representation would be slightly inconvenient for us, so we split things up a bit:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">interface</span> <span class="hl-title class_">Expr</span> {</span>
+<span class="line">    <span class="hl-attr">location</span>: <span class="hl-title class_">Location</span>;</span>
+<span class="line">    <span class="hl-attr">kind</span>: <span class="hl-title class_">ExprKind</span>;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">type</span> <span class="hl-title class_">ExprKind</span> = <span class="hl-title class_">ExprBool</span> | <span class="hl-title class_">ExprInt</span> | ... ;</span></code></pre>
+
+</figure>
+<p><span>One more thing </span>&mdash;<span> as we are going for something quick, we</span>&rsquo;<span>ll be storing inferred types directly in</span>
+<span>the AST nodes. Still, we want to keep raw and type-checked AST separate, so what we are going to do</span>
+<span>here is to parametrize the </span><code>Expr</code><span> over associated data it stores. A freshly parsed expression would</span>
+<span>use </span><code>void</code><span> as data, and the type checker will set it to </span><code>Type</code><span>. Here</span>&rsquo;<span>s what we get:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">interface</span> <span class="hl-title class_">Expr</span>&lt;T&gt; {</span>
+<span class="line">  <span class="hl-attr">location</span>: <span class="hl-title class_">Location</span>;</span>
+<span class="line">  <span class="hl-attr">data</span>: T;</span>
+<span class="line">  <span class="hl-attr">kind</span>: <span class="hl-title class_">ExprKind</span>&lt;T&gt;;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">type</span> <span class="hl-title class_">ExprKind</span>&lt;T&gt; =</span>
+<span class="line">  | <span class="hl-title class_">ExprBool</span>&lt;T&gt;</span>
+<span class="line">  | <span class="hl-title class_">ExprInt</span>&lt;T&gt;</span>
+<span class="line">  | <span class="hl-title class_">ExprBinary</span>&lt;T&gt;</span>
+<span class="line">  | <span class="hl-title class_">ExprControl</span>&lt;T&gt;;</span></code></pre>
+
+</figure>
+<p><span>A definition of </span><code>ExprBinary</code><span> could look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">interface</span> <span class="hl-title class_">ExprBinary</span>&lt;T&gt; {</span>
+<span class="line">  <span class="hl-attr">op</span>: <span class="hl-title class_">BinaryOp</span>;</span>
+<span class="line">  <span class="hl-attr">lhs</span>: <span class="hl-title class_">Expr</span>&lt;T&gt;;</span>
+<span class="line">  <span class="hl-attr">rhs</span>: <span class="hl-title class_">Expr</span>&lt;T&gt;;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">enum</span> <span class="hl-title class_">BinaryOp</span> {</span>
+<span class="line">  <span class="hl-title class_">Add</span>, <span class="hl-title class_">Sub</span>, <span class="hl-title class_">Mul</span>, <span class="hl-title class_">Div</span>,</span>
+<span class="line">  <span class="hl-title class_">Eq</span>, <span class="hl-title class_">Neq</span>,</span>
+<span class="line">  <span class="hl-title class_">Lt</span>, <span class="hl-title class_">Gt</span>, <span class="hl-title class_">Le</span>, <span class="hl-title class_">Ge</span>,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Note how I don</span>&rsquo;<span>t introduce separate types for, e.g, </span><code>AddExpr</code><span> and </span><code>SubExpr</code><span> </span>&mdash;<span> all binary</span>
+<span>expressions have the same shape, so one type is enough!</span></p>
+<p><span>But we need a tiny adjustment here. Our </span><code>Expr</code><span> kind is defined as a union type. To match a value of</span>
+<span>a union type a bit of runtime type information is needed. However, it</span>&rsquo;<span>s one of the core properties</span>
+<span>of TypeScript that it doesn</span>&rsquo;<span>t add any runtime behaviors. So, if we want to match on expression kinds</span>
+<span>(and we for sure want!), we need to give a helping hand to the compiler and include a bit of RTTI</span>
+<span>manually. That would be the </span><code>tag</code><span> field:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">interface</span> <span class="hl-title class_">ExprBinary</span>&lt;T&gt; {</span>
+<span class="line hl-line">  <span class="hl-attr">tag</span>: <span class="hl-string">&quot;binary&quot;</span>;</span>
+<span class="line">  <span class="hl-attr">op</span>: <span class="hl-title class_">BinaryOp</span>;</span>
+<span class="line">  <span class="hl-attr">lhs</span>: <span class="hl-title class_">Expr</span>&lt;T&gt;;</span>
+<span class="line">  <span class="hl-attr">rhs</span>: <span class="hl-title class_">Expr</span>&lt;T&gt;;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><code>tag: "binary"</code><span> means that the only possible runtime value for </span><code>tag</code><span> is the string </span><code>"binary"</code><span>.</span></p>
+<p><span>Similarly to various binary expressions, boolean literal and int literal expressions have </span><em><span>almost</span></em>
+<span>identical shape.  Almost, because the payload (</span><code>boolean</code><span> or </span><code>number</code><span>) is different. TypeScript</span>
+<span>allows us to neatly abstract this over:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">type</span> <span class="hl-title class_">ExprBool</span>&lt;T&gt; = <span class="hl-title class_">ExprLiteral</span>&lt;T, <span class="hl-built_in">boolean</span>, <span class="hl-string">&quot;bool&quot;</span>&gt;;</span>
+<span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">type</span> <span class="hl-title class_">ExprInt</span>&lt;T&gt; = <span class="hl-title class_">ExprLiteral</span>&lt;T, <span class="hl-built_in">number</span>, <span class="hl-string">&quot;int&quot;</span>&gt;;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">interface</span> <span class="hl-title class_">ExprLiteral</span>&lt;T, V, <span class="hl-title class_">Tag</span>&gt; {</span>
+<span class="line">  <span class="hl-attr">tag</span>: <span class="hl-title class_">Tag</span>;</span>
+<span class="line">  <span class="hl-attr">value</span>: V;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Finally, for control-flow expressions we only add </span><code>if</code><span> for now:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">type</span> <span class="hl-title class_">ExprControl</span>&lt;T&gt; = <span class="hl-title class_">ExprIf</span>&lt;T&gt;;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">interface</span> <span class="hl-title class_">ExprIf</span>&lt;T&gt; {</span>
+<span class="line">  <span class="hl-attr">tag</span>: <span class="hl-string">&quot;if&quot;</span>;</span>
+<span class="line">  <span class="hl-attr">cond</span>: <span class="hl-title class_">Expr</span>&lt;T&gt;;</span>
+<span class="line">  <span class="hl-attr">then_branch</span>: <span class="hl-title class_">Expr</span>&lt;T&gt;;</span>
+<span class="line">  <span class="hl-attr">else_branch</span>: <span class="hl-title class_">Expr</span>&lt;T&gt;;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This concludes the definition of the ast! Let</span>&rsquo;<span>s move on to the type inference! Start with types:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">type</span> <span class="hl-title class_">Type</span> = <span class="hl-title class_">TypeBool</span> | <span class="hl-title class_">TypeInt</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">interface</span> <span class="hl-title class_">TypeBool</span> {</span>
+<span class="line">  <span class="hl-attr">tag</span>: <span class="hl-string">&quot;Bool&quot;</span>;</span>
+<span class="line">}</span>
+<span class="line"><span class="hl-keyword">const</span> <span class="hl-title class_">TypeBool</span>: <span class="hl-title class_">TypeBool</span> = { <span class="hl-attr">tag</span>: <span class="hl-string">&quot;Bool&quot;</span> };</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">interface</span> <span class="hl-title class_">TypeInt</span> {</span>
+<span class="line">  <span class="hl-attr">tag</span>: <span class="hl-string">&quot;Int&quot;</span>;</span>
+<span class="line">}</span>
+<span class="line"><span class="hl-keyword">const</span> <span class="hl-title class_">TypeInt</span>: <span class="hl-title class_">TypeInt</span> = { <span class="hl-attr">tag</span>: <span class="hl-string">&quot;Int&quot;</span> };</span></code></pre>
+
+</figure>
+<p><span>Our types are really simple, we could have gone with </span><span class="display"><code>type Type = "Int" | "Bool"</code><span>,</span></span><span> but</span>
+<span>lets do this a bit more enterprisy! We define separate types for integer and boolean types. As these</span>
+<span>types are singletons, we also provide canonical definitions. And here is another TypeScript-ism.</span>
+<span>Because TypeScript fully erases types, everything related to types lives in a separate namespace. So</span>
+<span>you can have a type and a value sharing the same name. Which is exactly what we use to define the</span>
+<span>singletons!</span></p>
+<p><span>Finally, we can take advantage of our associated-data parametrized expression and write the</span>
+<span>signature of</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">function</span> <span class="hl-title function_">infer_types</span>(<span class="hl-params">expr: ast.Expr&lt;<span class="hl-built_in">void</span>&gt;</span>): ast.<span class="hl-property">Expr</span>&lt;<span class="hl-title class_">Type</span>&gt;</span></code></pre>
+
+</figure>
+<p><span>As it says on the tin, </span><code>inter_types</code><span> fills in </span><code>Type</code><span> information into the void! Let</span>&rsquo;<span>s fill in the</span>
+<span>details!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">function</span> <span class="hl-title function_">infer_types</span>(<span class="hl-params">expr: ast.Expr&lt;<span class="hl-built_in">void</span>&gt;</span>): ast.<span class="hl-property">Expr</span>&lt;<span class="hl-title class_">Type</span>&gt; {</span>
+<span class="line">  <span class="hl-keyword">switch</span> (expr.<span class="hl-property">kind</span>.<span class="hl-property">tag</span>) {</span>
+<span class="line">    cas</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>If at this point we hit Enter, the editor completes:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">function</span> <span class="hl-title function_">infer_types</span>(<span class="hl-params">expr: ast.Expr&lt;<span class="hl-built_in">void</span>&gt;</span>): ast.<span class="hl-property">Expr</span>&lt;<span class="hl-title class_">Type</span>&gt; {</span>
+<span class="line">  <span class="hl-keyword">switch</span> (expr.<span class="hl-property">kind</span>.<span class="hl-property">tag</span>) {</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;bool&quot;</span>:</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;int&quot;</span>:</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;binary&quot;</span>:</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;if&quot;</span>:</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>There</span>&rsquo;<span>s one problem though. What we really want to write here is something like</span>
+<span class="display"><code>const inferred_type = switch(..)</code><span>,</span></span>
+<span>but in TypeScript </span><code>switch</code><span> is a statement, not an expression.</span>
+<span>So let</span>&rsquo;<span>s define a generic visitor!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">type</span> <span class="hl-title class_">Visitor</span>&lt;T, R&gt; = {</span>
+<span class="line">  <span class="hl-title function_">bool</span>(<span class="hl-attr">kind</span>: <span class="hl-title class_">ExprBool</span>&lt;T&gt;): R;</span>
+<span class="line">  <span class="hl-title function_">int</span>(<span class="hl-attr">kind</span>: <span class="hl-title class_">ExprInt</span>&lt;T&gt;): R;</span>
+<span class="line">  <span class="hl-title function_">binary</span>(<span class="hl-attr">kind</span>: <span class="hl-title class_">ExprBinary</span>&lt;T&gt;): R;</span>
+<span class="line">  <span class="hl-keyword">if</span>(<span class="hl-attr">kind</span>: <span class="hl-title class_">ExprIf</span>&lt;T&gt;): R;</span>
+<span class="line">};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">function</span> visit&lt;T, R&gt;(</span>
+<span class="line">  <span class="hl-attr">expr</span>: <span class="hl-title class_">Expr</span>&lt;T&gt;,</span>
+<span class="line">  <span class="hl-attr">v</span>: <span class="hl-title class_">Visitor</span>&lt;T, R&gt;,</span>
+<span class="line">): R {</span>
+<span class="line">  <span class="hl-keyword">switch</span> (expr.<span class="hl-property">kind</span>.<span class="hl-property">tag</span>) {</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;bool&quot;</span>: <span class="hl-keyword">return</span> v.<span class="hl-title function_">bool</span>(expr.<span class="hl-property">kind</span>);</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;int&quot;</span>: <span class="hl-keyword">return</span> v.<span class="hl-title function_">int</span>(expr.<span class="hl-property">kind</span>);</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;binary&quot;</span>: <span class="hl-keyword">return</span> v.<span class="hl-title function_">binary</span>(expr.<span class="hl-property">kind</span>);</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;if&quot;</span>: <span class="hl-keyword">return</span> v.<span class="hl-title function_">if</span>(expr.<span class="hl-property">kind</span>);</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Armed with the </span><code>visit</code><span>, we can ergonomically match over the expression:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">function</span> <span class="hl-title function_">infer_types</span>(<span class="hl-params">expr: ast.Expr&lt;<span class="hl-built_in">void</span>&gt;</span>): ast.<span class="hl-property">Expr</span>&lt;<span class="hl-title class_">Type</span>&gt; {</span>
+<span class="line">  <span class="hl-keyword">const</span> ty = <span class="hl-title function_">visit</span>(expr, {</span>
+<span class="line">    <span class="hl-attr">bool</span>: <span class="hl-function">() =&gt;</span> <span class="hl-title class_">TypeBool</span>,</span>
+<span class="line">    <span class="hl-attr">int</span>: <span class="hl-function">() =&gt;</span> <span class="hl-title class_">TypeInt</span>,</span>
+<span class="line">    <span class="hl-attr">binary</span>: <span class="hl-function">(<span class="hl-params">kind: ast.ExprBinary&lt;<span class="hl-built_in">void</span>&gt;</span>) =&gt;</span> <span class="hl-title function_">result_type</span>(kind.<span class="hl-property">op</span>),</span>
+<span class="line">    <span class="hl-attr">if</span>: (<span class="hl-attr">kind</span>: ast.<span class="hl-property">ExprIf</span>&lt;<span class="hl-built_in">void</span>&gt;) {</span>
+<span class="line">      ...</span>
+<span class="line">    },</span>
+<span class="line">  });</span>
+<span class="line">  ...</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">function</span> <span class="hl-title function_">result_type</span>(<span class="hl-params">op: ast.BinaryOp</span>): <span class="hl-title class_">Type</span> {</span>
+<span class="line">  <span class="hl-keyword">switch</span> (op) { <span class="hl-comment">// A tad verbose, but auto-completed!</span></span>
+<span class="line">    <span class="hl-keyword">case</span> ast.<span class="hl-property">BinaryOp</span>.<span class="hl-property">Add</span>: <span class="hl-keyword">case</span> ast.<span class="hl-property">BinaryOp</span>.<span class="hl-property">Sub</span>:</span>
+<span class="line">    <span class="hl-keyword">case</span> ast.<span class="hl-property">BinaryOp</span>.<span class="hl-property">Mul</span>: <span class="hl-keyword">case</span> ast.<span class="hl-property">BinaryOp</span>.<span class="hl-property">Div</span>:</span>
+<span class="line">      <span class="hl-keyword">return</span> <span class="hl-title class_">TypeInt</span></span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">case</span> ast.<span class="hl-property">BinaryOp</span>.<span class="hl-property">Eq</span>: <span class="hl-keyword">case</span> ast.<span class="hl-property">BinaryOp</span>.<span class="hl-property">Neq</span>:</span>
+<span class="line">      <span class="hl-keyword">return</span> <span class="hl-title class_">TypeBool</span></span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">case</span> ast.<span class="hl-property">BinaryOp</span>.<span class="hl-property">Lt</span>: <span class="hl-keyword">case</span> ast.<span class="hl-property">BinaryOp</span>.<span class="hl-property">Gt</span>:</span>
+<span class="line">    <span class="hl-keyword">case</span> ast.<span class="hl-property">BinaryOp</span>.<span class="hl-property">Le</span>: <span class="hl-keyword">case</span> ast.<span class="hl-property">BinaryOp</span>.<span class="hl-property">Ge</span>:</span>
+<span class="line">      <span class="hl-keyword">return</span> <span class="hl-title class_">TypeBool</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Before we go further, let</span>&rsquo;<span>s generalize this visiting pattern a bit! Recall that our expressions are</span>
+<span>parametrized by the type of associated data, and type-checker-shaped transformations are essentially an</span>
+<code class="display">Expr&lt;U&gt; -&gt; Expr&lt;V&gt;</code>
+<span>transformation.</span></p>
+<p><span>Let</span>&rsquo;<span>s make this generic!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">function</span> transform&lt;U, V&gt;(<span class="hl-attr">expr</span>: <span class="hl-title class_">Expr</span>&lt;U&gt;, <span class="hl-attr">v</span>: <span class="hl-title class_">Visitor</span>&lt;V, V&gt;): <span class="hl-title class_">Expr</span>&lt;V&gt; {</span></code></pre>
+
+</figure>
+<p><span>Transform maps an expression carrying </span><code>T</code><span> into an expression carrying </span><code>V</code><span> by applying an </span><code>f</code>
+<span>visitor. Importantly, it</span>&rsquo;<span>s </span><code>Visitor&lt;V, V&gt;</code><span>, rather than a </span><code>Visitor&lt;U, V&gt;</code><span>. This is</span>
+<span>counter-intuitive, but correct </span>&mdash;<span> we run transformation bottom up, transforming the leaves first.</span>
+<span>So, when the time comes to visit an interior node, all subexpression will have been transformed!</span></p>
+<p><span>The body of </span><code>transform</code><span> is wordy, but regular, rectangular, and auto-completes itself:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">export</span> <span class="hl-keyword">function</span> transform&lt;U, V&gt;(<span class="hl-attr">expr</span>: <span class="hl-title class_">Expr</span>&lt;U&gt;, <span class="hl-attr">v</span>: <span class="hl-title class_">Visitor</span>&lt;V, V&gt;): <span class="hl-title class_">Expr</span>&lt;V&gt; {</span>
+<span class="line">  <span class="hl-keyword">switch</span> (expr.<span class="hl-property">kind</span>.<span class="hl-property">tag</span>) {</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;bool&quot;</span>:</span>
+<span class="line">      <span class="hl-keyword">return</span> {</span>
+<span class="line">        <span class="hl-attr">location</span>: expr.<span class="hl-property">location</span>,</span>
+<span class="line">        <span class="hl-attr">data</span>: v.<span class="hl-title function_">bool</span>(expr.<span class="hl-property">kind</span>),</span>
+<span class="line">        <span class="hl-attr">kind</span>: expr.<span class="hl-property">kind</span>, <i class="callout" data-value="1"></i></span>
+<span class="line">      };</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;int&quot;</span>:</span>
+<span class="line">      <span class="hl-keyword">return</span> {</span>
+<span class="line">        <span class="hl-attr">location</span>: expr.<span class="hl-property">location</span>,</span>
+<span class="line">        <span class="hl-attr">data</span>: v.<span class="hl-title function_">int</span>(expr.<span class="hl-property">kind</span>),</span>
+<span class="line">        <span class="hl-attr">kind</span>: expr.<span class="hl-property">kind</span>,</span>
+<span class="line">      };</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;binary&quot;</span>: {</span>
+<span class="line">      <span class="hl-keyword">const</span> <span class="hl-attr">kind</span>: <span class="hl-title class_">ExprBinary</span>&lt;V&gt; = { <i class="callout" data-value="2"></i></span>
+<span class="line">        <span class="hl-attr">tag</span>: <span class="hl-string">&quot;binary&quot;</span>,</span>
+<span class="line">        <span class="hl-attr">op</span>: expr.<span class="hl-property">kind</span>.<span class="hl-property">op</span>,</span>
+<span class="line">        <span class="hl-attr">lhs</span>: <span class="hl-title function_">transform</span>(expr.<span class="hl-property">kind</span>.<span class="hl-property">lhs</span>, v),</span>
+<span class="line">        <span class="hl-attr">rhs</span>: <span class="hl-title function_">transform</span>(expr.<span class="hl-property">kind</span>.<span class="hl-property">rhs</span>, v),</span>
+<span class="line">      };</span>
+<span class="line">      <span class="hl-keyword">return</span> {</span>
+<span class="line">        <span class="hl-attr">location</span>: expr.<span class="hl-property">location</span>,</span>
+<span class="line">        <span class="hl-attr">data</span>: v.<span class="hl-title function_">binary</span>(kind), <i class="callout" data-value="2"></i></span>
+<span class="line">        <span class="hl-attr">kind</span>: kind,</span>
+<span class="line">      };</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">case</span> <span class="hl-string">&quot;if&quot;</span>: {</span>
+<span class="line">      <span class="hl-keyword">const</span> <span class="hl-attr">kind</span>: <span class="hl-title class_">ExprIf</span>&lt;V&gt; = {</span>
+<span class="line">        <span class="hl-attr">tag</span>: <span class="hl-string">&quot;if&quot;</span>,</span>
+<span class="line">        <span class="hl-attr">cond</span>: <span class="hl-title function_">transform</span>(expr.<span class="hl-property">kind</span>.<span class="hl-property">cond</span>, v),</span>
+<span class="line">        <span class="hl-attr">then_branch</span>: <span class="hl-title function_">transform</span>(expr.<span class="hl-property">kind</span>.<span class="hl-property">then_branch</span>, v),</span>
+<span class="line">        <span class="hl-attr">else_branch</span>: <span class="hl-title function_">transform</span>(expr.<span class="hl-property">kind</span>.<span class="hl-property">else_branch</span>, v),</span>
+<span class="line">      };</span>
+<span class="line">      <span class="hl-keyword">return</span> {</span>
+<span class="line">        <span class="hl-attr">location</span>: expr.<span class="hl-property">location</span>,</span>
+<span class="line">        <span class="hl-attr">data</span>: v.<span class="hl-title function_">if</span>(kind),</span>
+<span class="line">        <span class="hl-attr">kind</span>: kind,</span>
+<span class="line">      };</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<p><span>Note how here </span><code>expr.kind</code><span> is both </span><code>Expr&lt;U&gt;</code><span> and  </span><code>Expr&lt;V&gt;</code><span> </span>&mdash;<span> literals don</span>&rsquo;<span>t depend on this type</span>
+<span>parameter, and TypeScript is smart enough to figure this out without us manually re-assembling</span>
+<span>the same value with a different type.</span></p>
+</li>
+<li>
+<p><span>This is where that magic with </span><code>Visitor&lt;V, V&gt;</code><span> happens.</span></p>
+</li>
+</ol>
+<p><span>The code is pretty regular here though! So at this point we might actually recall that TypeScript is</span>
+<span>a dynamically-typed language, and write a generic traversal using </span><code>Object.keys</code><span>, </span><em><span>while keeping the</span>
+<span>static function signature in-place</span></em><span>. I don</span>&rsquo;<span>t think we need to do it here, but there</span>&rsquo;<span>s comfort in</span>
+<span>knowing that it</span>&rsquo;<span>s possible!</span></p>
+<p><em><span>Now</span></em><span> implementing type inference should be a breeze! We need some way to emit type errors though.</span>
+<span>With TypeScript, it would be trivial to accumulate errors into an array as a side-effect, but let</span>&rsquo;<span>s</span>
+<span>actually represent type errors as instances of a specific type, </span><code>TypeError</code><span> (pun intended):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">type</span> <span class="hl-title class_">Type</span> = <span class="hl-title class_">TypeBool</span> | <span class="hl-title class_">TypeInt</span> | <span class="hl-title class_">TypeError</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">interface</span> <span class="hl-title class_">TypeError</span> {</span>
+<span class="line">  <span class="hl-attr">tag</span>: <span class="hl-string">&quot;Error&quot;</span>;</span>
+<span class="line">  <span class="hl-attr">location</span>: ast.<span class="hl-property">Location</span>;</span>
+<span class="line">  <span class="hl-attr">message</span>: <span class="hl-built_in">string</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>To check ifs and binary expressions, we would also need a utility for comparing types:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">function</span> <span class="hl-title function_">type_equal</span>(<span class="hl-params">lhs: Type, rhs: Type</span>): <span class="hl-built_in">boolean</span> {</span>
+<span class="line">  <span class="hl-keyword">if</span> (lhs.<span class="hl-property">tag</span> == <span class="hl-string">&quot;Error&quot;</span> || rhs.<span class="hl-property">tag</span> == <span class="hl-string">&quot;Error&quot;</span>) <span class="hl-keyword">return</span> <span class="hl-literal">true</span>;</span>
+<span class="line">  <span class="hl-keyword">return</span> lhs.<span class="hl-property">tag</span> == rhs.<span class="hl-property">tag</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>We make the </span><code>Error</code><span> type equal to any other type to prevent cascading failures. With all that</span>
+<span>machinery in place, our type checker is finally:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">function</span> <span class="hl-title function_">infer_types</span>(<span class="hl-params">expr: ast.Expr&lt;<span class="hl-built_in">void</span>&gt;</span>): ast.<span class="hl-property">Expr</span>&lt;<span class="hl-title class_">Type</span>&gt; {</span>
+<span class="line">  <span class="hl-keyword">return</span> ast.<span class="hl-title function_">transform</span>(expr, {</span>
+<span class="line">    <span class="hl-attr">bool</span>: (): <span class="hl-function"><span class="hl-params">Type</span> =&gt;</span> <span class="hl-title class_">TypeBool</span>,</span>
+<span class="line">    <span class="hl-attr">int</span>: (): <span class="hl-function"><span class="hl-params">Type</span> =&gt;</span> <span class="hl-title class_">TypeInt</span>,</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-attr">binary</span>: (<span class="hl-attr">kind</span>: ast.<span class="hl-property">ExprBinary</span>&lt;<span class="hl-title class_">Type</span>&gt;, <span class="hl-attr">location</span>: ast.<span class="hl-property">Location</span>): <span class="hl-function"><span class="hl-params">Type</span> =&gt;</span> {</span>
+<span class="line">      <span class="hl-keyword">if</span> (!<span class="hl-title function_">type_equal</span>(kind.<span class="hl-property">lhs</span>.<span class="hl-property">data</span>, kind.<span class="hl-property">rhs</span>.<span class="hl-property">data</span>)) {</span>
+<span class="line">        <span class="hl-keyword">return</span> {</span>
+<span class="line">          <span class="hl-attr">tag</span>: <span class="hl-string">&quot;Error&quot;</span>,</span>
+<span class="line">          location,</span>
+<span class="line">          <span class="hl-attr">message</span>: <span class="hl-string">&quot;binary expression operands have different types&quot;</span>,</span>
+<span class="line">        };</span>
+<span class="line">      }</span>
+<span class="line">      <span class="hl-keyword">return</span> <span class="hl-title function_">result_type</span>(kind.<span class="hl-property">op</span>);</span>
+<span class="line">    },</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-attr">if</span>: (<span class="hl-attr">kind</span>: ast.<span class="hl-property">ExprIf</span>&lt;<span class="hl-title class_">Type</span>&gt;, <span class="hl-attr">location</span>: ast.<span class="hl-property">Location</span>): <span class="hl-function"><span class="hl-params">Type</span> =&gt;</span> {</span>
+<span class="line">      <span class="hl-keyword">if</span> (!<span class="hl-title function_">type_equal</span>(kind.<span class="hl-property">cond</span>.<span class="hl-property">data</span>, <span class="hl-title class_">TypeBool</span>)) {</span>
+<span class="line">        <span class="hl-keyword">return</span> {</span>
+<span class="line">          <span class="hl-attr">tag</span>: <span class="hl-string">&quot;Error&quot;</span>,</span>
+<span class="line">          location,</span>
+<span class="line">          <span class="hl-attr">message</span>: <span class="hl-string">&quot;if condition is not a boolean&quot;</span>,</span>
+<span class="line">        };</span>
+<span class="line">      }</span>
+<span class="line">      <span class="hl-keyword">if</span> (!<span class="hl-title function_">type_equal</span>(kind.<span class="hl-property">then_branch</span>.<span class="hl-property">data</span>, kind.<span class="hl-property">else_branch</span>.<span class="hl-property">data</span>)) {</span>
+<span class="line">        <span class="hl-keyword">return</span> {</span>
+<span class="line">          <span class="hl-attr">tag</span>: <span class="hl-string">&quot;Error&quot;</span>,</span>
+<span class="line">          location,</span>
+<span class="line">          <span class="hl-attr">message</span>: <span class="hl-string">&quot;if branches have different types&quot;</span>,</span>
+<span class="line">        };</span>
+<span class="line">      }</span>
+<span class="line">      <span class="hl-keyword">return</span> kind.<span class="hl-property">then_branch</span>.<span class="hl-property">data</span>;</span>
+<span class="line">    },</span>
+<span class="line">  });</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">function</span> <span class="hl-title function_">result_type</span>(<span class="hl-params">op: ast.BinaryOp</span>): <span class="hl-title class_">Type</span> {</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Astute reader will notice that our visitor functions now take an extra </span><code>ast.Location</code><span> argument.</span>
+<span>TypeScript allows using this argument only in cases where it is needed, cutting down verbosity.</span></p>
+<p><span>And that</span>&rsquo;<span>s all for today! The end result is pretty neat and concise. It took some typing to get there,</span>
+<span>but TypeScript autocompletion really helps with that! What</span>&rsquo;<span>s more important, there was very little</span>
+<span>fighting with the language, and the result feels quite natural and directly corresponds to the shape</span>
+<span>of the problem.</span></p>
+<p><span>I am not entirely sure in the conclusion just yet, but I think I</span>&rsquo;<span>ll be using TypeScript as my tool</span>
+<span>of choice for various small language hacks. It is surprisingly productive due to the confluence of</span>
+<span>three aspects:</span></p>
+<ul>
+<li>
+<span>deno is a perfect scripting runtime! Small, hermetic, powerful, and optimized for effective</span>
+<span>development workflows.</span>
+</li>
+<li>
+<span>TypeScript tooling is great </span>&mdash;<span> the IDE is helpful and productive (and deno makes sure that it</span>
+<span>also requires zero configuration)</span>
+</li>
+<li>
+<span>The language is powerful both at runtime and at compile time. You can get pretty fancy with types,</span>
+<span>but you can also just escape to dynamic world if you need some very high-order code.</span>
+</li>
+</ul>
+<hr>
+<p><span>Just kidding, here</span>&rsquo;<span>s one more cute thing. Let</span>&rsquo;<span>s say that we want to have lots of syntactic sugar,</span>
+<span>and also want type-safe desugaring. We could tweak our setup a bit for that: instead of </span><code>Expr</code><span> and</span>
+<code>ExprKind</code><span> being parametrized over associated data, we circularly parametrize </span><code>Expr</code><span> by the whole</span>
+<code>ExprKind</code><span> and  vice verse:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">interface</span> <span class="hl-title class_">Expr</span>&lt;K&gt; {</span>
+<span class="line">  <span class="hl-attr">location</span>: <span class="hl-title class_">Location</span>,</span>
+<span class="line">  <span class="hl-attr">kind</span>: K,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">interface</span> <span class="hl-title class_">ExprBinary</span>&lt;E&gt; {</span>
+<span class="line">  <span class="hl-attr">op</span>: <span class="hl-title class_">BinaryOp</span>,</span>
+<span class="line">  <span class="hl-attr">lhs</span>: E,</span>
+<span class="line">  <span class="hl-attr">rhs</span>: E,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This allows expressing desugaring in a type-safe manner!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// Fundamental, primitive expressions.</span></span>
+<span class="line"><span class="hl-keyword">type</span> <span class="hl-title class_">ExprKindCore</span>&lt;E&gt; =</span>
+<span class="line">    <span class="hl-title class_">ExprInt</span>&lt;E&gt; | <span class="hl-title class_">ExprBinary</span>&lt;E&gt; | <span class="hl-title class_">ExprIf</span>&lt;E&gt;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Expressions which are either themselves primitive,</span></span>
+<span class="line"><span class="hl-comment">// or can be desugared to primitives.</span></span>
+<span class="line"><span class="hl-keyword">type</span> <span class="hl-title class_">ExprKindSugar</span>&lt;E&gt; = <span class="hl-title class_">ExprKindCore</span>&lt;E&gt;</span>
+<span class="line">    | <span class="hl-title class_">ExprCond</span>&lt;E&gt; | <span class="hl-title class_">ExprUnless</span>&lt;E&gt;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">type</span> <span class="hl-title class_">ExprCore</span> = <span class="hl-title class_">Expr</span>&lt;<span class="hl-title class_">ExprKindCore</span>&lt;<span class="hl-title class_">ExprCore</span>&gt;&gt;;</span>
+<span class="line"><span class="hl-keyword">type</span> <span class="hl-title class_">ExprSugar</span> = <span class="hl-title class_">Expr</span>&lt;<span class="hl-title class_">ExprKindSugar</span>&lt;<span class="hl-title class_">ExprSugar</span>&gt;&gt;;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Desugaring works by reducing the set of expression kinds.</span></span>
+<span class="line"><span class="hl-keyword">function</span> <span class="hl-title function_">desugar</span>(<span class="hl-params">expr: ExprSugar</span>): <span class="hl-title class_">ExprCore</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// A desugaring steps takes a (potentially sugar) expression,</span></span>
+<span class="line"><span class="hl-comment">// whose subexpression are already desugared,</span></span>
+<span class="line"><span class="hl-comment">// and produces an equivalent core expression.</span></span>
+<span class="line"><span class="hl-keyword">function</span> <span class="hl-title function_">desugar_one</span>(<span class="hl-params"></span></span>
+<span class="line"><span class="hl-params">    expr: ExprKindSugar&lt;ExprCore&gt;,</span></span>
+<span class="line"><span class="hl-params"></span>): <span class="hl-title class_">ExprKindCore</span>&lt;<span class="hl-title class_">ExprCore</span>&gt;</span></code></pre>
+
+</figure>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-08-17-typescript-is-surprisingly-ok-for-compilers.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

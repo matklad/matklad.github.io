@@ -1,0 +1,194 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Next Rust Compiler</title>
+  <meta name="description" content="In Rust in 2023, @nrc floated an idea of a Rust compiler rewrite.
+As my hobby is writing Rust compiler frontends (1, 2), I have some (but not very many) thoughts here!
+The post consists of two parts, covering organizational and technical aspects.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/01/25/next-rust-compiler.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Next Rust Compiler</span> <time datetime="2023-01-25">Jan 25, 2023</time></h1>
+<p><span>In </span><a href="https://www.ncameron.org/blog/rust-in-2023/"><span>Rust in 2023</span></a><span>, </span><a href="http://github.com/nrc"><span>@nrc</span></a><span> floated an idea of a Rust compiler rewrite.</span>
+<span>As my hobby is writing Rust compiler frontends (</span><a href="https://github.com/intellij-rust/intellij-rust"><span>1</span></a><span>, </span><a href="https://github.com/rust-lang/rust-analyzer"><span>2</span></a><span>), I have some (but not very many) thoughts here!</span>
+<span>The post consists of two parts, covering organizational and technical aspects.</span></p>
+<section id="Organization">
+
+    <h2>
+    <a href="#Organization"><span>Organization</span> </a>
+    </h2>
+<p><span>Writing a production-grade compiler is not a small endeavor.</span>
+<span>The questions of who writes the code, who pays the people writing the code, and what</span>&rsquo;<span>s the economic incentive to fund the work in the first place are quite important.</span></p>
+<p><span>My naive guesstimate is that Rust is currently at that stage of its life where it</span>&rsquo;<span>s clear that the language won</span>&rsquo;<span>t die, and would be deployed quite widely, but where, at the same time, the said deployment didn</span>&rsquo;<span>t quite happen to the full extent yet.</span>
+<span>From within the Rust community, it seems like Rust is everywhere.</span>
+<span>My guess is that from the outside it looks like there</span>&rsquo;<span>s Rust in at least some places.</span></p>
+<p><span>In other words, it</span>&rsquo;<span>s high time to invest substantially into Rust ecosystem, as the risk that the investment sinks completely is relatively low, but the expected growth is still quite high.</span>
+<span>This makes me think that a next-gen rust compiler isn</span>&rsquo;<span>t too unlikely: I feel that rustc is stuck in a local optimum, and that, with some boldness, it is possible to deliver something more awesome.</span></p>
+</section>
+<section id="Technicalities">
+
+    <h2>
+    <a href="#Technicalities"><span>Technicalities</span> </a>
+    </h2>
+<p><span>Here</span>&rsquo;<span>s what I think an awesome rust compiler would do:</span></p>
+<dl>
+<dt><span>rust-native compilation model</span></dt>
+<dd>
+<p><span>Like C++, Rust (ab)uses the C compilation model </span>&mdash;<span> compilation units are separately compiled into object files, which are then linked into a single executable by the linker.</span>
+<span>This model is at odds with how the language work.</span>
+<span>In particular, compiling a generic function isn</span>&rsquo;<span>t actually possible until you know specific type parameters at the call-site.</span>
+<span>Rust and C++ hack around that by compiling a separate copy for every call-site (C++ even re-type-checks every call-site), and deduplicating instantiations during the link step.</span>
+<span>This creates a lot of wasted work, which is only there because we try to follow </span>&ldquo;<span>compile to object files then link</span>&rdquo;<span> model of operation.</span>
+<span>It would be significantly more efficient to merge compiler and linker, such that only the minimal amount of code is compiled, compiled code is fully aware about surrounding context and can be inlined across crates, and where the compilation makes the optimal use of all available CPU and RAM.</span></p>
+</dd>
+<dt><span>intra-crate parallelism</span></dt>
+<dd>
+<p><span>C compilation model is not stupid </span>&mdash;<span> it is the way it is to enable separate compilation.</span>
+<span>Back in the day, compiling whole programs was simply not possible due to the limitations of the hardware.</span>
+<span>Rather, a program had to be compiled in separate parts, and then the parts linked together into the final artifact.</span>
+<span>With bigger computers today, we don</span>&rsquo;<span>t think about separate compilation as much.</span>
+<span>It is still important though </span>&mdash;<span> not only our computers are more powerful, our programs are much bigger.</span>
+<span>Moreover, computing power comes not from increasing clock speeds, but from a larger number of cores.</span></p>
+<p><span>Rust</span>&rsquo;<span>s DAG of anonymous crates with well-defined declaration-site checked interfaces is actually quite great for compiling Rust in parallel (especially if we get rid of completely accidental interactions between monomorphization and existing linkers).</span>
+<span>However, even a single crate can be quite large, and is compiled sequentially.</span>
+<span>For example, in the </span><a href="https://quick-lint-js.com/blog/cpp-vs-rust-build-times"><span>recent compile time benchmark</span></a><span>, a significant chunk of time was spent compiling just this </span><a href="https://github.com/quick-lint/cpp-vs-rust/blob/master/rust/libs/fe/tests/test_lex.rs"><span>file</span></a><span> with a bunch of functions.</span>
+<span>Intuitively, as all these functions are completely independent, compiler should be able to process them in parallel.</span>
+<span>In reality, Rust doesn</span>&rsquo;<span>t actually make that as easy as it seems, but it definitely is possible to do better than the current compiler.</span></p>
+</dd>
+<dt><span>open-world compiling; stable MIR</span></dt>
+<dd>
+<p><span>Today, Rust tooling is a black-box </span>&mdash;<span> you feed it with source text and an executable binary for the output.</span>
+<span>This solves the problem of producing executable binaries quite well!</span></p>
+<p><span>However, for more complex projects you want to have more direct relationship with the code.</span>
+<span>You want tools other than compiler to understand the meaning of the code, and to act on it.</span>
+<span>For example automated large scale refactors and code analysis, project-specific linting rules or formal proofs of correctness all could benefit from having an access to semantically rich model of the language.</span></p>
+<p><span>Providing such semantic  model, where AST is annotated with resolved names, inferred types, and bodies are converted to a simple and precise IR, is a huge ask.</span>
+<span>Not because it is technically hard to implement, but because this adds an entirely new stable API to the language.</span>
+<span>Nonetheless, such an API would unlock quite a few use cases, so the tradeoff is worth it.</span></p>
+</dd>
+<dt><span>hermetic deterministic compilation</span></dt>
+<dd>
+<p><span>It is increasingly common to want reproducible builds.</span>
+<span>With NixOS and Guix, whole Linux distros are built in a deterministic fashion.</span>
+<span>It is possible to achieve reproducibility by carefully freezing whatever mess you are currently in, the docker way.</span>
+<span>But a better approach is to start with inherently pure and hermetic components, and assemble them into a larger system.</span></p>
+<p><span>Today, Rust has some amount of determinism in its compilation, but it is achieved by plugging loopholes, rather than by not admitting impurities into the system in the first place.</span>
+<span>For example, the </span><a href="https://github.com/rust-lang/rust/blob/027c8507b4265dcf285b0b503e2a49214b929f7b/compiler/rustc_builtin_macros/src/env.rs#L81"><code>env!</code></a><span> macro literally looks up a value in compiler</span>&rsquo;<span>s environment, without any attempt at restricting or at least enumerating available inputs.</span>
+<span>Procedural macros are an unrestricted RCE.</span></p>
+<p><span>It feels like we can do better, and that we should do better, if the goal is still </span><a href="http://venge.net/graydon/talks/intro-talk-2.pdf"><span>less mess</span></a><span>.</span></p>
+</dd>
+<dt><span>lazy and error-resilient compilation</span></dt>
+<dd>
+<p><span>For the task of providing immediate feedback right in the editor when the user types the code, compilation </span>&ldquo;<span>pipeline</span>&rdquo;<span> needs to be changed significantly.</span>
+<span>It should be lazy (so that only the minimal amount of code is inspected and re-analyzed on typing) and resilient and robust to errors (IDE job mostly ends when the code is error free).</span>
+<a href="https://rust-analyzer.github.io"><span>rust-analyzer</span></a><span> shows one possible way to do that, with the only drawback of being a completely separate tool for IDE, and only IDE.</span>
+<span>There</span>&rsquo;<span>s no technical limitation why the full compiler can</span>&rsquo;<span>t be like that, just the organizational limitation of it being very hard to re-architecture existing entrenched code, perfected for its local optimum.</span></p>
+</dd>
+<dt><code>cargo install rust-compiler</code></dt>
+<dd>
+<p><span>Finally, for the benefit of compiler writers themselves, a compiler should be a simple rust crate, which builds with stable Rust and is otherwise a very boring text processing utility.</span>
+<span>Again, rust-analyzer shows that it is possible, and that the benefits for development velocity are enormous.</span>
+<span>I am glad to see </span><a href="https://jyn.dev/2023/01/12/Bootstrapping-Rust-in-2023.html"><span>a recent movement</span></a><span> to making the build process for the compiler simpler!</span></p>
+</dd>
+</dl>
+<p><span>Discussion on </span><a href="https://old.reddit.com/r/rust/comments/10ld2vn/blog_post_next_rust_compiler/"><span>/r/rust</span></a></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-01-25-next-rust-compiler.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

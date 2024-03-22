@@ -1,0 +1,193 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kafka versus Nabokov</title>
+  <meta name="description" content="Uplifting a lobste.rs comment to a stand-alone post.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/03/02/Kafka-vs-Nabokov.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Kafka versus Nabokov</span> <time datetime="2024-03-02">Mar 2, 2024</time></h1>
+<p><span>Uplifting a lobste.rs comment to a stand-alone post.</span></p>
+<p><code>objectif_lune</code><span> </span><a href="https://lobste.rs/s/9xtcun/complex_systems_bridging_between_spec"><span>asks</span></a><span>:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>I am on the cusp (hopefully) of kicking off development of a fairly large and complex system</span>
+<span>(multiple integrated services, kafkas involved, background processes, multiple client frontends,</span>
+<span>etc…). It’s predominantly going to be built in rust (but that’s only trivially relevant; i.e. not</span>
+<span>following standard OOP).</span></p>
+<p><span>Here’s where i’m at:</span></p>
+<ol>
+<li>
+<span>I have defined all the components, services, data stores to use / or develop</span>
+</li>
+<li>
+<span>I have a a fairly concrete conceptualisation of how to structure and manage data on the storage</span>
+<span>end of the system which i’m formalizing into a specification</span>
+</li>
+<li>
+<span>I have a deployment model for the various parts of the system to go into production</span>
+</li>
+</ol>
+<p><span>The problem is, I have a gap, from these specs of the individual components and services that need</span>
+<span>to be built out, to the actual implementation of those services. I’ve scaffolded the code-base</span>
+<span>around what “feels” like sensible semantics, but bridging from the scope, through the high-level</span>
+<span>code organisation through to implementation is where I start to get a bit queasy.</span></p>
+<p><span>In the past, i’ve more or less dove head-first into just starting to implement, but the problem has</span>
+<span>been that I will very easily end up going in circles, or I end up with a lot of duplicated code</span>
+<span>across areas and just generally feel like it’s not working out the way I had hoped (obviously</span>
+<span>because i’ve just gone ahead and implemented).</span></p>
+<p><span>What are some tools, processes, design concepts, thinking patterns that you can use to sort of fill</span>
+<span>in that “last mile” from high-level spec to implementing to try and ensure that things stay on track</span>
+<span>and limit abandonment or going down dead-ends?</span></p>
+<p><span>I’m interested in advice, articles, books, or anything else that makes sense in the rough context</span>
+<span>above. Not specifically around for instance design patterns themselves, i’m more than familiar with</span>
+<span>the tools in that arsenal, but how do you bridge the gap between the concept and the implementation</span>
+<span>without going too deep down the rabbit-hole of modelling out actual code and everything else in UML</span>
+<span>for instance? How do you basically minimize getting mired in massive refactors once you get to</span>
+<span>implementation phase?</span></p>
+</blockquote>
+
+</figure>
+<p><span>My answer:</span></p>
+<hr>
+<p><span>I don’t have much experience building these kind of systems (I like Kafka, but I must say I prefer</span>
+<span>Nabokov’s rendition of similar ideas in “Invitation to a Beheading” and “Pale Fire” more), but</span>
+<span>here’s a couple of things that come to mind.</span></p>
+<p><span>First, </span><a href="https://en.wikipedia.org/wiki/John_Gall_(author)#Gall's_law"><span>every complex system that works started out as a simple system that worked</span></a><span>. Write code top</span>
+<span>down: </span><a href="https://www.teamten.com/lawrence/programming/write-code-top-down.html" class="display url">https://www.teamten.com/lawrence/programming/write-code-top-down.html</a></p>
+<p><span>Even if it is a gigantic complex system with many moving parts, start with spiking and end-to-end</span>
+<span>solution which can handle one particular variation of a happy path. Build skeleton first, flesh can</span>
+<span>be added incrementally.</span></p>
+<p><span>To do this, you’ll need some way to actually run the entire system while it isn’t deployed yet,</span>
+<span>which is something you need to solve before you start writing pages of code.</span></p>
+<p><span>Similarly, include testing strategy in the specification, and start with one single simple</span>
+<span>end-to-end test. I think that TDD as a way to design a class or a function is mostly snake oil</span>
+<span>(because </span><a href="https://matklad.github.io/2021/05/31/how-to-test.html"><span>“unit” tests are mostly snake</span>
+<span>oil</span></a><span>), but the overall large scale design of</span>
+<span>the system should absolutely be driven by the way the system will be tested.</span></p>
+<p><span>It is helpful to dwell on these two laws:</span></p>
+<p><a href="https://martinfowler.com/articles/distributed-objects-microservices.html"><strong><strong><span>First Law of Distributed Object Design:</span></strong></strong></a></p>
+
+<figure class="blockquote">
+<blockquote><p><span>Don’t distribute your objects.</span></p>
+</blockquote>
+
+</figure>
+<p><a href="https://en.wikipedia.org/wiki/Conway%27s_law"><strong><strong><span>Conway’s law:</span></strong></strong></a></p>
+
+<figure class="blockquote">
+<blockquote><p><span>Organizations which design systems are constrained to produce designs which are copies of the</span>
+<span>communication structures of these organizations.</span></p>
+</blockquote>
+
+</figure>
+<p><span>The code architecture of your solution is going to be isomorphic to your org chart, not to your</span>
+<span>deployment topology. Let’s say you want to deploy three different services: </span><code>foo</code><span>, </span><code>bar</code><span>, and </span><code>baz</code><span>.</span>
+<span>Just put all three into a single binary, which can be invoked as </span><code>app foo</code><span>, </span><code>app bar</code><span>, and </span><code>app
+baz</code><span>. This mostly solves any code duplication issues — if there’s shared code, just call it!</span></p>
+<p><span>Finally, system boundaries are the focus of the design:</span>
+<a href="https://www.tedinski.com/2018/02/06/system-boundaries.html" class="display url">https://www.tedinski.com/2018/02/06/system-boundaries.html</a></p>
+<p><span>Figure out hard system boundaries between “your system” and “not your system”, and do design those</span>
+<span>carefully. Anything else that looks like a boundary isn’t. It is useful to spend some effort</span>
+<span>designing those things as well, but it’s more important to make sure that you can easily change</span>
+<span>them. Solid upgrade strategy for deployment trumps any design which seems perfect at a given moment</span>
+<span>in time.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-03-02-Kafka-vs-Nabokov.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

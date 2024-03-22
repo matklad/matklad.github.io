@@ -1,0 +1,149 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design Pattern: Kitchen Sink</title>
+  <meta name="description" content="These are the notes on a design pattern I noticed in several contexts.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2021/05/12/design-pattern-dumping-ground.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Design Pattern: Kitchen Sink</span> <time datetime="2021-05-12">May 12, 2021</time></h1>
+<p><span>These are the notes on a design pattern I noticed in several contexts.</span></p>
+<p><span>Suppose, metaphorically, you have a neatly organized bookcase which categorizes the books by their topics.</span>
+<span>And now, suppose you</span>&rsquo;<span>ve got a new book, which doesn</span>&rsquo;<span>t fit clearly into any existing category.</span>
+<span>What would you do?</span></p>
+<p><span>Here are some common solutions I</span>&rsquo;<span>ve seen:</span></p>
+<ul>
+<li>
+<span>Put the book somewhere in the bookcase.</span>
+</li>
+<li>
+<span>Start rearranging the shelves until you have a proper topic for this new book.</span>
+<span>Maybe introduce a dedicated topic just for this single book.</span>
+</li>
+<li>
+<span>Don</span>&rsquo;<span>t store the book in the bookcase, keep it on the bedside table.</span>
+</li>
+</ul>
+<p><span>Here</span>&rsquo;<span>s the </span>&ldquo;<span>kitchen sink pattern</span>&rdquo;<span> solution for this problem: have the </span>&ldquo;<span>Uncategorized</span>&rdquo;<span> shelf for books which don</span>&rsquo;<span>t clearly fit into the existing hierarchy.</span></p>
+<p><span>The idea here is that the overall organization becomes better, if you explicitly designate some place as </span>&ldquo;<span>stuff that doesn</span>&rsquo;<span>t fit goes here by default</span>&rdquo;<span>.</span>
+<span>Let</span>&rsquo;<span>s see the examples.</span></p>
+<p><em><span>First</span></em><span>, the Django web framework has a </span><code>shortcuts</code><span> module with contains conveniences functions, not fitting model/view separation.</span>
+<span>The </span><code>get_object_or_404</code><span> function lookups an object in the database and returns HTTP404 if it is not found.</span>
+<span>Models (SQL) and views (HTTP) don</span>&rsquo;<span>t know about each other, so the function doesn</span>&rsquo;<span>t belong to either of these modules.</span>
+<span>Placing it in </span><code>shortcuts</code><span> allows this separation to be more crisp.</span></p>
+<p><em><span>Second</span></em><span>, I have two tricks to keep my home folder organized.</span>
+<span>I have a script that clears </span><code>~/downloads</code><span> on every reboot, and I have a </span><code>~/tmp</code><span> as my dumping ground.</span>
+<span>Before </span><code>~/tmp</code><span>, various semi-transient things polluted my otherwise perfectly organized workspace.</span></p>
+<p><em><span>Third</span></em><span>, I asked my colleague recently about some testing infrastructure.</span>
+<span>They replied that they have an extensive document for it in their fork, because it</span>&rsquo;<span>s unclear what</span>&rsquo;<span>s the proper place for it in the main repo.</span>
+<span>In this case the absence of a </span>&ldquo;<span>dumping ground</span>&rdquo;<span> prevented useful work for no good reason.</span></p>
+<p><em><span>Fourth</span></em><span>, in </span><code>rust-analyzer</code><span> we have a </span><code>ast::make</code><span> module which is intended to contain the minimal orthogonal set of constructors for AST nodes.</span>
+<span>Historically, people kept adding non-minimal, non-orthogonal constructors there as well.</span>
+<span>Useful work was done, but it muddied the design.</span>
+<span>This was fixed by adding a dedicated </span><code>ast::make::ext</code><span> submodule for convenient shortcuts.</span></p>
+<p><em><span>Fifth</span></em><span>, for big projects I like having </span><code>stdext</code><span> modules, which fill-in missing batteries for the standard library.</span>
+<span>Without it, various modules tend to accumulate unrelated, and often slightly duplicated, functionality.</span></p>
+<p><em><span>Sixth</span></em><span>, to avoid overthinking and setup costs to start a new hobby project (of which I have a tonne), I have a single monorepo for all incomplete things.</span>
+<span>Adding a folder there is much easier than creating a GitHub repo.</span></p>
+<p><span>To sum up, many classifications work best if there is an explicit </span>&ldquo;<span>can</span>&rsquo;<span>t classify this</span>&rdquo;<span> category.</span>
+<span>If there</span>&rsquo;<span>s no obvious place to put things which don</span>&rsquo;<span>t fit, a solid design might erode with time.</span>
+<span>Note that for this pattern to be useful, an existence of a good solid design is prerequisite, lest all the code ends up in an </span><code>utils</code><span> module.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2021-05-12-design-pattern-dumping-ground.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

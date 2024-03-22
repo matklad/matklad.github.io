@@ -1,0 +1,432 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Caches In Rust</title>
+  <meta name="description" content="In this post I'll describe how to implement caches in Rust.
+It is inspired by two recent refactors I landed at nearcore (nearcore#6549, nearcore#6811).
+Based on that experience, it seems that implementing caches wrong is rather easy, and making a mistake there risks spilling over, and spoiling the overall architecture of the application a bit.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2022/06/11/caches-in-rust.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Caches In Rust</span> <time datetime="2022-06-11">Jun 11, 2022</time></h1>
+<p><span>In this post I</span>&rsquo;<span>ll describe how to implement caches in Rust.</span>
+<span>It is inspired by two recent refactors I landed at nearcore (</span><a href="https://github.com/near/nearcore/pull/6549"><span>nearcore#6549</span></a><span>, </span><a href="https://github.com/near/nearcore/pull/6811"><span>nearcore#6811</span></a><span>).</span>
+<span>Based on that experience, it seems that implementing caches wrong is rather easy, and making a mistake there risks </span>&ldquo;<span>spilling over</span>&rdquo;<span>, and spoiling the overall architecture of the application a bit.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with an imaginary setup with an application with some configuration and a database:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  config: Config,</span>
+<span class="line">  db: Db,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The database is an untyped key-value store:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Db</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">load</span>(&amp;<span class="hl-keyword">self</span>, key: &amp;[<span class="hl-type">u8</span>]) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Option</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt;&gt; {</span>
+<span class="line">    ...</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And the </span><code>App</code><span> encapsulates database and provides typed access to domain-specific </span><code>Widget</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(serde::Serialize, serde::Deserialize)]</span></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Widget</span> {</span>
+<span class="line">  title: <span class="hl-type">String</span>,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">get_widget</span>(</span>
+<span class="line">    &amp;<span class="hl-keyword">self</span>,</span>
+<span class="line">    id: <span class="hl-type">u32</span>,</span>
+<span class="line">  ) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Option</span>&lt;Widget&gt;&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">key</span> = id.<span class="hl-title function_ invoke__">to_be_bytes</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">value</span> = <span class="hl-keyword">match</span> <span class="hl-keyword">self</span>.db.<span class="hl-title function_ invoke__">load</span>(&amp;key)? {</span>
+<span class="line">      <span class="hl-literal">None</span> =&gt; <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-literal">None</span>),</span>
+<span class="line">      <span class="hl-title function_ invoke__">Some</span>(it) =&gt; it,</span>
+<span class="line">    };</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">widget</span>: Widget =</span>
+<span class="line">      bincode::<span class="hl-title function_ invoke__">deserialize</span>(&amp;value).<span class="hl-title function_ invoke__">map_err</span>(|it| {</span>
+<span class="line">        io::Error::<span class="hl-title function_ invoke__">new</span>(io::ErrorKind::InvalidData, it)</span>
+<span class="line">      })?;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-title function_ invoke__">Some</span>(widget))</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Now, for the sake of argument let</span>&rsquo;<span>s assume that database access and subsequent deserialization are costly, and that we want to add a cache of Widgets in front of the database.</span>
+<span>Data-oriented thinking would compel us to get rid of deserialization step instead, but we will not pursue that idea this time.</span></p>
+<p><span>We</span>&rsquo;<span>ll use a simple </span><code>HashMap</code><span> for the cache:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  config: Config,</span>
+<span class="line">  db: Db,</span>
+<span class="line">  cache: HashMap&lt;<span class="hl-type">u32</span>, Widget&gt;,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And we need to modify </span><code>get_widget</code><span> method to return the value from the cache, if there is one:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">get_widget</span>(</span>
+<span class="line hl-line">    &amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>,</span>
+<span class="line">    id: <span class="hl-type">u32</span>,</span>
+<span class="line hl-line">  ) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Option</span>&lt;&amp;Widget&gt;&gt; {</span>
+<span class="line"></span>
+<span class="line hl-line">    <span class="hl-keyword">if</span> <span class="hl-keyword">self</span>.cache.<span class="hl-title function_ invoke__">contains_key</span>(&amp;id) {</span>
+<span class="line hl-line">      <span class="hl-keyword">let</span> <span class="hl-variable">widget</span> = <span class="hl-keyword">self</span>.cache.<span class="hl-title function_ invoke__">get</span>(&amp;id).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line hl-line">      <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-title function_ invoke__">Some</span>(widget));</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">key</span> = id.<span class="hl-title function_ invoke__">to_be_bytes</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">value</span> = <span class="hl-keyword">match</span> <span class="hl-keyword">self</span>.db.<span class="hl-title function_ invoke__">load</span>(&amp;key)? {</span>
+<span class="line">      <span class="hl-literal">None</span> =&gt; <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-literal">None</span>),</span>
+<span class="line">      <span class="hl-title function_ invoke__">Some</span>(it) =&gt; it,</span>
+<span class="line">    };</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">widget</span>: Widget =</span>
+<span class="line">      bincode::<span class="hl-title function_ invoke__">deserialize</span>(&amp;value).<span class="hl-title function_ invoke__">map_err</span>(|it| {</span>
+<span class="line">        io::Error::<span class="hl-title function_ invoke__">new</span>(io::ErrorKind::InvalidData, it)</span>
+<span class="line">      })?;</span>
+<span class="line"></span>
+<span class="line hl-line">    <span class="hl-keyword">self</span>.cache.<span class="hl-title function_ invoke__">insert</span>(id, widget);</span>
+<span class="line hl-line">    <span class="hl-keyword">let</span> <span class="hl-variable">widget</span> = <span class="hl-keyword">self</span>.cache.<span class="hl-title function_ invoke__">get</span>(&amp;id).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-title function_ invoke__">Some</span>(widget))</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The biggest change is the </span><code>&amp;mut self</code><span>.</span>
+<span>Even when reading the widget, we need to modify the </span><code>cache</code><span>, and the easiest way to get that ability is to require an exclusive reference.</span></p>
+<p><span>I want to argue that this path of least resistance doesn</span>&rsquo;<span>t lead to a good place.</span>
+<span>There are </span><em><span>many</span></em><span> problems with methods of the following-shape:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">get</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> &amp;Widget</span></code></pre>
+
+</figure>
+<p><em><span>First</span></em><span>, such methods conflict with each other.</span>
+<span>For example, the following code won</span>&rsquo;<span>t work, because we</span>&rsquo;<span>ll try to borrow the app exclusively twice.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">app</span>: &amp;<span class="hl-keyword">mut</span> App = ...;</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">w1</span> = app.<span class="hl-title function_ invoke__">get_widget</span>(<span class="hl-number">1</span>)?;</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">w2</span> = app.<span class="hl-title function_ invoke__">get_widget</span>(<span class="hl-number">2</span>)?;</span></code></pre>
+
+</figure>
+<p><em><span>Second</span></em><span>, the </span><code>&amp;mut</code><span> methods conflict even with </span><code>&amp;</code><span> methods.</span>
+<span>Naively, it would seem that, as </span><code>get_widget</code><span> </span><em><span>returns</span></em><span> a shared reference, we should be able to call </span><code>&amp;</code><span> methods.</span>
+<span>So, one can expect something like this to work:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">w</span>: &amp;Widget = app.<span class="hl-title function_ invoke__">get_widget</span>(<span class="hl-number">1</span>)?.<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">c</span>: &amp;Color = &amp;app.config.main_color;</span></code></pre>
+
+</figure>
+<p><span>Alas, it doesn</span>&rsquo;<span>t.</span>
+<span>Rust borrow checker doesn</span>&rsquo;<span>t distinguish between </span><code>mut</code><span> and non-</span><code>mut</code><span> lifetimes (for a good reason: doing that would be unsound).</span>
+<span>So, although </span><code>w</code><span> is just </span><code>&amp;Widget</code><span>, the lifetime there is the same as on the </span><code>&amp;mut self</code><span>, so the app remains mutably borrowed while the widget exists.</span></p>
+<p><em><span>Third</span></em><span>, perhaps the most important point, the </span><code>&amp;mut self</code><span> becomes viral </span>&mdash;<span> most of functions in the program begin requiring </span><code>&amp;mut</code><span>, and you lose type-system distinction between read-only and read-write operations.</span>
+<span>There</span>&rsquo;<span>s no distinction between </span>&ldquo;<span>this function can only modify the cache</span>&rdquo;<span> and </span>&ldquo;<span>this function can modify literally everything</span>&rdquo;<span>.</span></p>
+<p><em><span>Finally</span></em><span>, even implementing </span><code>get_widget</code><span> is not pleasant.</span>
+<span>Seasoned rustaceans among you might twitch at the needlessly-repeated hashmap lookups.</span>
+<span>But trying to get rid of those with the help of the entry-API runs into current borrow checker limitations.</span></p>
+<p><span>Let</span>&rsquo;<span>s look at how we can better tackle this!</span></p>
+<p><span>The general idea for this class of problems is to think what the ownership and borrowing situation </span><em><span>should</span></em><span> be and try to achieve that, as opposed to merely following suggestions by the compiler.</span>
+<span>That is, </span><em><span>most</span></em><span> of the time just using </span><code>&amp;mut</code><span> and </span><code>&amp;</code><span> as compiler guides you is a path to success, as, it turns out, majority of the code naturally follows simple aliasing rules.</span>
+<span>But there are exceptions, it</span>&rsquo;<span>s important to recognize them as such and make use of interior mutability to implement the aliasing structure which makes sense.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with a simplified case.</span>
+<span>Suppose that there</span>&rsquo;<span>s only one </span><code>Widget</code><span> to deal with.</span>
+<span>In this case, we</span>&rsquo;<span>d want something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  ...</span>
+<span class="line">  cache: <span class="hl-type">Option</span>&lt;Widget&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">get_widget</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> &amp;Widget {</span>
+<span class="line">    <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(widget) = &amp;<span class="hl-keyword">self</span>.cache {</span>
+<span class="line">      <span class="hl-keyword">return</span> widget;</span>
+<span class="line">    }</span>
+<span class="line hl-line">    <span class="hl-keyword">self</span>.cache = <span class="hl-title function_ invoke__">Some</span>(<span class="hl-title function_ invoke__">create_widget</span>());</span>
+<span class="line">    <span class="hl-keyword">self</span>.cache.<span class="hl-title function_ invoke__">as_ref</span>().<span class="hl-title function_ invoke__">unwrap</span>()</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This doesn</span>&rsquo;<span>t work as is </span>&mdash;<span> modifying the </span><code>cache</code><span> needs </span><code>&amp;mut</code><span> which we</span>&rsquo;<span>d very much prefer to avoid.</span>
+<span>However, thinking about this pattern, it feels like it </span><em><span>should</span></em><span> be valid </span>&mdash;<span> we enforce at runtime that the contents of the </span><code>cache</code><span> is never overwritten.</span>
+<span>That is, we actually </span><em><span>do</span></em><span> have exclusive access to cache on the highlighted line at runtime, we just can</span>&rsquo;<span>t explain that to the type system.</span>
+<span>But we can reach out for </span><code>unsafe</code><span> for that.</span>
+<span>What</span>&rsquo;<span>s more, Rust</span>&rsquo;<span>s type system is powerful enough to encapsulate that usage of unsafe into a safe and generally re-usable API.</span>
+<span>So let</span>&rsquo;<span>s pull </span><a href="https://docs.rs/once_cell"><code>once_cell</code></a><span> crate for this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  ...</span>
+<span class="line">  cache: once_cell::sync::OnceCell&lt;Widget&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">get_widget</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> &amp;Widget {</span>
+<span class="line">    <span class="hl-keyword">self</span>.cache.<span class="hl-title function_ invoke__">get_or_init</span>(create_widget)</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Coming back to the original hash-map example, we can apply the same logic here:</span>
+<span>as long as we never overwrite, delete or move values, we can safely return references to them.</span>
+<span>This is handled by the </span><a href="https://docs.rs/elsa"><code>elsa</code></a><span> crate:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  config: Config,</span>
+<span class="line">  db: Db,</span>
+<span class="line">  cache: elsa::map::FrozenMap&lt;<span class="hl-type">u32</span>, <span class="hl-type">Box</span>&lt;Widget&gt;&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">get_widget</span>(</span>
+<span class="line">    &amp;<span class="hl-keyword">self</span>,</span>
+<span class="line">    id: <span class="hl-type">u32</span>,</span>
+<span class="line">  ) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Option</span>&lt;&amp;Widget&gt;&gt; {</span>
+<span class="line">    <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(widget) = <span class="hl-keyword">self</span>.cache.<span class="hl-title function_ invoke__">get</span>(&amp;id) {</span>
+<span class="line">      <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-title function_ invoke__">Some</span>(widget));</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">key</span> = id.<span class="hl-title function_ invoke__">to_be_bytes</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">value</span> = <span class="hl-keyword">match</span> <span class="hl-keyword">self</span>.db.<span class="hl-title function_ invoke__">load</span>(&amp;key)? {</span>
+<span class="line">      <span class="hl-literal">None</span> =&gt; <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-literal">None</span>),</span>
+<span class="line">      <span class="hl-title function_ invoke__">Some</span>(it) =&gt; it,</span>
+<span class="line">    };</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">widget</span>: Widget =</span>
+<span class="line">      bincode::<span class="hl-title function_ invoke__">deserialize</span>(&amp;value).<span class="hl-title function_ invoke__">map_err</span>(|it| {</span>
+<span class="line">        io::Error::<span class="hl-title function_ invoke__">new</span>(io::ErrorKind::InvalidData, it)</span>
+<span class="line">      })?;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">widget</span> = <span class="hl-keyword">self</span>.cache.<span class="hl-title function_ invoke__">insert</span>(id, <span class="hl-type">Box</span>::<span class="hl-title function_ invoke__">new</span>(widget));</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-title function_ invoke__">Some</span>(widget))</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The third case is that of a bounded cache.</span>
+<span>If you need to evict values, than the above reasoning does not apply.</span>
+<span>If the user of a cache gets a </span><code>&amp;T</code><span>, and than the corresponding entry is evicted, the reference would dangle.</span>
+<span>In this situations, we want the clients of the cache to co-own the value.</span>
+<span>This is easily handled by an </span><code>Rc</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  config: Config,</span>
+<span class="line">  db: Db,</span>
+<span class="line">  cache: RefCell&lt;lru::LruCache&lt;<span class="hl-type">u32</span>, Rc&lt;Widget&gt;&gt;&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">App</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">get_widget</span>(</span>
+<span class="line">    &amp;<span class="hl-keyword">self</span>,</span>
+<span class="line">    id: <span class="hl-type">u32</span>,</span>
+<span class="line">  ) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;<span class="hl-type">Option</span>&lt;Rc&lt;Widget&gt;&gt;&gt; {</span>
+<span class="line">    {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">cache</span> = <span class="hl-keyword">self</span>.cache.<span class="hl-title function_ invoke__">borrow_mut</span>();</span>
+<span class="line">      <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(widget) = cache.<span class="hl-title function_ invoke__">get</span>(&amp;id) {</span>
+<span class="line">        <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-title function_ invoke__">Some</span>(Rc::<span class="hl-title function_ invoke__">clone</span>(widget)));</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">key</span> = id.<span class="hl-title function_ invoke__">to_be_bytes</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">value</span> = <span class="hl-keyword">match</span> <span class="hl-keyword">self</span>.db.<span class="hl-title function_ invoke__">load</span>(&amp;key)? {</span>
+<span class="line">      <span class="hl-literal">None</span> =&gt; <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-literal">None</span>),</span>
+<span class="line">      <span class="hl-title function_ invoke__">Some</span>(it) =&gt; it,</span>
+<span class="line">    };</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">widget</span>: Widget =</span>
+<span class="line">      bincode::<span class="hl-title function_ invoke__">deserialize</span>(&amp;value).<span class="hl-title function_ invoke__">map_err</span>(|it| {</span>
+<span class="line">        io::Error::<span class="hl-title function_ invoke__">new</span>(io::ErrorKind::InvalidData, it)</span>
+<span class="line">      })?;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">widget</span> = Rc::<span class="hl-title function_ invoke__">new</span>(widget);</span>
+<span class="line">    {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">cache</span> = <span class="hl-keyword">self</span>.cache.<span class="hl-title function_ invoke__">borrow_mut</span>();</span>
+<span class="line">      cache.<span class="hl-title function_ invoke__">put</span>(id, Rc::<span class="hl-title function_ invoke__">clone</span>(&amp;widget));</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-title function_ invoke__">Some</span>(widget))</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>To sum up: when implementing a cache, the path of the least resistance is to come up with a signature like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">get</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> &amp;T</span></code></pre>
+
+</figure>
+<p><span>This often leads to problems down the line.</span>
+<span>It</span>&rsquo;<span>s usually better to employ some interior mutability and get either of these instead:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">get</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> &amp;T</span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">get</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> T</span></code></pre>
+
+</figure>
+<p><span>This is an instance of the more general effect: despite the </span>&ldquo;<span>mutability</span>&rdquo;<span> terminology, Rust references track not mutability, but aliasing.</span>
+<span>Mutability and exclusive access are correlated, but not perfectly.</span>
+<span>It</span>&rsquo;<span>s important to identify instances where you need to employ interior mutability, often they are architecturally interesting.</span></p>
+<p><span>To learn more about relationships between aliasing and mutability, I recommend the following two posts:</span></p>
+<dl>
+<dt><span>Rust: A unique perspective</span></dt>
+<dd>
+<p><a href="https://limpet.net/mbrubeck/2019/02/07/rust-a-unique-perspective.html" class="url">https://limpet.net/mbrubeck/2019/02/07/rust-a-unique-perspective.html</a></p>
+</dd>
+<dt><span>Accurate mental model for Rust’s reference types</span></dt>
+<dd>
+<p><a href="https://docs.rs/dtolnay/latest/dtolnay/macro._02__reference_types.html" class="url">https://docs.rs/dtolnay/latest/dtolnay/macro._02__reference_types.html</a></p>
+</dd>
+</dl>
+<p><span>Finally, the </span>&ldquo;<span>borrow checker</span>&rdquo;<span> limitation is explained (with much skill and humor, I should add), in this document:</span></p>
+<dl>
+<dt><span>Polonius the Crab</span></dt>
+<dd>
+<p><a href="https://docs.rs/polonius-the-crab/0.2.1/polonius_the_crab/" class="url">https://docs.rs/polonius-the-crab/0.2.1/polonius_the_crab/</a></p>
+</dd>
+</dl>
+<p><span>That</span>&rsquo;<span>s all! Discussion on </span><a href="https://old.reddit.com/r/rust/comments/v9xsnb/blog_post_caches_in_rust/"><span>/r/rust</span></a><span>.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2022-06-11-caches-in-rust.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,327 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Window: Live, Constant Time Grep</title>
+  <meta name="description" content="In this post, I describe the design of window --- a small
+grep-like utility I implemented in 500 lines of Rust. The utility itself is likely not that
+interesting --- I bet some greybeared can implement an equivalent in 5 lines of bash. But the
+design principles behind it might be interesting --- this small utility manages to combine core
+ideas of rust-analyzer and TigerBeetle!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/02/10/window-live-constant-time-grep.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Window: Live, Constant Time Grep</span> <time datetime="2024-02-10">Feb 10, 2024</time></h1>
+<p><span>In this post, I describe the design of </span><a href="https://github.com/matklad/window/"><span>window</span></a><span> </span>&mdash;<span> a small</span>
+<span>grep-like utility I implemented in 500 lines of Rust. The utility itself is likely not that</span>
+<span>interesting </span>&mdash;<span> I bet some greybeared can implement an equivalent in 5 lines of bash. But the</span>
+<span>design principles behind it might be interesting </span>&mdash;<span> this small utility manages to combine core</span>
+<span>ideas of rust-analyzer and TigerBeetle!</span></p>
+<section id="Problem-Statement">
+
+    <h2>
+    <a href="#Problem-Statement"><span>Problem Statement</span> </a>
+    </h2>
+<p><span>TigerBeetle is tested primarily through a deterministic simulator: a cluster of replicas runs in a</span>
+<span>single process (in a single thread even), replicas are connected to a virtual network and a virtual</span>
+<span>hard drive. Both the net and the disk are extra nasty, and regularly drop, reorder, and corrupt IO</span>
+<span>requests. The cluster has to correctly process randomly generated load in spite of this radioactive</span>
+<span>environment. You can play with visualization of the simulator here:</span>
+<a href="https://sim.tigerbeetle.com" class="display url">https://sim.tigerbeetle.com</a></p>
+<p><span>Of course, sometimes we have bugs, and need to debug crashes found by the simulator. Because</span>
+<span>everything is perfectly deterministic, a crash is a pair of commit hash and a seed for a random</span>
+<span>number generator. We don</span>&rsquo;<span>t yet have any minimization infrastructure, so some crashes tend to be</span>
+<span>rather large: a debug log from a crash can easily reach 50 gigabytes!</span></p>
+<p><span>So that</span>&rsquo;<span>s my problem: given multi-gigabyte log of a crash, find a dozen or so of log-lines which</span>
+<span>explain the crash.</span></p>
+<p><span>I think you are supposed to use </span><code>coreutils</code><span> to solve this problem, but I am not good enough with</span>
+<span>grep to make that efficient: my experience that grepping anything in this large file takes seconds,</span>
+<span>and still produces gigabytes of output which is hard to make heads or tails of.</span></p>
+<p><span>I had relatively more success with </span><a href="https://lnav.org"><span>lnav.org</span></a><span>, but:</span></p>
+<ul>
+<li>
+<span>it is still slower than I would like,</span>
+</li>
+<li>
+<span>it comes with its own unique TUI interface, shortcuts, and workflow, which is at odds with my</span>
+<span>standard editing environment.</span>
+</li>
+</ul>
+</section>
+<section id="Window">
+
+    <h2>
+    <a href="#Window"><span>Window</span> </a>
+    </h2>
+<p><span>So, I made </span><code>window</code><span>. You run it as</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> window huge-file.log &amp;</span></code></pre>
+
+</figure>
+<p><span>It then creates two files:</span></p>
+<ul>
+<li>
+<code>window.toml</code><span> </span>&mdash;<span> the file with the input query,</span>
+</li>
+<li>
+<code>huge-file.log.window</code><span> </span>&mdash;<span> the result of the query.</span>
+</li>
+</ul>
+<p><span>You open both files side-by-side in your editor of choice. Edits to the query file are immediately</span>
+<span>reflected in the results file (assuming the editor has auto-save and automatically reloads files</span>
+<span>changed on disk):</span></p>
+<p><span>Here</span>&rsquo;<span>s a demo in Emacs (you might want to full-screen that video):</span></p>
+<script async id="asciicast-637434" src="https://asciinema.org/a/637434.js"></script>
+<p><span>In the demo, I have to manually save the </span><code>window.toml</code><span> file with </span><code>C-x C-s</code><span>, but in my</span>
+<span>actual usage in VS Code the file is saved automatically after 100ms.</span></p>
+<p><span>As you can see, </span><code>window</code><span> is pretty much instant. How is this possible?</span></p>
+</section>
+<section id="When-Best-Ideas-of-rust-analyzer-and-TigerBeetle-are-Combined-in-a-Tool-of-Questionable-Usefulness">
+
+    <h2>
+    <a href="#When-Best-Ideas-of-rust-analyzer-and-TigerBeetle-are-Combined-in-a-Tool-of-Questionable-Usefulness"><span>When Best Ideas of rust-analyzer and TigerBeetle are Combined in a Tool of Questionable</span>
+<span>Usefulness</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s take a closer look at that query string:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-attr">reverse</span> = <span class="hl-literal">false</span></span>
+<span class="line"><span class="hl-attr">position</span> = <span class="hl-string">&quot;0%&quot;</span></span>
+<span class="line"><span class="hl-attr">anchor</span> = <span class="hl-string">&quot;&quot;</span></span>
+<span class="line"><span class="hl-attr">source_bytes_max</span> = <span class="hl-number">104857600</span></span>
+<span class="line"><span class="hl-attr">target_bytes_max</span> = <span class="hl-number">102400</span></span>
+<span class="line"><span class="hl-attr">target_lines_max</span> = <span class="hl-number">50</span></span>
+<span class="line"><span class="hl-attr">filter_in</span> = [</span>
+<span class="line">      [<span class="hl-string">&quot;(replica): 0&quot;</span>, <span class="hl-string">&quot;view=74&quot;</span>],</span>
+<span class="line">      [<span class="hl-string">&quot;(replica): 1&quot;</span>, <span class="hl-string">&quot;view=74&quot;</span>]</span>
+<span class="line">]</span>
+<span class="line"><span class="hl-attr">filter_out</span> = [</span>
+<span class="line">       <span class="hl-string">&quot;ping&quot;</span>, <span class="hl-string">&quot;pong&quot;</span></span>
+<span class="line">]</span></code></pre>
+
+</figure>
+<p><span>The secret sauce are </span><code>source_bytes_max</code><span> and </span><code>target_bytes_max</code><span> parameters.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with </span><code>target_bytes_max</code><span>. This is a lesson from </span><code>rust-analyzer</code><span>. For dev tools, the user</span>
+<span>of software is a human. Humans are slow, and can</span>&rsquo;<span>t process a lot of information. That means it is</span>
+<span>generally useless to produce more than a hundred lines of output </span>&mdash;<span> a human won</span>&rsquo;<span>t be able to make</span>
+<span>use of a larger result set </span>&mdash;<span> they</span>&rsquo;<span>d rather refine the query than manually sift through pages of</span>
+<span>results.</span></p>
+<p><span>So, when designing software to execute a user-supplied query, the inner loop should have some idea</span>
+<span>about the amount of results produced so far, and a short-circuiting logic. It is more valuable to</span>
+<span>produce some result quickly and to inform the user that the query is not specific, than to spend a</span>
+<span>second computing the full result set.</span></p>
+<p><span>A similar assumption underpins the architecture of a lot of language servers. No matter the size of</span>
+<span>the codebase, the amount of information displayed on the screen in user</span>&rsquo;<span>s IDE at a given point in</span>
+<span>time is O(1). A typical successful language server tries hard to do the absolute minimal amount of</span>
+<span>work to compute the relevant information, and nothing more.</span></p>
+<p><span>So, the </span><code>window</code><span>, by default, limits the output size to the minimum of 100 kilobytes / 50 lines, and</span>
+<span>never tries to compute more than that. If the first 50 lines of the output don</span>&rsquo;<span>t contain the result,</span>
+<span>the user can make the query more specific by adding more AND terms to </span><code>filter_in</code><span> causes, or adding</span>
+<span>OR terms to </span><code>filter_out</code><span>.</span></p>
+<p><span>TigerBeetle gives </span><code>window</code><span> the second magic parameter </span>&mdash;<span> </span><code>source_bytes_max</code><span>. The big insight of</span>
+<span>TigerBeetle is that all software always has limits. Sometimes the limit is a  hard wall: if a server</span>
+<span>runs out of file descriptors, it just crashes. The limit can also be a soft, sloughy bog as well: if</span>
+<span>the server runs out of memory, it might start paging memory in and out, slowing to a crawl. Even if</span>
+<span>some requests are, functionally speaking, fulfilled, the results are useless, as they arrive too</span>
+<span>late. Or, in other words, every request has a (potentially quite large) latency window.</span></p>
+<p><span>It might be a good idea to make the limits explicit, and design software around them. That gives</span>
+<span>predictable performance, and allows the user to manually chunk larger requests in manageable pieces.</span></p>
+<p><span>That is exactly what </span><code>window</code><span> does. Grepping 100 megabytes is pretty fast. Grepping more might be</span>
+<span>slow. So </span><code>window</code><span> just doesn</span>&rsquo;<span>t do it. Here</span>&rsquo;<span>s a rough rundown of the algorithm:</span></p>
+<ol>
+<li>
+<code>mmap</code><span> the entire input file to a </span><code>&amp;[u8]</code><span>.</span>
+</li>
+<li>
+<span>Wait until the control file (</span><code>window.toml</code><span>) changes and contains a valid query.</span>
+</li>
+<li>
+<span>Convert the </span><code>position</code><span> field (which might be absolute or a percentage) to an absolute offset.</span>
+</li>
+<li>
+<span>Select slice of </span><code>source_bytes_max</code><span> starting at that offset.</span>
+</li>
+<li>
+<span>Adjust boundaries of the slice to be on </span><code>\n</code><span>.</span>
+</li>
+<li>
+<span>Iterate lines.</span>
+</li>
+<li>
+<span>If a line matches any of </span><code>filter_out</code><span> conditions, skip over it.</span>
+</li>
+<li>
+<span>If a line matches any of </span><code>filter_in</code><span> conditions, add it to the result.</span>
+</li>
+<li>
+<span>Break when reaching the end of </span><code>source_bytes_max</code><span> window, or when the size of output exceeds</span>
+<code>target_bytes_max</code><span>.</span>
+</li>
+</ol>
+<p><span>The deal is:</span></p>
+<ul>
+<li>
+<span>It</span>&rsquo;<span>s on the user to position a limited window over the interesting part of the input.</span>
+</li>
+<li>
+<span>In exchange, the </span><code>window</code><span> tool guarantees constant-time performance.</span>
+</li>
+</ul>
+</section>
+<section id="Limits-of-Applicability">
+
+    <h2>
+    <a href="#Limits-of-Applicability"><span>Limits of Applicability</span> </a>
+    </h2>
+<p><span>Important pre-requisites to make the </span>&ldquo;<span>limit the size of the output</span>&rdquo;<span> work are:</span></p>
+<ul>
+<li>
+<span>The user can refine the query.</span>
+</li>
+<li>
+<span>The results are computed instantly.</span>
+</li>
+</ul>
+<p><span>If these assumptions are violated, it might be best to return the full list of results.</span></p>
+<p><span>Here</span>&rsquo;<span>s one counterexample! I love reading blogs. When I find a great post, I often try to read all</span>
+<span>other posts by the same author </span>&mdash;<span> older posts which are still relevant usually are much more</span>
+<span>valuable then the news of the day. I love when blogs have a simple chronological list of all</span>
+<span>articles, a-la: </span><a href="https://matklad.github.io" class="display url">https://matklad.github.io</a></p>
+<p><span>Two blogging platforms mess up this feature:</span></p>
+<p><span>WordPress blogs love to have </span>&ldquo;<span>archives</span>&rdquo;<span> organized by month, where a month</span>&rsquo;<span>s page typically has 1 to</span>
+<span>3 entries. What</span>&rsquo;<span>s more, WordPress loves to display a couple of pages of content for each entry. This</span>
+<span>is just comically unusable </span>&mdash;<span> the amount of </span><em><span>entries</span></em><span> on a page is too few to effectively search</span>
+<span>them, but the actual amount of content on a page is overwhelming.</span></p>
+<p><span>Substack</span>&rsquo;<span>s archive is an infinite scroll that fetches 12 entries at a time. 12 entries is a joke!</span>
+<span>It</span>&rsquo;<span>s only 1kb compressed, and is clearly bellow human processing limit. There </span><em><span>might</span></em><span> be some</span>
+<span>argument for client-side pagination to postpone loading of posts</span>&rsquo;<span> images, but feeding the posts</span>
+<span>themselves over the network one tiny droplet at a time seems excessive.</span></p>
+<hr>
+<p><span>To recap:</span></p>
+<ul>
+<li>
+<p><span>Limiting </span><em><span>output</span></em><span> size might be a good idea, because, with a human on the other side of display,</span>
+<span>any additional line of output has a diminishing return (and might even be a net-negative). On the</span>
+<span>other hand, constant-time output allows reducing latency, and can even push a batch workflow into</span>
+<span>an interactive one</span></p>
+</li>
+<li>
+<p><span>Limiting </span><em><span>input</span></em><span> size might be a good idea, because the input is </span><em><span>always</span></em><span> limited anyway. The</span>
+<span>question is whether you know the limit, and whether the clients know how to cut their queries into</span>
+<span>reasonably-sized batches.</span></p>
+</li>
+<li>
+<p><span>If you have exactly the same 20 GB log file problems as me, you might install </span><code>window</code><span> with</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo install --git https://github.com/matklad/window</span></code></pre>
+
+</figure>
+</li>
+</ul>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-02-10-window-live-constant-time-grep.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,172 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Why Linux Troubleshooting Advice Sucks</title>
+  <meta name="description" content="A short post on how to create better troubleshooting documentation, prompted by me spending last evening trying to get builtin display of my laptop working with Linux.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2022/10/19/why-linux-troubleshooting-advice-sucks.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Why Linux Troubleshooting Advice Sucks</span> <time datetime="2022-10-19">Oct 19, 2022</time></h1>
+<p><span>A short post on how to create better troubleshooting documentation, prompted by me spending last evening trying to get builtin display of my laptop working with Linux.</span></p>
+<p><span>What finally fixed the blank screen for me was this advice from NixOS wiki:</span></p>
+
+<aside class="block">
+<div class="title">12th Gen (Alder Lake)</div>
+<p><span>X Server may fail to start with the newer 12th generation, Alder Lake, iRISxe integrated graphics chips.</span>
+<span>If this is the case, you can give the kernel a hint as to what driver to use.</span>
+<span>First confirm the graphic chip</span>&rsquo;<span>s device ID by running in a terminal:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> nix-shell -p pciutils --run "lspci | grep VGA"</span>
+<span class="line"><span class="hl-output">00:02.0 VGA compatible controller: Intel Corporation Device 46a6 (rev 0c)</span></span></code></pre>
+
+</figure>
+<p><span>In this example, </span>&ldquo;<span>46a6</span>&rdquo;<span> is the device ID. You can then add this to your configuration and reboot:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">boot.kernelParams = [ "i915.force_probe=46a6" ];</span></code></pre>
+
+</figure>
+
+</aside>
+  <p><span>While this particular approach worked, in contrast to a dozen different ones I tried before, I think it shares a very common flaw, which is endemic to troubleshooting documentation.</span>
+<span>Can you spot it?</span></p>
+<p><span>The advice tells you the remedy (</span>&ldquo;<span>add this kernel parameter</span>&rdquo;<span>), but it doesn</span>&rsquo;<span>t explain how to verify that this indeed is the problem.</span>
+<span>That is, if the potential problem is a not loaded kernel driver, it would really help me to know how to check which kernel driver is in use, so that I can do both:</span></p>
+<ul>
+<li>
+<em><span>Before</span></em><span> adding the parameter, check that </span><code>46a6</code><span> doesn</span>&rsquo;<span>t have a driver</span>
+</li>
+<li>
+<em><span>After</span></em><span> the fix, verify that </span><code>i915</code><span> is indeed used.</span>
+</li>
+</ul>
+<p><span>If a </span>&ldquo;<span>fix</span>&rdquo;<span> doesn</span>&rsquo;<span>t come with a linked </span>&ldquo;<span>diagnostic</span>&rdquo;<span>, a very common outcome is:</span></p>
+<ol>
+<li>
+<span>Apply some random fix from the Internet</span>
+</li>
+<li>
+<span>Observe that the final problem (blank screen) isn</span>&rsquo;<span>t fixed</span>
+</li>
+<li>
+<span>Wonder which of the two is the case:</span>
+<ul>
+<li>
+<span>the fix is not relevant for the problem,</span>
+</li>
+<li>
+<span>the fix is relevant, but is applied wrong.</span>
+</li>
+</ul>
+</li>
+</ol>
+<p><span>So, call to action: if you are writing any kind of documentation, before explaining how to </span><em><span>fix</span></em><span> the problem, teach the user how to </span><em><span>diagnose</span></em><span> it.</span></p>
+<p><span>When helping with </span><code>git</code><span>, start with explaining </span><code>git log</code><span> and </span><code>git status</code><span>, not with </span><code>git reset</code><span> or </span><code>git reflog</code><span>.</span></p>
+<hr>
+<p><span>While the post might come as just a tiny bit angry, I want to explicitly mention that I am eternally grateful to all the people who write </span><em><span>any</span></em><span> kind of docs for using Linux on desktop.</span>
+<span>I</span>&rsquo;<span>ve been running it for more than 10 years at this point, and I am still completely clueless as to how debug issues from the first principles.</span>
+<span>If not for all of the wikis, stackoverflows and random forum posts out there, I wouldn</span>&rsquo;<span>t be able to use the OS, so thank you all!</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2022-10-19-why-linux-troubleshooting-advice-sucks.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

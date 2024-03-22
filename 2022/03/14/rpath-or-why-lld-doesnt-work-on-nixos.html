@@ -1,0 +1,439 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RPATH, or why lld doesn't work on NixOS</title>
+  <meta name="description" content="I've learned a thing I wish I didn't know.
+As a revenge, I am going to write it down so that you, my dear reader, also learn about this.
+You probably want to skip this post unless you are interested and somewhat experienced in all of Rust, NixOS, and dynamic linking.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2022/03/14/rpath-or-why-lld-doesnt-work-on-nixos.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>RPATH, or why lld doesn</span>&rsquo;<span>t work on NixOS</span> <time datetime="2022-03-14">Mar 14, 2022</time></h1>
+<p><span>I</span>&rsquo;<span>ve learned a thing I wish I didn</span>&rsquo;<span>t know.</span>
+<span>As a revenge, I am going to write it down so that you, my dear reader, also learn about this.</span>
+<span>You probably want to skip this post unless you are interested and somewhat experienced in all of Rust, NixOS, and dynamic linking.</span></p>
+<section id="Problem">
+
+    <h2>
+    <a href="#Problem"><span>Problem</span> </a>
+    </h2>
+<p><span>I use NixOS and Rust.</span>
+<span>For linking my Rust code, I would love to use lld, the LLVM linker, as it is significantly faster.</span>
+<span>Unfortunately, this often leads to errors when trying to run the resulting binary:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">error while loading shared libraries: libbla.so.92:</span>
+<span class="line">cannot open shared object file: No such file or directory</span></code></pre>
+
+</figure>
+<p><span>Let</span>&rsquo;<span>s see what</span>&rsquo;<span>s going on here!</span></p>
+</section>
+<section id="Baseline">
+
+    <h2>
+    <a href="#Baseline"><span>Baseline</span> </a>
+    </h2>
+<p><span>We</span>&rsquo;<span>ll be using </span><code>evdev-rs</code><span> as a running example.</span>
+<span>It is binding to the evdev shared library on Linux.</span>
+<span>First, we</span>&rsquo;<span>ll build it with the default linker, which just works (haha, nope, this is NixOS).</span></p>
+<p><span>Let</span>&rsquo;<span>s get the crate:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> git clone git@github.com:ndesh26/evdev-rs.git</span>
+<span class="line"><span class="hl-title function_">$</span> cd evdev-rs</span></code></pre>
+
+</figure>
+<p><span>And run the example</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo run --example evtest</span>
+<span class="line"><span class="hl-output">    Updating crates.io index</span></span>
+<span class="line"><span class="hl-output">  Downloaded libc v0.2.120</span></span>
+<span class="line"><span class="hl-output">  Downloaded 1 crate (574.7 KB) in 1.10s</span></span>
+<span class="line"><span class="hl-output">   Compiling cc v1.0.73</span></span>
+<span class="line"><span class="hl-output">   Compiling pkg-config v0.3.24</span></span>
+<span class="line"><span class="hl-output">   Compiling libc v0.2.120</span></span>
+<span class="line"><span class="hl-output">   Compiling log v0.4.14</span></span>
+<span class="line"><span class="hl-output">   Compiling cfg-if v1.0.0</span></span>
+<span class="line"><span class="hl-output">   Compiling bitflags v1.3.2</span></span>
+<span class="line"><span class="hl-output">   Compiling evdev-sys v0.2.4</span></span>
+<span class="line"><span class="hl-output">error: failed to run custom build command for `evdev-sys`</span></span>
+<span class="line"><span class="hl-output">&lt;---SNIP---&gt;</span></span>
+<span class="line"><span class="hl-output">  Couldn't find libevdev from pkgconfig</span></span>
+<span class="line"><span class="hl-output">&lt;---SNIP---&gt;</span></span></code></pre>
+
+</figure>
+<p><span>This of course doesn</span>&rsquo;<span>t just work and spits out humongous error message, which contains one line of important information: we are missing </span><code>libevdev</code><span> library.</span>
+<span>As this is NixOS, we are not going to barbarically install it globally.</span>
+<span>Let</span>&rsquo;<span>s create an isolated environment instead, using </span><code>nix-shell</code><span>:</span></p>
+
+<figure class="code-block">
+<figcaption class="title">shell.nix</figcaption>
+
+
+<pre><code><span class="line"><span class="hl-keyword">with</span> <span class="hl-built_in">import</span> &lt;nixpkgs&gt; {};</span>
+<span class="line">mkShell {</span>
+<span class="line">    <span class="hl-attr">buildInputs</span> = [</span>
+<span class="line">        pkgconfig</span>
+<span class="line">        libevdev</span>
+<span class="line">    ];</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And activate it:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> nix-shell</span></code></pre>
+
+</figure>
+<p><span>This environment gives us two things </span>&mdash;<span> the </span><code>pkg-config</code><span> binary and the </span><code>evdev</code><span> library.</span>
+<code>pkg-config</code><span> is a sort of half of a C package manager for UNIX: it can</span>&rsquo;<span>t install libraries, but it helps to locate them.</span>
+<span>Let</span>&rsquo;<span>s ask it about </span><code>libevdev</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> pkg-config --libs libevdev</span>
+<span class="line"><span class="hl-output">-L/nix/store/62gwpvp0c1i97lr84az2p0qg8nliwzgh-libevdev-1.11.0/lib -levdev</span></span></code></pre>
+
+</figure>
+<p><span>Essentially, it resolved library</span>&rsquo;<span>s short name (</span><code>libevdev</code><span>) to the full path to the directory were the library resides:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> exa -l /nix/store/62gwpvp0c1i97lr84az2p0qg8nliwzgh-libevdev-1.11.0/lib</span>
+<span class="line"><span class="hl-output">libevdev.la</span></span>
+<span class="line"><span class="hl-output">libevdev.so -&gt; libevdev.so.2.3.0</span></span>
+<span class="line"><span class="hl-output">libevdev.so.2 -&gt; libevdev.so.2.3.0</span></span>
+<span class="line"><span class="hl-output">libevdev.so.2.3.0</span></span>
+<span class="line"><span class="hl-output">pkgconfig</span></span></code></pre>
+
+</figure>
+<p><span>The </span><code>libevdev.so.2.3.0</code><span> file is the actual dynamic library.</span>
+<span>The symlinks stuff is another bit of a C package manager which implements somewhat-semver: </span><code>libevdev.so.2</code><span> version requirement gets resolved to </span><code>libevdev.so.2.3.0</code><span> version.</span></p>
+<p><span>Anyway, this works well enough to allow us to finally run the example</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo run --example evtest</span>
+<span class="line"><span class="hl-output">    Finished dev [unoptimized + debuginfo] target(s) in 0.01s</span></span>
+<span class="line"><span class="hl-output">     Running `target/debug/examples/evtest`</span></span>
+<span class="line"><span class="hl-output">Usage: evtest /path/to/device</span></span></code></pre>
+
+</figure>
+<p><span>Success!</span></p>
+<p><span>Ooook, so let</span>&rsquo;<span>s now do what we wanted to from the beginning and configure cargo to use </span><code>lld</code><span>, for blazingly fast linking.</span></p>
+</section>
+<section id="lld">
+
+    <h2>
+    <a href="#lld"><span>lld</span> </a>
+    </h2>
+<p><span>The magic spell you need need to put into </span><code>.cargo/config</code><span> is (courtesy of @lnicola):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-section">[build]</span></span>
+<span class="line"><span class="hl-attr">rustflags</span> = [<span class="hl-string">&quot;-Clink-arg=-fuse-ld=lld&quot;</span>]</span></code></pre>
+
+</figure>
+<p><span>To unpack this:</span></p>
+<ul>
+<li>
+<code>-C</code><span> set codegen option </span><code>link-arg=-fuse-ld=lld</code><span>.</span>
+</li>
+<li>
+<code>link-arg</code><span> means that </span><code>rustc</code><span> will pass </span>&ldquo;<span>-fuse-ld=lld</span>&rdquo;<span> to the linker.</span>
+</li>
+<li>
+<span>Because linkers are not in the least confusing, the </span>&ldquo;<span>linker</span>&rdquo;<span> here is actually the whole gcc/clang.</span>
+<span>That is, rather than invoking the linker, </span><code>rustc</code><span> will call </span><code>cc</code><span> and </span><em><span>that</span></em><span> will then call the linker.</span>
+</li>
+<li>
+<span>So </span><code>-fuse-ld</code><span> (unlike </span><code>-C</code><span>, I </span><em><span>think</span></em><span> this is an atomic option, not </span><code>-f use-ld</code><span>) is an argument to gcc/clang,</span>
+<span>which asks it to use </span><code>lld</code><span> linker.</span>
+</li>
+<li>
+<span>And note that it</span>&rsquo;<span>s </span><code>lld</code><span> rather than </span><code>ldd</code><span> which confusingly exists and does something completely different.</span>
+</li>
+</ul>
+<p><span>Anyhow, the end result is that we switch the linker from </span><code>ld</code><span> (default slow GNU linker) to </span><code>lld</code><span> (fast LLVM linker).</span></p>
+<p><span>And that breaks!</span></p>
+<p><em><span>Building</span></em><span> the code still works fine:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo build --example evtest</span>
+<span class="line"><span class="hl-output">   Compiling libc v0.2.120</span></span>
+<span class="line"><span class="hl-output">   Compiling pkg-config v0.3.24</span></span>
+<span class="line"><span class="hl-output">   Compiling cc v1.0.73</span></span>
+<span class="line"><span class="hl-output">   Compiling log v0.4.14</span></span>
+<span class="line"><span class="hl-output">   Compiling cfg-if v1.0.0</span></span>
+<span class="line"><span class="hl-output">   Compiling bitflags v1.3.2</span></span>
+<span class="line"><span class="hl-output">   Compiling evdev-sys v0.2.4 (/home/matklad/tmp/evdev-rs/evdev-sys)</span></span>
+<span class="line"><span class="hl-output">   Compiling evdev-rs v0.5.0 (/home/matklad/tmp/evdev-rs)</span></span>
+<span class="line"><span class="hl-output">    Finished dev [unoptimized + debuginfo] target(s) in 2.87s</span></span></code></pre>
+
+</figure>
+<p><span>But </span><em><span>running</span></em><span> the binary fails:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo run --example evtest</span>
+<span class="line"><span class="hl-output">    Finished dev [unoptimized + debuginfo] target(s) in 0.01s</span></span>
+<span class="line"><span class="hl-output">     Running `target/debug/examples/evtest`</span></span>
+<span class="line"><span class="hl-output">target/debug/examples/evtest: error while loading shared libraries:</span></span>
+<span class="line"><span class="hl-output">libevdev.so.2: cannot open shared object file: No such file or directory</span></span></code></pre>
+
+</figure>
+</section>
+<section id="rpath">
+
+    <h2>
+    <a href="#rpath"><span>rpath</span> </a>
+    </h2>
+<p><span>Ok, what</span>&rsquo;<span>s now?</span>
+<span>Now, let</span>&rsquo;<span>s understand why the first example, with </span><code>ld</code><span> rather than </span><code>lld</code><span>, can</span>&rsquo;<span>t work :-)</span></p>
+<p><span>As a reminder, we use NixOS, so there</span>&rsquo;<span>s no global folder a-la </span><code>/usr/lib</code><span> where all shared libraries are stored.</span>
+<span>Coming back to our </span><code>pkgconfig</code><span> example,</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> pkg-config --libs libevdev</span>
+<span class="line"><span class="hl-output">-L/nix/store/62gwpvp0c1i97lr84az2p0qg8nliwzgh-libevdev-1.11.0/lib -levdev</span></span></code></pre>
+
+</figure>
+<p><span>the </span><code>libevdev.so</code><span> is well-hidden behind the hash.</span>
+<span>So we need a </span><code>pkg-config</code><span> binary at compile time to get from </span><code>libevdev</code><span> name to actual location.</span></p>
+<p><span>However, as this is a dynamic library, we need it not only during compilation, but during runtime as well.</span>
+<span>And at runtime loader (also known as dynamic linker (its binary name is something like </span><code>ld-linux-x86-64.so</code><span>, but despite the </span><code>.so</code><span> suffix, it</span>&rsquo;<span>s an executable (I kid you not, this stuff is indeed this confusing))) loads the executable together with shared libraries required by it.</span>
+<span>Normally, the loader looks for libraries in well-known locations, like the aforementioned </span><code>/usr/lib</code><span> or </span><code>LD_LIBRARY_PATH</code><span>.</span>
+<span>So we need </span><em><span>something</span></em><span> which would tell the loader that </span><code>libevdev</code><span> lives at </span><code>/nix/store/$HASH/lib</code><span>.</span></p>
+<p><span>That something is rpath (also known as RUNPATH) </span>&mdash;<span> this is more or less </span><code>LD_LIBRARY_PATH</code><span>, just hard-coded into the executable.</span>
+<span>We can use </span><code>readelf</code><span> to inspect program</span>&rsquo;<span>s rpath.</span></p>
+<p><span>When the binary is linked with the default linker, the result is as follows (lightly edited for clarity):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> readelf -d target/debug/examples/evtest | rg PATH</span>
+<span class="line"><span class="hl-output"> 0x000000000000001d (RUNPATH)            Library runpath: [</span></span>
+<span class="line"><span class="hl-output">    /nix/store/a9m53x4b3jf6mp1ll9acnh55lnx48hcj-nix-shell/lib64</span></span>
+<span class="line"><span class="hl-output">    /nix/store/a9m53x4b3jf6mp1ll9acnh55lnx48hcj-nix-shell/lib</span></span>
+<span class="line"><span class="hl-output">    /nix/store/62gwpvp0c1i97lr84az2p0qg8nliwzgh-libevdev-1.11.0/lib</span></span>
+<span class="line"><span class="hl-output">    /nix/store/z56jcx3j1gfyk4sv7g8iaan0ssbdkhz1-glibc-2.33-56/lib</span></span>
+<span class="line"><span class="hl-output">    /nix/store/c9f15p1kwm0mw5p13wsnvd1ixrhbhb12-gcc-10.3.0-lib/lib</span></span>
+<span class="line"><span class="hl-output">]</span></span></code></pre>
+
+</figure>
+<p><span>And sure, we see path to </span><code>libevdev</code><span> right there!</span></p>
+<p><span>With </span><code>rustflags = ["-Clink-arg=-fuse-ld=lld"]</code><span>, the result is different, the library is missing from rpath:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">0x000000000000001d (RUNPATH)            Library runpath: [</span>
+<span class="line">    /nix/store/a9m53x4b3jf6mp1ll9acnh55lnx48hcj-nix-shell/lib64</span>
+<span class="line">    /nix/store/a9m53x4b3jf6mp1ll9acnh55lnx48hcj-nix-shell/lib</span>
+<span class="line">]</span></code></pre>
+
+</figure>
+<p><span>At this point, I think we know what</span>&rsquo;<span>s going on.</span>
+<span>To recap:</span></p>
+<ul>
+<li>
+<span>With both </span><code>ld</code><span> and </span><code>lld</code><span>, we don</span>&rsquo;<span>t have problems at compile time, because </span><code>pkg-config</code><span> helps the compiler to find the library.</span>
+</li>
+<li>
+<span>At runtime, the library linked with </span><code>lld</code><span> fails to find the shared library, while the one linked with </span><code>ld</code><span> works.</span>
+</li>
+<li>
+<span>The difference between the two binaries is the value of rpath in the binary itself.</span>
+<code>ld</code><span> somehow manages to include rpath which contains path to the library.</span>
+<span>This rpath is what allows the loader to locate the library at runtime.</span>
+</li>
+</ul>
+<p><span>Curious observation: dynamic linking on NixOS is not </span><em><span>entirely</span></em><span> dynamic.</span>
+<span>Because executables expect to find shared libraries in specific locations marked with hashes of the libraries themselves, it</span>&rsquo;<span>s not possible to </span><em><span>just</span></em><span> upgrade </span><code>.so</code><span> on disk for all the binaries to pick it up.</span></p>
+</section>
+<section id="Who-sets-rpath">
+
+    <h2>
+    <a href="#Who-sets-rpath"><span>Who sets rpath?</span> </a>
+    </h2>
+<p><span>At this point, we have only one question left:</span></p>
+<p><span>Why?</span></p>
+<p><span>Why do we have that magical rpath thing in one of the binaries.</span>
+<span>The answer is simple </span>&mdash;<span> to set rpath, one passes </span><code>-rpath /nix/store/...</code><span> flag to the linker at compile time.</span>
+<span>The linker then just embeds the specified string as rpath field in the executable, without really inspecting it in any way.</span></p>
+<p><span>And here comes the magical/hacky bit </span>&mdash;<span> the thing that adds that </span><code>-rpath</code><span> argument to the linker</span>&rsquo;<span>s command line is the NixOS wrapper script!</span>
+<span>That is, the </span><code>ld</code><span> on NixOS is not a proper ld, but rather a shell script which does a bit of extra fudging here and there, including the rpath:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cat (which ld)</span>
+<span class="line"><span class="hl-output">&lt;---SNIP---&gt;</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># Three tasks:</span></span>
+<span class="line"><span class="hl-comment">#</span></span>
+<span class="line"><span class="hl-comment">#   1. Find all -L... switches for rpath</span></span>
+<span class="line"><span class="hl-comment">#</span></span>
+<span class="line"><span class="hl-comment">#   2. Find relocatable flag for build id.</span></span>
+<span class="line"><span class="hl-comment">#</span></span>
+<span class="line"><span class="hl-comment">#   3. Choose 32-bit dynamic linker if needed</span></span>
+<span class="line"><span class="hl-output">declare -a libDirs</span></span>
+<span class="line"><span class="hl-output">&lt;---SNIP---&gt;</span></span>
+<span class="line"><span class="hl-output">        case "$prev" in</span></span>
+<span class="line"><span class="hl-output">            -L)</span></span>
+<span class="line"><span class="hl-output">                libDirs+=("$p")</span></span>
+<span class="line"><span class="hl-output">                ;;</span></span>
+<span class="line"><span class="hl-output">&lt;---SNIP---&gt;</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output">    for dir in ${libDirs+"${libDirs[@]}"}; do</span></span>
+<span class="line"><span class="hl-output">        &lt;---SNIP---&gt;</span></span>
+<span class="line"><span class="hl-output">                extraAfter+=(-rpath "$dir")</span></span>
+<span class="line"><span class="hl-output">        &lt;---SNIP---&gt;</span></span>
+<span class="line"><span class="hl-output">    done</span></span>
+<span class="line"><span class="hl-output">&lt;---SNIP---&gt;</span></span>
+<span class="line"><span class="hl-output">/nix/store/sga0l55gm9nlwglk79lmihwb2bpv597j-binutils-2.35.2/bin/ld \</span></span>
+<span class="line"><span class="hl-output">    ${extraBefore+"${extraBefore[@]}"} \</span></span>
+<span class="line"><span class="hl-output">    ${params+"${params[@]}"} \</span></span>
+<span class="line"><span class="hl-output">    ${extraAfter+"${extraAfter[@]}"}</span></span></code></pre>
+
+</figure>
+<p><span>There</span>&rsquo;<span>s a lot of going on in that wrapper script, but the relevant thing to us, as far as I understand, is that everything that gets passed as </span><code>-L</code><span> at compile time gets embedded into the binary</span>&rsquo;<span>s rpath, so that it can be used at runtime as well.</span></p>
+<p><span>Now, let</span>&rsquo;<span>s take a look at </span><code>lld</code>&rsquo;<span>s wrapper:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cat (which lld)</span>
+<span class="line"><span class="hl-output">@@@@@@@TT@@pHpH&lt;&lt;E8o	8o	wN:HgPHwHpp@p@ @@  Stdpp@p@ Ptd@G@@QtdRtd/nix/store/4s21k8k7p1mfik0b33r2spq5hq7774k1-glibc-2.33-108/lib/ld-linux-x86-64.so.2GNUGNU r	\X</span></span>
+<span class="line"><span class="hl-output">0F                                                                                                                                                                        &lt;C5`</span></span>
+<span class="line"><span class="hl-output">Bx	rZ1V3	y</span></span></code></pre>
+
+</figure>
+<p><span>Haha, nope, there</span>&rsquo;<span>s no wrapper!</span>
+<span>Unlike </span><code>ld</code><span>, </span><code>lld</code><span> on NixOS is an honest-to-Bosch binary file, and that</span>&rsquo;<span>s why we can</span>&rsquo;<span>t have great things!</span>
+<span>This is tracked in issue #24744 in the nixpkgs repo :)</span></p>
+<p><span>Update:</span></p>
+<p><span>So</span>&hellip;<span>.. turns out there</span>&rsquo;<span>s more than one </span><code>lld</code><span> on NixOS.</span>
+<span>There</span>&rsquo;<span>s </span><code>pkgs.lld</code><span>, the thing I have been using in the post.</span>
+<span>And then there</span>&rsquo;<span>s </span><code>pkgs.llvmPackages.bintools</code><span> package, which also contains </span><code>lld</code><span>.</span>
+<span>And that version is actually wrapped into an rpath-setting shell script, the same way </span><code>ld</code><span> is.</span></p>
+<p><span>That is, </span><code>pkgs.lld</code><span> is the wrong </span><code>lld</code><span>, the right one is </span><code>pkgs.llvmPackages.bintools</code><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2022-03-14-rpath-or-why-lld-doesnt-work-on-nixos.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

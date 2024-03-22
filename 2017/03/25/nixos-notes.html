@@ -1,0 +1,203 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NixOS Notes</title>
+  <meta name="description" content="I had bought a new laptop recently, which was a perfect opportunity to take a
+fresh look at my NixOS setup.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2017/03/25/nixos-notes.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>NixOS Notes</span> <time datetime="2017-03-25">Mar 25, 2017</time></h1>
+<p><span>I had bought a new laptop recently, which was a perfect opportunity to take a</span>
+<span>fresh look at my </span><a href="http://nixos.org/"><span>NixOS</span></a><span> setup.</span></p>
+<p><span>As usual, there are some hacks and not obvious things which I would like to</span>
+<span>document just in case :)</span></p>
+<section id="If-it-does-not-work-update">
+
+    <h2>
+    <a href="#If-it-does-not-work-update"><span>If it does not work, update</span> </a>
+    </h2>
+<p><span>I</span>&rsquo;<span>ve tried installed a stable 16.09 version first, but live CD didn</span>&rsquo;<span>t manage to</span>
+<span>start the X server properly. This was easy to fix by switching to the then beta</span>
+<span>17.03.</span></p>
+</section>
+<section id="UEFI">
+
+    <h2>
+    <a href="#UEFI"><span>UEFI</span> </a>
+    </h2>
+<p><span>It is my first system which uses </span><a href="https://en.wikipedia.org/wiki/Unified_Extensible_Firmware_Interface"><span>UEFI</span></a><span> instead of BIOS, and I was</span>
+<span>pleasantly surprised by how everything just worked. Documentation contains only</span>
+<span>a short paragraph about UEFI, but it</span>&rsquo;<span>s everything you need. The only hiccup on</span>
+<span>my side happened when I enabled GRUB together with </span><code>systemd-boot</code><span>: you don</span>&rsquo;<span>t</span>
+<span>need GRUB at all, </span><code>system-boot</code><span> is a bootloader which handles everything.</span></p>
+</section>
+<section id="If-it-does-not-work-fix-the-obvious-problem">
+
+    <h2>
+    <a href="#If-it-does-not-work-fix-the-obvious-problem"><span>If it does not work, fix the obvious problem</span> </a>
+    </h2>
+<p><span>After I</span>&rsquo;<span>ve installed everything, I was presented with a blank screen</span>
+<span>instead of my desktop environment (with the live CD everything</span>
+<span>worked). It took me ages to debug the issue, while the fix was super</span>
+<span>trivial: add </span><code>videoDrivers = [ "intel" ];</code><span> to </span><code>xserver</code><span> config and</span>
+<code>"noveau"</code><span> to </span><code>blacklistedKernelModules</code><span>.</span></p>
+</section>
+<section id="Rust">
+
+    <h2>
+    <a href="#Rust"><span>Rust</span> </a>
+    </h2>
+<p><span>While nix is the best way to manage Linux desktop I am aware of,</span>
+<a href="https://github.com/rust-lang-nursery/rustup.rs"><span>rustup</span></a><span> is the most convenient way of managing Rust toolchains.</span>
+<span>Unfortunately it</span>&rsquo;<span>s not easy to make rustup play nicely with NixOS (UPDATE:</span>
+<span>rustup is now packaged in nixpkgs and just works). Rustup downloads binaries of</span>
+<span>the compiler and Cargo, but it is impossible to launch unmodified binaries on</span>
+<span>NixOS because it a lacks conventional loader.</span></p>
+<p><span>The fix I came up with is a horrible hack which goes against</span>
+<span>everything in NixOS. Here it is:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">environment.<span class="hl-attr">extraInit</span> = <span class="hl-keyword">let</span> <span class="hl-attr">loader</span> = <span class="hl-string">&quot;ld-linux-x86-64.so.2&quot;</span>; <span class="hl-keyword">in</span> <span class="hl-string">&#x27;&#x27;</span></span>
+<span class="line"><span class="hl-string">  export LD_LIBRARY_PATH=&quot;$LD_LIBRARY_PATH:/run/current-system/sw/lib:<span class="hl-subst">${pkgs.stdenv.cc.cc.lib}</span>/lib&quot;</span></span>
+<span class="line"><span class="hl-string">  ln -fs <span class="hl-subst">${pkgs.stdenv.cc.libc.out}</span>/lib/<span class="hl-subst">${loader}</span> /lib64/<span class="hl-subst">${loader}</span></span></span>
+<span class="line"><span class="hl-string">&#x27;&#x27;</span>;</span></code></pre>
+
+</figure>
+<p><span>It makes the loader and shared libraries (rustup needs </span><code>zlib</code><span>) visible</span>
+<span>to binaries compiled for x64 Linux.</span></p>
+</section>
+<section id="Idea">
+
+    <h2>
+    <a href="#Idea"><span>Idea</span> </a>
+    </h2>
+<p><span>Another software which I wish to update somewhat more frequently than</span>
+<span>other packages is </span><a href="https://www.jetbrains.com/idea/"><span>IntelliJ IDEA</span></a><span> (I write a fair amount of Kotlin and</span>
+<span>Rust). NixOS has a super convenient mechanism to do this:</span>
+<a href="https://nixos.org/wiki/Nix_Modifying_Packages#Overriding_Existing_Packages"><code>packageOverrides</code></a><span>. Here is my </span><code>~/nixpkgs/config.nix</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">{</span>
+<span class="line">  <span class="hl-attr">packageOverrides</span> = pkgs: <span class="hl-keyword">rec</span> {</span>
+<span class="line">    <span class="hl-attr">idea-community</span> = <span class="hl-keyword">let</span></span>
+<span class="line">      <span class="hl-attr">version</span> = <span class="hl-string">&quot;2017.1&quot;</span>;</span>
+<span class="line">      <span class="hl-attr">sha256</span> = <span class="hl-string">&quot;750b517742157475bb690c1cc8f21ac151a754a38fec5c99a4bb473efd71da5d&quot;</span>;</span>
+<span class="line">    <span class="hl-keyword">in</span></span>
+<span class="line">      pkgs.idea.idea-community.overrideDerivation (attrs: <span class="hl-keyword">rec</span> {</span>
+<span class="line">        <span class="hl-keyword">inherit</span> version;</span>
+<span class="line">        <span class="hl-attr">name</span> = <span class="hl-string">&quot;idea-community-<span class="hl-subst">${version}</span>&quot;</span>;</span>
+<span class="line">        <span class="hl-attr">src</span> = pkgs.fetchurl {</span>
+<span class="line">          <span class="hl-keyword">inherit</span> sha256;</span>
+<span class="line">          <span class="hl-attr">url</span> = <span class="hl-string">&quot;https://download.jetbrains.com/idea/ideaIC-<span class="hl-subst">${version}</span>.tar.gz&quot;</span>;</span>
+<span class="line">        };</span>
+<span class="line">      });</span>
+<span class="line">  };</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>It allows to use the most recent IDEA with the stable NixOS channel.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2017-03-25-nixos-notes.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

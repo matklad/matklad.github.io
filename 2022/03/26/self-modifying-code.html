@@ -1,0 +1,646 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Self Modifying Code</title>
+  <meta name="description" content="This post has nothing to do with JIT-like techniques for patching machine code on the fly (though they are cool!).
+Instead, it describes a cute/horrible trick/hack you can use to generate source code if you are not a huge fan of macros.
+The final technique is going to be independent of any particular programming language, but the lead-up is going to be Rust-specific.
+The pattern can be applied to a wide variety of tasks, but we'll use a model problem to study different solutions.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2022/03/26/self-modifying-code.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Self Modifying Code</span> <time datetime="2022-03-26">Mar 26, 2022</time></h1>
+<p><span>This post has nothing to do with JIT-like techniques for patching machine code on the fly (though they are cool!).</span>
+<span>Instead, it describes a cute/horrible trick/hack you can use to generate </span><em><span>source</span></em><span> code if you are not a huge fan of macros.</span>
+<span>The final technique is going to be independent of any particular programming language, but the lead-up is going to be Rust-specific.</span>
+<span>The pattern can be applied to a wide variety of tasks, but we</span>&rsquo;<span>ll use a model problem to study different solutions.</span></p>
+<section id="Problem">
+
+    <h2>
+    <a href="#Problem"><span>Problem</span> </a>
+    </h2>
+<p><span>I have a field-less enum representing various error conditions:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Debug, Clone, Copy)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">enum</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  InvalidSignature,</span>
+<span class="line">  AccountNotFound,</span>
+<span class="line">  InsufficientBalance,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This is a type I expect to change fairly often.</span>
+<span>I predict that it will grow a lot.</span>
+<span>Even the initial version contains half a dozen variants already!</span>
+<span>For brevity, I am showing only a subset here.</span></p>
+<p><span>For the purposes of serialization, I would like to convert this error to and from an error code.</span>
+<span>One direction is easy, there</span>&rsquo;<span>s built in mechanism for this in Rust:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">as_code</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span> <span class="hl-keyword">as</span> <span class="hl-type">u32</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The other direction is more annoying: it isn</span>&rsquo;<span>t handled by the language automatically yet (although there</span>&rsquo;<span>s an in-progress PR which adds just that!), so we have to write some code ourselves:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">as_code</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span> <span class="hl-keyword">as</span> <span class="hl-type">u32</span></span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">from_code</span>(code: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;Error&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">res</span> = <span class="hl-keyword">match</span> code {</span>
+<span class="line">      <span class="hl-number">0</span> =&gt; Error::InvalidSignature,</span>
+<span class="line">      <span class="hl-number">1</span> =&gt; Error::AccountNotFound,</span>
+<span class="line">      <span class="hl-number">2</span> =&gt; Error::InsufficientBalance,</span>
+<span class="line">      _ =&gt; <span class="hl-keyword">return</span> <span class="hl-literal">None</span>,</span>
+<span class="line">    };</span>
+<span class="line">    <span class="hl-title function_ invoke__">Some</span>(res)</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Now, given that I expect this type to change frequently, this is asking for trouble!</span>
+<span>It</span>&rsquo;<span>s very easy for the </span><code>match</code><span> and the enum definition to get out of sync!</span></p>
+<p><span>What should we do? What </span><em><span>can</span></em><span> we do?</span></p>
+</section>
+<section id="Minimalist-Solution">
+
+    <h2>
+    <a href="#Minimalist-Solution"><span>Minimalist Solution</span> </a>
+    </h2>
+<p><span>Now, seasoned Rust developers are probably already thinking about macros (or maybe even about specific macro crates).</span>
+<span>And we</span>&rsquo;<span>ll get there!</span>
+<span>But first, let</span>&rsquo;<span>s see how I usually solve the problem, when (as I am by default) I am not keen on adding macros.</span></p>
+<p><span>The idea is to trick the compiler into telling us the number of elements in the enum, which would allow us to implement some sanity checking.</span>
+<span>We can do this by adding a fake element at the end of the enum:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">enum</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  InvalidSignature,</span>
+<span class="line">  AccountNotFound,</span>
+<span class="line">  InsufficientBalance,</span>
+<span class="line">  __LAST,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  <span class="hl-keyword">const</span> ALL: [Error; Error::__LAST <span class="hl-keyword">as</span> <span class="hl-type">usize</span>] = [</span>
+<span class="line">    Error::InvalidSignature,</span>
+<span class="line">    Error::AccountNotFound,</span>
+<span class="line">    Error::InsufficientBalance,</span>
+<span class="line">  ];</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">from_code</span>(code: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;Error&gt; {</span>
+<span class="line">    Error::ALL.<span class="hl-title function_ invoke__">get</span>(code <span class="hl-keyword">as</span> <span class="hl-type">usize</span>).<span class="hl-title function_ invoke__">copied</span>()</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">as_code</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    Error::ALL</span>
+<span class="line">      .<span class="hl-title function_ invoke__">into_iter</span>()</span>
+<span class="line">      .<span class="hl-title function_ invoke__">position</span>(|it| it == <span class="hl-keyword">self</span>)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">unwrap_or_default</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Now, if we add a new error variant, but forget to update the </span><code>ALL</code><span> array, the code will fail to compile </span>&mdash;<span> exactly the reminder we need.</span>
+<span>The major drawback here is that </span><code>__LAST</code><span> variant has to exist.</span>
+<span>This is fine for internal stuff, but something not really great for a public, clean API.</span></p>
+</section>
+<section id="Minimalist-Macro">
+
+    <h2>
+    <a href="#Minimalist-Macro"><span>Minimalist Macro</span> </a>
+    </h2>
+<p><span>Now, let</span>&rsquo;<span>s get to macros, and let</span>&rsquo;<span>s start with the simplest possible one I can think of!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">define_error![</span>
+<span class="line">  InvalidSignature,</span>
+<span class="line">  AccountNotFound,</span>
+<span class="line">  InsufficientBalance,</span>
+<span class="line">];</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">as_code</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span> <span class="hl-keyword">as</span> <span class="hl-type">u32</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Pretty simple, heh? Let</span>&rsquo;<span>s look at the definition of </span><code>define_error!</code><span> though:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-built_in">macro_rules!</span> define_error {</span>
+<span class="line">  ($($err:ident,)*) =&gt; {</span>
+<span class="line">    <span class="hl-meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span>
+<span class="line">    <span class="hl-keyword">pub</span> <span class="hl-keyword">enum</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">      $($err,)*</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">      <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">from_code</span>(code: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;Error&gt; {</span>
+<span class="line">        <span class="hl-meta">#![allow(non_upper_case_globals)]</span></span>
+<span class="line">        $(<span class="hl-keyword">const</span> $err: <span class="hl-type">u32</span> = Error::$err <span class="hl-keyword">as</span> <span class="hl-type">u32</span>;)*</span>
+<span class="line">        <span class="hl-keyword">match</span> code {</span>
+<span class="line">          $($err =&gt; <span class="hl-title function_ invoke__">Some</span>(Error::$err),)*</span>
+<span class="line">          _ =&gt; <span class="hl-literal">None</span>,</span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line">  };</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>That</span>&rsquo;<span>s </span>&hellip;<span> quite literally a puzzle!</span>
+<span>Declarative macro machinery is comparatively inexpressive, so you need to get creative to get what you want.</span>
+<span>Here, ideally I</span>&rsquo;<span>d write</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">match</span> code {</span>
+<span class="line">  <span class="hl-number">0</span> =&gt; Error::InvalidSignature,</span>
+<span class="line">  <span class="hl-number">1</span> =&gt; Error::AccountNotFound,</span>
+<span class="line">  <span class="hl-number">2</span> =&gt; Error::InsufficientBalance,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Alas, counting in macro by example is possible, but not trivial.</span>
+<span>It</span>&rsquo;<span>s a subpuzle!</span>
+<span>Rather than solving it, I use the following work-around:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> InvalidSignature: <span class="hl-type">u32</span> = Error::InvalidSignature <span class="hl-keyword">as</span> <span class="hl-type">u32</span>;</span>
+<span class="line"><span class="hl-keyword">match</span> {</span>
+<span class="line">  InvalidSignature =&gt; Error::InvalidSignature,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And then I have to </span><code>#![allow(non_upper_case_globals)]</code><span>, to prevent the compiler from complaining.</span></p>
+</section>
+<section id="Idiomatic-Macro">
+
+    <h2>
+    <a href="#Idiomatic-Macro"><span>Idiomatic Macro</span> </a>
+    </h2>
+<p><span>The big problem with macro is that it</span>&rsquo;<span>s not only the internal implementation which is baroque!</span>
+<span>The call-site is pretty inscrutable as well!</span>
+<span>Let</span>&rsquo;<span>s imagine we are new to a codebase, and come across the following snippet:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">define_error![</span>
+<span class="line">  InvalidSignature,</span>
+<span class="line">  AccountNotFound,</span>
+<span class="line">  InsufficientBalance,</span>
+<span class="line">];</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">as_code</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span> <span class="hl-keyword">as</span> <span class="hl-type">u32</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The question I would ask here would be </span>&ldquo;<span>what</span>&rsquo;<span>s that </span><code>Error</code><span> thing is?</span>&rdquo;<span>.</span>
+<span>Luckily, we live in the age of powerful IDEs, so we can just </span>&ldquo;<span>goto definition</span>&rdquo;<span> to answer that, right?</span></p>
+
+<figure>
+
+<img alt="" src="/assets/gotodef-macro-1.gif">
+</figure>
+<p><span>Well, not really.</span>
+<span>An IDE says that the </span><code>Error</code><span> token is produced by </span><em><span>something</span></em><span> inside that macro invocation.</span>
+<span>That</span>&rsquo;<span>s a correct answer, if not the most useful one!</span>
+<span>So I have to read the definition of the </span><code>define_error</code><span> macro and understand how that works internally to get the idea about public API available externally (e.g., that the </span><code>Error</code><span> refers to a public enum).</span>
+<span>And here the puzzler nature of declarative macros is exacerbated.</span>
+<span>It</span>&rsquo;<span>s hard enough to figure out how to express the idea you want using the restricted language of macros.</span>
+<span>It</span>&rsquo;<span>s doubly hard to understand the idea the macro</span>&rsquo;<span>s </span><em><span>author</span></em><span> had when you can</span>&rsquo;<span>t peek inside their brain and observer only to the implementation of the macro.</span></p>
+<p><span>One remedy here is to make macro input look more like the code we want to produce.</span>
+<span>Something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">define_error![</span>
+<span class="line">  <span class="hl-meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">enum</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">    InvalidSignature,</span>
+<span class="line">    AccountNotFound,</span>
+<span class="line">    InsufficientBalance,</span>
+<span class="line">  }</span>
+<span class="line">];</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">as_code</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span> <span class="hl-keyword">as</span> <span class="hl-type">u32</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This indeed is marginally friendlier for IDEs and people to make sense of:</span></p>
+
+<figure>
+
+<img alt="" src="/assets/gotodef-macro-2.gif">
+</figure>
+<p><span>The cost for this is a more complicated macro implementation.</span>
+<span>Generally, a macro needs to do two things: parse arbitrary token stream input, and emit valid Rust code as output.</span>
+<span>Parsing is usually the more complicated task.</span>
+<span>That</span>&rsquo;<span>s why in our minimal attempt we used maximally simple syntax, just a list of identifiers.</span>
+<span>However, if we want to make the input of the macro look more like Rust, we have to parse a subset of Rust, and that</span>&rsquo;<span>s more involved:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-built_in">macro_rules!</span> define_error {</span>
+<span class="line">  (</span>
+<span class="line">    $(<span class="hl-meta">#[$meta:meta]</span>)*</span>
+<span class="line">    $vis:vis <span class="hl-keyword">enum</span> $Error:ident {</span>
+<span class="line">      $($err:ident,)*</span>
+<span class="line">    }</span>
+<span class="line">  ) =&gt; {</span>
+<span class="line">    $(<span class="hl-meta">#[$meta]</span>)*</span>
+<span class="line">    $vis <span class="hl-keyword">enum</span> $Error {</span>
+<span class="line">      $($err,)*</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">      <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">from_code</span>(code: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;Error&gt; {</span>
+<span class="line">        <span class="hl-meta">#![allow(non_upper_case_globals)]</span></span>
+<span class="line">        $(<span class="hl-keyword">const</span> $err: <span class="hl-type">u32</span> = $Error::$err <span class="hl-keyword">as</span> <span class="hl-type">u32</span>;)*</span>
+<span class="line">        <span class="hl-keyword">match</span> code {</span>
+<span class="line">          $($err =&gt; <span class="hl-title function_ invoke__">Some</span>($Error::$err),)*</span>
+<span class="line">          _ =&gt; <span class="hl-literal">None</span>,</span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line">  };</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">define_error![</span>
+<span class="line">  <span class="hl-meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">enum</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">    InvalidSignature,</span>
+<span class="line">    AccountNotFound,</span>
+<span class="line">    InsufficientBalance,</span>
+<span class="line">  }</span>
+<span class="line">];</span></code></pre>
+
+</figure>
+<p><span>We have to carefully deal with all those visibilities and attributes.</span>
+<span>Even after we do that, the connection between the input Rust-like syntax and the output Rust is skin-deep.</span>
+<span>This is mostly smoke and mirrors, and is not much different from, e.g., using Haskell syntax here:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-built_in">macro_rules!</span> define_error {</span>
+<span class="line">  (</span>
+<span class="line">    data $Error:ident = $err0:ident $(| $err:ident)*</span>
+<span class="line">      $(<span class="hl-title function_ invoke__">deriving</span> ($($derive:ident),*))?</span>
+<span class="line">  ) =&gt; {</span>
+<span class="line">    $(<span class="hl-meta">#[derive($($derive),*)]</span>)?</span>
+<span class="line">    <span class="hl-keyword">enum</span> $Error {</span>
+<span class="line">      $err0,</span>
+<span class="line">      $($err,)*</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">      <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">from_code</span>(code: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;Error&gt; {</span>
+<span class="line">        <span class="hl-meta">#![allow(non_upper_case_globals)]</span></span>
+<span class="line">        <span class="hl-keyword">const</span> $err0: <span class="hl-type">u32</span> = $Error::$err0 <span class="hl-keyword">as</span> <span class="hl-type">u32</span>;</span>
+<span class="line">        $(<span class="hl-keyword">const</span> $err: <span class="hl-type">u32</span> = $Error::$err <span class="hl-keyword">as</span> <span class="hl-type">u32</span>;)*</span>
+<span class="line">        <span class="hl-keyword">match</span> code {</span>
+<span class="line">          $err0 =&gt; <span class="hl-title function_ invoke__">Some</span>($Error::$err0),</span>
+<span class="line">          $($err =&gt; <span class="hl-title function_ invoke__">Some</span>($Error::$err),)*</span>
+<span class="line">          _ =&gt; <span class="hl-literal">None</span>,</span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line">  };</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">define_error![</span>
+<span class="line">  data Error = InvalidSignature | AccountNotFound | InsufficientBalance</span>
+<span class="line">    <span class="hl-title function_ invoke__">deriving</span> (<span class="hl-built_in">Debug</span>, <span class="hl-built_in">Clone</span>, <span class="hl-built_in">Copy</span>, <span class="hl-built_in">PartialEq</span>, <span class="hl-built_in">Eq</span>)</span>
+<span class="line"></span>
+<span class="line">];</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">as_code</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span> <span class="hl-keyword">as</span> <span class="hl-type">u32</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Attribute-Macro">
+
+    <h2>
+    <a href="#Attribute-Macro"><span>Attribute Macro</span> </a>
+    </h2>
+<p><span>We can meaningfully increase the fidelity between macro input and macro output by switching to a derive macro.</span>
+<span>In contrast to function-like macros, derives require that their input is syntactically and even semantically valid Rust.</span></p>
+<p><span>So the result looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> macros::FromCode;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(FromCode, Debug, Clone, Copy, PartialEq, Eq)]</span></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  InvalidSignature,</span>
+<span class="line">  AccountNotFound,</span>
+<span class="line">  InsufficientBalance,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">as_code</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span> <span class="hl-keyword">as</span> <span class="hl-type">u32</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Again, the </span><code>enum Error</code><span> here is an honest, simple enum!</span>
+<span>It</span>&rsquo;<span>s not an alien beast which just wears enum</span>&rsquo;<span>s skin.</span></p>
+<p><span>And the implementation of the macro doesn</span>&rsquo;<span>t look too bad either, thanks to @dtolnay</span>&rsquo;<span>s tasteful API design:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> proc_macro::TokenStream;</span>
+<span class="line"><span class="hl-keyword">use</span> quote::quote;</span>
+<span class="line"><span class="hl-keyword">use</span> syn::{parse_macro_input, DeriveInput};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[proc_macro_derive(FromCode)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">from_code</span>(input: TokenStream) <span class="hl-punctuation">-&gt;</span> TokenStream {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">input</span> = parse_macro_input!(input <span class="hl-keyword">as</span> DeriveInput);</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">error_name</span> = input.ident;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">enum_</span> = <span class="hl-keyword">match</span> input.data {</span>
+<span class="line">    syn::Data::<span class="hl-title function_ invoke__">Enum</span>(it) =&gt; it,</span>
+<span class="line">    _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;expected an enum&quot;</span>),</span>
+<span class="line">  };</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">arms</span> =</span>
+<span class="line">    enum_.variants.<span class="hl-title function_ invoke__">iter</span>().<span class="hl-title function_ invoke__">enumerate</span>().<span class="hl-title function_ invoke__">map</span>(|(i, var)| {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">i</span> = i <span class="hl-keyword">as</span> <span class="hl-type">u32</span>;</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">var_name</span> = &amp;var.ident;</span>
+<span class="line">      quote! {</span>
+<span class="line">        #i =&gt; <span class="hl-title function_ invoke__">Some</span>(#error_name::#var_name),</span>
+<span class="line">      }</span>
+<span class="line">    });</span>
+<span class="line"></span>
+<span class="line">  quote! {</span>
+<span class="line">    <span class="hl-keyword">impl</span> #error_name {</span>
+<span class="line">      <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">from_code</span>(code: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;#error_name&gt; {</span>
+<span class="line">        <span class="hl-keyword">match</span> code {</span>
+<span class="line">          #(#arms)*</span>
+<span class="line">          _ =&gt; <span class="hl-literal">None</span>,</span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">  .<span class="hl-title function_ invoke__">into</span>()</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Unlike declarative macros, here we just directly express the syntax that we want to emit </span>&mdash;<span> a match over consecutive natural numbers.</span></p>
+<p><span>The biggest drawback here is that on the call-site now we don</span>&rsquo;<span>t have </span><em><span>any</span></em><span> idea about the extra API generated by the macro.</span>
+<span>If, with declarative macros, you can notice an </span><code>pub fn from_code</code><span> in the same file and guess that that</span>&rsquo;<span>s a part of an API, with a procedural macro that string is in a completely different crate!</span>
+<span>While proc-macro can greatly improve the ergonomics of using and implementing macros (inflated compile times notwithstanding), for the reader, they are arguably even more opaque than declarative macros.</span></p>
+</section>
+<section id="Self-Modifying-Code-1">
+
+    <h2>
+    <a href="#Self-Modifying-Code-1"><span>Self Modifying Code</span> </a>
+    </h2>
+<p><span>Finally, let</span>&rsquo;<span>s see the promised hacky solution :)</span>
+<span>While, as you might have noticed, I am not a huge fan of macros, I like plain old code generation </span>&mdash;<span> text in, text out.</span>
+<span>Text manipulation is much worse-is-betterer than advanced macro systems.</span></p>
+<p><span>So what we are going to do is:</span></p>
+<ul>
+<li>
+<span>Read the file with the enum definition as a string (</span><code>file!()</code><span> macro will be useful here).</span>
+</li>
+<li>
+&ldquo;<span>Parse</span>&rdquo;<span> enum definition using unsophisticated string splitting (</span><code>str::split_once</code><span>, aka </span><code>cut</code><span> would be our parser).</span>
+</li>
+<li>
+<span>Generate the code we want by concatenating strings.</span>
+</li>
+<li>
+<span>Paste the resulting code into a specially marked position.</span>
+</li>
+<li>
+<span>Overwrite the file in place, if there are changes.</span>
+</li>
+<li>
+<span>And we are going to use a </span><code>#[test]</code><span> to drive the process!</span>
+</li>
+</ul>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Debug, Clone, Copy)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">enum</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  InsufficientBalance,</span>
+<span class="line">  InvalidSignature,</span>
+<span class="line">  AccountNotFound,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Error</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">as_code</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span> <span class="hl-keyword">as</span> <span class="hl-type">u32</span></span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">from_code</span>(code: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;Error&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">res</span> = <span class="hl-keyword">match</span> code {</span>
+<span class="line">      <span class="hl-comment">// region:sourcegen</span></span>
+<span class="line">      <span class="hl-number">0</span> =&gt; Error::InsufficientBalance,</span>
+<span class="line">      <span class="hl-number">1</span> =&gt; Error::InvalidSignature,</span>
+<span class="line">      <span class="hl-number">2</span> =&gt; Error::AccountNotFound,</span>
+<span class="line">      <span class="hl-comment">// endregion:sourcegen</span></span>
+<span class="line">      _ =&gt; <span class="hl-keyword">return</span> <span class="hl-literal">None</span>,</span>
+<span class="line">    };</span>
+<span class="line">    <span class="hl-title function_ invoke__">Some</span>(res)</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">sourcegen_from_code</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">original_text</span> = std::fs::<span class="hl-title function_ invoke__">read_to_string</span>(<span class="hl-built_in">file!</span>()).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> (_, variants, _) =</span>
+<span class="line">    <span class="hl-title function_ invoke__">split_twice</span>(&amp;original_text, <span class="hl-string">&quot;pub enum Error {\n&quot;</span>, <span class="hl-string">&quot;}&quot;</span>)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">arms</span> = variants</span>
+<span class="line">    .<span class="hl-title function_ invoke__">lines</span>()</span>
+<span class="line">    .<span class="hl-title function_ invoke__">map</span>(|line| line.<span class="hl-title function_ invoke__">trim</span>().<span class="hl-title function_ invoke__">trim_end_matches</span>(<span class="hl-string">&#x27;,&#x27;</span>))</span>
+<span class="line">    .<span class="hl-title function_ invoke__">enumerate</span>()</span>
+<span class="line">    .<span class="hl-title function_ invoke__">map</span>(|(i, var)| <span class="hl-built_in">format!</span>(<span class="hl-string">&quot;      {i} =&gt; Error::{var},\n&quot;</span>))</span>
+<span class="line">    .collect::&lt;<span class="hl-type">String</span>&gt;();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">new_text</span> = {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">start_marker</span> = <span class="hl-string">&quot;      // region:sourcegen\n&quot;</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">end_marker</span> = <span class="hl-string">&quot;      // endregion:sourcegen\n&quot;</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> (prefix, _, suffix) =</span>
+<span class="line">      <span class="hl-title function_ invoke__">split_twice</span>(&amp;original_text, start_marker, end_marker)</span>
+<span class="line">        .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">format!</span>(<span class="hl-string">&quot;{prefix}{start_marker}{arms}{end_marker}{suffix}&quot;</span>)</span>
+<span class="line">  };</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">if</span> new_text != original_text {</span>
+<span class="line">    std::fs::<span class="hl-title function_ invoke__">write</span>(<span class="hl-built_in">file!</span>(), new_text).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;source was not up-to-date&quot;</span>)</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">split_twice</span>&lt;<span class="hl-symbol">&#x27;a</span>&gt;(</span>
+<span class="line">  text: &amp;<span class="hl-symbol">&#x27;a</span> <span class="hl-type">str</span>,</span>
+<span class="line">  start_marker: &amp;<span class="hl-type">str</span>,</span>
+<span class="line">  end_marker: &amp;<span class="hl-type">str</span>,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;(&amp;<span class="hl-symbol">&#x27;a</span> <span class="hl-type">str</span>, &amp;<span class="hl-symbol">&#x27;a</span> <span class="hl-type">str</span>, &amp;<span class="hl-symbol">&#x27;a</span> <span class="hl-type">str</span>)&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> (prefix, rest) = text.<span class="hl-title function_ invoke__">split_once</span>(start_marker)?;</span>
+<span class="line">  <span class="hl-keyword">let</span> (mid, suffix) = rest.<span class="hl-title function_ invoke__">split_once</span>(end_marker)?;</span>
+<span class="line">  <span class="hl-title function_ invoke__">Some</span>((prefix, mid, suffix))</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>That</span>&rsquo;<span>s the whole pattern!</span>
+<span>Note how, unlike every other solution, it is crystal clear how the generated code works.</span>
+<span>It</span>&rsquo;<span>s just code which you can goto-definition, or step through in debugging.</span>
+<span>You can be completely oblivious about the shady </span><code>#[test]</code><span> machinery, and that won</span>&rsquo;<span>t harm understanding in any way.</span></p>
+<p><span>The code of the </span>&ldquo;<span>macro</span>&rdquo;<span> is also easy to understand </span>&mdash;<span> that</span>&rsquo;<span>s literally string manipulation.</span>
+<span>What</span>&rsquo;<span>s more, you can easily see how it works by just running the test!</span></p>
+<p><span>The </span>&ldquo;<span>read and update your own source code</span>&rdquo;<span> part is a bit mind-bending!</span>
+<span>But the implementation is tiny and only uses the standard library, so it should be easy to understand.</span></p>
+<p><span>Unlike macros, this doesn</span>&rsquo;<span>t try to enforce at compile time that the generated code is fresh.</span>
+<span>If you update the </span><code>Error</code><span> definition, you need to re-run test for the generated code to be updated as well.</span>
+<span>But this </span><em><span>will</span></em><span> be caught by the tests.</span>
+<span>Note the important detail </span>&mdash;<span> the test only tries to update the source code if there are, in fact, changes.</span>
+<span>That is, writable </span><code>src/</code><span> is required only during development.</span></p>
+<p><span>That</span>&rsquo;<span>s all, hope this survey was useful! Discussion on </span><a href="https://old.reddit.com/r/rust/comments/tp8tmn/blog_post_self_modifying_code/"><span>/r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2022-03-26-self-modifying-code.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

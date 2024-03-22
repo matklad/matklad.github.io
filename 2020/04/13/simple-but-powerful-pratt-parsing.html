@@ -1,0 +1,1398 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simple but Powerful Pratt Parsing</title>
+  <meta name="description" content="Welcome to my article about Pratt parsing --- the monad tutorial of syntactic analysis.
+The number of Pratt parsing articles is so large that there exists a survey post :)">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Simple but Powerful Pratt Parsing</span> <time datetime="2020-04-13">Apr 13, 2020</time></h1>
+<p><span>Welcome to my article about Pratt parsing </span>&mdash;<span> the monad tutorial of syntactic analysis.</span>
+<span>The number of Pratt parsing articles is so large that there exists a </span><a href="https://www.oilshell.org/blog/2017/03/31.html"><span>survey post</span></a><span> :)</span></p>
+<p><span>The goals of this particular article are:</span></p>
+<ul>
+<li>
+<span>Raising an issue that the so-called left-recursion problem is overstated.</span>
+</li>
+<li>
+<span>Complaining about inadequacy of BNF for representing infix expressions.</span>
+</li>
+<li>
+<span>Providing a description and implementation of Pratt parsing algorithm which sticks to the core and doesn</span>&rsquo;<span>t introduce a DSL-y abstraction.</span>
+</li>
+<li>
+<span>Understanding the algorithm myself for hopefully the last time. I</span>&rsquo;<span>ve</span>
+<a href="https://github.com/rust-analyzer/rust-analyzer/blob/c388130f5ffbcbe7d3131213a24d12d02f769b87/crates/ra_parser/src/grammar/expressions.rs#L280-L281"><span>implemented</span></a>
+<span>a production-grade Pratt parser once, but I no longer immediately understand that code :-)</span>
+</li>
+</ul>
+<p><span>This post assumes a fair bit of familiarity with parsing techniques, and, for example, does not explain what a context free grammar is.</span></p>
+<section id="Introduction">
+
+    <h2>
+    <a href="#Introduction"><span>Introduction</span> </a>
+    </h2>
+<p><span>Parsing is the process by which a compiler turns a </span><em><span>sequence</span></em><span> of tokens into a </span><em><span>tree</span></em><span> representation:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">                            Add</span>
+<span class="line">                 Parser     / \</span>
+<span class="line"> "1 + 2 * 3"    -------&gt;   1  Mul</span>
+<span class="line">                              / \</span>
+<span class="line">                             2   3</span></code></pre>
+
+</figure>
+<p><span>There are many approaches to this task, which roughly fall into one of the broad two categories:</span></p>
+<ul>
+<li>
+<span>Using a DSL to specify an abstract grammar of the language</span>
+</li>
+<li>
+<span>Hand-writing the parser</span>
+</li>
+</ul>
+<p><span>Pratt parsing is one of the most frequently used techniques for hand-written parsing.</span></p>
+</section>
+<section id="BNF">
+
+    <h2>
+    <a href="#BNF"><span>BNF</span> </a>
+    </h2>
+<p><span>The pinnacle of syntactic analysis theory is discovering the context free grammar</span>
+<span>notation (often using BNF concrete syntax) for decoding linear structures into trees:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Item ::=</span>
+<span class="line">    StructItem</span>
+<span class="line">  | EnumItem</span>
+<span class="line">  | ...</span>
+<span class="line"></span>
+<span class="line">StructItem ::=</span>
+<span class="line">    'struct' Name '{' FieldList '}'</span>
+<span class="line"></span>
+<span class="line">...</span></code></pre>
+
+</figure>
+<p><span>I remember being fascinated by this idea, especially by parallels with natural language sentence structure.</span>
+<span>However, my optimism quickly waned once we got to describing expressions.</span>
+<span>The natural expression grammar indeed allows one to see what is an expression.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Expr ::=</span>
+<span class="line">    Expr '+' Expr</span>
+<span class="line">  | Expr '*' Expr</span>
+<span class="line">  | '(' Expr ')'</span>
+<span class="line">  | 'number'</span></code></pre>
+
+</figure>
+<p><span>Although this grammar looks great, it is in fact ambiguous and imprecise, and needs to be rewritten to be amendable to automated parser generation.</span>
+<span>Specifically, we need to specify precedence and associativity of operators.</span>
+<span>The fixed grammar looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Expr ::=</span>
+<span class="line">    Factor</span>
+<span class="line">  | Expr '+' Factor</span>
+<span class="line"></span>
+<span class="line">Factor ::=</span>
+<span class="line">    Atom</span>
+<span class="line">  | Factor '*' Atom</span>
+<span class="line"></span>
+<span class="line">Atom ::=</span>
+<span class="line">    'number'</span>
+<span class="line">  | '(' Expr ')'</span></code></pre>
+
+</figure>
+<p><span>To me, the </span>&ldquo;<span>shape</span>&rdquo;<span> of expressions feels completely lost in this new formulation.</span>
+<span>Moreover, it took me three or four </span><em><span>courses</span></em><span> in formal languages before I was able to reliably create this grammar myself.</span></p>
+<p><span>And that</span>&rsquo;<span>s why I love Pratt parsing </span>&mdash;<span> it is an enhancement of recursive descent parsing algorithm, which uses the natural terminology of precedence and associativity for parsing expressions, instead of grammar obfuscation techniques.</span></p>
+</section>
+<section id="Recursive-descent-and-left-recursion">
+
+    <h2>
+    <a href="#Recursive-descent-and-left-recursion"><span>Recursive descent and left-recursion</span> </a>
+    </h2>
+<p><span>The simplest technique for hand-writing a parser is recursive descent, which</span>
+<span>models the grammar as a set of mutually recursive functions. For example, the</span>
+<span>above item grammar fragment can look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">item</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">    <span class="hl-keyword">match</span> p.<span class="hl-title function_ invoke__">peek</span>() {</span>
+<span class="line">        STRUCT_KEYWORD =&gt; <span class="hl-title function_ invoke__">struct_item</span>(p),</span>
+<span class="line">        ENUM_KEYWORD   =&gt; <span class="hl-title function_ invoke__">enum_item</span>(p),</span>
+<span class="line">        ...</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">struct_item</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">    p.<span class="hl-title function_ invoke__">expect</span>(STRUCT_KEYWORD);</span>
+<span class="line">    <span class="hl-title function_ invoke__">name</span>(p);</span>
+<span class="line">    p.<span class="hl-title function_ invoke__">expect</span>(L_CURLY);</span>
+<span class="line">    <span class="hl-title function_ invoke__">field_list</span>(p);</span>
+<span class="line">    p.<span class="hl-title function_ invoke__">expect</span>(R_CURLY);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">...</span></code></pre>
+
+</figure>
+<p><span>Traditionally, text-books point out left-recursive grammars as the Achilles heel</span>
+<span>of this approach, and use this drawback to motivate more advanced LR parsing</span>
+<span>techniques. An example of problematic grammar can look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Sum ::=</span>
+<span class="line">    Sum '+' Int</span>
+<span class="line">  | Int</span></code></pre>
+
+</figure>
+<p><span>Indeed, if we naively code the </span><code>sum</code><span> function, it wouldn</span>&rsquo;<span>t be too useful:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">sum</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">    <span class="hl-comment">// Try first alternative</span></span>
+<span class="line">    <span class="hl-title function_ invoke__">sum</span>(p); <i class="callout" data-value="1"></i></span>
+<span class="line">    p.<span class="hl-title function_ invoke__">expect</span>(PLUS);</span>
+<span class="line">    <span class="hl-title function_ invoke__">int</span>(p);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// If that fails, try the second one</span></span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<span>At this point we immediately loop and overflow the stack</span>
+</li>
+</ol>
+<p><span>A theoretical fix to the problem involves rewriting the grammar to eliminate the left recursion.</span>
+<span>However in practice, for a hand-written parser, a solution is much simpler </span>&mdash;<span> breaking away with a pure </span><em><span>recursive</span></em><span> paradigm and using a loop:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">sum</span>(p: &amp;<span class="hl-keyword">mut</span> Parser) {</span>
+<span class="line">    <span class="hl-title function_ invoke__">int</span>(p);</span>
+<span class="line">    <span class="hl-keyword">while</span> p.<span class="hl-title function_ invoke__">eat</span>(PLUS) {</span>
+<span class="line">        <span class="hl-title function_ invoke__">int</span>(p);</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Pratt-parsing-the-general-shape">
+
+    <h2>
+    <a href="#Pratt-parsing-the-general-shape"><span>Pratt parsing, the general shape</span> </a>
+    </h2>
+<p><span>Using just loops won</span>&rsquo;<span>t be enough for parsing infix expressions.</span>
+<span>Instead, Pratt parsing uses </span><em><span>both</span></em><span> loops </span><em><span>and</span></em><span> recursion:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">parse_expr</span>() {</span>
+<span class="line">    ...</span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">        ...</span>
+<span class="line">        <span class="hl-title function_ invoke__">parse_expr</span>()</span>
+<span class="line">        ...</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Not only does it send your mind into Möbeus-shaped hamster wheel, it also handles associativity and precedence!</span></p>
+</section>
+<section id="From-Precedence-to-Binding-Power">
+
+    <h2>
+    <a href="#From-Precedence-to-Binding-Power"><span>From Precedence to Binding Power</span> </a>
+    </h2>
+<p><span>I have a confession to make: I am always confused by </span>&ldquo;<span>high precedence</span>&rdquo;<span> and </span>&ldquo;<span>low precedence</span>&rdquo;<span>. In </span><code>a + b * c</code><span>, addition has a lower precedence, but it is at the top of the parse tree</span>&hellip;</p>
+<p><span>So instead, I find thinking in terms of binding power more intuitive.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">expr:   A       +       B       *       C</span>
+<span class="line">power:      3       3       5       5</span></code></pre>
+
+</figure>
+<p><span>The </span><code>*</code><span> is stronger, it has more power to hold together </span><code>B</code><span> and </span><code>C</code><span>, and so the expression is parsed as</span>
+<code>A + (B * C)</code><span>.</span></p>
+<p><span>What about associativity though? In </span><code>A + B + C</code><span> all operators seem to have the same power, and it is unclear which </span><code>+</code><span> to fold first.</span>
+<span>But this can also be modelled with power, if we make it slightly asymmetric:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">expr:      A       +       B       +       C</span>
+<span class="line">power:  0      3      3.1      3      3.1     0</span></code></pre>
+
+</figure>
+<p><span>Here, we pumped the right power of </span><code>+</code><span> just a little bit, so that it holds the right operand tighter.</span>
+<span>We also added zeros at both ends, as there are no operators to bind from the sides.</span>
+<span>Here, the first (and only the first) </span><code>+</code><span> holds both of its arguments tighter than the neighbors, so we can reduce it:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">expr:     (A + B)     +     C</span>
+<span class="line">power:  0          3    3.1    0</span></code></pre>
+
+</figure>
+<p><span>Now we can fold the second plus and get </span><code>(A + B) + C</code><span>.</span>
+<span>Or, in terms of the syntax tree, the second </span><code>+</code><span> really likes its right operand more than the left one, so it rushes to get hold of </span><code>C</code><span>.</span>
+<span>While he does that, the first </span><code>+</code><span> captures both </span><code>A</code><span> and </span><code>B</code><span>, as they are uncontested.</span></p>
+<p><span>What Pratt parsing does is that it finds these badass, stronger than neighbors operators, by processing the string left to right.</span>
+<span>We are almost at a point where we finally start writing some code, but let</span>&rsquo;<span>s first look at the other running example.</span>
+<span>We will use function composition operator, </span><code>.</code><span> (dot) as a </span><em><span>right</span></em><span> associative operator with a high binding power.</span>
+<span>That is, </span><code>f . g . h</code><span> is parsed as </span><code>f . (g . h)</code><span>, or, in terms of power</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">  f     .    g     .    h</span>
+<span class="line">0   8.5    8   8.5    8   0</span></code></pre>
+
+</figure>
+</section>
+<section id="Minimal-Pratt-Parser">
+
+    <h2>
+    <a href="#Minimal-Pratt-Parser"><span>Minimal Pratt Parser</span> </a>
+    </h2>
+<p><span>We will be parsing expressions where basic atoms are </span><em><span>single character</span></em><span> numbers and variables, and which uses punctuation for operators.</span>
+<span>Let</span>&rsquo;<span>s define a simple tokenizer:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Token</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Atom</span>(<span class="hl-type">char</span>),</span>
+<span class="line">    <span class="hl-title function_ invoke__">Op</span>(<span class="hl-type">char</span>),</span>
+<span class="line">    Eof,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Lexer</span> {</span>
+<span class="line">    tokens: <span class="hl-type">Vec</span>&lt;Token&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Lexer</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">new</span>(input: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> Lexer {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">tokens</span> = input</span>
+<span class="line">            .<span class="hl-title function_ invoke__">chars</span>()</span>
+<span class="line">            .<span class="hl-title function_ invoke__">filter</span>(|it| !it.<span class="hl-title function_ invoke__">is_ascii_whitespace</span>())</span>
+<span class="line">            .<span class="hl-title function_ invoke__">map</span>(|c| <span class="hl-keyword">match</span> c {</span>
+<span class="line">                <span class="hl-string">&#x27;0&#x27;</span>..=<span class="hl-string">&#x27;9&#x27;</span> |</span>
+<span class="line">                <span class="hl-string">&#x27;a&#x27;</span>..=<span class="hl-string">&#x27;z&#x27;</span> | <span class="hl-string">&#x27;A&#x27;</span>..=<span class="hl-string">&#x27;Z&#x27;</span> =&gt; Token::<span class="hl-title function_ invoke__">Atom</span>(c),</span>
+<span class="line">                _ =&gt; Token::<span class="hl-title function_ invoke__">Op</span>(c),</span>
+<span class="line">            })</span>
+<span class="line">            .collect::&lt;<span class="hl-type">Vec</span>&lt;_&gt;&gt;();</span>
+<span class="line">        tokens.<span class="hl-title function_ invoke__">reverse</span>();</span>
+<span class="line">        Lexer { tokens }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">next</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> Token {</span>
+<span class="line">        <span class="hl-keyword">self</span>.tokens.<span class="hl-title function_ invoke__">pop</span>().<span class="hl-title function_ invoke__">unwrap_or</span>(Token::Eof)</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">peek</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> Token {</span>
+<span class="line">        <span class="hl-keyword">self</span>.tokens.<span class="hl-title function_ invoke__">last</span>().<span class="hl-title function_ invoke__">copied</span>().<span class="hl-title function_ invoke__">unwrap_or</span>(Token::Eof)</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>To make sure that we got the </span><del><span>precedence</span></del><span> binding power correctly, we will be transforming infix expressions into a gold-standard (not so popular in Poland, for whatever reason) unambiguous notation </span>&mdash;<span> S-expressions:</span><br>
+<code>1 + 2 * 3 == (+ 1 (* 2 3))</code><span>.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::fmt;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">S</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Atom</span>(<span class="hl-type">char</span>),</span>
+<span class="line">    <span class="hl-title function_ invoke__">Cons</span>(<span class="hl-type">char</span>, <span class="hl-type">Vec</span>&lt;S&gt;),</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">fmt</span>::Display <span class="hl-keyword">for</span> <span class="hl-title class_">S</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">fmt</span>(&amp;<span class="hl-keyword">self</span>, f: &amp;<span class="hl-keyword">mut</span> fmt::Formatter&lt;<span class="hl-symbol">&#x27;_</span>&gt;) <span class="hl-punctuation">-&gt;</span> fmt::<span class="hl-type">Result</span> {</span>
+<span class="line">        <span class="hl-keyword">match</span> <span class="hl-keyword">self</span> {</span>
+<span class="line">            S::<span class="hl-title function_ invoke__">Atom</span>(i) =&gt; <span class="hl-built_in">write!</span>(f, <span class="hl-string">&quot;{}&quot;</span>, i),</span>
+<span class="line">            S::<span class="hl-title function_ invoke__">Cons</span>(head, rest) =&gt; {</span>
+<span class="line">                <span class="hl-built_in">write!</span>(f, <span class="hl-string">&quot;({}&quot;</span>, head)?;</span>
+<span class="line">                <span class="hl-keyword">for</span> <span class="hl-variable">s</span> <span class="hl-keyword">in</span> rest {</span>
+<span class="line">                    <span class="hl-built_in">write!</span>(f, <span class="hl-string">&quot; {}&quot;</span>, s)?</span>
+<span class="line">                }</span>
+<span class="line">                <span class="hl-built_in">write!</span>(f, <span class="hl-string">&quot;)&quot;</span>)</span>
+<span class="line">            }</span>
+<span class="line">        }</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And let</span>&rsquo;<span>s start with just this: expressions with atoms and two infix binary operators, </span><code>+</code><span> and </span><code>*</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr</span>(input: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lexer</span> = Lexer::<span class="hl-title function_ invoke__">new</span>(input);</span>
+<span class="line">    <span class="hl-title function_ invoke__">expr_bp</span>(&amp;<span class="hl-keyword">mut</span> lexer)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_bp</span>(lexer: &amp;<span class="hl-keyword">mut</span> Lexer) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    todo!()</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">tests</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;1 + 2 * 3&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(+ 1 (* 2 3))&quot;</span>)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>So, the general approach is roughly the one we used to deal with left recursion </span>&mdash;<span> start with parsing a first number, and then loop, consuming operators and doing </span>&hellip;<span> something?</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_bp</span>(lexer: &amp;<span class="hl-keyword">mut</span> Lexer) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">lhs</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Atom</span>(it) =&gt; S::<span class="hl-title function_ invoke__">Atom</span>(it),</span>
+<span class="line">        t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">    };</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">op</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">            Token::Eof =&gt; <span class="hl-keyword">break</span>,</span>
+<span class="line">            Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; op,</span>
+<span class="line">            t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        todo!()</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    lhs</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">tests</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;1&quot;</span>); <i class="callout" data-value="1"></i></span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;1&quot;</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<span>Note that we already can parse this simple test!</span>
+</li>
+</ol>
+<p><span>We want to use this power idea, so let</span>&rsquo;<span>s compute both left and right powers of the operator.</span>
+<span>We</span>&rsquo;<span>ll use </span><code>u8</code><span> to represent power, so, for associativity, we</span>&rsquo;<span>ll add </span><code>1</code><span>.</span>
+<span>And we</span>&rsquo;<span>ll reserve the </span><code>0</code><span> power for the end of input, so the lowest power operator can have is </span><code>1</code><span>.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_bp</span>(lexer: &amp;<span class="hl-keyword">mut</span> Lexer) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">lhs</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Atom</span>(it) =&gt; S::<span class="hl-title function_ invoke__">Atom</span>(it),</span>
+<span class="line">        t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">    };</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">op</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">peek</span>() {</span>
+<span class="line">            Token::Eof =&gt; <span class="hl-keyword">break</span>,</span>
+<span class="line">            Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; op,</span>
+<span class="line">            t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">        };</span>
+<span class="line">        <span class="hl-keyword">let</span> (l_bp, r_bp) = <span class="hl-title function_ invoke__">infix_binding_power</span>(op);</span>
+<span class="line"></span>
+<span class="line">        todo!()</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    lhs</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">infix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> (<span class="hl-type">u8</span>, <span class="hl-type">u8</span>) {</span>
+<span class="line">    <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; (<span class="hl-number">1</span>, <span class="hl-number">2</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;*&#x27;</span> | <span class="hl-string">&#x27;/&#x27;</span> =&gt; (<span class="hl-number">3</span>, <span class="hl-number">4</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad op: {:?}&quot;</span>)</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And now comes the tricky bit, where we introduce recursion into the picture.</span>
+<span>Let</span>&rsquo;<span>s think about this example (with powers below):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">a   +   b   *   c   *   d   +   e</span>
+<span class="line">  1   2   3   4   3   4   1   2</span></code></pre>
+
+</figure>
+<p><span>The cursor is at the first </span><code>+</code><span>, we know that the left </span><code>bp</code><span> is </span><code>1</code><span> and the right one is </span><code>2</code><span>.</span>
+<span>The </span><code>lhs</code><span> stores </span><code>a</code><span>.</span>
+<span>The next operator after </span><code>+</code><span> is </span><code>*</code><span>, so we shouldn</span>&rsquo;<span>t add </span><code>b</code><span> to </span><code>a</code><span>.</span>
+<span>The problem is that we haven</span>&rsquo;<span>t yet seen the next operator, we are just past </span><code>+</code><span>.</span>
+<span>Can we add a lookahead?</span>
+<span>Looks like no </span>&mdash;<span> we</span>&rsquo;<span>d have to look past all of </span><code>b</code><span>, </span><code>c</code><span> and </span><code>d</code><span> to find the next operator with lower binding power, which sounds pretty unbounded.</span>
+<span>But we are onto something!</span>
+<span>Our current right priority is </span><code>2</code><span>, and, to be able to fold the expression, we need to find the next operator with lower priority.</span>
+<span>So let</span>&rsquo;<span>s recursively call </span><code>expr_bp</code><span> starting at </span><code>b</code><span>, but also tell it to stop as soon as </span><code>bp</code><span> drops below </span><code>2</code><span>.</span>
+<span>This necessitates the addition of </span><code>min_bp</code><span> argument to the main function.</span></p>
+<p><span>And lo, we have a fully functioning minimal Pratt parser:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr</span>(input: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lexer</span> = Lexer::<span class="hl-title function_ invoke__">new</span>(input);</span>
+<span class="line">    <span class="hl-title function_ invoke__">expr_bp</span>(&amp;<span class="hl-keyword">mut</span> lexer, <span class="hl-number">0</span>) <i class="callout" data-value="5"></i></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_bp</span>(lexer: &amp;<span class="hl-keyword">mut</span> Lexer, min_bp: <span class="hl-type">u8</span>) <span class="hl-punctuation">-&gt;</span> S { <i class="callout" data-value="1"></i></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lhs</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Atom</span>(it) =&gt; S::<span class="hl-title function_ invoke__">Atom</span>(it),</span>
+<span class="line">        t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">    };</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">op</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">peek</span>() {</span>
+<span class="line">            Token::Eof =&gt; <span class="hl-keyword">break</span>,</span>
+<span class="line">            Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; op,</span>
+<span class="line">            t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">let</span> (l_bp, r_bp) = <span class="hl-title function_ invoke__">infix_binding_power</span>(op);</span>
+<span class="line">        <span class="hl-keyword">if</span> l_bp &lt; min_bp { <i class="callout" data-value="2"></i></span>
+<span class="line">            <span class="hl-keyword">break</span>;</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        lexer.<span class="hl-title function_ invoke__">next</span>(); <i class="callout" data-value="3"></i></span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line"></span>
+<span class="line">        lhs = S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs, rhs]); <i class="callout" data-value="4"></i></span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    lhs</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">infix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> (<span class="hl-type">u8</span>, <span class="hl-type">u8</span>) {</span>
+<span class="line">    <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; (<span class="hl-number">1</span>, <span class="hl-number">2</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;*&#x27;</span> | <span class="hl-string">&#x27;/&#x27;</span> =&gt; (<span class="hl-number">3</span>, <span class="hl-number">4</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad op: {:?}&quot;</span>),</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">tests</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;1&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;1&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;1 + 2 * 3&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(+ 1 (* 2 3))&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;a + b * c * d + e&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(+ (+ a (* (* b c) d)) e)&quot;</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<code>min_bp</code><span> argument is the crucial addition. </span><code>expr_bp</code><span> now parses expressions with relatively high binding power. As soon as it sees something weaker than </span><code>min_bp</code><span>, it stops.</span>
+</li>
+<li>
+<span>This is the </span>&ldquo;<span>it stops</span>&rdquo;<span> point.</span>
+</li>
+<li>
+<span>And here we bump past the operator itself and make the recursive call.</span>
+<span>Note how we use </span><code>l_bp</code><span> to check against </span><code>min_bp</code><span>, and </span><code>r_bp</code><span> as the new </span><code>min_bp</code><span> of the recursive call.</span>
+<span>So, you can think about </span><code>min_bp</code><span> as the binding power of the operator to the left of the current expressions.</span>
+</li>
+<li>
+<span>Finally, after parsing the correct right hand side, we assemble the new current expression.</span>
+</li>
+<li>
+<span>To start the recursion, we use binding power of zero.</span>
+<span>Remember, at the beginning the binding power of the operator to the left is the lowest possible, zero, as there</span>&rsquo;<span>s no actual operator there.</span>
+</li>
+</ol>
+<p><span>So, yup, these 40 lines </span><em><span>are</span></em><span> the Pratt parsing algorithm.</span>
+<span>They are tricky, but, if you understand them, everything else is straightforward additions.</span></p>
+</section>
+<section id="Bells-and-Whistles">
+
+    <h2>
+    <a href="#Bells-and-Whistles"><span>Bells and Whistles</span> </a>
+    </h2>
+<p><span>Now let</span>&rsquo;<span>s add all kinds of weird expressions to show the power and flexibility of the algorithm.</span>
+<span>First, let</span>&rsquo;<span>s add a high-priority, right associative function composition operator: </span><code>.</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">infix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> (<span class="hl-type">u8</span>, <span class="hl-type">u8</span>) {</span>
+<span class="line">    <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; (<span class="hl-number">1</span>, <span class="hl-number">2</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;*&#x27;</span> | <span class="hl-string">&#x27;/&#x27;</span> =&gt; (<span class="hl-number">3</span>, <span class="hl-number">4</span>),</span>
+<span class="line hl-line">        <span class="hl-string">&#x27;.&#x27;</span> =&gt; (<span class="hl-number">6</span>, <span class="hl-number">5</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad op: {:?}&quot;</span>),</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Yup, it</span>&rsquo;<span>s a single line!</span>
+<span>Note how the left side of the operator binds tighter, which gives us desired right associativity:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;f . g . h&quot;</span>);</span>
+<span class="line"><span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(. f (. g h))&quot;</span>);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot; 1 + 2 + f . g . h * 3 * 4&quot;</span>);</span>
+<span class="line"><span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(+ (+ 1 2) (* (* (. f (. g h)) 3) 4))&quot;</span>);</span></code></pre>
+
+</figure>
+<p><span>Now, let</span>&rsquo;<span>s add unary </span><code>-</code><span>, which binds tighter than binary arithmetic operators, but less tight than composition.</span>
+<span>This requires changes to how we start our loop, as we no longer can assume that the first token is an atom, and need to handle minus as well.</span>
+<span>But let the types drive us.</span>
+<span>First, we start with binding powers.</span>
+<span>As this is an unary operator, it really only have right binding power, so, ahem, let</span>&rsquo;<span>s just code this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">prefix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> ((), <span class="hl-type">u8</span>) { <i class="callout" data-value="1"></i></span>
+<span class="line">    <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; ((), <span class="hl-number">5</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad op: {:?}&quot;</span>, op),</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">infix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> (<span class="hl-type">u8</span>, <span class="hl-type">u8</span>) {</span>
+<span class="line">    <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; (<span class="hl-number">1</span>, <span class="hl-number">2</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;*&#x27;</span> | <span class="hl-string">&#x27;/&#x27;</span> =&gt; (<span class="hl-number">3</span>, <span class="hl-number">4</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;.&#x27;</span> =&gt; (<span class="hl-number">8</span>, <span class="hl-number">7</span>), <i class="callout" data-value="2"></i></span>
+<span class="line">        _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad op: {:?}&quot;</span>),</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<span>Here, we return a dummy </span><code>()</code><span> to make it clear that this is a prefix, and not a postfix operator, and thus can only bind things to the right.</span>
+</li>
+<li>
+<span>Note, as we want to add unary </span><code>-</code><span> between </span><code>.</code><span> and </span><code>*</code><span>, we need to shift priorities of </span><code>.</code><span> by two.</span>
+<span>The general rule is that we use an odd priority as base, and bump it by one for associativity, if the operator is binary. For unary minus it doesn</span>&rsquo;<span>t matter and we could have used either </span><code>5</code><span> or </span><code>6</code><span>, but sticking to odd is more consistent.</span>
+</li>
+</ol>
+<p><span>Plugging this into </span><code>expr_bp</code><span>, we get:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_bp</span>(lexer: &amp;<span class="hl-keyword">mut</span> Lexer, min_bp: <span class="hl-type">u8</span>) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lhs</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Atom</span>(it) =&gt; S::<span class="hl-title function_ invoke__">Atom</span>(it),</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; {</span>
+<span class="line">            <span class="hl-keyword">let</span> ((), r_bp) = <span class="hl-title function_ invoke__">prefix_binding_power</span>(op);</span>
+<span class="line">            todo!()</span>
+<span class="line">        }</span>
+<span class="line">        t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">    };</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Now, we only have </span><code>r_bp</code><span> and not </span><code>l_bp</code><span>, so let</span>&rsquo;<span>s just copy-paste half of the code from the main loop?</span>
+<span>Remember, we use </span><code>r_bp</code><span> for recursive calls.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_bp</span>(lexer: &amp;<span class="hl-keyword">mut</span> Lexer, min_bp: <span class="hl-type">u8</span>) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lhs</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Atom</span>(it) =&gt; S::<span class="hl-title function_ invoke__">Atom</span>(it),</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; {</span>
+<span class="line">            <span class="hl-keyword">let</span> ((), r_bp) = <span class="hl-title function_ invoke__">prefix_binding_power</span>(op);</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line">            S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[rhs])</span>
+<span class="line">        }</span>
+<span class="line">        t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">    };</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">op</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">peek</span>() {</span>
+<span class="line">            Token::Eof =&gt; <span class="hl-keyword">break</span>,</span>
+<span class="line">            Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; op,</span>
+<span class="line">            t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">let</span> (l_bp, r_bp) = <span class="hl-title function_ invoke__">infix_binding_power</span>(op);</span>
+<span class="line">        <span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line">            <span class="hl-keyword">break</span>;</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        lexer.<span class="hl-title function_ invoke__">next</span>();</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line"></span>
+<span class="line">        lhs = S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs, rhs]);</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    lhs</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">tests</span>() {</span>
+<span class="line">    ...</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;--1 * 2&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(* (- (- 1)) 2)&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;--f . g&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(- (- (. f g)))&quot;</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Amusingly, this purely mechanical, type-driven transformation works.</span>
+<span>You can also reason why it works, of course.</span>
+<span>The same argument applies; after we</span>&rsquo;<span>ve consumed a prefix operator, the operand consists of operators that bind tighter, and we just so conveniently happen to have a function which can parse expressions tighter than the specified power.</span></p>
+<p><span>Ok, this is getting stupid.</span>
+<span>If using </span><code>((), u8)</code><span> </span>&ldquo;<span>just worked</span>&rdquo;<span> for prefix operators, can </span><code>(u8, ())</code><span> deal with postfix ones?</span>
+<span>Well, let</span>&rsquo;<span>s add </span><code>!</code><span> for factorials. It should bind tighter than </span><code>-</code><span>, because </span><code>-(92!)</code><span> is obviously more useful than </span><code>(-92)!</code><span>.</span>
+<span>So, the familiar drill </span>&mdash;<span> new priority function, shifting priority of </span><code>.</code><span> (this bit </span><em><span>is</span></em><span> annoying in Pratt parsers), copy-pasting the code</span>&hellip;</p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> (l_bp, ()) = <span class="hl-title function_ invoke__">postfix_binding_power</span>(op);</span>
+<span class="line"><span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line">    <span class="hl-keyword">break</span>;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">let</span> (l_bp, r_bp) = <span class="hl-title function_ invoke__">infix_binding_power</span>(op);</span>
+<span class="line"><span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line">    <span class="hl-keyword">break</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Wait, something</span>&rsquo;<span>s wrong here.</span>
+<span>After we</span>&rsquo;<span>ve parsed the prefix expression, we can see either a postfix or an infix operator.</span>
+<span>But we bail on unrecognized operators, which is not going to work</span>&hellip;
+<span>So, let</span>&rsquo;<span>s make </span><code>postfix_binding_power</code><span> to return an option, for the case where the operator is not postfix:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_bp</span>(lexer: &amp;<span class="hl-keyword">mut</span> Lexer, min_bp: <span class="hl-type">u8</span>) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lhs</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Atom</span>(it) =&gt; S::<span class="hl-title function_ invoke__">Atom</span>(it),</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; {</span>
+<span class="line">            <span class="hl-keyword">let</span> ((), r_bp) = <span class="hl-title function_ invoke__">prefix_binding_power</span>(op);</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line">            S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[rhs])</span>
+<span class="line">        }</span>
+<span class="line">        t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">    };</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">op</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">peek</span>() {</span>
+<span class="line">            Token::Eof =&gt; <span class="hl-keyword">break</span>,</span>
+<span class="line">            Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; op,</span>
+<span class="line">            t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line hl-line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>((l_bp, ())) = <span class="hl-title function_ invoke__">postfix_binding_power</span>(op) {</span>
+<span class="line hl-line">            <span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line hl-line">                <span class="hl-keyword">break</span>;</span>
+<span class="line hl-line">            }</span>
+<span class="line hl-line">            lexer.<span class="hl-title function_ invoke__">next</span>();</span>
+<span class="line hl-line"></span>
+<span class="line hl-line">            lhs = S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs]);</span>
+<span class="line hl-line">            <span class="hl-keyword">continue</span>;</span>
+<span class="line hl-line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">let</span> (l_bp, r_bp) = <span class="hl-title function_ invoke__">infix_binding_power</span>(op);</span>
+<span class="line">        <span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line">            <span class="hl-keyword">break</span>;</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        lexer.<span class="hl-title function_ invoke__">next</span>();</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line"></span>
+<span class="line">        lhs = S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs, rhs]);</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    lhs</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">prefix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> ((), <span class="hl-type">u8</span>) {</span>
+<span class="line">    <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; ((), <span class="hl-number">5</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad op: {:?}&quot;</span>, op),</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line hl-line"><span class="hl-keyword">fn</span> <span class="hl-title function_">postfix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;(<span class="hl-type">u8</span>, ())&gt; {</span>
+<span class="line hl-line">    <span class="hl-keyword">let</span> <span class="hl-variable">res</span> = <span class="hl-keyword">match</span> op {</span>
+<span class="line hl-line">        <span class="hl-string">&#x27;!&#x27;</span> =&gt; (<span class="hl-number">7</span>, ()),</span>
+<span class="line hl-line">        _ =&gt; <span class="hl-keyword">return</span> <span class="hl-literal">None</span>,</span>
+<span class="line hl-line">    };</span>
+<span class="line hl-line">    <span class="hl-title function_ invoke__">Some</span>(res)</span>
+<span class="line hl-line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">infix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> (<span class="hl-type">u8</span>, <span class="hl-type">u8</span>) {</span>
+<span class="line">    <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; (<span class="hl-number">1</span>, <span class="hl-number">2</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;*&#x27;</span> | <span class="hl-string">&#x27;/&#x27;</span> =&gt; (<span class="hl-number">3</span>, <span class="hl-number">4</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;.&#x27;</span> =&gt; (<span class="hl-number">10</span>, <span class="hl-number">9</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad op: {:?}&quot;</span>),</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">tests</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;-9!&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(- (! 9))&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;f . g !&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(! (. f g))&quot;</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Amusingly, both the old and the new tests pass.</span></p>
+<p><span>Now, we are ready to add a new kind of expression: parenthesised expression.</span>
+<span>It is actually not that hard, and we could have done it from the start, but it makes sense to handle this here, you</span>&rsquo;<span>ll see in a moment why.</span>
+<span>Parens are just a primary expressions, and are handled similar to atoms:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lhs</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">    Token::<span class="hl-title function_ invoke__">Atom</span>(it) =&gt; S::<span class="hl-title function_ invoke__">Atom</span>(it),</span>
+<span class="line">    Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;(&#x27;</span>) =&gt; {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">lhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, <span class="hl-number">0</span>);</span>
+<span class="line">        <span class="hl-built_in">assert_eq!</span>(lexer.<span class="hl-title function_ invoke__">next</span>(), Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;)&#x27;</span>));</span>
+<span class="line">        lhs</span>
+<span class="line">    }</span>
+<span class="line">    Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; {</span>
+<span class="line">        <span class="hl-keyword">let</span> ((), r_bp) = <span class="hl-title function_ invoke__">prefix_binding_power</span>(op);</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line">        S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[rhs])</span>
+<span class="line">    }</span>
+<span class="line">    t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">};</span></code></pre>
+
+</figure>
+<p><span>Unfortunately, the following test fails:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;(((0)))&quot;</span>);</span>
+<span class="line"><span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;0&quot;</span>);</span></code></pre>
+
+</figure>
+<p><span>The panic comes from the loop below </span>&mdash;<span> the only termination condition we have is reaching eof, and </span><code>)</code><span> is definitely not eof.</span>
+<span>The easiest way to fix that is to change </span><code>infix_binding_power</code><span> to return </span><code>None</code><span> on unrecognized operands.</span>
+<span>That way, it</span>&rsquo;<span>ll become similar to </span><code>postfix_binding_power</code><span> again!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_bp</span>(lexer: &amp;<span class="hl-keyword">mut</span> Lexer, min_bp: <span class="hl-type">u8</span>) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lhs</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Atom</span>(it) =&gt; S::<span class="hl-title function_ invoke__">Atom</span>(it),</span>
+<span class="line hl-line">        Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;(&#x27;</span>) =&gt; {</span>
+<span class="line hl-line">            <span class="hl-keyword">let</span> <span class="hl-variable">lhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, <span class="hl-number">0</span>);</span>
+<span class="line hl-line">            <span class="hl-built_in">assert_eq!</span>(lexer.<span class="hl-title function_ invoke__">next</span>(), Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;)&#x27;</span>));</span>
+<span class="line hl-line">            lhs</span>
+<span class="line hl-line">        }</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; {</span>
+<span class="line">            <span class="hl-keyword">let</span> ((), r_bp) = <span class="hl-title function_ invoke__">prefix_binding_power</span>(op);</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line">            S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[rhs])</span>
+<span class="line">        }</span>
+<span class="line">        t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">    };</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">op</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">peek</span>() {</span>
+<span class="line">            Token::Eof =&gt; <span class="hl-keyword">break</span>,</span>
+<span class="line">            Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; op,</span>
+<span class="line">            t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>((l_bp, ())) = <span class="hl-title function_ invoke__">postfix_binding_power</span>(op) {</span>
+<span class="line">            <span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line">                <span class="hl-keyword">break</span>;</span>
+<span class="line">            }</span>
+<span class="line">            lexer.<span class="hl-title function_ invoke__">next</span>();</span>
+<span class="line"></span>
+<span class="line">            lhs = S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs]);</span>
+<span class="line">            <span class="hl-keyword">continue</span>;</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line hl-line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>((l_bp, r_bp)) = <span class="hl-title function_ invoke__">infix_binding_power</span>(op) {</span>
+<span class="line hl-line">            <span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line hl-line">                <span class="hl-keyword">break</span>;</span>
+<span class="line hl-line">            }</span>
+<span class="line hl-line"></span>
+<span class="line hl-line">            lexer.<span class="hl-title function_ invoke__">next</span>();</span>
+<span class="line hl-line">            <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line hl-line"></span>
+<span class="line hl-line">            lhs = S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs, rhs]);</span>
+<span class="line hl-line">            <span class="hl-keyword">continue</span>;</span>
+<span class="line hl-line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">break</span>;</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    lhs</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">prefix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> ((), <span class="hl-type">u8</span>) {</span>
+<span class="line">    <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; ((), <span class="hl-number">5</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad op: {:?}&quot;</span>, op),</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">postfix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;(<span class="hl-type">u8</span>, ())&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">res</span> = <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;!&#x27;</span> =&gt; (<span class="hl-number">7</span>, ()),</span>
+<span class="line">        _ =&gt; <span class="hl-keyword">return</span> <span class="hl-literal">None</span>,</span>
+<span class="line">    };</span>
+<span class="line">    <span class="hl-title function_ invoke__">Some</span>(res)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line hl-line"><span class="hl-keyword">fn</span> <span class="hl-title function_">infix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;(<span class="hl-type">u8</span>, <span class="hl-type">u8</span>)&gt; {</span>
+<span class="line hl-line">    <span class="hl-keyword">let</span> <span class="hl-variable">res</span> = <span class="hl-keyword">match</span> op {</span>
+<span class="line hl-line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; (<span class="hl-number">1</span>, <span class="hl-number">2</span>),</span>
+<span class="line hl-line">        <span class="hl-string">&#x27;*&#x27;</span> | <span class="hl-string">&#x27;/&#x27;</span> =&gt; (<span class="hl-number">3</span>, <span class="hl-number">4</span>),</span>
+<span class="line hl-line">        <span class="hl-string">&#x27;.&#x27;</span> =&gt; (<span class="hl-number">10</span>, <span class="hl-number">9</span>),</span>
+<span class="line hl-line">        _ =&gt; <span class="hl-keyword">return</span> <span class="hl-literal">None</span>,</span>
+<span class="line hl-line">    };</span>
+<span class="line hl-line">    <span class="hl-title function_ invoke__">Some</span>(res)</span>
+<span class="line hl-line">}</span></code></pre>
+
+</figure>
+<p><span>And now let</span>&rsquo;<span>s add array indexing operator: </span><code>a[i]</code><span>.</span>
+<span>What kind of -fix is it?</span>
+<span>Around-fix?</span>
+<span>If it were just </span><code>a[]</code><span>, it would clearly be postfix.</span>
+<span>if it were just </span><code>[i]</code><span>, it would work exactly like parens.</span>
+<span>And it is the key: the </span><code>i</code><span> part doesn</span>&rsquo;<span>t really participate in the whole power game, as it is unambiguously delimited. So, let</span>&rsquo;<span>s do this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_bp</span>(lexer: &amp;<span class="hl-keyword">mut</span> Lexer, min_bp: <span class="hl-type">u8</span>) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lhs</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Atom</span>(it) =&gt; S::<span class="hl-title function_ invoke__">Atom</span>(it),</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;(&#x27;</span>) =&gt; {</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">lhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, <span class="hl-number">0</span>);</span>
+<span class="line">            <span class="hl-built_in">assert_eq!</span>(lexer.<span class="hl-title function_ invoke__">next</span>(), Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;)&#x27;</span>));</span>
+<span class="line">            lhs</span>
+<span class="line">        }</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; {</span>
+<span class="line">            <span class="hl-keyword">let</span> ((), r_bp) = <span class="hl-title function_ invoke__">prefix_binding_power</span>(op);</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line">            S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[rhs])</span>
+<span class="line">        }</span>
+<span class="line">        t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">    };</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">op</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">peek</span>() {</span>
+<span class="line">            Token::Eof =&gt; <span class="hl-keyword">break</span>,</span>
+<span class="line">            Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; op,</span>
+<span class="line">            t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>((l_bp, ())) = <span class="hl-title function_ invoke__">postfix_binding_power</span>(op) {</span>
+<span class="line">            <span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line">                <span class="hl-keyword">break</span>;</span>
+<span class="line">            }</span>
+<span class="line">            lexer.<span class="hl-title function_ invoke__">next</span>();</span>
+<span class="line"></span>
+<span class="line hl-line">            lhs = <span class="hl-keyword">if</span> op == <span class="hl-string">&#x27;[&#x27;</span> {</span>
+<span class="line hl-line">                <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, <span class="hl-number">0</span>);</span>
+<span class="line hl-line">                <span class="hl-built_in">assert_eq!</span>(lexer.<span class="hl-title function_ invoke__">next</span>(), Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;]&#x27;</span>));</span>
+<span class="line hl-line">                S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs, rhs])</span>
+<span class="line hl-line">            } <span class="hl-keyword">else</span> {</span>
+<span class="line hl-line">                S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs])</span>
+<span class="line hl-line">            };</span>
+<span class="line">            <span class="hl-keyword">continue</span>;</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>((l_bp, r_bp)) = <span class="hl-title function_ invoke__">infix_binding_power</span>(op) {</span>
+<span class="line">            <span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line">                <span class="hl-keyword">break</span>;</span>
+<span class="line">            }</span>
+<span class="line"></span>
+<span class="line">            lexer.<span class="hl-title function_ invoke__">next</span>();</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line"></span>
+<span class="line">            lhs = S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs, rhs]);</span>
+<span class="line">            <span class="hl-keyword">continue</span>;</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">break</span>;</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    lhs</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">prefix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> ((), <span class="hl-type">u8</span>) {</span>
+<span class="line">    <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; ((), <span class="hl-number">5</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad op: {:?}&quot;</span>, op),</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">postfix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;(<span class="hl-type">u8</span>, ())&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">res</span> = <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;!&#x27;</span> | <span class="hl-string">&#x27;[&#x27;</span> =&gt; (<span class="hl-number">7</span>, ()), <i class="callout" data-value="1"></i></span>
+<span class="line">        _ =&gt; <span class="hl-keyword">return</span> <span class="hl-literal">None</span>,</span>
+<span class="line">    };</span>
+<span class="line">    <span class="hl-title function_ invoke__">Some</span>(res)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">infix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;(<span class="hl-type">u8</span>, <span class="hl-type">u8</span>)&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">res</span> = <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; (<span class="hl-number">1</span>, <span class="hl-number">2</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;*&#x27;</span> | <span class="hl-string">&#x27;/&#x27;</span> =&gt; (<span class="hl-number">3</span>, <span class="hl-number">4</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;.&#x27;</span> =&gt; (<span class="hl-number">10</span>, <span class="hl-number">9</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-keyword">return</span> <span class="hl-literal">None</span>,</span>
+<span class="line">    };</span>
+<span class="line">    <span class="hl-title function_ invoke__">Some</span>(res)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">tests</span>() {</span>
+<span class="line">    ...</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;x[0][1]&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;([ ([ x 0) 1)&quot;</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ol class="callout">
+<li>
+<span>Note that we use the same priority for </span><code>!</code><span> as for </span><code>[</code><span>.</span>
+<span>In general, for the correctness of our algorithm it</span>&rsquo;<span>s pretty important that, when we make decisions, priorities are never equal.</span>
+<span>Otherwise, we might end up in a situation like the one before tiny adjustment for associativity, where there were two equally-good candidates for reduction.</span>
+<span>However, we only compare right </span><code>bp</code><span> with left </span><code>bp</code><span>!</span>
+<span>So for two postfix operators it</span>&rsquo;<span>s OK to have priorities the same, as they are both right.</span>
+</li>
+</ol>
+<p><span>Finally, the ultimate boss of all operators, the dreaded ternary:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">c ? e1 : e2</span></code></pre>
+
+</figure>
+<p><span>Is this </span>&hellip;<span> all-other-the-place-fix operator?</span>
+<span>Well, let</span>&rsquo;<span>s change the syntax of ternary slightly:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">c [ e1 ] e2</span></code></pre>
+
+</figure>
+<p><span>And let</span>&rsquo;<span>s recall that </span><code>a[i]</code><span> turned out to be a postfix operator + parenthesis</span>&hellip;
+<span>So, yeah, </span><code>?</code><span> and </span><code>:</code><span> are actually a weird pair of parens!</span>
+<span>And let</span>&rsquo;<span>s handle it as such!</span>
+<span>Now, what about priority and associativity?</span>
+<span>What associativity even is in this case?</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">a ? b : c ? d : e</span></code></pre>
+
+</figure>
+<p><span>To figure it out, we just squash the parens part:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">a ?: c ?: e</span></code></pre>
+
+</figure>
+<p><span>This can be parsed as</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">(a ?: c) ?: e</span></code></pre>
+
+</figure>
+<p><span>or  as</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">a ?: (c ?: e)</span></code></pre>
+
+</figure>
+<p><span>What is more useful?</span>
+<span>For </span><code>?</code><span>-chains like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">a ? b :</span>
+<span class="line">c ? d :</span>
+<span class="line">e</span></code></pre>
+
+</figure>
+<p><span>the right-associative reading is more useful.</span>
+<span>Priority-wise, the ternary is low priority.</span>
+<span>In C, only </span><code>=</code><span> and </span><code>,</code><span> have lower priority.</span>
+<span>While we are at it, let</span>&rsquo;<span>s add C-style right associative </span><code>=</code><span> as well.</span></p>
+<p><span>Here</span>&rsquo;<span>s our the most complete and perfect version of a simple Pratt parser:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::{fmt, io::BufRead};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">S</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Atom</span>(<span class="hl-type">char</span>),</span>
+<span class="line">    <span class="hl-title function_ invoke__">Cons</span>(<span class="hl-type">char</span>, <span class="hl-type">Vec</span>&lt;S&gt;),</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">fmt</span>::Display <span class="hl-keyword">for</span> <span class="hl-title class_">S</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">fmt</span>(&amp;<span class="hl-keyword">self</span>, f: &amp;<span class="hl-keyword">mut</span> fmt::Formatter&lt;<span class="hl-symbol">&#x27;_</span>&gt;) <span class="hl-punctuation">-&gt;</span> fmt::<span class="hl-type">Result</span> {</span>
+<span class="line">        <span class="hl-keyword">match</span> <span class="hl-keyword">self</span> {</span>
+<span class="line">            S::<span class="hl-title function_ invoke__">Atom</span>(i) =&gt; <span class="hl-built_in">write!</span>(f, <span class="hl-string">&quot;{}&quot;</span>, i),</span>
+<span class="line">            S::<span class="hl-title function_ invoke__">Cons</span>(head, rest) =&gt; {</span>
+<span class="line">                <span class="hl-built_in">write!</span>(f, <span class="hl-string">&quot;({}&quot;</span>, head)?;</span>
+<span class="line">                <span class="hl-keyword">for</span> <span class="hl-variable">s</span> <span class="hl-keyword">in</span> rest {</span>
+<span class="line">                    <span class="hl-built_in">write!</span>(f, <span class="hl-string">&quot; {}&quot;</span>, s)?</span>
+<span class="line">                }</span>
+<span class="line">                <span class="hl-built_in">write!</span>(f, <span class="hl-string">&quot;)&quot;</span>)</span>
+<span class="line">            }</span>
+<span class="line">        }</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Token</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">Atom</span>(<span class="hl-type">char</span>),</span>
+<span class="line">    <span class="hl-title function_ invoke__">Op</span>(<span class="hl-type">char</span>),</span>
+<span class="line">    Eof,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Lexer</span> {</span>
+<span class="line">    tokens: <span class="hl-type">Vec</span>&lt;Token&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Lexer</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">new</span>(input: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> Lexer {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">tokens</span> = input</span>
+<span class="line">            .<span class="hl-title function_ invoke__">chars</span>()</span>
+<span class="line">            .<span class="hl-title function_ invoke__">filter</span>(|it| !it.<span class="hl-title function_ invoke__">is_ascii_whitespace</span>())</span>
+<span class="line">            .<span class="hl-title function_ invoke__">map</span>(|c| <span class="hl-keyword">match</span> c {</span>
+<span class="line">                <span class="hl-string">&#x27;0&#x27;</span>..=<span class="hl-string">&#x27;9&#x27;</span></span>
+<span class="line">                | <span class="hl-string">&#x27;a&#x27;</span>..=<span class="hl-string">&#x27;z&#x27;</span> | <span class="hl-string">&#x27;A&#x27;</span>..=<span class="hl-string">&#x27;Z&#x27;</span> =&gt; Token::<span class="hl-title function_ invoke__">Atom</span>(c),</span>
+<span class="line">                _ =&gt; Token::<span class="hl-title function_ invoke__">Op</span>(c),</span>
+<span class="line">            })</span>
+<span class="line">            .collect::&lt;<span class="hl-type">Vec</span>&lt;_&gt;&gt;();</span>
+<span class="line">        tokens.<span class="hl-title function_ invoke__">reverse</span>();</span>
+<span class="line">        Lexer { tokens }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">next</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> Token {</span>
+<span class="line">        <span class="hl-keyword">self</span>.tokens.<span class="hl-title function_ invoke__">pop</span>().<span class="hl-title function_ invoke__">unwrap_or</span>(Token::Eof)</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">peek</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> Token {</span>
+<span class="line">        <span class="hl-keyword">self</span>.tokens.<span class="hl-title function_ invoke__">last</span>().<span class="hl-title function_ invoke__">copied</span>().<span class="hl-title function_ invoke__">unwrap_or</span>(Token::Eof)</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr</span>(input: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lexer</span> = Lexer::<span class="hl-title function_ invoke__">new</span>(input);</span>
+<span class="line">    <span class="hl-title function_ invoke__">expr_bp</span>(&amp;<span class="hl-keyword">mut</span> lexer, <span class="hl-number">0</span>)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">expr_bp</span>(lexer: &amp;<span class="hl-keyword">mut</span> Lexer, min_bp: <span class="hl-type">u8</span>) <span class="hl-punctuation">-&gt;</span> S {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lhs</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">next</span>() {</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Atom</span>(it) =&gt; S::<span class="hl-title function_ invoke__">Atom</span>(it),</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;(&#x27;</span>) =&gt; {</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">lhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, <span class="hl-number">0</span>);</span>
+<span class="line">            <span class="hl-built_in">assert_eq!</span>(lexer.<span class="hl-title function_ invoke__">next</span>(), Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;)&#x27;</span>));</span>
+<span class="line">            lhs</span>
+<span class="line">        }</span>
+<span class="line">        Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; {</span>
+<span class="line">            <span class="hl-keyword">let</span> ((), r_bp) = <span class="hl-title function_ invoke__">prefix_binding_power</span>(op);</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line">            S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[rhs])</span>
+<span class="line">        }</span>
+<span class="line">        t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">    };</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">loop</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">op</span> = <span class="hl-keyword">match</span> lexer.<span class="hl-title function_ invoke__">peek</span>() {</span>
+<span class="line">            Token::Eof =&gt; <span class="hl-keyword">break</span>,</span>
+<span class="line">            Token::<span class="hl-title function_ invoke__">Op</span>(op) =&gt; op,</span>
+<span class="line">            t =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad token: {:?}&quot;</span>, t),</span>
+<span class="line">        };</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>((l_bp, ())) = <span class="hl-title function_ invoke__">postfix_binding_power</span>(op) {</span>
+<span class="line">            <span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line">                <span class="hl-keyword">break</span>;</span>
+<span class="line">            }</span>
+<span class="line">            lexer.<span class="hl-title function_ invoke__">next</span>();</span>
+<span class="line"></span>
+<span class="line">            lhs = <span class="hl-keyword">if</span> op == <span class="hl-string">&#x27;[&#x27;</span> {</span>
+<span class="line">                <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, <span class="hl-number">0</span>);</span>
+<span class="line">                <span class="hl-built_in">assert_eq!</span>(lexer.<span class="hl-title function_ invoke__">next</span>(), Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;]&#x27;</span>));</span>
+<span class="line">                S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs, rhs])</span>
+<span class="line">            } <span class="hl-keyword">else</span> {</span>
+<span class="line">                S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs])</span>
+<span class="line">            };</span>
+<span class="line">            <span class="hl-keyword">continue</span>;</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>((l_bp, r_bp)) = <span class="hl-title function_ invoke__">infix_binding_power</span>(op) {</span>
+<span class="line">            <span class="hl-keyword">if</span> l_bp &lt; min_bp {</span>
+<span class="line">                <span class="hl-keyword">break</span>;</span>
+<span class="line">            }</span>
+<span class="line">            lexer.<span class="hl-title function_ invoke__">next</span>();</span>
+<span class="line"></span>
+<span class="line">            lhs = <span class="hl-keyword">if</span> op == <span class="hl-string">&#x27;?&#x27;</span> {</span>
+<span class="line">                <span class="hl-keyword">let</span> <span class="hl-variable">mhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, <span class="hl-number">0</span>);</span>
+<span class="line">                <span class="hl-built_in">assert_eq!</span>(lexer.<span class="hl-title function_ invoke__">next</span>(), Token::<span class="hl-title function_ invoke__">Op</span>(<span class="hl-string">&#x27;:&#x27;</span>));</span>
+<span class="line">                <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line">                S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs, mhs, rhs])</span>
+<span class="line">            } <span class="hl-keyword">else</span> {</span>
+<span class="line">                <span class="hl-keyword">let</span> <span class="hl-variable">rhs</span> = <span class="hl-title function_ invoke__">expr_bp</span>(lexer, r_bp);</span>
+<span class="line">                S::<span class="hl-title function_ invoke__">Cons</span>(op, <span class="hl-built_in">vec!</span>[lhs, rhs])</span>
+<span class="line">            };</span>
+<span class="line">            <span class="hl-keyword">continue</span>;</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="hl-keyword">break</span>;</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    lhs</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">prefix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> ((), <span class="hl-type">u8</span>) {</span>
+<span class="line">    <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; ((), <span class="hl-number">9</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-built_in">panic!</span>(<span class="hl-string">&quot;bad op: {:?}&quot;</span>, op),</span>
+<span class="line">    }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">postfix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;(<span class="hl-type">u8</span>, ())&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">res</span> = <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;!&#x27;</span> =&gt; (<span class="hl-number">11</span>, ()),</span>
+<span class="line">        <span class="hl-string">&#x27;[&#x27;</span> =&gt; (<span class="hl-number">11</span>, ()),</span>
+<span class="line">        _ =&gt; <span class="hl-keyword">return</span> <span class="hl-literal">None</span>,</span>
+<span class="line">    };</span>
+<span class="line">    <span class="hl-title function_ invoke__">Some</span>(res)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">infix_binding_power</span>(op: <span class="hl-type">char</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;(<span class="hl-type">u8</span>, <span class="hl-type">u8</span>)&gt; {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">res</span> = <span class="hl-keyword">match</span> op {</span>
+<span class="line">        <span class="hl-string">&#x27;=&#x27;</span> =&gt; (<span class="hl-number">2</span>, <span class="hl-number">1</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;?&#x27;</span> =&gt; (<span class="hl-number">4</span>, <span class="hl-number">3</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;+&#x27;</span> | <span class="hl-string">&#x27;-&#x27;</span> =&gt; (<span class="hl-number">5</span>, <span class="hl-number">6</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;*&#x27;</span> | <span class="hl-string">&#x27;/&#x27;</span> =&gt; (<span class="hl-number">7</span>, <span class="hl-number">8</span>),</span>
+<span class="line">        <span class="hl-string">&#x27;.&#x27;</span> =&gt; (<span class="hl-number">14</span>, <span class="hl-number">13</span>),</span>
+<span class="line">        _ =&gt; <span class="hl-keyword">return</span> <span class="hl-literal">None</span>,</span>
+<span class="line">    };</span>
+<span class="line">    <span class="hl-title function_ invoke__">Some</span>(res)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">tests</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;1&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;1&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;1 + 2 * 3&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(+ 1 (* 2 3))&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;a + b * c * d + e&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(+ (+ a (* (* b c) d)) e)&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;f . g . h&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(. f (. g h))&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot; 1 + 2 + f . g . h * 3 * 4&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(</span>
+<span class="line">        s.<span class="hl-title function_ invoke__">to_string</span>(),</span>
+<span class="line">        <span class="hl-string">&quot;(+ (+ 1 2) (* (* (. f (. g h)) 3) 4))&quot;</span>,</span>
+<span class="line">    );</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;--1 * 2&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(* (- (- 1)) 2)&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;--f . g&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(- (- (. f g)))&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;-9!&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(- (! 9))&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;f . g !&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(! (. f g))&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;(((0)))&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;0&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;x[0][1]&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;([ ([ x 0) 1)&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(</span>
+<span class="line">        <span class="hl-string">&quot;a ? b :</span></span>
+<span class="line"><span class="hl-string">         c ? d</span></span>
+<span class="line"><span class="hl-string">         : e&quot;</span>,</span>
+<span class="line">    );</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(? a b (? c d e))&quot;</span>);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(<span class="hl-string">&quot;a = 0 ? b : c = d&quot;</span>);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(s.<span class="hl-title function_ invoke__">to_string</span>(), <span class="hl-string">&quot;(= a (= (? 0 b c) d))&quot;</span>)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">line</span> <span class="hl-keyword">in</span> std::io::<span class="hl-title function_ invoke__">stdin</span>().<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">lines</span>() {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">line</span> = line.<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">s</span> = <span class="hl-title function_ invoke__">expr</span>(&amp;line);</span>
+<span class="line">        <span class="hl-built_in">println!</span>(<span class="hl-string">&quot;{}&quot;</span>, s)</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The code is also available in</span>
+<a href="https://github.com/matklad/minipratt"><span>this repository</span></a><span>, Eof :-)</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-04-13-simple-but-powerful-pratt-parsing.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

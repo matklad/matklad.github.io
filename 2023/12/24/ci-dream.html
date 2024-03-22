@@ -1,0 +1,158 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CI Dream</title>
+  <meta name="description" content="This is more of an android dream (that one with a unicorn) than a coherent post, but please indulge me.
+It's a short one at least!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/12/24/ci-dream.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>CI Dream</span> <time datetime="2023-12-24">Dec 24, 2023</time></h1>
+<p><span>This is more of an android dream (that one with a unicorn) than a coherent post, but please indulge me.</span>
+<span>It</span>&rsquo;<span>s a short one at least!</span></p>
+<p><span>Several years ago, it made sense for things like Travis CI or GitHub Actions to exist as technical products as well as businesses.</span>
+<span>Back in the day, maintaining a fleet of machines was hard.</span>
+<span>So you could take that shepherd job onto yourself, and provide your users and customers with an API to run their tests.</span></p>
+<p><span>Is it true today though?</span>
+<span>I am not well-versed in cloud things, but my impression is that today one can rent machines as a commodity.</span>
+<span>Cloud providers give you a distributed computer which you pay for as you go.</span></p>
+<p><span>In this world, CI as a SaaS feels like accidental complexity of </span><a href="https://lwn.net/Articles/336262/"><span>midlayer mistake</span></a><span> variety.</span>
+<span>Can we make it simpler?</span>
+<span>Can we say that CI is just a </span>&ldquo;<span>program</span>&rdquo;<span> for a distributed computer?</span>
+<span>So, in your project</span>&rsquo;<span>s repo, there</span>&rsquo;<span>s a </span><code>./ci</code><span> folder with a such program </span>&mdash;
+<span>a bunch of Docker files, or .yamls, or whatever is the </span>&ldquo;<span>programming language of the cloud</span>&rdquo;<span>.</span>
+<span>You then point, say, AWS to it, tell it </span>&ldquo;<span>run this, here are my credentials</span>&rdquo;<span>, and you get your entire CI infra,</span>
+<span>with not rocket science rule, continuous fuzzing, releases, and what not.</span>
+<span>And, crucially, whatever project specific logic you need </span>&mdash;<span> AWS doesn</span>&rsquo;<span>t care what it runs, everything is under your control.</span></p>
+<p><span>Of course, there</span>&rsquo;<span>s a hefty amount of logic required </span>&mdash;
+<span>interacting with your forge webhooks,</span>
+<span>UI through @magic comments and maybe a web server with an HTML GUI,</span>
+<span>the management of storage to ensure that cross-build caches stay close,</span>
+<span>the management of compute and idempotence, to allow running on cheap spot instances,</span>
+<span>and perhaps a thousands of other CI concerns.</span></p>
+<p><span>But it feels like all that could conceivably be a library (an ecosystem of competing projects even)?</span></p>
+<p><span>If I want to have a merge queue, why are these my choices?:</span></p>
+<ul>
+<li>
+<span>GitHub Merge Queue, which is </span><a href="https://matklad.github.io/2023/06/18/GitHub-merge-queue.html"><span>not good</span></a><span>.</span>
+</li>
+<li>
+<a href="https://mergify.com"><span>Mergify</span></a><span>, which I am reluctant even to try due to strength of </span>&ldquo;<span>this is a product</span>&rdquo;<span> vibes.</span>
+</li>
+<li>
+<span>Self-hosting </span><a href="https://github.com/bors-ng/bors-ng"><span>bors-ng</span></a><span>, managing an individual server as a pet.</span>
+</li>
+</ul>
+<p><span>Why this isn</span>&rsquo;<span>t the world we live in?:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cd ci</span>
+<span class="line"><span class="hl-title function_">$</span> cargo add protection-agency</span></code></pre>
+
+</figure>
+<p><strong><strong><span>Update(2024-01-01):</span></strong></strong><span> If you like this post, please also read</span>
+<a href="https://gregoryszorc.com/blog/2021/04/07/modern-ci-is-too-complex-and-misdirected/" class="display url">https://gregoryszorc.com/blog/2021/04/07/modern-ci-is-too-complex-and-misdirected/</a></p>
+<p><span>Although that post contains much fewer references to</span>
+<a href="https://open.spotify.com/track/7DklRKMUGf8D9anitG68kj"><span>Philip K. Dick</span></a><span>,</span>
+<span>it is much better in every other respect.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-12-24-ci-dream.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,483 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Elements Of a Great Markup Language</title>
+  <meta name="description" content="This post contains some inconclusive musing on lightweight markup languages (Markdown, AsciiDoc, LaTeX, reStructuredText, etc).
+The overall mood is that I don't think a genuinely great markup languages exists.
+I wish it did though.
+As an appropriate disclosure, this text is written in AsciiDoctor.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2022/10/28/elements-of-a-great-markup-language.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Elements Of a Great Markup Language</span> <time datetime="2022-10-28">Oct 28, 2022</time></h1>
+<p><span>This post contains some inconclusive musing on lightweight markup languages (Markdown, AsciiDoc, LaTeX, reStructuredText, etc).</span>
+<span>The overall mood is that I don</span>&rsquo;<span>t think a genuinely great markup languages exists.</span>
+<span>I wish it did though.</span>
+<span>As an appropriate disclosure, this text is written in AsciiDoctor.</span></p>
+<p><span>EDIT: if you like this post, you should definitely check out </span><a href="https://djot.net" class="url">https://djot.net</a><span>.</span></p>
+<p><span>EDIT: welp, that escalated quickly, this post is now written in Djot.</span></p>
+<section id="Document-Model">
+
+    <h2>
+    <a href="#Document-Model"><span>Document Model</span> </a>
+    </h2>
+<p><span>This I think is the big one.</span>
+<span>Very often, a particular markup language is married to a particular output format, either syntactically (markdown supports HTML syntax), or by the processor just not making a crisp enough distinction between the input document and the output (AsciiDoctor).</span></p>
+<p><span>Roughly, if the markup language is for emitting HTML, or PDF, or DocBook XML, that</span>&rsquo;<span>s bad.</span>
+<span>A good markup language describes an abstract hierarchical structure of the document, and lets a separate program to adapt that structure to the desired output.</span></p>
+<p><span>More or less, what I want from markup is to convert a text string into a document tree:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">Element</span> {</span>
+<span class="line">  <span class="hl-title function_ invoke__">Text</span>(<span class="hl-type">String</span>),</span>
+<span class="line">  Node {</span>
+<span class="line">    tag: <span class="hl-type">String</span>,</span>
+<span class="line">    attributes: Map&lt;<span class="hl-type">String</span>, <span class="hl-type">String</span>&gt;</span>
+<span class="line">    children: <span class="hl-type">Vec</span>&lt;Element&gt;,</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">parse_markup</span>(input: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> Element { ... }</span></code></pre>
+
+</figure>
+<p><span>Markup language which nails this perfectly is HTML.</span>
+<span>It directly expresses this tree structure.</span>
+<span>Various viewers for HTML can then render the document in a particular fashion.</span>
+<span>HTML</span>&rsquo;<span>s syntax itself doesn</span>&rsquo;<span>t really care about tag names and semantics: you can imagine authoring HTML documents using an alternative set of tag names.</span></p>
+<p><span>Markup language which completely falls over this is Markdown.</span>
+<span>There</span>&rsquo;<span>s no way to express generic tree structure, conversion to HTML with specific browser tags is hard-coded.</span></p>
+<p><span>Language which does this half-good is AsciiDoctor.</span></p>
+<p><span>In AsciiDoctor, it is possible to express genuine nesting.</span>
+<span>Here</span>&rsquo;<span>s a bunch of nested blocks with some inline content and attributes:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">====</span>
+<span class="line">Here are your options:</span>
+<span class="line"></span>
+<span class="line">.Red Pill</span>
+<span class="line">[%collapsible]</span>
+<span class="line">======</span>
+<span class="line">Escape into the real world.</span>
+<span class="line">======</span>
+<span class="line"></span>
+<span class="line">.Blue Pill</span>
+<span class="line">[%collapsible]</span>
+<span class="line">======</span>
+<span class="line">Live within the simulated reality without want or fear.</span>
+<span class="line">======</span>
+<span class="line"></span>
+<span class="line">====</span></code></pre>
+
+</figure>
+<p><span>The problem with AsciiDoctor is that generic blocks come of as a bit of implementation detail, not as a foundation.</span>
+<span>It is difficult to untangle presentation-specific semantics of particular blocks (examples, admonitions, etc) from the generic document structure.</span>
+<span>As a fun consequence, a semantic-neutral block (equivalent of a </span><code>&lt;/div&gt;</code><span>) is the only kind of block which can</span>&rsquo;<span>t actually nest in AsciiDoctor, due to syntactic ambiguity.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>Great markup format unambiguously interprets an input string as an abstract tree model of a document.</span>
+<span>It doesn</span>&rsquo;<span>t ascribe semantics to particular tag names or attributes.</span></p>
+</div>
+</aside></section>
+<section id="Concrete-Syntax">
+
+    <h2>
+    <a href="#Concrete-Syntax"><span>Concrete Syntax</span> </a>
+    </h2>
+<p><span>Syntax matters.</span>
+<span>For lightweight text markup languages, syntax is of utmost importance.</span></p>
+<p><span>The only right way to spell a list is</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">- Foo</span>
+<span class="line">- Bar</span>
+<span class="line">- Baz</span></code></pre>
+
+</figure>
+<p><span>Not</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-tag">&lt;<span class="hl-name">ul</span>&gt;</span></span>
+<span class="line">    <span class="hl-tag">&lt;<span class="hl-name">li</span>&gt;</span>Foo<span class="hl-tag">&lt;/<span class="hl-name">li</span>&gt;</span></span>
+<span class="line">    <span class="hl-tag">&lt;<span class="hl-name">li</span>&gt;</span>Bar<span class="hl-tag">&lt;/<span class="hl-name">li</span>&gt;</span></span>
+<span class="line">    <span class="hl-tag">&lt;<span class="hl-name">li</span>&gt;</span>Baz<span class="hl-tag">&lt;/<span class="hl-name">li</span>&gt;</span></span>
+<span class="line"><span class="hl-tag">&lt;/<span class="hl-name">ul</span>&gt;</span></span></code></pre>
+
+</figure>
+<p><span>And most definitely not</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">\begin</span>{itemize}</span>
+<span class="line">    <span class="hl-keyword">\item</span> foo</span>
+<span class="line">    <span class="hl-keyword">\item</span> Bar</span>
+<span class="line">    <span class="hl-keyword">\item</span> Baz</span>
+<span class="line"><span class="hl-keyword">\end</span>{itemize}</span></code></pre>
+
+</figure>
+<p><span>Similarly, you lose if you spell links like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">`My Blog &lt;https://matklad.github.io&gt;`_</span></code></pre>
+
+</figure>
+<p><span>Markdown is the trailblazer here, it picked a lot of great concrete syntaxes.</span>
+<span>Though, some choices are questionable, like trailing double space rule, or the syntax for including images.</span></p>
+<p><span>AsciiDoctor is the treasure trove of tasteful syntactic decisions.</span></p>
+<section id="Inline-Formatting">
+
+    <h3>
+    <a href="#Inline-Formatting"><span>Inline Formatting</span> </a>
+    </h3>
+<p><span>For example </span><code>*bold*</code><span> is </span><strong><span>bold</span></strong><span>, </span><code>_italics_</code><span> is </span><em><span>italics</span></em><span>, and repeating the emphasis symbol twice (</span><code>__like *this*__</code><span>) allows for </span><em><span>unambiguous </span><strong><span>nesting</span></strong></em><span>.</span></p>
+</section>
+<section id="Links">
+
+    <h3>
+    <a href="#Links"><span>Links</span> </a>
+    </h3>
+<p><span>URls are spelled like this</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">https://matklad.github.io[My Blog]</span></code></pre>
+
+</figure>
+<p><span>And images like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">image:/media/logo.png[width=640,height=480]</span></code></pre>
+
+</figure>
+<p><span>This is a generic syntax:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">tag : argument [attributes]</span></code></pre>
+
+</figure>
+<p><span>For example </span><code>http://example.com[]</code><span> gets parsed as </span><code>&lt;http&gt;//example.com&lt;/http&gt;</code><span>, and the converter knows basic url schemes.</span>
+<span>And of course there</span>&rsquo;<span>s a generic link syntax for corner cases where a URL syntax isn</span>&rsquo;<span>t a valid AsciiDoctor syntax:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">link:downloads/report.pdf[Get Report]</span></code></pre>
+
+</figure>
+<p><span>(</span><code>image:</code><span> produces an inline element, while </span><code>image::</code><span> emits a block. Again, this </span><em><span>isn</span>&rsquo;<span>t</span></em><span> hard-coded to images, it is a generic syntax for </span><code>whatever::</code><span>).</span></p>
+</section>
+<section id="Lists">
+
+    <h3>
+    <a href="#Lists"><span>Lists</span> </a>
+    </h3>
+<p><span>Another tasteful decision are numbered lists, which use </span><code>.</code><span> to avoid tedious renumbering:</span></p>
+<div class="two-col">
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">[lowerroman]</span>
+<span class="line">. One</span>
+<span class="line">. Two</span>
+<span class="line">. Three</span></code></pre>
+
+</figure>
+<ol type="i">
+<li>
+<span>One</span>
+</li>
+<li>
+<span>Two</span>
+</li>
+<li>
+<span>Three</span>
+</li>
+</ol>
+</div>
+</section>
+<section id="Tables">
+
+    <h3>
+    <a href="#Tables"><span>Tables</span> </a>
+    </h3>
+<p><span>And AsciiDoctor also has a reasonable-ish syntax for tables, with one-line per cell and a blank like to delimit rows.</span></p>
+<div class="two-col">
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">[cols="1,1"]</span>
+<span class="line">|===</span>
+<span class="line">|First</span>
+<span class="line">|Row</span>
+<span class="line"></span>
+<span class="line">|X</span>
+<span class="line">|Y</span>
+<span class="line"></span>
+<span class="line">|Last</span>
+<span class="line">|Row</span>
+<span class="line">|===</span></code></pre>
+
+</figure>
+<table>
+<tr>
+<td><span>First</span></td>
+<td><span>Row</span></td>
+</tr>
+<tr>
+<td><span>X</span></td>
+<td><span>Y</span></td>
+</tr>
+<tr>
+<td><span>Last</span></td>
+<td><span>Row</span></td>
+</tr>
+</table>
+</div>
+<hr>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>Great markup format contains a tasteful selection of syntactic forms to express common patterns:</span>
+<span>lists, admonitions, links, footnotes, cross-references, quotes, tables, images.</span></p>
+<p><span>The syntax is fundamentally sugary, and expands to the standard tree-of-nodes-with-attributes.</span></p>
+</div>
+</aside></section>
+</section>
+<section id="Composable-Processing">
+
+    <h2>
+    <a href="#Composable-Processing"><span>Composable Processing</span> </a>
+    </h2>
+<p><span>To convert our nice, sweet syntax to general tree and than into the final output, we need some kind of a tool.</span>
+<span>One way to do that is by direct translation from our source document to, eg, html.</span></p>
+<p><span>Such one-step translation is convenient for all-inclusive tools, but is a barrier for extensibility.</span>
+<span>Amusingly, AsciiDoctor is both a positive and a negative example here.</span></p>
+<p><span>On the negative side of things, classical AsciiDoctor is an extensible Ruby processor.</span>
+<span>To extend it, you essentially write a </span>&ldquo;<span>compiler plugin</span>&rdquo;<span> </span>&mdash;<span> a bit of Ruby code which gets hook into the main processor and gets invoked as a callback when certain </span>&ldquo;<span>tags</span>&rdquo;<span> are parsed.</span>
+<span>This plugin interacts with the Ruby API of the processor itself, and is tied to a particular toolchain.</span></p>
+<p><span>In contrast, asciidoctor-web-pdf, a newer thing (which non-the-less uses the same Ruby core), approaches the task a bit differently.</span>
+<span>There</span>&rsquo;<span>s no API to extend the processor itself.</span>
+<span>Rather, the processor produces an abstract document tree, and then a user-supplied JavaScript function can convert that </span><em><em><span>piece of data</span></em></em><span> into whatever html it needs, by following a lightweight visitor pattern.</span>
+<span>I think this is the key to a rich ecosystem:  strictly separate converting input text to an abstract document model from rendering the model through some template.</span>
+<span>The two parts could be done by two separate processes which exchange serialized data.</span>
+<span>It</span>&rsquo;<span>s even possible to imagine some canonical JSON encoding of the parsed document.</span></p>
+<p><span>There</span>&rsquo;<span>s one more behavior where all-inclusive approach of AsciiDoctor gets in a way of doing the right thing.</span>
+<span>AsciiDoctor supports includes, and they are textual, preprocessor includes, meaning that syntax of the included file affects what follows afterwards.</span>
+<span>A much cleaner solution would have been to keep includes in the document tree as distinct nodes (with the path to the included file as an attribute), and let it to the output layer to interpret those as either verbatim text, or subdocuments.</span></p>
+<p><span>Another aspect of composability is that the parsing part of the processing should have, at minimum, a lightweight, embeddable implementation.</span>
+<span>Ideally, of course, there</span>&rsquo;<span>s a spec and an array of implementations to choose from.</span></p>
+<p><span>Markdown fairs fairly well here: there never was a shortage of implementations, and today we even have a bunch of different specs!</span></p>
+<p><span>AsciiDoctor</span>&hellip;
+<span>Well, I am amazed.</span>
+<span>The original implementation of AsciiDoc was in Python.</span>
+<span>AsciiDoctor, the current tool, is in Ruby.</span>
+<span>Neither is too embeddable.</span>
+<em><span>But!</span></em><span> AsciiDoctor folks are crazy, they compiled Ruby to JavaScript (and Java), and so the toolchain is available on JVM and Node.</span>
+<span>At least for Node, I can confidently say that that</span>&rsquo;<span>s a real production-ready thing which is quite convenient to use!</span>
+<span>Still, I</span>&rsquo;<span>d prefer a Rust library or a small WebAssembly blob instead.</span></p>
+<p><span>A different aspect of composability is extensibility.</span>
+<span>In Markdown land, the usual answer for when Markdown doesn</span>&rsquo;<span>t quite do everything needed (i.e., in 90% of cases), the answer is to extend </span><em><span>concrete syntax</span></em><span>.</span>
+<span>This is quite unfortunate, changing syntax is </span><em><span>hard</span></em><span>.</span>
+<span>A much better avenue I think is to take advantage of the generic tree structure, and extend the </span><em><span>output</span></em><span> layer instead.</span>
+<span>Tree-with-attributes should be enough to express whatever structure is needed, and than its up to the converter to pattern-match this structure and emit its special thing.</span></p>
+<p><span>Do you remember the fancy two-column rendering above with source-code on the left, and rendered document on the right?</span>
+<span>This is how I</span>&rsquo;<span>ve done it:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">[.two-col]</span>
+<span class="line">--</span>
+<span class="line">```</span>
+<span class="line">[lowerroman]</span>
+<span class="line">. One</span>
+<span class="line">. Two</span>
+<span class="line">. Three</span>
+<span class="line">```</span>
+<span class="line"></span>
+<span class="line">[lowerroman]</span>
+<span class="line">. One</span>
+<span class="line">. Two</span>
+<span class="line">. Three</span>
+<span class="line">--</span></code></pre>
+
+</figure>
+<p><span>That is, a generic block, with </span><code>.two-col</code><span> attribute and two children </span>&mdash;<span> a listing block and a list.</span>
+<span>Then there</span>&rsquo;<span>s a separate css which assigns an appropriate </span><code>flexbox</code><span> layout for </span><code>.two-col</code><span> elements.</span>
+<span>There</span>&rsquo;<span>s no need for special </span>&ldquo;<span>two column layout</span>&rdquo;<span> extension.</span>
+<span>It would be perhaps </span><em><span>nice</span></em><span> to have a dedicated syntax here, but just re-using generic </span><code>--</code><span> block is quite ok!</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>Great markup language defines the semantics of converting text to a document tree, and provides a lightweight library to do the parsing.</span></p>
+<p><span>Converting an abstract document tree to a specific output type is left to a thriving ecosystem of converters.</span>
+<span>A particularly powerful form of converter allows calling user-supplied functions on document elements.</span>
+<span>Combined with a generic syntax for nodes and attributes, this provides extensibility which is:</span></p>
+<ul>
+<li>
+<span>Easy to use (there</span>&rsquo;<span>s no new syntax to learn, only new attributes)</span>
+</li>
+<li>
+<span>Easy to implement (no need to depend on internal API of particular converter, extension is a pure function from data to data)</span>
+</li>
+<li>
+<span>Powerful (everything can be expressed as a tree of nodes with attributes)</span>
+</li>
+</ul>
+</div>
+</aside></section>
+<section id="Where-Do-We-Stand-Now">
+
+    <h2>
+    <a href="#Where-Do-We-Stand-Now"><span>Where Do We Stand Now?</span> </a>
+    </h2>
+<p><span>Not quite there, I would think!</span>
+<span>AsciiDoctor at least half-ticks quite a few of the checkboxes, but it is still not perfect.</span></p>
+<p><span>There is a specification in progress, I have high hopes that it</span>&rsquo;<span>ll spur alternative implementations (and most of AsciiDoctor problems are implementation issues).</span>
+<span>At the same time, I am not overly-optimistic.</span>
+<span>The overriding goal for AsciiDoctor is compatibility, and rightfully so.</span>
+<span>There</span>&rsquo;<span>s a lot of content already written, and I would hate to migrate this blog, for example :)</span></p>
+<p><span>At the same time, there are quite a few rough edges in AsciiDoctor:</span></p>
+<ul>
+<li>
+<span>includes</span>
+</li>
+<li>
+<span>non-nestable generic blocks</span>
+</li>
+<li>
+<span>many ways to do certain things (AsciiDoctor essentially supports the union of Markdown and AsciiDoc concrete syntaxes)</span>
+</li>
+<li>
+<span>lack of some concrete sugar (reference-style links are notably better in Markdown)</span>
+</li>
+</ul>
+<p><span>It feels like there</span>&rsquo;<span>s a smaller, simpler language somewhere (no, I will not link that xkcd for once (though </span><code>xkcd:927[]</code><span> would be a nice use of AsciiDoctor extensibility))</span></p>
+<p><span>On the positive side of things, it seems that in the recent years we built a lot of infrastructure to make these kinds of projects more feasible.</span></p>
+<p><em><span>Rust</span></em><span> is just about the perfect language to take a </span><code>String</code><span> from a user and parse it into some sort of a tree, while packaging the whole thing into a self-contained zero-dependency, highly</span>
+<span>embeddable, reliable, and reusable library.</span></p>
+<p><em><span>WebAssembly</span></em><span> greatly extends reusability of low-level libraries: between a static library with a </span><code>C</code><span> ABI, and a </span><code>.wasm</code><span> module, you got all important platforms covered.</span></p>
+<p><span>True extensibility </span><em><span>fundamentally</span></em><span> requires taking code as input data.</span>
+<span>A converter from a great markup language to HTML should accept some user-written script file as an argument, to do fine tweaking of the conversion process.</span>
+<span>WebAssembly can be a part of the solution, it is a toolchain-neutral way of expressing computation.</span>
+<span>But we have something even more appropriate.</span>
+<em><span>Deno</span></em><span> with its friendly scripting language with nice template literals and a capabilities based security model, is just about the perfect runtime to implement a static site generator which takes a bunch of input documents, a custom conversion script, and outputs a bunch of HTML files.</span></p>
+<p><span>If I didn</span>&rsquo;<span>t have anything else to do, I</span>&rsquo;<span>d certainly be writing my own lightweight markup language today!</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2022-10-28-elements-of-a-great-markup-language.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

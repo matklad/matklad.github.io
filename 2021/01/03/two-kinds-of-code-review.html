@@ -1,0 +1,189 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Two Kinds of Code Review</title>
+  <meta name="description" content="I've read a book about management and it helped me to solve a long-standing personal conundrum about the code review process.
+The book is High Output Management.
+Naturally, I recommend it (and read this review as well: https://apenwarr.ca/log/20190926).">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2021/01/03/two-kinds-of-code-review.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Two Kinds of Code Review</span> <time datetime="2021-01-03">Jan 3, 2021</time></h1>
+<p><span>I</span>&rsquo;<span>ve read a book about management and it helped me to solve a long-standing personal conundrum about the code review process.</span>
+<span>The book is </span>&ldquo;<span>High Output Management</span>&rdquo;<span>.</span>
+<span>Naturally, I recommend it (and read this </span>&ldquo;<span>review</span>&rdquo;<span> as well: </span><a href="https://apenwarr.ca/log/20190926" class="url">https://apenwarr.ca/log/20190926</a><span>).</span></p>
+<p><span>One of the smaller ideas of the book is that of the managerial meddling.</span>
+<span>If my manager micro-manages me and always tells me what to do, I</span>&rsquo;<span>ll grow accustomed to that and won</span>&rsquo;<span>t be able to contribute without close supervision.</span>
+<span>This is a facet of a more general </span><strong><strong><span>T</span></strong></strong><span>ask-</span><strong><strong><span>R</span></strong></strong><span>elevant </span><strong><strong><span>M</span></strong></strong><span>aturity framework.</span>
+<span>Irrespective of the overall level of seniority, a person has some expertise level for each </span><em><span>specific</span></em><span> task.</span>
+<span>The optimal quantity and quality of supervisor</span>&rsquo;<span>s involvement depends on this level (TRM).</span>
+<span>When TRM grows, the management style should go from structured control to supervision to nudges and consultations.</span>
+<span>I don</span>&rsquo;<span>t need a ton of support when writing Rust, I can benefit a lot from a thorough review when coding in Julia and I certainly require hand-holding when attempting to write Spanish!</span>
+<span>But the overarching goal is to improve my TRM, as that directly improves my productivity and frees up my supervisor</span>&rsquo;<span>s time.</span>
+<span>The problem with meddling is not excessive control (it might be appropriate in low-TRM situations), it is that meddling removes the motivation to learn to take the wheel yourself.</span></p>
+<p><span>Now, how on earth all this managerial gibberish relates to the pull request review?</span>
+<span>I now believe that there are two largely orthogonal (and even conflicting) goals to a review process.</span></p>
+<p><em><span>One</span></em><span> goal of a review process is good </span><em><span>code</span></em><span>.</span>
+<span>The review ensures that each change improves the overall quality of a code base.</span>
+<span>Without continuous betterment any code under change reverts to the default architecture: a ball of goo.</span></p>
+<p><em><span>Another</span></em><span> goal of a review is good </span><em><span>coders</span></em><span>.</span>
+<span>The review is a perfect mentorship opportunity, it is a way to increase contributor</span>&rsquo;<span>s TRM.</span>
+<span>This is vital for community-driven open-source projects.</span></p>
+<p><span>I personally always felt that the review process I use falls quite short of the proper level of quality.</span>
+<span>Which didn</span>&rsquo;<span>t really square with me bootstrapping a couple of successful open source projects.</span>
+<span>Now I think that I just happen to optimize for the people</span>&rsquo;<span>s aspect of the review process, while most guides</span>
+<span>(with a notable exception of </span><a href="http://hintjens.com/blog:106"><span>Optimistic Merging</span></a><span>) focus on code aspects.</span></p>
+<p><span>Now, (let me stress this point), I do not claim that the second goal is inherently better (though it sounds nicer).</span>
+<span>It</span>&rsquo;<span>s just that in the context of both </span><a href="https://intellij-rust.github.io"><span>IntelliJ Rust</span></a><span> and </span><a href="https://rust-analyzer.github.io"><span>rust-analyzer</span></a><span> (green-field projects with massive scope, big uncertainties and limited payed-for hours) growing the community of contributors and maintainers was more important than maintaining perfectly clean code.</span></p>
+<p><span>Reviews for quality are hard and time consuming.</span>
+<span>I personally can</span>&rsquo;<span>t really review the code looking at the diff, I can give only superficial comments.</span>
+<span>To understand the code, most of the time I need to fetch it locally and to try to implement the change myself in a different way.</span>
+<span>To make a meaningful suggestion, I need to implement and run it on my machine (and the first two attempts won</span>&rsquo;<span>t fly).</span>
+<span>Hence, a proper review for me takes roughly the same time as the implementation itself.</span>
+<span>Taking into account the fact that there are many more contributors than maintainers, this is an instant game over for reviews for quality.</span></p>
+<p><span>Luckily, folks submitting PRs generally have medium/high TRM.</span>
+<span>They were able to introduce themselves to the codebase, find an issue to work on and come up with a working code without me!</span>
+<span>So, instead of scrutinizing away every last bit of diff</span>&rsquo;<span>s imperfection, my goal is to promote the contributor to an autonomous maintainer status.</span>
+<span>This is mostly just a matter of trust.</span>
+<span>I don</span>&rsquo;<span>t read every line of code, as I trust the author of the PR to handle ifs and whiles well enough (this is the major time saver).</span>
+<span>I trust that people address my comments and let them merge their own PRs (</span><a href="https://bors.tech/documentation/"><code>bors d+</code></a><span>).</span>
+<span>I trust that people can review other</span>&rsquo;<span>s code, and share commit access (</span><code>r+</code><span>) liberally.</span></p>
+
+<aside class="block">
+
+<p><span>Note that explicit calls for contribution such as </span>&ldquo;<span>good first issue</span>&rdquo;<span> labels tend to attract less experienced contributors.</span>
+<span>When applying this label, make sure that you are ready to closely mentor the PR.</span></p>
+
+</aside>
+  <p><span>What new contributors don</span>&rsquo;<span>t have and what I do talk about in reviews is the understanding of project-specific architecture and values.</span>
+<span>These are best demonstrated on  specific issues with the diff.</span>
+<span>But the focus isn</span>&rsquo;<span>t the improvement of a specific change, the focus is teaching the author of (hopefully) subsequent changes.</span>
+<span>I liberally digress into discussing general code philosophy issues.</span>
+<span>As disseminating this knowledge 1-1 is not very efficient, I also try to document it.</span>
+<span>Rather than writing a PR comment, I put the text into</span>
+<a href="https://github.com/rust-analyzer/rust-analyzer/blob/41454eb1ebc87c0f35d247bfb600e775abe022f4/docs/dev/architecture.md"><span>architecture.md</span></a><span> or</span>
+<a href="https://github.com/rust-analyzer/rust-analyzer/blob/41454eb1ebc87c0f35d247bfb600e775abe022f4/docs/dev/style.md"><span>style.md</span></a>
+<span>and link that instead.</span>
+<span>I also try to do only a small fixed number of review rounds.</span>
+<span>Roughly, the PR is merged after two round-trips, not when there</span>&rsquo;<span>s nothing left to improve.</span></p>
+<p><span>All this definitely produces warm fuzzy feelings, but what about code quality?</span>
+<span>Gating PRs on quality is one, but not the only one, way to maintain clean code.</span>
+<span>The approach I use instead is continuous reafactoring / asynchronous reviews.</span>
+<span>One of the (documented) values in rust-analyzer is that anyone is allowed and encouraged to refactor all the code, old and new.</span></p>
+<p><span>Instead of blocking the PR, I merge it and then refactor the code in a follow-up (ccing the original author), when I touch this area next time.</span>
+<span>This gives me a much better context than a diff view, as I can edit the code in-place and run the tests.</span>
+<span>I also don</span>&rsquo;<span>t waste time transforming the change I have in mind to a PR comment (the motivation bits go directly into comment/commit message).</span>
+<span>It</span>&rsquo;<span>s also easy to do unrelated drive-by fixes!</span></p>
+<p><span>I wish this asynchronous review workflow was better supported by tools.</span>
+<span>By default, changes are merged by the author, but the PR also goes to a review queue.</span>
+<span>Later, the reviewer looks at the merged code in the main branch.</span>
+<span>Any suggestions are submitted as a new PR, with the original author set as a reviewer.</span>
+<span>(The in-editor reviewing reminds me </span><a href="https://blog.janestreet.com/putting-the-i-back-in-ide-towards-a-github-explorer/"><span>iron workflow</span></a><span>.)</span></p>
+<hr>
+<p><span>For conclusion, let me reference another book.</span>
+<span>I like item 32 from </span>&ldquo;<span>C++ Coding Standards</span>&rdquo;<span>: be clear what kind of class you</span>&rsquo;<span>re writing.</span>
+<span>A value type is not an interface is not a base class.</span>
+<span>All three are classes, but each needs a unique set of rules.</span></p>
+<p><span>When doing/receiving a code review, understand the context and purpose.</span>
+<span>If this is a homework assignment, you want to share knowledge.</span>
+<span>In a critical crypto library, you need perfect code.</span>
+<span>And for a young open source project, you aim to get a co-maintainer!</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2021-01-03-two-kinds-of-code-review.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

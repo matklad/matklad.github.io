@@ -1,0 +1,177 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Three-State Stability</title>
+  <meta name="description" content="Usually, when discussing stability of the APIs (in a broad sense; databases and programming languages are also APIs), only two states are mentioned:">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/02/16/three-state-stability.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Three-State Stability</span> <time datetime="2023-02-16">Feb 16, 2023</time></h1>
+<p><span>Usually, when discussing stability of the APIs (in a broad sense; databases and programming languages are also APIs), only two states are mentioned:</span></p>
+<ul>
+<li>
+<span>an API is stable if there</span>&rsquo;<span>s a promise that all future changes would be backwards compatible</span>
+</li>
+<li>
+<span>otherwise, it is unstable</span>
+</li>
+</ul>
+<p><span>This is reflected in, e.g, SemVer: before 1.0, anything goes, after 1.0 you only allow to break API if you bump major version.</span></p>
+<p><span>I think the </span><em><span>actual</span></em><span> situation in the real world is a bit more nuanced than that.</span>
+<span>In addition to clearly stable or clearly unstable, there</span>&rsquo;<span>s often a poorly defined third category.</span>
+<span>It often manifests as either:</span></p>
+<ul>
+<li>
+<span>some technically non-stable version of the project (e.g., </span><code>0.2</code><span>) becoming widely used and de facto stable</span>
+</li>
+<li>
+<span>some minor but technically breaking quietly slipping in shortly after 1.0</span>
+</li>
+</ul>
+<p><span>Here</span>&rsquo;<span>s what I think happens over a lifetime of a typical API:</span></p>
+<p><span>In the first phase, the API is actively evolving.</span>
+<span>There is a promise of anti-stability </span>&mdash;<span> there</span>&rsquo;<span>s constant change and a lot of experimentation.</span>
+<span>Almost no one is using the project seriously:</span></p>
+<ul>
+<li>
+<span>the API is simply incomplete, there are large gaps in functionality</span>
+</li>
+<li>
+<span>chasing upstream requires continuous, large effort</span>
+</li>
+<li>
+<span>there</span>&rsquo;<span>s no certainty that the project will, in fact, ship a stable version, rather than die</span>
+</li>
+</ul>
+<p><span>In the second phase, the API is </span><em><span>mostly</span></em><span> settled.</span>
+<span>It does everything it needs to do, and the shape feels mostly right.</span>
+<span>Transition to this state happens when the API maintainers feel like they nailed down everything.</span>
+<span>However, no wide deployment had happened, so there might still be minor, but backwards incompatible adjustments wanting to be made.</span>
+<span>It makes sense to use the API for all </span><em><span>active</span></em><span> projects (though it costs you an innovation token).</span>
+<span>The thing basically works, you </span><em><span>might</span></em><span> need to adjust your code from time to time, occasionally an adjustment is not trivial, but the overall expected effort is low.</span>
+<span>The API is fully production ready, and has everything except stability.</span>
+<span>If you write a program on top of the API today, and try to run it ten years later, it will fail.</span>
+<span>But if you are making your own releases a couple of times a year, you should be fine.</span></p>
+<p><span>In the third phase, the API is fully stable, and no backwards-incompatible changes are expected.</span>
+<span>Otherwise, it is identical to the second phase.</span>
+<span>Transition to this phase happens after:</span></p>
+<ul>
+<li>
+<span>early adopters empirically stop uncovering deficiencies in the API</span>
+</li>
+<li>
+<span>API maintainers make a commitment to maintain stability.</span>
+</li>
+</ul>
+<p><span>In other words, it is not unstable -&gt; stable, it is rather:</span></p>
+<ul>
+<li>
+<span>experimental (unstable, not fit for production)</span>
+</li>
+<li>
+<span>production ready (still unstable, but you can budget-in a bounded amount of upgrade work)</span>
+</li>
+<li>
+<span>stable (no maintenance work is required)</span>
+</li>
+</ul>
+<p><span>We don</span>&rsquo;<span>t have great, catchy terms to describe the second bullet, so it gets lumped together with the first or the last one.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-02-16-three-state-stability.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

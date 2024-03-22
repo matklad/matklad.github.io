@@ -1,0 +1,246 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zig defer Patterns</title>
+  <meta name="description" content="A short note about some unexpected usages of Zig's defer statement.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/03/21/defer-patterns.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Zig defer Patterns</span> <time datetime="2024-03-21">Mar 21, 2024</time></h1>
+<p><span>A short note about some unexpected usages of Zig</span>&rsquo;<span>s </span><code>defer</code><span> statement.</span></p>
+<p><span>This post assumes that you already know the basics about RAII, </span><code>defer</code><span> and </span><code>errdefer</code><span>. While</span>
+<span>discussing the differences between them is not the point, I will allow myself one high level</span>
+<span>comment. I don</span>&rsquo;<span>t like </span><code>defer</code><span> as a replacement for RAII: after writing Zig for some time, I am</span>
+<span>relatively confident that humans are just not good at not forgetting defers, especially when</span>
+&ldquo;<span>optional</span>&rdquo;<span> ownership transfer is at play (i.e, this function takes ownership of an argument, unless</span>
+<span>an error is returned). But defer is good at discouraging RAII oriented programming. RAII encourages</span>
+<span>binding lifetime of resources (such as memory) with lifetimes of individual domain objects (such as</span>
+<span>a </span><code>String</code><span>). But often, in pursuit of performance and small code size, you want to separate the two</span>
+<span>concerns, and let many domain objects to share the single pool of resources. Instead of each</span>
+<span>individual string managing its own allocation, you might want to store the contents of all related</span>
+<span>strings into a single continuously allocated buffer. Because RAII with defer is painful, Zig</span>
+<span>naturally pushes you towards batching your resource acquisition and release calls, such that you have</span>
+<span>far fewer resources than objects in your program.</span></p>
+<p><span>But, as I</span>&rsquo;<span>ve said, this post isn</span>&rsquo;<span>t about all that. This post is about non-resource-oriented usages</span>
+<span>of </span><code>defer</code><span>. There</span>&rsquo;<span>s more to defer than just RAII, it</span>&rsquo;<span>s a nice little powerful construct! This is way</span>
+<span>to much ado already, so here come the patterns:</span></p>
+<section id="Asserting-Post-Conditions">
+
+    <h2>
+    <a href="#Asserting-Post-Conditions"><span>Asserting Post Conditions</span> </a>
+    </h2>
+<p><code>defer</code><span> gives you poor man</span>&rsquo;<span>s contract programming in the form of</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">assert(precondition)</span>
+<span class="line"><span class="hl-keyword">defer</span> assert(postcondition)</span></code></pre>
+
+</figure>
+<p><span>Real life </span><a href="https://github.com/tigerbeetle/tigerbeetle/blob/73bbc1a32ba2513e369764680350c099fe302285/src/vsr/grid.zig#L298-L309"><span>example</span></a><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">{</span>
+<span class="line">  assert(<span class="hl-operator">!</span>grid.free_set.opened);</span>
+<span class="line">  <span class="hl-keyword">defer</span> assert(grid.free_set.opened);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// Code to open the free set</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Statically-Enforcing-Absence-of-Errors">
+
+    <h2>
+    <a href="#Statically-Enforcing-Absence-of-Errors"><span>Statically Enforcing Absence of Errors</span> </a>
+    </h2>
+<p><span>This is basically peak Zig:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">errdefer</span> <span class="hl-keyword">comptime</span> <span class="hl-keyword">unreachable</span></span></code></pre>
+
+</figure>
+<p><code>errdefer</code><span> runs when a function returns an error (e.g., when a </span><code>try</code><span> fails). </span><code>unreachable</code>
+<span>crashes the program (in </span><code>ReleaseSafe</code><span>). But </span><code>comptime unreachable</code><span> straight up fails compilation</span>
+<span>if the compiler tries to generate the corresponding runtime code. The three together ensure the</span>
+<span>absence of error-returning paths.</span></p>
+<p><span>Here</span>&rsquo;<span>s </span><a href="https://github.com/ziglang/zig/blob/1d82d7987acf7f020bcc6a976f9887a3556ef79c/lib/std/hash_map.zig#L1561-L1584"><span>an example</span></a>
+<span>from the standard library, the function to grow a hash map:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// The function as a whole can fail...</span></span>
+<span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> grow</span>(</span>
+<span class="line">  self: <span class="hl-operator">*</span>Self,</span>
+<span class="line">  allocator: Allocator,</span>
+<span class="line">  new_capacity: Size,</span>
+<span class="line">) Allocator.Error<span class="hl-operator">!</span><span class="hl-type">void</span> {</span>
+<span class="line">  <span class="hl-built_in">@setCold</span>(<span class="hl-literal">true</span>);</span>
+<span class="line">  <span class="hl-keyword">var</span> map: Self = .{};</span>
+<span class="line">  <span class="hl-keyword">try</span> map.allocate(allocator, new_capacity);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// ...but from this point on, failure is impossible</span></span>
+<span class="line">  <span class="hl-keyword">errdefer</span> <span class="hl-keyword">comptime</span> <span class="hl-keyword">unreachable</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// Code to rehash&amp;copy self to map</span></span>
+<span class="line">  std.mem.swap(Self, self, <span class="hl-operator">&amp;</span>map);</span>
+<span class="line">  map.deinit(allocator);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Logging-Errors">
+
+    <h2>
+    <a href="#Logging-Errors"><span>Logging Errors</span> </a>
+    </h2>
+<p><span>Zig</span>&rsquo;<span>s error handling mechanism provides only error code (a number) and an error trace. This is</span>
+<span>usually plenty to programmatically handle the error in an application and for the operator to</span>
+<span>debug a failure, but this is decidedly not enough to provide a nice report for the end user.</span>
+<span>However, if you are in a business of reporting errors to users, you are likely writing an</span>
+<span>application, and application might get away without propagating extra information about the error</span>
+<span>to the caller. Often, there</span>&rsquo;<span>s enough context at the point where the error originates in the first</span>
+<span>place to produce a user-facing report right there.</span></p>
+<p><a href="https://github.com/tigerbeetle/tigerbeetle/blob/73bbc1a32ba2513e369764680350c099fe302285/src/tigerbeetle/benchmark_driver.zig#L158-L163"><span>Example:</span></a></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> port = port: {</span>
+<span class="line">  <span class="hl-keyword">errdefer</span> <span class="hl-operator">|</span>err<span class="hl-operator">|</span> log.err(<span class="hl-string">&quot;failed to read the port number: {}&quot;</span>, .{err});</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">var</span> buf: [fmt.count(<span class="hl-string">&quot;{}<span class="hl-string">\n</span>&quot;</span>, .{maxInt(<span class="hl-type">u16</span>)})]<span class="hl-type">u8</span> = <span class="hl-literal">undefined</span>;</span>
+<span class="line">  <span class="hl-keyword">const</span> len = <span class="hl-keyword">try</span> process.stdout.?.readAll(<span class="hl-operator">&amp;</span>buf);</span>
+<span class="line">  <span class="hl-keyword">break</span> :port <span class="hl-keyword">try</span> fmt.parseInt(<span class="hl-type">u16</span>, buf[<span class="hl-numbers">0</span> .. len <span class="hl-operator">-</span><span class="hl-operator">|</span> <span class="hl-numbers">1</span>], <span class="hl-numbers">10</span>);</span>
+<span class="line">};</span></code></pre>
+
+</figure>
+</section>
+<section id="Post-Increment">
+
+    <h2>
+    <a href="#Post-Increment"><span>Post Increment</span> </a>
+    </h2>
+<p><span>Finally, </span><code>defer</code><span> can be used as an </span><code>i++</code><span> of sorts. </span><a href="https://github.com/tigerbeetle/tigerbeetle/blob/0.15.3/src/lsm/scan_buffer.zig#L97-L102"><span>For</span>
+<span>example</span></a><span>,</span>
+<span>here</span>&rsquo;<span>s how you can pop an item off a free list:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> acquire</span>(self: <span class="hl-operator">*</span>ScanBufferPool) Error<span class="hl-operator">!</span><span class="hl-operator">*</span><span class="hl-keyword">const</span> ScanBuffer {</span>
+<span class="line">  <span class="hl-keyword">if</span> (self.scan_buffer_used <span class="hl-operator">==</span> constants.lsm_scans_max) {</span>
+<span class="line">    <span class="hl-keyword">return</span> Error.ScansMaxExceeded;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">defer</span> self.scan_buffer_used <span class="hl-operator">+=</span> <span class="hl-numbers">1</span>;</span>
+<span class="line">  <span class="hl-keyword">return</span> <span class="hl-operator">&amp;</span>self.scan_buffers[self.scan_buffer_used];</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-03-21-defer-patterns.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

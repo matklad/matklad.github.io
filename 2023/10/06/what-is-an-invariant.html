@@ -1,0 +1,385 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What is an Invariant?</title>
+  <meta name="description" content="I extolled the benefits of programming with invariants in a couple of recent posts.
+Naturally, I didn't explain what I think when I write invariant. This post fixes that.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/10/06/what-is-an-invariant.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>What is an Invariant?</span> <time datetime="2023-10-06">Oct 6, 2023</time></h1>
+<p><span>I extolled the benefits of programming with invariants in a couple of recent posts.</span>
+<span>Naturally, I didn</span>&rsquo;<span>t explain what I think when I write </span>&ldquo;<span>invariant</span>&rdquo;<span>. This post fixes that.</span></p>
+<p><span>There are at least three different concepts I label with </span>&ldquo;<span>invariant</span>&rdquo;<span>:</span></p>
+<ul>
+<li>
+<span>a general </span>&ldquo;<span>math</span>&rdquo;<span> mode of thinking, where you distinguish between fuzzy, imprecise thoughts and</span>
+<span>precise statements with logical meaning.</span>
+</li>
+<li>
+<span>a specific technique for writing correct code when programming in the small.</span>
+</li>
+<li>
+<span>when programming in the large, compact, viral, descriptive properties of the systems.</span>
+</li>
+</ul>
+<p><span>I wouldn</span>&rsquo;<span>t discuss the first point here </span>&mdash;<span> I don</span>&rsquo;<span>t know how to describe this better than </span>&ldquo;<span>that</span>
+<span>thing that you do when you solve non-trivial math puzzler</span>&rdquo;<span>. The bulk of the post describes the</span>
+<span>second bullet point, for which I think I have a perfect litmus test to explain exactly what I am</span>
+<span>thinking here. I also touch a bit on the last point in the end.</span></p>
+<p><span>So let</span>&rsquo;<span>s start with a </span><a href="https://research.swtch.com/hwmm"><span>litmus test program</span></a><span> to show invariants in</span>
+<span>the small in action:</span></p>
+
+<aside class="block">
+
+<p><span>Write a binary search variation which computes insertion point </span>&mdash;<span> the smallest index such that, if</span>
+<span>the new element is inserted at this index, the array remains sorted:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">insertion_point</span>(xs: &amp;[<span class="hl-type">i32</span>], x: <span class="hl-type">i32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span></span></code></pre>
+
+</figure>
+
+</aside>
+  <p><span>You might want to write one yourself before proceeding. Here</span>&rsquo;<span>s an </span><a href="https://matklad.github.io/2021/11/07/generate-all-the-things.html"><span>exhaustive</span>
+<span>test</span></a><span> for this functionality,</span>
+<span>using </span><a href="https://crates.io/crates/exhaustigen"><span>exhaustigen crate</span></a><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">N</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">M</span> = <span class="hl-number">5</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = exhaustigen::Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    <span class="hl-comment">// Generate an arbitrary sorted array of length at most M.</span></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">xs</span> =</span>
+<span class="line">      (<span class="hl-number">0</span>..g.<span class="hl-title function_ invoke__">gen</span>(N)).<span class="hl-title function_ invoke__">map</span>(|_| g.<span class="hl-title function_ invoke__">gen</span>(M) <span class="hl-keyword">as</span> <span class="hl-type">i32</span>).collect::&lt;<span class="hl-type">Vec</span>&lt;_&gt;&gt;();</span>
+<span class="line">    xs.<span class="hl-title function_ invoke__">sort</span>();</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">x</span> = g.<span class="hl-title function_ invoke__">gen</span>(M) <span class="hl-keyword">as</span> <span class="hl-type">i32</span>;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">i</span> = <span class="hl-title function_ invoke__">insertion_point</span>(&amp;xs, x);</span>
+<span class="line">    <span class="hl-keyword">if</span> i &gt; <span class="hl-number">0</span>        { <span class="hl-built_in">assert!</span>(xs[i - <span class="hl-number">1</span>] &lt; x) }</span>
+<span class="line">    <span class="hl-keyword">if</span> i &lt; xs.<span class="hl-title function_ invoke__">len</span>() { <span class="hl-built_in">assert!</span>(x &lt;= xs[i]) }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here</span>&rsquo;<span>s how I would naively write this function. First, I start with defining the boundaries for the</span>
+<span>binary search:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">insertion_point</span>(xs: &amp;[<span class="hl-type">i32</span>], x: <span class="hl-type">i32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lo</span> = <span class="hl-number">0</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">hi</span> = xs.<span class="hl-title function_ invoke__">len</span>();</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Then, repeatedly cut the interval in half until it vanishes</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">    <span class="hl-keyword">while</span> hi &gt; lo {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">mid</span> = lo + (hi - lo) / <span class="hl-number">2</span>;</span>
+<span class="line">        ...</span>
+<span class="line">    }</span></code></pre>
+
+</figure>
+<p><span>and recur into the left or the right half accordingly:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">        <span class="hl-keyword">if</span> x &lt; xs[mid] {</span>
+<span class="line">            lo = mid;</span>
+<span class="line">        } <span class="hl-keyword">else</span> {</span>
+<span class="line">            hi = mid;</span>
+<span class="line">        }</span></code></pre>
+
+</figure>
+<p><span>Altogether:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">insertion_point</span>(xs: &amp;[<span class="hl-type">i32</span>], x: <span class="hl-type">i32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span> {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">lo</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">hi</span> = xs.<span class="hl-title function_ invoke__">len</span>();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">while</span> lo &lt; hi {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">mid</span> = lo + (hi - lo) / <span class="hl-number">2</span>;</span>
+<span class="line">    <span class="hl-keyword">if</span> x &lt; xs[mid] {</span>
+<span class="line">      hi = mid;</span>
+<span class="line">    } <span class="hl-keyword">else</span> {</span>
+<span class="line">      lo = mid;</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  lo</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>I love this code! It has so many details right!</span></p>
+<ul>
+<li>
+<span>The </span><code>insertion_point</code><span> interface compactly compresses usually messy result of a binary search to</span>
+<span>just one index.</span>
+</li>
+<li>
+<code>xs / x</code><span> pair of names for the sequence and its element crisply describes abstract algorithm on</span>
+<span>sequencies.</span>
+</li>
+<li>
+<span>Similarly, </span><code>lo / hi</code><span> name pair is symmetric, expressing the relation between the two indexes.</span>
+</li>
+<li>
+<span>Half-open intervals are used for indexing.</span>
+</li>
+<li>
+<span>There are no special casing anywhere, the natural </span><code>lo &lt; hi</code><span> condition handles empty slice.</span>
+</li>
+<li>
+<span>We even dodge Java</span>&rsquo;<span>s binary search bug by computing midpoint without overflow.</span>
+</li>
+</ul>
+<p><span>There</span>&rsquo;<span>s only one problem with this code </span>&mdash;<span> it doesn</span>&rsquo;<span>t work. Just blindly following rules-of-thumb</span>
+<span>gives you working code surprisingly often, but this particular algorithm is an exception.</span></p>
+<p><span>The question is, how do we fix this overwise great code? And here</span>&rsquo;<span>s where thinking invariants helps.</span>
+<span>Before I internalized invariants, my approach would be to find a failing example, and to fumble with</span>
+<span>some plus or minus ones here and there and other special casing to make it work. That is, find a</span>
+<span>concrete problem, solve it. This works, but is slow, and doesn</span>&rsquo;<span>t allow discovering the problem</span>
+<span>before running the code.</span></p>
+<p><span>The alternative is to actually make an effort and spell out, explicitly, what the code is supposed</span>
+<span>to do. In this case, we want </span><code>lo</code><span> and </span><code>hi</code><span> to bound the result. That is,</span>
+<code class="display">lo &lt;= insertion_point &lt;= hi</code>
+<span>should hold on every iteration. It clearly holds before we enter the loop. On each iteration, we</span>
+<span>would like to shorten this interval, cutting away the part that definitely does not contain</span>
+<span>insertion point.</span></p>
+<p><span>Elaborating the invariant, all elements to the left of </span><code>lo</code><span> should be less than the target.</span>
+<span>Conversely, all elements to the right of </span><code>hi</code><span> should be at least as large as the target.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..lo: xs[i] &lt; x</span>
+<span class="line"><span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> hi..:  x &lt;= xs[i]</span></code></pre>
+
+</figure>
+<p><span>Let</span>&rsquo;<span>s now take a second look at the branching condition:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">x &lt; xs[mid]</span></code></pre>
+
+</figure>
+<p><span>It matches neither invariant prong exactly: </span><code>x</code><span> is on the left, but inequality is strict. We can</span>
+<span>rearrange the code to follow the invariant more closely:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">if</span> xs[mid] &lt; x {</span>
+<span class="line">    lo = mid + <span class="hl-number">1</span>;</span>
+<span class="line">} <span class="hl-keyword">else</span> {</span>
+<span class="line">    hi = mid;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<ul>
+<li>
+<span>we flip the condition and if-branches, so that </span><code>xs[mid] &lt; x</code><span> matches </span><code>xs[i] &lt; x</code><span> from the</span>
+<span>invariant for </span><code>lo</code>
+</li>
+<li>
+<span>to make the invariant tight, we add </span><code>mid + 1</code><span> (if </span><code>xs[mid]</code><span> is less than </span><code>x</code><span>, we know that the</span>
+<span>insertion point is at least </span><code>mid + 1</code><span>)</span>
+</li>
+</ul>
+<p><span>The code now works. So what went wrong with the original version with </span><code>x &lt; xs[mid]</code><span>? In the else</span>
+<span>case, when </span><code>x &gt;= xs[mid]</code><span> we set </span><code>lo = mid</code><span>, but that</span>&rsquo;<span>s wrong! It might be the case that </span><code>x ==
+xs[mid]</code><span> and </span><code>x == xs[mid - 1]</code><span>, which would break the invariant for </span><code>lo</code><span>.</span></p>
+<p><span>The point isn</span>&rsquo;<span>t in this </span><em><span>particular</span></em><span> invariant or this particular algorithm. It</span>&rsquo;<span>s the general</span>
+<span>pattern that  it</span>&rsquo;<span>s easy to write the code which implements the right algorithm, and sort-of works,</span>
+<span>but is wrong in details. To get the details right for the right reason, you need to understand</span>
+<em><span>precisely</span></em><span> what the result should be, and formulating this as a (loop or recursion) invariant</span>
+<span>helps.</span></p>
+<hr>
+<p><span>Perhaps it</span>&rsquo;<span>s time to answer the title question: invariant is some property which holds at all times</span>
+<span>during dynamic evolution of the system. In the above example, the evolution is the program</span>
+<span>progressing through subsequent loop iterations. The invariant, the condition binding </span><code>lo</code><span> and </span><code>hi</code><span>,</span>
+<span>holds on every iteration. Invariants are powerful, because they are </span><em><span>compressed</span></em><span> descriptions of</span>
+<span>the system, they collapse away the time dimension, which is a huge simplification. Reasoning about</span>
+<span>each particular path the program could take is hard, because there are so many different paths.</span>
+<span>Reasoning about invariants is easy, because they capture properties shared by </span><em><span>all</span></em><span> execution paths.</span></p>
+<p><span>The same idea applies when programming in the large. In the small, we looked at how the state of a</span>
+<span>running program evolves over time. In the large, we will look at how the source code of the program</span>
+<span>itself evolves, as it is being refactored and extended to support new features. Here are some</span>
+<span>systems invariants from the systems I</span>&rsquo;<span>ve worked with:</span></p>
+<p><strong><span>Cargo:</span></strong></p>
+<p><span>File system paths entered by users are preserved exactly. If the user types</span>
+<span class="display"><code>cargo frob ../some/dir</code><span>,</span></span>
+<span>Cargo doesn</span>&rsquo;<span>t attempt to resolve </span><code>../some/dir</code><span> to an absolute path and passes the path</span>
+<span>to the underlying OS as is. The reason for that is that file systems are very finicky. Although it</span>
+<span>might look as if two paths are equivalent, there are bound to be cases where they are not. If the</span>
+<span>user typed a particular form of a path, they believe that it</span>&rsquo;<span>ll work, and any changes can mess</span>
+<span>things up easily.</span></p>
+<p><span>This is a relatively compact invariant </span>&mdash;<span> basically, code is just forbidden from calling</span>
+<code>fs::canonicalize</code><span>.</span></p>
+<p><strong><span>rust-analyzer:</span></strong></p>
+<p><span>Syntax trees are identity-less value types. That is, if you take an object representing an </span><code>if</code>
+<span>expression, that object doesn</span>&rsquo;<span>t have any knowledge of where in the larger program the </span><code>if</code>
+<span>expression is. The thinking about this invariant was that it simplifies refactors </span>&mdash;<span> while in the</span>
+<span>static program it</span>&rsquo;<span>s natural to talk about </span>&ldquo;<code>if</code><span> on the line X in file Y</span>&rdquo;<span>, when you start modifying</span>
+<span>code, identity becomes much more fluid.</span></p>
+<p><span>This is an invariant with far reaching consequences </span>&mdash;<span> that means that literally everything in</span>
+<span>rust-analyzer needs to track identities of things explicitly. You don</span>&rsquo;<span>t just pass around syntax</span>
+<span>nodes, you pass nodes with extra breadcrumbs describing their origin. I think this might have been a</span>
+<span>mistake </span>&mdash;<span> while it does make refactoring APIs more principled, refactoring is not the common case!</span>
+<span>Most of the work of a language server consists of read-only analysis of existing code, and the</span>
+<span>actual refactor is just a cherry on top. So perhaps it</span>&rsquo;<span>s better to try to bind identity mode tightly</span>
+<span>into the core data structure, and just use fake identities for temporary trees that arise during</span>
+<span>refactors.</span></p>
+<p><span>A more successful invariant from rust-analyzer is that the IDE has a full, frozen view of a snapshot</span>
+<span>of the world. There</span>&rsquo;<span>s no API for inferring the types, rather, the API looks as if all the types are</span>
+<span>computed at all times. Similarly, there</span>&rsquo;<span>s no explicit API for changing the code or talking about</span>
+<span>different historical versions of the code </span>&mdash;<span> the IDE sees a single </span>&ldquo;<span>current</span>&rdquo;<span> snapshot with all</span>
+<span>derived data computed. Underneath, there</span>&rsquo;<span>s a smart system to secretly compute the information on</span>
+<span>demand and re-use previous results, but this is all hidden from the API.</span></p>
+<p><span>This is a great, simple mental model, and it provides for a nice boundary between the compiler</span>
+<span>proper and IDE fluff like refactors and code completion. Long term, I</span>&rsquo;<span>d love to see several</span>
+<span>implementations of the </span>&ldquo;<span>compiler parts</span>&rdquo;<span>.</span></p>
+<p><strong><span>TigerBeetle:</span></strong></p>
+<p><span>A </span><em><span>lot</span></em><span> of thoughtful invariants here! To touch only a few:</span></p>
+<p><span>TigerBeetle doesn</span>&rsquo;<span>t allocate memory after startup. This simple invariant affects every bit of code</span>
+&mdash;<span> whatever you do, you must manage with existing, pre-allocated data structures. You can</span>&rsquo;<span>t just</span>
+<code>memcpy</code><span> stuff around, there</span>&rsquo;<span>s no ambient available space to </span><code>memcpy</code><span> to! As a consequence (and,</span>
+<span>historically, as a motivation for the design)</span>
+<a href="https://github.com/tigerbeetle/tigerbeetle/blob/cfb46eff4e001bb6b33f5e48924a2de44db20e8f/src/constants.zig#L417-L418"><span>everything</span></a>
+<span>has a specific numeric limit.</span></p>
+<p><span>Another fun one is that transaction logic can</span>&rsquo;<span>t read from disk. Every object which could be touched</span>
+<span>by a transaction needs to be explicitly prefetched into memory before transaction begins. Because</span>
+<span>disk IO happens separately from the execution, it is possible to parallelize IO for a whole batch of</span>
+<span>transactions. The actual transaction execution is then a very tight serial CPU loop without any</span>
+<span>locks.</span></p>
+<p><span>Speaking of disk IO, in TigerBeetle </span>&ldquo;<span>reading from disk</span>&rdquo;<span> can</span>&rsquo;<span>t fail. The central API for reading</span>
+<span>takes a data block address, a checksum, and invokes the callback with data with a matching checksum.</span>
+<span>Everything built on top doesn</span>&rsquo;<span>t need to worry about error handling. The way this works internally is</span>
+<span>that reads that fail on a local disk are repaired through other replicas in the cluster. It</span>&rsquo;<span>s just</span>
+<span>that the repair happens transparently to the caller. If the block of data of interest isn</span>&rsquo;<span>t found on</span>
+<span>the set of reachable replicas, the cluster correctly gets stuck until it is found.</span></p>
+<hr>
+<p><span>Summing up: invariants are helpful for describing systems that evolve over time. There</span>&rsquo;<span>s a</span>
+<span>combinatorial explosion of trajectories that a system </span><em><span>could</span></em><span> take. Invariants compactly describe</span>
+<span>properties shared by an infinite amount of trajectories.</span></p>
+<p><span>In the small, formulating invariants about program state helps to wire correct code.</span></p>
+<p><span>In the large, formulating invariants about the code itself helps to go from a small, simple system</span>
+<span>that works to a large system which is used in production.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-10-06-what-is-an-invariant.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

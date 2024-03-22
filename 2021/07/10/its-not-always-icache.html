@@ -1,0 +1,496 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>It's Not Always ICache</title>
+  <meta name="description" content="This is a follow up to the previous post about #[inline] in Rust specifically.
+This post is a bit more general, and a bit more ranty.
+Reader, beware!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2021/07/10/its-not-always-icache.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>It</span>&rsquo;<span>s Not Always ICache</span> <time datetime="2021-07-10">Jul 10, 2021</time></h1>
+<p><span>This is a follow up to the </span><a href="https://matklad.github.io/2021/07/09/inline-in-rust.html"><span>previous post</span></a><span> about </span><code>#[inline]</code><span> in Rust specifically.</span>
+<span>This post is a bit more general, and a bit more ranty.</span>
+<span>Reader, beware!</span></p>
+<p><span>When inlining optimization is discussed, the following is almost always mentioned: </span>&ldquo;<span>inlining can also make code slower, </span><em><span>because</span></em><span> inlining increases the code size, blowing the instruction cache size and causing cache misses</span>&rdquo;<span>.</span></p>
+<p><span>I myself have seen this repeated on various forms many times.</span>
+<span>I have also seen a lot of benchmarks where judicious removal of inlining annotations did increase performance.</span>
+<span>However, not once have I seen the performance improvement being traced to ICache specifically.</span>
+<span>To me at least, this explanation doesn</span>&rsquo;<span>t seem to be grounded </span>&mdash;<span> people know that ICache is to blame because other people say this, not because there</span>&rsquo;<span>s a benchmark everyone points to.</span>
+<span>It doesn</span>&rsquo;<span>t mean that the ICache explanation is wrong </span>&mdash;<span> just that I personally don</span>&rsquo;<span>t have evidence to believe it is better than any other explanation.</span></p>
+<p><span>Anyway, I</span>&rsquo;<span>ve decided to look at a specific case where I know </span><code>#[inline]</code><span> to cause an observable slow down, and understand why it happens.</span>
+<span>Note that the goal here is not to explain real-world impact of </span><code>#[inline]</code><span>, the benchmark is artificial.</span>
+<span>The goal is, first and foremost, to learn more about the tools to use for explaining results.</span>
+<span>The secondary goal is to either observe ICache effects in practice, or else to provide an alternative hypothesis for why removing inlining can speed the things up.</span></p>
+<p><span>The benchmark is based on my </span><a href="https://github.com/matklad/once_cell"><span>once_cell</span></a><span> Rust library.</span>
+<span>The library provides a primitive, similar to </span><a href="https://en.wikipedia.org/wiki/Double-checked_locking"><span>double-checked locking</span></a><span>.</span>
+<span>There</span>&rsquo;<span>s a function that looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">get_or_try_init</span>&lt;F, E&gt;(&amp;<span class="hl-keyword">self</span>, f: F) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Result</span>&lt;&amp;T, E&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line"> F: <span class="hl-title function_ invoke__">FnOnce</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Result</span>&lt;T, E&gt;,</span>
+<span class="line">{</span>
+<span class="line">  <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(value) = <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">get</span>() {</span>
+<span class="line">    <span class="hl-comment">// Fast path.</span></span>
+<span class="line">    <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">Ok</span>(value);</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// Slow path.</span></span>
+<span class="line">  <span class="hl-keyword">self</span>.<span class="hl-number">0</span>.<span class="hl-title function_ invoke__">initialize</span>(f)?;</span>
+<span class="line">  <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-keyword">unsafe</span> { <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">get_unchecked</span>() })</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>I know that performance improves significantly when the </span><code>initialize</code><span> function is not inlined.</span>
+<span>It</span>&rsquo;<span>s somewhat obvious that this is the case (that</span>&rsquo;<span>s why the benchmark is synthetic </span>&mdash;<span> real world examples are about cases where we don</span>&rsquo;<span>t know if </span><code>inline</code><span> is needed).</span>
+<span>But it is unclear why, </span><em><span>exactly</span></em><span>, inlining </span><code>initialize</code><span> leads to slower code.</span></p>
+<p><span>For the experiment, I wrote a simple high-level benchmark calling </span><code>get_or_try_init</code><span> in a loop:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> N_LOOPS: <span class="hl-type">usize</span> = <span class="hl-number">8</span>;</span>
+<span class="line"><span class="hl-keyword">static</span> CELL: OnceCell&lt;<span class="hl-type">usize</span>&gt; = OnceCell::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..N_LOOPS {</span>
+<span class="line">    <span class="hl-title function_ invoke__">go</span>(i)</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">go</span>(i: <span class="hl-type">usize</span>) {</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..<span class="hl-number">100_000_000</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> &amp;value = CELL.<span class="hl-title function_ invoke__">get_or_init</span>(|| i);</span>
+<span class="line">    <span class="hl-built_in">assert!</span>(value &lt; N_LOOPS);</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>I also added compile-time toggle to force or forbid inlining:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[cfg_attr(feature = <span class="hl-string">&quot;inline_always&quot;</span>, inline(always))]</span></span>
+<span class="line"><span class="hl-meta">#[cfg_attr(feature = <span class="hl-string">&quot;inline_never&quot;</span>, inline(never))]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">initialize</span>() { ... }</span></code></pre>
+
+</figure>
+<p><span>You can see the full benchmark in this commit: </span><a href="https://github.com/matklad/once_cell/commit/a741d5f2ca7cd89125ef1c70ee2e5fe660271050"><span>matklad/once_cell@a741d5f</span></a><span>.</span></p>
+<p><span>Running both versions shows that </span><code>#[inline(never)]</code><span> is indeed measurably faster:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo run -q --example bench  --release --features inline_always</span>
+<span class="line"><span class="hl-output">330ms</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-title function_">$</span> cargo run -q --example bench  --release --features inline_never</span>
+<span class="line"><span class="hl-output">259ms</span></span></code></pre>
+
+</figure>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>Note that we don</span>&rsquo;<span>t use fancy statistics here.</span>
+<code>/usr/bin/time</code><span> is enough to see the difference with a naked eye despite the fact that the effect we are looking for is very low-level.</span>
+<span>Hence, a general tip: if you are benchmarking relative difference (and not the absolute performance), don</span>&rsquo;<span>t bother with measuring nanosecond-precision time.</span>
+<span>Instead, loop the benchmark enough to make the change human-perceptible.</span></p>
+</div>
+</aside><p><span>How do we explain the difference?</span>
+<span>The first step is to remove cargo from the equation and make two binaries for comparison:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo build --example bench --release --features inline_never</span>
+<span class="line"><span class="hl-title function_">$</span> cp ./target/release/examples/bench never</span>
+<span class="line"><span class="hl-title function_">$</span> cargo build --example bench --release --features inline_always</span>
+<span class="line"><span class="hl-title function_">$</span> cp ./target/release/examples/bench always</span></code></pre>
+
+</figure>
+<p><span>On Linux, the best tool to quickly access the performance of any program is </span><code>perf stat</code><span>.</span>
+<span>It runs the program and shows a bunch of CPU-level performance counters, which might explain what</span>&rsquo;<span>s going on.</span>
+<span>As we suspect that ICache might be to blame, let</span>&rsquo;<span>s include the counters for caches:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> perf stat -e instructions,cycles,\</span>
+<span class="line">  L1-dcache-loads,L1-dcache-load-misses,L1-dcache-prefetches,\</span>
+<span class="line">  L1-icache-loads,L1-icache-load-misses,cache-misses \</span>
+<span class="line">  ./always</span>
+<span class="line"><span class="hl-output">348ms</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output"> 6,396,754,995      instructions:u</span></span>
+<span class="line"><span class="hl-output"> 1,601,314,994      cycles:u</span></span>
+<span class="line"><span class="hl-output"> 1,600,621,170      L1-dcache-loads:u</span></span>
+<span class="line"><span class="hl-output">         4,806      L1-dcache-load-misses:u</span></span>
+<span class="line"><span class="hl-output">         4,402      L1-dcache-prefetches:u</span></span>
+<span class="line"><span class="hl-output">        69,594      L1-icache-loads:u</span></span>
+<span class="line"><span class="hl-output">           461      L1-icache-load-misses:u</span></span>
+<span class="line"><span class="hl-output">         1,928      cache-misses:u</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-title function_">$</span> perf stat -e instructions,cycles,\</span>
+<span class="line">  L1-dcache-loads,L1-dcache-load-misses,L1-dcache-prefetches,\</span>
+<span class="line">  L1-icache-loads,L1-icache-load-misses,cache-misses \</span>
+<span class="line">  ./never</span>
+<span class="line"><span class="hl-output">261ms</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output"> Performance counter stats for './never':</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output"> 5,597,215,493      instructions:u</span></span>
+<span class="line"><span class="hl-output"> 1,199,960,402      cycles:u</span></span>
+<span class="line"><span class="hl-output"> 1,599,404,303      L1-dcache-loads:u</span></span>
+<span class="line"><span class="hl-output">         4,612      L1-dcache-load-misses:u</span></span>
+<span class="line"><span class="hl-output">         4,290      L1-dcache-prefetches:u</span></span>
+<span class="line"><span class="hl-output">        62,268      L1-icache-loads:u</span></span>
+<span class="line"><span class="hl-output">           603      L1-icache-load-misses:u</span></span>
+<span class="line"><span class="hl-output">         1,675      cache-misses:u</span></span></code></pre>
+
+</figure>
+<p><span>There is some difference in </span><code>L1-icache-load-misses</code><span>, but there</span>&rsquo;<span>s also a surprising difference in </span><code>instructions</code><span>.</span>
+<span>What</span>&rsquo;<span>s more, the </span><code>L1-icache-load-misses</code><span> difference is hard to estimate, because it</span>&rsquo;<span>s unclear what </span><code>L1-icache-loads</code><span> are.</span>
+<span>As a sanity check, statistics for </span><code>dcache</code><span> are the same, just as we expect.</span></p>
+<p><span>While </span><code>perf</code><span> takes the real data from the CPU, an alternative approach is to run the program in a simulated environment.</span>
+<span>That</span>&rsquo;<span>s what </span><code>cachegrind</code><span> tool does.</span>
+<span>Fun fact: the primary author of cachegrind is </span><a href="https://github.com/nnethercote"><span>@nnethercote</span></a><span>, whose </span><a href="https://nnethercote.github.io/perf-book/"><span>Rust Performance Book</span></a><span> we saw in the last post.</span>
+<span>Let</span>&rsquo;<span>s see what </span><code>cachegrind</code><span> thinks about the benchmark.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> valgrind --tool=cachegrind ./always</span>
+<span class="line"><span class="hl-output">10s</span></span>
+<span class="line"><span class="hl-output"> I   refs:      6,400,577,147</span></span>
+<span class="line"><span class="hl-output"> I1  misses:            1,560</span></span>
+<span class="line"><span class="hl-output"> LLi misses:            1,524</span></span>
+<span class="line"><span class="hl-output"> I1  miss rate:          0.00%</span></span>
+<span class="line"><span class="hl-output"> LLi miss rate:          0.00%</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output"> D   refs:      1,600,196,336</span></span>
+<span class="line"><span class="hl-output"> D1  misses:            5,549</span></span>
+<span class="line"><span class="hl-output"> LLd misses:            4,024</span></span>
+<span class="line"><span class="hl-output"> D1  miss rate:           0.0%</span></span>
+<span class="line"><span class="hl-output"> LLd miss rate:           0.0%</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output"> LL refs:               7,109</span></span>
+<span class="line"><span class="hl-output"> LL misses:             5,548</span></span>
+<span class="line"><span class="hl-output"> LL miss rate:            0.0%</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-title function_">$</span> valgrind --tool=cachegrind ./never</span>
+<span class="line"><span class="hl-output">9s</span></span>
+<span class="line"><span class="hl-output"> I   refs:      5,600,577,226</span></span>
+<span class="line"><span class="hl-output"> I1  misses:            1,572</span></span>
+<span class="line"><span class="hl-output"> LLi misses:            1,529</span></span>
+<span class="line"><span class="hl-output"> I1  miss rate:          0.00%</span></span>
+<span class="line"><span class="hl-output"> LLi miss rate:          0.00%</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output"> D   refs:      1,600,196,330</span></span>
+<span class="line"><span class="hl-output"> D1  misses:            5,553</span></span>
+<span class="line"><span class="hl-output"> LLd misses:            4,024</span></span>
+<span class="line"><span class="hl-output"> D1  miss rate:           0.0%</span></span>
+<span class="line"><span class="hl-output"> LLd miss rate:           0.0%</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output"> LL refs:               7,125</span></span>
+<span class="line"><span class="hl-output"> LL misses:             5,553</span></span>
+<span class="line"><span class="hl-output"> LL miss rate:            0.0%</span></span></code></pre>
+
+</figure>
+<p><span>Note that, because </span><code>cachegrind</code><span> simulates the program, it runs much slower.</span>
+<span>Here, we don</span>&rsquo;<span>t see a big difference in ICache misses (I1 </span>&mdash;<span> first level instruction cache, LLi </span>&mdash;<span> last level instruction cache).</span>
+<span>We do see a difference in ICache references.</span>
+<span>Note that the number of times CPU refers to ICache should correspond to the number of instructions it executes.</span>
+<span>Cross-checking the number with </span><code>perf</code><span>, we see that both </span><code>perf</code><span> and </span><code>cachegrind</code><span> agree on the number of instructions executed.</span>
+<span>They also agree that </span><code>inline_always</code><span> version executes more instructions.</span>
+<span>It</span>&rsquo;<span>s still hard to say what perf</span>&rsquo;<span>s </span><code>sL1-icache-loads</code><span> means.</span>
+<span>Judging by the name, it should correspond to </span><code>cachegrind</code>&rsquo;<span>s </span><code>I refs</code><span>, but it doesn</span>&rsquo;<span>t.</span></p>
+<p><span>Anyway, it seems there</span>&rsquo;<span>s one thing that bears further investigation </span>&mdash;<span> why inlining changes the number of instructions executed?</span>
+<span>Inlining doesn</span>&rsquo;<span>t actually change the code the CPU runs, so the number of instructions should stay the same.</span>
+<span>Let</span>&rsquo;<span>s look at the asm then!</span>
+<span>The right tool here is </span><a href="https://github.com/gnzlbg/cargo-asm"><span>cargo-asm</span></a><span>.</span></p>
+<p><span>Again, here</span>&rsquo;<span>s the function we will be looking at:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">go</span>(tid: <span class="hl-type">usize</span>) {</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..<span class="hl-number">100_000_000</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> &amp;value = CELL.<span class="hl-title function_ invoke__">get_or_init</span>(|| tid);</span>
+<span class="line">    <span class="hl-built_in">assert!</span>(value &lt; N_THREADS);</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The call to </span><code>get_or_init</code><span> will be inlined, and the nested call to </span><code>initialize</code><span> will be inlined depending on the flag.</span></p>
+<p><span>Let</span>&rsquo;<span>s first look at the </span><code>inline_never</code><span> version:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">  <span class="hl-keyword">push</span>    <span class="hl-built_in">r14</span> <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">push</span>    <span class="hl-built_in">rbx</span> <span class="hl-comment">; prologue</span></span>
+<span class="line">  <span class="hl-keyword">push</span>    <span class="hl-built_in">rax</span> <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rsp</span>], <span class="hl-built_in">rdi</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">ebx</span>, <span class="hl-number">100000001</span> <span class="hl-comment">; loop counter</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">r14</span>, <span class="hl-built_in">rsp</span></span>
+<span class="line">  <span class="hl-keyword">jmp</span>     .LBB14_1</span>
+<span class="line"><span class="hl-symbol"> .loop:</span></span>
+<span class="line hl-line">  <span class="hl-keyword">cmp</span>     <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, CELL+<span class="hl-number">16</span>], <span class="hl-number">8</span></span>
+<span class="line hl-line">  <span class="hl-keyword">jae</span>     .assert_failure</span>
+<span class="line hl-line"><span class="hl-symbol"> .LBB14_1:</span></span>
+<span class="line hl-line">  <span class="hl-keyword">add</span>     <span class="hl-built_in">rbx</span>, -<span class="hl-number">1</span></span>
+<span class="line hl-line">  <span class="hl-keyword">je</span>      .normal_exit</span>
+<span class="line hl-line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">rax</span>, <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, CELL]</span>
+<span class="line hl-line">  <span class="hl-keyword">cmp</span>     <span class="hl-built_in">rax</span>, <span class="hl-number">2</span></span>
+<span class="line hl-line">  <span class="hl-keyword">je</span>      .loop</span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">rdi</span>, <span class="hl-built_in">r14</span></span>
+<span class="line">  <span class="hl-keyword">call</span>    once_cell::imp::OnceCell&lt;T&gt;::initialize</span>
+<span class="line">  <span class="hl-keyword">jmp</span>     .loop</span>
+<span class="line"><span class="hl-symbol"> .normal_exit:</span></span>
+<span class="line">  <span class="hl-keyword">add</span>     <span class="hl-built_in">rsp</span>, <span class="hl-number">8</span> <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">pop</span>     <span class="hl-built_in">rbx</span>    <span class="hl-comment">; epilogue</span></span>
+<span class="line">  <span class="hl-keyword">pop</span>     r14a   <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">ret</span>            <span class="hl-comment">;</span></span>
+<span class="line"><span class="hl-symbol"> .assert_failure:</span></span>
+<span class="line">  <span class="hl-keyword">lea</span>     <span class="hl-built_in">rdi</span>, [<span class="hl-built_in">rip</span>, +, .L__unnamed_12]</span>
+<span class="line">  <span class="hl-keyword">lea</span>     <span class="hl-built_in">rdx</span>, [<span class="hl-built_in">rip</span>, +, .L__unnamed_13]</span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">esi</span>, <span class="hl-number">35</span></span>
+<span class="line">  <span class="hl-keyword">call</span>    <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, core::panicking::panic@GOTPCREL]</span>
+<span class="line">  <span class="hl-keyword">ud2</span></span></code></pre>
+
+</figure>
+<p><span>And then at the </span><code>inline_always</code><span> version:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">  <span class="hl-keyword">push</span>    <span class="hl-built_in">rbp</span>  <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">push</span>    <span class="hl-built_in">r15</span>  <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">push</span>    <span class="hl-built_in">r14</span>  <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">push</span>    <span class="hl-built_in">r13</span>  <span class="hl-comment">; prologue</span></span>
+<span class="line">  <span class="hl-keyword">push</span>    <span class="hl-built_in">r12</span>  <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">push</span>    <span class="hl-built_in">rbx</span>  <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">sub</span>     <span class="hl-built_in">rsp</span>, <span class="hl-number">24</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">r12</span>, <span class="hl-built_in">rdi</span></span>
+<span class="line">  <span class="hl-keyword">xor</span>     <span class="hl-built_in">ebx</span>, <span class="hl-built_in">ebx</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">r13d</span>, <span class="hl-number">1</span></span>
+<span class="line">  <span class="hl-keyword">lea</span>     <span class="hl-built_in">r14</span>, [<span class="hl-built_in">rip</span>, +, CELL]</span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">rbp</span>, <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, WaiterQueue::drop@GOTPCREL]</span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">r15</span>, <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, once_cell::imp::wait@GOTPCREL]</span>
+<span class="line">  <span class="hl-keyword">jmp</span>     .LBB10_1</span>
+<span class="line"><span class="hl-symbol"> .LBB10_10:</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rsp</span>, +, <span class="hl-number">8</span>], <span class="hl-built_in">r14</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, CELL+<span class="hl-number">8</span>], <span class="hl-number">1</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, CELL+<span class="hl-number">16</span>], <span class="hl-built_in">r12</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rsp</span>, +, <span class="hl-number">16</span>], <span class="hl-number">2</span></span>
+<span class="line">  <span class="hl-keyword">lea</span>     <span class="hl-built_in">rdi</span>, [<span class="hl-built_in">rsp</span>, +, <span class="hl-number">8</span>]</span>
+<span class="line">  <span class="hl-keyword">call</span>    <span class="hl-built_in">rbp</span></span>
+<span class="line"><span class="hl-symbol"> .loop:</span></span>
+<span class="line hl-line">  <span class="hl-keyword">add</span>     <span class="hl-built_in">rbx</span>, <span class="hl-number">1</span></span>
+<span class="line hl-line">  <span class="hl-keyword">cmp</span>     <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, CELL+<span class="hl-number">16</span>], <span class="hl-number">8</span></span>
+<span class="line hl-line">  <span class="hl-keyword">jae</span>     .assert_failure</span>
+<span class="line hl-line"><span class="hl-symbol"> .LBB10_1:</span></span>
+<span class="line hl-line">  <span class="hl-keyword">cmp</span>     <span class="hl-built_in">rbx</span>, <span class="hl-number">100000000</span></span>
+<span class="line hl-line">  <span class="hl-keyword">je</span>      .normal_exit</span>
+<span class="line hl-line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">rax</span>, <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, CELL]</span>
+<span class="line hl-line">  <span class="hl-keyword">cmp</span>     <span class="hl-built_in">rax</span>, <span class="hl-number">2</span></span>
+<span class="line hl-line">  <span class="hl-keyword">je</span>      .loop</span>
+<span class="line"><span class="hl-symbol"> .LBB10_3:</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">rax</span>, <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, CELL]</span>
+<span class="line"><span class="hl-symbol"> .LBB10_4:</span></span>
+<span class="line">  <span class="hl-keyword">test</span>    <span class="hl-built_in">rax</span>, <span class="hl-built_in">rax</span></span>
+<span class="line">  <span class="hl-keyword">jne</span>     .LBB10_5</span>
+<span class="line">  <span class="hl-keyword">xor</span>     <span class="hl-built_in">eax</span>, <span class="hl-built_in">eax</span></span>
+<span class="line">  <span class="hl-keyword">lock</span>    <span class="hl-keyword">cmpxchg</span>, <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, CELL], <span class="hl-built_in">r13</span></span>
+<span class="line">  <span class="hl-keyword">jne</span>     .LBB10_4</span>
+<span class="line">  <span class="hl-keyword">jmp</span>     .LBB10_10</span>
+<span class="line"><span class="hl-symbol"> .LBB10_5:</span></span>
+<span class="line">  <span class="hl-keyword">cmp</span>     <span class="hl-built_in">rax</span>, <span class="hl-number">2</span></span>
+<span class="line">  <span class="hl-keyword">je</span>      .loop</span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">ecx</span>, <span class="hl-built_in">eax</span></span>
+<span class="line">  <span class="hl-keyword">and</span>     <span class="hl-built_in">ecx</span>, <span class="hl-number">3</span></span>
+<span class="line">  <span class="hl-keyword">cmp</span>     <span class="hl-built_in">ecx</span>, <span class="hl-number">1</span></span>
+<span class="line">  <span class="hl-keyword">jne</span>     .LBB10_8</span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">rdi</span>, <span class="hl-built_in">r14</span></span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">rsi</span>, <span class="hl-built_in">rax</span></span>
+<span class="line">  <span class="hl-keyword">call</span>    <span class="hl-built_in">r15</span></span>
+<span class="line">  <span class="hl-keyword">jmp</span>     .LBB10_3</span>
+<span class="line"><span class="hl-symbol"> .normal_exit:</span></span>
+<span class="line">  <span class="hl-keyword">add</span>     <span class="hl-built_in">rsp</span>, <span class="hl-number">24</span> <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">pop</span>     <span class="hl-built_in">rbx</span>     <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">pop</span>     <span class="hl-built_in">r12</span>     <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">pop</span>     <span class="hl-built_in">r13</span>     <span class="hl-comment">; epilogue</span></span>
+<span class="line">  <span class="hl-keyword">pop</span>     <span class="hl-built_in">r14</span>     <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">pop</span>     <span class="hl-built_in">r15</span>     <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">pop</span>     <span class="hl-built_in">rbp</span>     <span class="hl-comment">;</span></span>
+<span class="line">  <span class="hl-keyword">ret</span></span>
+<span class="line"><span class="hl-symbol"> .assert_failure:</span></span>
+<span class="line">  <span class="hl-keyword">lea</span>     <span class="hl-built_in">rdi</span>, [<span class="hl-built_in">rip</span>, +, .L__unnamed_9]</span>
+<span class="line">  <span class="hl-keyword">lea</span>     <span class="hl-built_in">rdx</span>, [<span class="hl-built_in">rip</span>, +, .L__unnamed_10]</span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">esi</span>, <span class="hl-number">35</span></span>
+<span class="line">  <span class="hl-keyword">call</span>    <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, core::panicking::panic@GOTPCREL]</span>
+<span class="line">  <span class="hl-keyword">ud2</span></span>
+<span class="line"><span class="hl-symbol"> .LBB10_8:</span></span>
+<span class="line">  <span class="hl-keyword">lea</span>     <span class="hl-built_in">rdi</span>, [<span class="hl-built_in">rip</span>, +, .L__unnamed_11]</span>
+<span class="line">  <span class="hl-keyword">lea</span>     <span class="hl-built_in">rdx</span>, [<span class="hl-built_in">rip</span>, +, .L__unnamed_12]</span>
+<span class="line">  <span class="hl-keyword">mov</span>     <span class="hl-built_in">esi</span>, <span class="hl-number">57</span></span>
+<span class="line">  <span class="hl-keyword">call</span>    <span class="hl-built_in">qword</span>, <span class="hl-built_in">ptr</span>, [<span class="hl-built_in">rip</span>, +, core::panicking::panic@GOTPCREL]</span>
+<span class="line">  <span class="hl-keyword">ud2</span></span></code></pre>
+
+</figure>
+<p><span>I</span>&rsquo;<span>ve slightly edited the code and also highlighted the hot loop which constitutes the bulk of the benchmark.</span></p>
+<p><span>Looking at the assembly, we can see the following:</span></p>
+<ul>
+<li>
+<span>code is much larger </span>&mdash;<span> inlining happened!</span>
+</li>
+<li>
+<span>function prologue is bigger, compiler pushes more callee-saved registers to the stack</span>
+</li>
+<li>
+<span>function epilogue is bigger, compiler needs to restore more registers</span>
+</li>
+<li>
+<span>stack frame is larger</span>
+</li>
+<li>
+<span>compiler hoisted some of the </span><code>initialize</code><span> code to before the loop</span>
+</li>
+<li>
+<span>the core loop is very tight in both cases, just a handful of instructions</span>
+</li>
+<li>
+<span>the core loop counts upwards rather than downwards, adding an extra </span><code>cmp</code><span> instruction</span>
+</li>
+</ul>
+<p><span>Note that it</span>&rsquo;<span>s highly unlikely that ICache affects the running code, as it</span>&rsquo;<span>s a small bunch of instructions next to each other in memory.</span>
+<span>On the other hand, an extra </span><code>cmp</code><span> with a large immediate precisely accounts for the amount of extra instructions we observe (the loop is run 800</span><span>_000</span><span>_000 times).</span></p>
+<section id="Conclusions">
+
+    <h2>
+    <a href="#Conclusions"><span>Conclusions</span> </a>
+    </h2>
+<p><span>It</span>&rsquo;<span>s hard enough to come up with a benchmark which demonstrate the difference between two alternatives.</span>
+<span>It</span>&rsquo;<span>s even harder to explain the difference </span>&mdash;<span> there might be many </span><a href="https://en.wikipedia.org/wiki/Availability_heuristic"><span>readily available</span></a><span> explanations, but they are not necessary true.</span>
+<span>Nonetheless, today we have a wealth of helpful tooling.</span>
+<span>Two notable examples are </span><a href="https://perf.wiki.kernel.org/index.php/Tutorial"><span>perf</span></a><span> and </span><a href="https://valgrind.org/docs/manual/quick-start.html"><span>valgrind</span></a><span>.</span>
+<span>Tools are not always correct </span>&mdash;<span> it</span>&rsquo;<span>s a good idea to sanity check different tools against each other and against common-sense understanding of the problem.</span></p>
+<p><span>For inlining in particular, we found the following reasons why inlining </span><code>S</code><span> into </span><code>C</code><span> might cause a slow down:</span></p>
+<ol>
+<li>
+<span>Inlining might cause </span><code>C</code><span> to use more registers.</span>
+<span>This means that prologue and epilogue grow additional push/pop instructions, which also use stack memory.</span>
+<span>Without inlining, these instructions are hidden in </span><code>S</code><span> and are only paid for when </span><code>C</code><span> actually calls into </span><code>S</code><span>, as opposed to every time </span><code>C</code><span> itself is called.</span>
+</li>
+<li>
+<span>Generalizing from the first point, if </span><code>S</code><span> is called in a loop or in an </span><code>if</code><span>, the compiler might hoist some instructions of </span><code>S</code><span> to before the branch, moving them from the cold path to the hot path.</span>
+</li>
+<li>
+<span>With more local variables and control flow in the stack frame to juggle, compiler might accidentally pessimize the hot loop.</span>
+</li>
+</ol>
+<p><span>If you are curious under which conditions ICache does become an issue, there</span>&rsquo;<span>s </span><a href="https://www.scylladb.com/2017/07/06/scyllas-approach-improve-performance-cpu-bound-workloads/"><span>this excellent article</span></a><span> about one such case.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2021-07-10-its-not-always-icache.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

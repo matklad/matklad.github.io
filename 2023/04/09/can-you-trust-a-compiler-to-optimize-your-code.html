@@ -1,0 +1,557 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Can You Trust a Compiler to Optimize Your Code?</title>
+  <meta name="description" content="More or less the title this time, but first, a story about SIMD. There are three
+levels of understanding how SIMD works (well, at least I am level 3 at the moment):">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/04/09/can-you-trust-a-compiler-to-optimize-your-code.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Can You Trust a Compiler to Optimize Your Code?</span> <time datetime="2023-04-09">Apr 9, 2023</time></h1>
+<p><span>More or less the title this time, but first, a story about SIMD. There are three</span>
+<span>levels of understanding how SIMD works (well, at least I am level 3 at the moment):</span></p>
+<ol>
+<li>
+<p><span>Compilers are smart! They will auto-vectorize all the code!</span></p>
+</li>
+<li>
+<p><span>Compilers are dumb, auto-vectorization is fragile, it</span>&rsquo;<span>s very easy to break it</span>
+<span>by unrelated changes to the code. It</span>&rsquo;<span>s always better to manually write</span>
+<span>explicit SIMD instructions.</span></p>
+</li>
+<li>
+<p><span>Writing SIMD by hand is really hard </span>&mdash;<span> you</span>&rsquo;<span>ll need to re-do the work for</span>
+<span>every different CPU architecture. Also, you probably think that, for scalar</span>
+<span>code, a compiler writes better assembly than you. What makes you think that</span>
+<span>you</span>&rsquo;<span>d beat the compiler at SIMD, where there are more funky instructions and</span>
+<span>constraints? Compilers are tools. They can reliably vectorize code if it is</span>
+<span>written in an amenable-to-vectorization form.</span></p>
+</li>
+</ol>
+<p><span>I</span>&rsquo;<span>ve recently moved from the second level to the third one, and that made me aware of the moment when the model used by a compiler for optimization clicked in my head.</span>
+<span>In this post, I want to explain the general framework for reasoning about compiler optimizations for static languages such as Rust or C++.</span>
+<span>After that, I</span>&rsquo;<span>ll apply that framework to auto-vectorization.</span></p>
+<p><span>I haven</span>&rsquo;<span>t worked on backends of production optimizing compilers, so the following will not be academically correct, but these models are definitely helpful at least to me!</span></p>
+<section id="Seeing-Like-a-Compiler">
+
+    <h2>
+    <a href="#Seeing-Like-a-Compiler"><span>Seeing Like a Compiler</span> </a>
+    </h2>
+<p><span>The first bit of a puzzle is understanding how a compiler views code. Some useful references here include</span>
+<a href="https://link.springer.com/book/10.1007/978-3-030-80515-9"><em><span>The SSA Book</span></em></a><span> or LLVM</span>&rsquo;<span>s</span>
+<a href="https://llvm.org/docs/LangRef.html"><em><span>Language Reference</span></em></a><span>.</span></p>
+<p><span>Another interesting choice would be </span><a href="https://webassembly.github.io/spec/core/"><em><span>WebAssembly Specification</span></em></a><span>.</span>
+<span>While WASM would be a poor IR for an optimizing compiler, it has a lot of structural similarities, and the core spec is exceptionally readable.</span></p>
+<p><span>A unit of optimization is a function.</span>
+<span>Let</span>&rsquo;<span>s take a simple function like the following:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">sum</span>(xs: &amp;[<span class="hl-type">i32</span>]) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">i32</span> {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..xs.<span class="hl-title function_ invoke__">len</span>() {</span>
+<span class="line">    total = total.<span class="hl-title function_ invoke__">wrapping_add</span>(xs[i]);</span>
+<span class="line">  }</span>
+<span class="line">  total</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>In some pseudo-IR, it would look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">fn sum return i32 {</span>
+<span class="line">  param xs_ptr: ptr</span>
+<span class="line">  param xs_len: size</span>
+<span class="line"></span>
+<span class="line">  local total: i32 = 0</span>
+<span class="line">  local i: size = 0</span>
+<span class="line">  local x: i32</span>
+<span class="line"></span>
+<span class="line">loop:</span>
+<span class="line">  branch_if i &gt;= xs_len :ret</span>
+<span class="line">  load x base=xs_ptr offset=i</span>
+<span class="line">  add total x</span>
+<span class="line">  add i 1</span>
+<span class="line">  goto :loop</span>
+<span class="line"></span>
+<span class="line">ret:</span>
+<span class="line">  return total</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The most important characteristic here is that there are two kinds of entities:</span></p>
+<p><em><span>First</span></em><span>, there is program memory, very roughly an array of bytes.</span>
+<span>Compilers generally can not reason about the contents of the memory very well, because it is shared by all the functions, and different functions might interpret the contents of the memory differently.</span></p>
+<p><em><span>Second</span></em><span>, there are local variables.</span>
+<span>Local variables are not bytes </span>&mdash;<span> they are integers, they obey mathematical properties which a compiler can reason about.</span></p>
+<p><span>For example, if a compiler sees a loop like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">param n: u32</span>
+<span class="line">local i: u32 = 0</span>
+<span class="line">local total: u32</span>
+<span class="line">local tmp</span>
+<span class="line"></span>
+<span class="line">loop:</span>
+<span class="line">  branch_if i &gt;= n :ret</span>
+<span class="line">  set tmp i</span>
+<span class="line">  mul tmp 4</span>
+<span class="line">  add t tmp</span>
+<span class="line">  goto :loop</span>
+<span class="line"></span>
+<span class="line">ret:</span>
+<span class="line">  return total</span></code></pre>
+
+</figure>
+<p><span>It can </span><em><span>reason</span></em><span> that on each iteration </span><code>tmp</code><span> holds </span><code>i * 4</code><span> and optimize the code to</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">param n: u32</span>
+<span class="line">local i: u32 = 0</span>
+<span class="line">local total: u32</span>
+<span class="line">local tmp = 0</span>
+<span class="line"></span>
+<span class="line">loop:</span>
+<span class="line">  branch_if i &gt;= n :ret</span>
+<span class="line">  add t tmp</span>
+<span class="line">  add tmp 4  # replace multiplication with addition</span>
+<span class="line">  goto :loop</span>
+<span class="line"></span>
+<span class="line">ret:</span>
+<span class="line">  return total</span></code></pre>
+
+</figure>
+<p><span>This works, because all locals are just numbers.</span>
+<span>If we did the same computation, but all numbers were located in memory, it would be significantly harder for a compiler to reason that the transformation is actually correct.</span>
+<span>What if the storage for </span><code>n</code><span> and </span><code>total</code><span> actually overlaps?</span>
+<span>What if </span><code>tmp</code><span> overlaps with something which isn</span>&rsquo;<span>t even in the current function?</span></p>
+<p><span>However, there</span>&rsquo;<span>s a bridge between the worlds of mathematical local variables and the world of memory bytes </span>&mdash;<span> </span><code>load</code><span> and </span><code>store</code><span> instructions.</span>
+<span>The </span><code>load</code><span> instruction takes a range of bytes in memory, interprets the bytes as an integer, and stores that integer into a local variable.</span>
+<span>The </span><code>store</code><span> instruction does the opposite.</span>
+<span>By loading something from memory into a local, a compiler gains the ability to reason about it precisely.</span>
+<span>Thus, the compiler doesn</span>&rsquo;<span>t need to track the general contents of memory.</span>
+<span>It only needs to check that it would be correct to load from memory at a specific point in time.</span></p>
+<p><span>So, a compiler really doesn</span>&rsquo;<span>t see all that well </span>&mdash;<span> it can only really reason about a single function at a time, and only about the local variables in that function.</span></p>
+</section>
+<section id="Bringing-Code-Closer-to-Compiler-s-Nose">
+
+    <h2>
+    <a href="#Bringing-Code-Closer-to-Compiler-s-Nose"><span>Bringing Code Closer to Compiler</span>&rsquo;<span>s Nose</span> </a>
+    </h2>
+<p><span>Compilers are myopic.</span>
+<span>This can be fixed by giving more context to the compiler, which is the task of two core optimizations.</span></p>
+<p><em><span>The first</span></em><span> core optimization is </span><dfn><span>inlining</span></dfn><span>.</span>
+<span>It substitutes callee</span>&rsquo;<span>s body for a specific call.</span>
+<span>The benefit here is not that we eliminate function call overhead, that</span>&rsquo;<span>s relatively minor.</span>
+<span>The big thing is that locals of both the caller and the callee are now in the same frame, and a compiler can optimize them together.</span></p>
+<p><span>Let</span>&rsquo;<span>s look again at that Rust code:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">sum</span>(xs: &amp;[<span class="hl-type">i32</span>]) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">i32</span> {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..xs.<span class="hl-title function_ invoke__">len</span>() {</span>
+<span class="line">    total = total.<span class="hl-title function_ invoke__">wrapping_add</span>(xs[i]);</span>
+<span class="line">  }</span>
+<span class="line">  total</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The </span><code>xs[i]</code><span> expression there is actually a function call.</span>
+<span>The indexing function does a bounds check before accessing the element of an array.</span>
+<span>After inlining it into the </span><code>sum</code><span>, compiler can see that it is dead code and eliminate it.</span></p>
+<p><span>If you look at various standard optimizations, they often look like getting rid of dumb things, which no one would actually write in the first place, so its not clear immediately if it is worth it to implement such optimizations.</span>
+<span>But the thing is, after inlining a lot of dumb things appear, because functions tend to handle the general case, and, at a specific call-site, there are usually enough constraints to dismiss many edge cases.</span></p>
+<p><em><span>The second</span></em><span> core optimization is </span><dfn><span>scalar replacement of aggregates</span></dfn><span>.</span>
+<span>It is a generalization of the </span>&ldquo;<span>let</span>&rsquo;<span>s use </span><code>load</code><span> to avoid reasoning about memory and reason about a local instead</span>&rdquo;<span> idea we</span>&rsquo;<span>ve already seen.</span></p>
+<p><span>If you have a function like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">permute</span>(xs: &amp;<span class="hl-keyword">mut</span> <span class="hl-type">Vec</span>&lt;<span class="hl-type">i32</span>&gt;) {</span>
+<span class="line">  ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>it</span>&rsquo;<span>s pretty difficult for the compiler to reason about it.</span>
+<span>It receives a pointer to some memory which holds a complex struct (ptr, len, capacity triple), so reasoning about evolution of this struct is hard.</span>
+<span>What the compiler can do is to load this struct from memory, replacing the aggregate with a bunch of scalar local variables:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">fn permute(xs: &amp;mut Vec&lt;i32&gt;) {</span>
+<span class="line">  local ptr: ptr</span>
+<span class="line">  local len: usize</span>
+<span class="line">  local cap: usize</span>
+<span class="line"></span>
+<span class="line">  load ptr xs.ptr</span>
+<span class="line">  load len xs.len</span>
+<span class="line">  load cap xs.cap</span>
+<span class="line"></span>
+<span class="line">  ...</span>
+<span class="line"></span>
+<span class="line">  store xs.ptr ptr</span>
+<span class="line">  store xs.len len</span>
+<span class="line">  store xs.cap cap</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This way, a compiler again gains reasoning power.</span>
+<span>SROA is like inlining, but for memory rather than code.</span></p>
+</section>
+<section id="Impossible-and-Possible">
+
+    <h2>
+    <a href="#Impossible-and-Possible"><span>Impossible and Possible</span> </a>
+    </h2>
+<p><span>Using this mental model of a compiler which:</span></p>
+<ul>
+<li>
+<span>optimizes on a per-function basis,</span>
+</li>
+<li>
+<span>can inline function calls,</span>
+</li>
+<li>
+<span>is great at noticing relations between local variables and rearranging the code based on that,</span>
+</li>
+<li>
+<span>is capable of </span><em><span>limited</span></em><span> reasoning about the memory (namely, deciding when it</span>&rsquo;<span>s safe to </span><code>load</code><span> or </span><code>store</code><span>)</span>
+</li>
+</ul>
+<p><span>we can describe which code is reliably optimizable, and which code prevents optimizations, explaining zero cost abstractions.</span></p>
+<p><span>To enable inlining, a compiler needs to know which function is actually called.</span>
+<span>If a function is called directly, it</span>&rsquo;<span>s pretty much guaranteed that a compiler would try to inline it.</span>
+<span>If the call is indirect (via function pointer, or via a table of virtual functions), in the general case a compiler won</span>&rsquo;<span>t be able to inline that.</span>
+<span>Even for indirect calls, sometimes the compiler can reason about the value of the pointer and de-virtualize the call, but that relies on successful optimization elsewhere.</span></p>
+<p><span>This is the reason why, in Rust, every function has a unique, zero-sized type with no runtime representation.</span>
+<span>It statically guarantees that the compiler could always inline the code, and makes this abstraction zero cost, because any decent optimizing compiler will melt it to nothing.</span></p>
+<p><span>A higher level language might choose to </span><em><span>always</span></em><span> represent functions with function pointers.</span>
+<span>In practice, in many cases the resulting code would be equivalently optimizable.</span>
+<span>But there won</span>&rsquo;<span>t be any indication in the source whether this is an optimizable case (the actual pointer is knowable at compile time) or a genuinely dynamic call.</span>
+<span>With Rust, the difference between guaranteed to be optimizable and potentially optimizable is reflected in the source language:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// Compiler is guaranteed to be able to inline call to `f`.</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">call1</span>&lt;F: <span class="hl-title function_ invoke__">Fn</span>()&gt;(f: F) {</span>
+<span class="line">  <span class="hl-title function_ invoke__">f</span>()</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Compiler _might_ be able to inline call to `f`.</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">call2</span>(f: <span class="hl-title function_ invoke__">fn</span>()) {</span>
+<span class="line">  <span class="hl-title function_ invoke__">f</span>()</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>So, the first rule is to make most of the calls statically resolvable, to allow inlining.</span>
+<span>Function pointers and dynamic dispatch prevent inlining.</span>
+<span>Separate compilation might also get in a way of inlining, see this </span><a href="https://matklad.github.io/2021/07/09/inline-in-rust.html"><span>separate essay</span></a><span> on the topic.</span></p>
+<p><span>Similarly, indirection in </span><em><span>memory</span></em><span> can cause troubles for the compiler.</span></p>
+<p><span>For something like this</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Foo</span> {</span>
+<span class="line">  bar: Bar,</span>
+<span class="line">  baz: Baz,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>the </span><code>Foo</code><span> struct is completely transparent for the compiler.</span></p>
+<p><span>While here:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Foo</span> {</span>
+<span class="line">  bar: <span class="hl-type">Box</span>&lt;Bar&gt;,</span>
+<span class="line">  baz: Baz,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>it is not clear cut.</span>
+<span>Proving something about the memory occupied by </span><code>Foo</code><span> does not in general transfer to the memory occupied by </span><code>Bar</code><span>.</span>
+<span>Again, in many cases a compiler </span><em><span>can</span></em><span> reason through boxes thanks to uniqueness, but this is not guaranteed.</span></p>
+<p><span>A good homework at this point is to look at Rust</span>&rsquo;<span>s iterators and understand why they look the way they do.</span></p>
+<p><span>Why the signature and definition of </span><a href="https://doc.rust-lang.org/stable/core/iter/trait.Iterator.html#method.map"><code>map</code></a><span> is</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[inline]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">map</span>&lt;B, F&gt;(<span class="hl-keyword">self</span>, f: F) <span class="hl-punctuation">-&gt;</span> Map&lt;<span class="hl-keyword">Self</span>, F&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  <span class="hl-keyword">Self</span>: <span class="hl-built_in">Sized</span>,</span>
+<span class="line">  F: <span class="hl-title function_ invoke__">FnMut</span>(<span class="hl-keyword">Self</span>::Item) <span class="hl-punctuation">-&gt;</span> B,</span>
+<span class="line">{</span>
+<span class="line">  Map::<span class="hl-title function_ invoke__">new</span>(<span class="hl-keyword">self</span>, f)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Another important point about memory is that, in general, a compiler can</span>&rsquo;<span>t change the overall layout of stuff.</span>
+<span>SROA can load some data structure into a bunch of local variables, which then can, eg, replace </span>&ldquo;<span>a pointer and an index</span>&rdquo;<span> representation with </span>&ldquo;<span>a pair of pointers</span>&rdquo;<span>.</span>
+<span>But at the end of the day SROA would have to materialize </span>&ldquo;<span>a pointer and an index</span>&rdquo;<span> back and store that representation back into the memory.</span>
+<span>This is because memory layout is shared across all functions, so a function can not unilaterally dictate a more optimal representation.</span></p>
+<p><span>Together, these observations give a basic rule for the baseline of performant code.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>Think about data layout in memory.</span>
+<span>A compiler is of very little help here and would mostly put the bytes where you tell it to.</span>
+<span>Make data structures more compact, reduce indirection, exploit common access patterns for improving cache efficiency.</span></p>
+<p><span>Compilers are much better at reasoning about the code, as long as they can see it.</span>
+<span>Make sure that most calls are known at compile time and can be inlined, trust the compiler to do the rest.</span></p>
+</div>
+</aside></section>
+<section id="SIMD">
+
+    <h2>
+    <a href="#SIMD"><span>SIMD</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s apply this general framework of giving a compiler optimizable code to work with to auto-vectorization.</span>
+<span>We will be optimizing the function which computes the longest common prefix between two slices of bytes (thanks </span><a href="https://github.com/nkkarpov"><span>@nkkarpov</span></a><span> for the example).</span></p>
+<p><span>A  direct implementation would look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::iter::zip;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// 650 milliseconds</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">common_prefix</span>(xs: &amp;[<span class="hl-type">u8</span>], ys: &amp;[<span class="hl-type">u8</span>]) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span> {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">result</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-title function_ invoke__">for</span> (x, y) <span class="hl-keyword">in</span> <span class="hl-title function_ invoke__">zip</span>(xs, ys) {</span>
+<span class="line">    <span class="hl-keyword">if</span> x != y { <span class="hl-keyword">break</span>; }</span>
+<span class="line">    result += <span class="hl-number">1</span></span>
+<span class="line">  }</span>
+<span class="line">  result</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>If you already have a mental model for auto-vectorization, or if you look at the assembly output, you can realize that the function as written works one byte at a time, which is much slower than it needs to be.</span>
+<span>Let</span>&rsquo;<span>s fix that!</span></p>
+<p><span>SIMD works on many values simultaneously.</span>
+<span>Intuitively, we want the compiler to compare a bunch of bytes at the same time, but our current code does not express that.</span>
+<span>Let</span>&rsquo;<span>s make the structure explicit, by processing 16 bytes at a time, and then handling remainder separately:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// 450 milliseconds</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">common_prefix</span>(xs: &amp;[<span class="hl-type">u8</span>], ys: &amp;[<span class="hl-type">u8</span>]) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span> {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">chunk_size</span> = <span class="hl-number">16</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">result</span> = <span class="hl-number">0</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-symbol">&#x27;outer</span>: <span class="hl-title function_ invoke__">for</span> (xs_chunk, ys_chunk) <span class="hl-keyword">in</span></span>
+<span class="line">    <span class="hl-title function_ invoke__">zip</span>(xs.<span class="hl-title function_ invoke__">chunks_exact</span>(chunk_size), ys.<span class="hl-title function_ invoke__">chunks_exact</span>(chunk_size))</span>
+<span class="line">  {</span>
+<span class="line">    <span class="hl-title function_ invoke__">for</span> (x, y) <span class="hl-keyword">in</span> <span class="hl-title function_ invoke__">zip</span>(xs_chunk, ys_chunk) {</span>
+<span class="line">      <span class="hl-keyword">if</span> x != y { <span class="hl-keyword">break</span> <span class="hl-symbol">&#x27;outer</span>; }</span>
+<span class="line">      result += <span class="hl-number">1</span></span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-title function_ invoke__">for</span> (x, y) <span class="hl-keyword">in</span> <span class="hl-title function_ invoke__">zip</span>(&amp;xs[result..], &amp;ys[result..]) {</span>
+<span class="line">    <span class="hl-keyword">if</span> x != y { <span class="hl-keyword">break</span>; }</span>
+<span class="line">    result += <span class="hl-number">1</span></span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  result</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Amusingly, this is already a bit faster, but not quite there yet.</span>
+<span>Specifically, SIMD needs to process all values in the chunk in parallel in the same way.</span>
+<span>In our code above, we have a </span><code>break</code><span>, which means that processing of the nth pair of bytes depends on the n-1st pair.</span>
+<span>Let</span>&rsquo;<span>s fix </span><em><span>that</span></em><span> by disabling short-circuiting.</span>
+<span>We will check if the whole chunk of bytes matches or not, but we won</span>&rsquo;<span>t care which specific byte is a mismatch:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// 80 milliseconds</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">common_prefix3</span>(xs: &amp;[<span class="hl-type">u8</span>], ys: &amp;[<span class="hl-type">u8</span>]) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span> {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">chunk_size</span> = <span class="hl-number">16</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">result</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-title function_ invoke__">for</span> (xs_chunk, ys_chunk) <span class="hl-keyword">in</span></span>
+<span class="line">    <span class="hl-title function_ invoke__">zip</span>(xs.<span class="hl-title function_ invoke__">chunks_exact</span>(chunk_size), ys.<span class="hl-title function_ invoke__">chunks_exact</span>(chunk_size))</span>
+<span class="line">  {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">chunk_equal</span>: <span class="hl-type">bool</span> = <span class="hl-literal">true</span>;</span>
+<span class="line">    <span class="hl-title function_ invoke__">for</span> (x, y) <span class="hl-keyword">in</span> <span class="hl-title function_ invoke__">zip</span>(xs_chunk, ys_chunk) {</span>
+<span class="line">      <span class="hl-comment">// NB: &amp;, unlike &amp;&amp;, doesn&#x27;t short-circuit.</span></span>
+<span class="line">      chunk_equal = chunk_equal &amp; (x == y);</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">if</span> !chunk_equal { <span class="hl-keyword">break</span>; }</span>
+<span class="line">    result += chunk_size;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-title function_ invoke__">for</span> (x, y) <span class="hl-keyword">in</span> <span class="hl-title function_ invoke__">zip</span>(&amp;xs[result..], &amp;ys[result..]) {</span>
+<span class="line">    <span class="hl-keyword">if</span> x != y { <span class="hl-keyword">break</span>; }</span>
+<span class="line">    result += <span class="hl-number">1</span></span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  result</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And this version finally lets vectorization kick in, reducing the runtime almost by an order of magnitude.</span>
+<span>We can now compress this version using iterators.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// 80 milliseconds</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">common_prefix5</span>(xs: &amp;[<span class="hl-type">u8</span>], ys: &amp;[<span class="hl-type">u8</span>]) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">usize</span> {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">chunk_size</span> = <span class="hl-number">16</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">off</span> =</span>
+<span class="line">    <span class="hl-title function_ invoke__">zip</span>(xs.<span class="hl-title function_ invoke__">chunks_exact</span>(chunk_size), ys.<span class="hl-title function_ invoke__">chunks_exact</span>(chunk_size))</span>
+<span class="line">      .<span class="hl-title function_ invoke__">take_while</span>(|(xs_chunk, ys_chunk)| xs_chunk == ys_chunk)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">count</span>() * chunk_size;</span>
+<span class="line"></span>
+<span class="line">  off + <span class="hl-title function_ invoke__">zip</span>(&amp;xs[off..], &amp;ys[off..])</span>
+<span class="line">    .<span class="hl-title function_ invoke__">take_while</span>(|(x, y)| x == y)</span>
+<span class="line">    .<span class="hl-title function_ invoke__">count</span>()</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Note how the code is meaningfully different from our starting point.</span>
+<span>We do not blindly rely on the compiler</span>&rsquo;<span>s optimization.</span>
+<span>Rather, we are aware about specific optimizations we need in this case, and write the code in a way that triggers them.</span></p>
+<p><span>Specifically, for SIMD:</span></p>
+<ul>
+<li>
+<span>we express the algorithm in terms of processing </span><em><span>chunks</span></em><span> of elements,</span>
+</li>
+<li>
+<span>within each chunk, we make sure that there</span>&rsquo;<span>s no branching and all elements are processed in the same way.</span>
+</li>
+</ul>
+</section>
+<section id="Conclusion">
+
+    <h2>
+    <a href="#Conclusion"><span>Conclusion</span> </a>
+    </h2>
+<p><span>Compilers are tools.</span>
+<span>While there</span>&rsquo;<span>s a fair share of </span>&ldquo;<span>optimistic</span>&rdquo;<span> transformations which sometimes kick in, the bulk of the impact of an optimizing compiler comes from guaranteed optimizations with specific preconditions.</span>
+<span>Compilers are myopic </span>&mdash;<span> they have a hard time reasoning about code outside of the current function and values not held in the local variables.</span>
+<span>Inlining and scalar replacement of aggregates are two optimizations to remedy the situation.</span>
+<span>Zero cost abstractions work by expressing opportunities for guaranteed optimizations in the language</span>&rsquo;<span>s type system.</span></p>
+<p><span>If you like this post, I highly recommend </span><a href="https://www.clear.rice.edu/comp512/Lectures/Papers/1971-allen-catalog.pdf"><em><span>A Catalogue of Optimizing Transformations</span></em></a><span> by Frances Allen.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-04-09-can-you-trust-a-compiler-to-optimize-your-code.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

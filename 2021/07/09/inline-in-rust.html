@@ -1,0 +1,269 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inline In Rust</title>
+  <meta name="description" content="There's a lot of tribal knowledge surrounding #[inline] attribute in Rust.
+I often find myself teaching how it works, so I finally decided to write this down.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2021/07/09/inline-in-rust.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Inline In Rust</span> <time datetime="2021-07-09">Jul 9, 2021</time></h1>
+<p><span>There</span>&rsquo;<span>s a lot of tribal knowledge surrounding </span><a href="https://doc.rust-lang.org/reference/attributes/codegen.html#the-inline-attribute"><code>#[inline]</code></a><span> attribute in Rust.</span>
+<span>I often find myself teaching how it works, so I finally decided to write this down.</span></p>
+<p><span>Caveat Emptor: this is what I know, not necessarily what is true.</span>
+<span>Additionally, exact semantics of </span><code>#[inline]</code><span> is not set in stone and may change in future Rust versions.</span></p>
+<section id="Why-Inlining-Matters">
+
+    <h2>
+    <a href="#Why-Inlining-Matters"><span>Why Inlining Matters?</span> </a>
+    </h2>
+<p><span>Inlining is an optimizing transformation which replaces a call to a function with its body.</span></p>
+<p><span>To give a trivial example, during compilation the compiler can transform this code:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>(w: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">inline_me</span>(w, <span class="hl-number">2</span>)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">inline_me</span>(x: <span class="hl-type">u32</span>, y: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    x * y</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Into this code:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>(w: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    w * <span class="hl-number">2</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>To paraphrase </span><a href="https://www.clear.rice.edu/comp512/Lectures/Papers/1971-allen-catalog.pdf"><span>A Catalogue of Optimizing Transformations</span></a><span> by </span><a href="https://en.wikipedia.org/wiki/Frances_Allen"><span>Frances Allen</span></a><span> and </span><a href="https://en.wikipedia.org/wiki/John_Cocke"><span>John Cocke</span></a><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">There are many obvious advantages to inlining; two are:</span>
+<span class="line"></span>
+<span class="line">a. There is no function call overhead whatsoever.</span>
+<span class="line">b. Caller and callee are optimized together. Advantage can be taken</span>
+<span class="line">   of particular argument values and relationships: constant arguments</span>
+<span class="line">   can be folded into the code, invariant instructions in the callee</span>
+<span class="line">   can be moved to infrequently executed areas of the caller, etc.</span></code></pre>
+
+</figure>
+<p><span>In other words, for an ahead of time compiled language inlining is the mother of all other optimizations.</span>
+<span>It gives the compiler the necessary context to apply further transformations.</span></p>
+</section>
+<section id="Inlining-and-Separate-Compilation">
+
+    <h2>
+    <a href="#Inlining-and-Separate-Compilation"><span>Inlining and Separate Compilation</span> </a>
+    </h2>
+<p><span>Inlining is at odds with another important idea in compilers </span>&mdash;<span> that of separate compilation.</span>
+<span>When compiling big programs, it is desirable to separate them into modules which can be compiled independently to:</span></p>
+<ul>
+<li>
+<span>Process everything in parallel.</span>
+</li>
+<li>
+<span>Scope incremental recompilations to individual changed modules.</span>
+</li>
+</ul>
+<p><span>To achieve separate compilation, compilers expose signatures of functions, but keep function bodies invisible to other modules, preventing inlining.</span>
+<span>This fundamental tension is what makes </span><code>#[inline]</code><span> in Rust trickier than just a hint for the compiler to inline the function.</span></p>
+</section>
+<section id="Inlining-in-Rust">
+
+    <h2>
+    <a href="#Inlining-in-Rust"><span>Inlining in Rust</span> </a>
+    </h2>
+<p><span>In Rust, a unit of (separate) compilation is a crate.</span>
+<span>If a function </span><code>f</code><span> is defined in a crate </span><code>A</code><span>, then all calls to </span><code>f</code><span> from within </span><code>A</code><span> can be inlined, as the compiler has full access to </span><code>f</code><span>.</span>
+<span>If, however, </span><code>f</code><span> is called from some downstream crate </span><code>B</code><span>, such calls can</span>&rsquo;<span>t be inlined.</span>
+<code>B</code><span> has access only to the signature of </span><code>f</code><span>, not its body.</span></p>
+<p><span>That</span>&rsquo;<span>s where the main usage of </span><code>#[inline]</code><span> comes from </span>&mdash;<span> it enables cross-crate inlining.</span>
+<span>Without </span><code>#[inline]</code><span>, even the most trivial of functions can</span>&rsquo;<span>t be inlined across the crate boundary.</span>
+<span>The benefit is not without a cost </span>&mdash;<span> the compiler implements this by compiling a separate copy of the </span><code>#[inline]</code><span> function with every crate it is used in, significantly increasing compile times.</span></p>
+<p><span>Besides </span><code>#[inline]</code><span>, there are two more exceptions to this.</span>
+<span>Generic functions are implicitly inlinable.</span>
+<span>Indeed, the compiler can only compile a generic function when it knows the specific type arguments it is instantiated with.</span>
+<span>As that is known only in the calling crate, bodies of generic functions have to be always available.</span></p>
+<p><span>The other exception is link-time optimization.</span>
+<span>LTO opts out of separate compilation </span>&mdash;<span> it makes bodies of all functions available, at the cost of making compilation much slower.</span></p>
+</section>
+<section id="Inlining-in-Practice">
+
+    <h2>
+    <a href="#Inlining-in-Practice"><span>Inlining in Practice</span> </a>
+    </h2>
+<p><span>Now that the underlying semantics is explained, it</span>&rsquo;<span>s possible to infer some rule-of-thumbs for using </span><code>#[inline]</code><span>.</span></p>
+<p><em><span>First</span></em><span>, it</span>&rsquo;<span>s not a good idea to apply </span><code>#[inline]</code><span> indiscriminately, as that makes compile time worse.</span>
+<span>If you don</span>&rsquo;<span>t care about compile times, a much better solution is to set </span><code>lto = true</code><span> in Cargo profile (</span><a href="https://doc.rust-lang.org/cargo/reference/profiles.html#lto"><span>docs</span></a><span>).</span></p>
+<p><em><span>Second</span></em><span>, it usually isn</span>&rsquo;<span>t necessary to apply </span><code>#[inline]</code><span> to private functions </span>&mdash;<span> within a crate, the compiler generally makes good inline decisions.</span>
+<span>There</span>&rsquo;<span>s </span><a href="https://twitter.com/ManishEarth/status/936084757212946432"><span>a joke</span></a><span> that LLVM</span>&rsquo;<span>s heuristic for when the function should be inlined is </span>&ldquo;<span>yes</span>&rdquo;<span>.</span></p>
+<p><em><span>Third</span></em><span>, when building an application, apply </span><code>#[inline]</code><span> reactively when profiling shows that a particular small function is a bottleneck.</span>
+<span>Consider using lto for releases.</span>
+<span>It might make sense to proactively </span><code>#[inline]</code><span> trivial public functions.</span></p>
+<p><em><span>Fourth</span></em><span>, when building libraries, proactively add </span><code>#[inline]</code><span> to small non-generic functions.</span>
+<span>Pay special attention to impls: </span><code>Deref</code><span>, </span><code>AsRef</code><span> and the like often benefit from inlining.</span>
+<span>A library can</span>&rsquo;<span>t anticipate all usages upfront, it makes sense to not prematurely pessimize future users.</span>
+<span>Note that </span><code>#[inline]</code><span> is not transitive: if a trivial public function calls a trivial private function, you need to </span><code>#[inline]</code><span> both.</span>
+<span>See </span><a href="https://github.com/matklad/benchmarks/tree/91171269f0a6e260a27111d07661021a89d20085/rust-inline"><span>this benchmark</span></a><span> for details.</span></p>
+<p><em><span>Fifth</span></em><span>, mind generic functions.</span>
+<span>It</span>&rsquo;<span>s not too wrong to say that generic functions are implicitly inline.</span>
+<span>As a result, they often are a cause for code bloat.</span>
+<span>Generic functions, especially in libraries, should be written to minimize unwanted inlining.</span>
+<span>To give an example from </span><a href="https://github.com/bytecodealliance/wasm-tools/blob/0486fb4de505b8116a0034bdde4918cd783325b9/crates/wat/src/lib.rs#L214-L222"><span>wat</span></a><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// Public, generic function.</span></span>
+<span class="line"><span class="hl-comment">// Will cause code bloat if not handled carefully!</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">parse_str</span>(wat: <span class="hl-keyword">impl</span> <span class="hl-title class_">AsRef</span>&lt;<span class="hl-type">str</span>&gt;) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Result</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt; {</span>
+<span class="line">  <span class="hl-comment">// Immediately delegate to a non-generic function.</span></span>
+<span class="line">  _parse_str(wat.<span class="hl-title function_ invoke__">as_ref</span>())</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// Separate-compilation friendly private implementation.</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">_parse_str</span>(wat: &amp;<span class="hl-type">str</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Result</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u8</span>&gt;&gt; {</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="References">
+
+    <h2>
+    <a href="#References"><span>References</span> </a>
+    </h2>
+<ol>
+<li>
+<a href="https://doc.rust-lang.org/reference/attributes/codegen.html#the-inline-attribute"><span>Language reference</span></a><span>.</span>
+</li>
+<li>
+<a href="https://nnethercote.github.io/perf-book/inlining.html"><span>Rust performance book</span></a><span>.</span>
+</li>
+<li>
+<span>@alexcrichton </span><a href="https://github.com/rust-lang/hashbrown/pull/119#issuecomment-537539046"><span>explains inline</span></a><span>.</span>
+<span>Note that, in reality, the compile time costs are worse than what I described </span>&mdash;<span> inline functions are compiled per codegen-unit, not per crate.</span>
+</li>
+<li>
+<a href="https://users.rust-lang.org/t/enable-cross-crate-inlining-without-suggesting-inlining/55004/9?u=matklad"><span>More @alexcrichton</span></a><span>.</span>
+</li>
+<li>
+<a href="https://internals.rust-lang.org/t/inlining-policy-for-functions-in-std/14189/10?u=matklad"><span>Even more @alexcrichton</span></a><span>.</span>
+</li>
+</ol>
+<p><span>Discussion on </span><a href="https://old.reddit.com/r/rust/comments/oh4s2j/blog_post_inline_in_rust/"><span>/r/rust</span></a><span>.</span></p>
+<p><span>There is now a follow up post: </span><a href="https://matklad.github.io/2021/07/10/its-not-always-icache.html"><span>It</span>&rsquo;<span>s Not Always iCache</span></a><span>.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>This post is a part of </span><a href="https://matklad.github.io/2021/09/05/Rust100k.html"><span>One Hundred Thousand Lines of Rust</span></a><span> series.</span></p>
+</div>
+</aside></section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2021-07-09-inline-in-rust.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

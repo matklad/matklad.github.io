@@ -1,0 +1,340 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How a Zig IDE Could Work</title>
+  <meta name="description" content="Zig is a very interesting language from an IDE point of view.
+Some aspects of it are friendly to IDEs, like a very minimal and simple-to-parse syntax
+(Zig can even be correctly lexed line-by-line, very cool!),
+the absence of syntactic macros, and ability to do a great deal of semantic analysis on a file-by-file basis, in parallel.
+On the other hand, comptime.
+I accidentally spent some time yesterday thinking about how to build an IDE for that, this post is a result.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/02/10/how-a-zig-ide-could-work.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>How a Zig IDE Could Work</span> <time datetime="2023-02-10">Feb 10, 2023</time></h1>
+<p><span>Zig is a very interesting language from an IDE point of view.</span>
+<span>Some aspects of it are friendly to IDEs, like a very minimal and simple-to-parse syntax</span>
+<span>(Zig can even be </span><em><span>correctly</span></em><span> lexed line-by-line, very cool!),</span>
+<span>the absence of syntactic macros, and ability to do a great deal of semantic analysis on a file-by-file basis, in parallel.</span>
+<span>On the other hand, </span><code>comptime</code><span>.</span>
+<span>I accidentally spent some time yesterday thinking about how to build an IDE for that, this post is a result.</span></p>
+<section id="How-Does-the-Zig-Compiler-Work">
+
+    <h2>
+    <a href="#How-Does-the-Zig-Compiler-Work"><span>How Does the Zig Compiler Work?</span> </a>
+    </h2>
+<p><span>It</span>&rsquo;<span>s useful to discuss a bit how the compiler works today.</span>
+<span>For something more thorough, refer to this excellent series of posts: </span><a href="https://mitchellh.com/zig" class="url">https://mitchellh.com/zig</a><span>.</span></p>
+<p><span>First, each Zig file is parsed into an AST.</span>
+<span>Delightfully, parsing doesn</span>&rsquo;<span>t require any context whatsoever, it</span>&rsquo;<span>s a pure </span><code>[]const u8 -&gt; Ast</code><span> function, and the resulting Ast is just a piece of data.</span></p>
+<p><span>After parsing, the Ast is converted to an intermediate representation, Zir.</span>
+<span>This is where Zig diverges a bit from more typical statically compiled languages.</span>
+<span>Zir actually resembles something like Python</span>&rsquo;<span>s bytecode </span>&mdash;<span> an intermediate representation that an interpreter for a dynamically-typed language would use.</span>
+<span>That</span>&rsquo;<span>s because it </span><em><span>is</span></em><span> an interpreter</span>&rsquo;<span>s IR </span>&mdash;<span> the next stage would use Zir to evaluate comptime.</span></p>
+<p><span>Let</span>&rsquo;<span>s look at an example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> generic_add</span>(<span class="hl-keyword">comptime</span> T: <span class="hl-type">type</span>, lhs: T, rhs: T) T {</span>
+<span class="line">  <span class="hl-keyword">return</span> lhs <span class="hl-operator">+</span> rhs;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, the Zir for </span><code>generic_add</code><span> would encode addition as a typeless operation, because we don</span>&rsquo;<span>t know types at this point.</span>
+<span>In particular, </span><code>T</code><span> can be whatever.</span>
+<span>When the compiler would </span><em><span>instantiate</span></em><span> </span><code>generic_add</code><span> with different </span><code>T</code><span>s, like </span><code>generic_add(u32, ...)</code><span>, </span><code>generic_add(f64, ...)</code><span>, it will re-use the same Zir for different instantiations.</span>
+<span>That</span>&rsquo;<span>s the two purposes of Zir: to directly evaluate code at compile time, and to serve as a template for monomorphisation.</span></p>
+<p><span>The next stage is where the magic happens </span>&mdash;<span> the compiler partially evaluates dynamically typed Zir to convert it into a fairly standard statically typed IR.</span>
+<span>The process starts at the </span><code>main</code><span> function.</span>
+<span>The compiler more or less tries to evaluate the Zir.</span>
+<span>If it sees something like </span><code>90 + 2</code><span>, it directly evaluates that to </span><code>92</code><span>.</span>
+<span>For something which can</span>&rsquo;<span>t be evaluated at compile time, like </span><code>a + 2</code><span> where </span><code>a</code><span> is a runtime variable, the compiler generates typed IR for addition (as, at this point, we already know the type of </span><code>a</code><span>).</span></p>
+<p><span>When the compiler sees something like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> T = <span class="hl-type">u8</span>;</span>
+<span class="line"><span class="hl-keyword">const</span> x = generic_add(T, a, b);</span></code></pre>
+
+</figure>
+<p><span>the compiler monomorphises the generic call.</span>
+<span>It checks that all comptime arguments (</span><code>T</code><span>) are fully evaluated, and starts partial evaluation of the called function, with comptime parameters fixed to particular values (this of course is memoized).</span></p>
+<p><span>The whole process is lazy </span>&mdash;<span> only things transitively used from main are analyzed.</span>
+<span>Compiler won</span>&rsquo;<span>t complain about something like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> unused</span>() <span class="hl-type">void</span> {</span>
+<span class="line">    <span class="hl-numbers">1</span> <span class="hl-operator">+</span> <span class="hl-string">&quot;&quot;</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This looks perfectly fine at the Zir level, and the compiler will not move beyond Zir unless the function is actually called somewhere.</span></p>
+</section>
+<section id="And-an-IDE">
+
+    <h2>
+    <a href="#And-an-IDE"><span>And an IDE?</span> </a>
+    </h2>
+<p><span>IDE adds several dimensions to the compiler:</span></p>
+<ul>
+<li>
+<span>works with incomplete and incorrect code</span>
+</li>
+<li>
+<span>works with code which rapidly changes over time</span>
+</li>
+<li>
+<span>gives results immediately, there is no edit/compile cycle</span>
+</li>
+<li>
+<span>provides source to source transformations</span>
+</li>
+</ul>
+<p><span>The hard bit is the combination of rapid changes and immediate results.</span>
+<span>This is usually achieved using some smart, language-specific combination of</span></p>
+<ul>
+<li>
+<p><span>Incrementality: although changes are frequent and plentiful, they are local, and it is often possible to re-use large chunks of previous analysis.</span></p>
+</li>
+<li>
+<p><span>Laziness: unlike a compiler, an IDE does not need full analysis results for the entirety of the codebase.</span>
+<span>Usually, analysis of the function which is currently being edited is the only time-critical part, everything else can be done asynchronously, later.</span></p>
+</li>
+</ul>
+<p><span>This post gives an overview of some specific fruitful combinations of the two ideas:</span></p>
+<p><a href="https://rust-analyzer.github.io/blog/2020/07/20/three-architectures-for-responsive-ide.html" class="url">https://rust-analyzer.github.io/blog/2020/07/20/three-architectures-for-responsive-ide.html</a></p>
+<p><span>How can we apply the ideas to Zig?</span>
+<span>Let</span>&rsquo;<span>s use this as our running example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> guinea_pig</span>(<span class="hl-keyword">comptime</span> T: <span class="hl-type">type</span>, foo: Foo) <span class="hl-type">void</span> {</span>
+<span class="line">    foo.&lt;complete here&gt;;</span>
+<span class="line"></span>
+<span class="line">    helper(T).&lt;here&gt;;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">var</span> t: T = <span class="hl-literal">undefined</span>;</span>
+<span class="line">    t.&lt;<span class="hl-keyword">and</span> here&gt;;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>There are two, separate interesting questions to ask here:</span></p>
+<ul>
+<li>
+<span>what result do we even want here?</span>
+</li>
+<li>
+<span>how to achieve that given strict performance requirements?</span>
+</li>
+</ul>
+</section>
+<section id="Just-Compile-Everything">
+
+    <h2>
+    <a href="#Just-Compile-Everything"><span>Just Compile Everything</span> </a>
+    </h2>
+<p><span>It</span>&rsquo;<span>s useful to start with a pedantically correct approach.</span>
+<span>Let</span>&rsquo;<span>s run our usual compilation (recursively monomorphising called functions starting from the </span><code>main</code><span>).</span>
+<span>The result would contain a bunch of different monomorphisations of </span><code>guinea_pig</code><span>, for different values of </span><code>T</code><span>.</span>
+<span>For each </span><em><span>specific</span></em><span> monomorphisation it</span>&rsquo;<span>s now clear what is the correct answer.</span>
+<span>For the unspecialized case as written in the source code, the IDE can now show something reasonable by combining partial results from each monomorphisation.</span></p>
+<p><span>There are several issues with this approach.</span></p>
+<p><em><span>First</span></em><span>, collecting the </span><em><span>full</span></em><span> set of monomorphisations is not well-defined in the presence of conditional compilation.</span>
+<span>Even if you run the </span>&ldquo;<span>full</span>&rdquo;<span> compilation starting from main, today compiler assumes some particular environment (eg, Windows or Linux), which doesn</span>&rsquo;<span>t give you a full picture.</span>
+<span>There</span>&rsquo;<span>s a fascinating issue about multibuilds </span>&mdash;<span> making the compiler process all combinations of conditional compilation flags at the same time: </span><a href="https://github.com/ziglang/zig/issues/3028"><span>zig#3028</span></a><span>.</span>
+<span>With my IDE writer hat on, I really hope it gets in, as it will move IDE support from inherently heuristic territory, to something where, in principle, there</span>&rsquo;<span>s a correct result (even if might not be particularly easy to compute).</span></p>
+<p><span>The </span><em><span>second</span></em><span> problem is that this probably is going to be much too slow.</span>
+<span>If you think about IDE support for the first time, a very tantalizing idea is to try to lean just into incremental compilation.</span>
+<span>Specifically, you can imagine a compiler that maintains fully type-checked and resolved view of the code at all times.</span>
+<span>If a user edits something, the compiler just incrementally changes what needs to be changed.</span>
+<span>So the trick for IDE-grade interactive performance is just to implement sufficiently advanced incremental compilation.</span></p>
+<p><span>The problem with sufficiently incremental compiler is that even the perfect incrementality, which does the minimal required amount of work, will be slow in a non-insignificant amount of cases.</span>
+<span>The nature of code is that a small change to the source in a single place might lead to a large change to resolved types all over the project.</span>
+<span>For examples, changing the name of some popular type invalidates all the code that uses this type.</span>
+<span>That</span>&rsquo;<span>s the fundamental reason why IDE try hard to maintain an ability to </span><em><span>not</span></em><span> analyze everything.</span></p>
+<p><span>On the other hand, at the end of the day you</span>&rsquo;<span>ll have to do this work at least by the time you run the tests.</span>
+<span>And Zig</span>&rsquo;<span>s compiler is written from the ground up to be very incremental and very fast, so perhaps this will be good enough?</span>
+<span>My current gut feeling is that the answer is no </span>&mdash;<span> even if you </span><em><span>can</span></em><span> re-analyze everything in, say, 100ms, that</span>&rsquo;<span>ll still require burning the battery for essentially useless work.</span>
+<span>Usually, there</span>&rsquo;<span>s a lot more atomic small edits for a single test run.</span></p>
+<p><span>The </span><em><span>third</span></em><span> problem with the approach of collection all monomorphisations is that it simply does not work if the function isn</span>&rsquo;<span>t actually called, yet.</span>
+<span>Which is common in incomplete code that is being written, exactly the use-case where the IDE is most useful!</span></p>
+</section>
+<section id="Compile-Only-What-We-Need">
+
+    <h2>
+    <a href="#Compile-Only-What-We-Need"><span>Compile Only What We Need</span> </a>
+    </h2>
+<p><span>Thinking about the </span>&ldquo;<span>full</span>&rdquo;<span> approach more, it feels like it could be, at least in theory, optimized somewhat.</span>
+<span>Recall that in this approach we have a graph of function instantiations, which starts at the root (</span><code>main</code><span>), and contains various monomorphisations of </span><code>guinea_pig</code><span> on paths reachable from the root.</span></p>
+<p><span>It is clear we actually don</span>&rsquo;<span>t need the full graph to answer queries about instantiations of </span><code>guinea_pig</code><span>.</span>
+<span>For example, if we have something like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> helper</span>() <span class="hl-type">i32</span> {</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>and the </span><code>helper</code><span> does not (transitively) call </span><code>guinea_pig</code><span>, we can avoid looking into its body, as the signature is enough to analyze everything else.</span></p>
+<p><span>More precisely, given the graph of monomorphisations, we can select minimal subgraph which includes all paths from </span><code>main</code><span> to </span><code>guinea_pig</code><span> instantiations, as well as all the functions whose bodies we need to process to understand their signatures.</span>
+<span>My intuition is that the size of that subgraph is going to be much smaller than the whole thing, and, in principle, an algorithm which would analyze only that subgraph should be speedy enough in practice.</span></p>
+<p><span>The problem though is that, as far as I know, it</span>&rsquo;<span>s not possible to understand what belongs to the subgraph without analysing the whole thing!</span>
+<span>In particular, using compile-time reflection our </span><code>guinea_pig</code><span> can be called through something like </span><code>comptime "guinea" ++ "_pig"</code><span>.</span>
+<span>It</span>&rsquo;<span>s impossible to infer the call graph just from Zir.</span></p>
+<p><span>And of course this does not help the case where the function isn</span>&rsquo;<span>t called at all.</span></p>
+</section>
+<section id="Abstract-Comptime-Interpretation">
+
+    <h2>
+    <a href="#Abstract-Comptime-Interpretation"><span>Abstract Comptime Interpretation</span> </a>
+    </h2>
+<p><span>It is possible to approach</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> guinea_pig</span>(<span class="hl-keyword">comptime</span> T: <span class="hl-type">type</span>, foo: Foo) <span class="hl-type">void</span> {</span>
+<span class="line">    foo.&lt;complete here&gt;;</span>
+<span class="line"></span>
+<span class="line">    helper(T).&lt;here&gt;;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">var</span> t: T = <span class="hl-literal">undefined</span>;</span>
+<span class="line">    t.&lt;<span class="hl-keyword">and</span> here&gt;;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>from a different direction.</span>
+<span>What if we just treat this function as the root of our graph?</span>
+<span>We can</span>&rsquo;<span>d do that exactly, because it has some comptime parameters.</span>
+<span>But we </span><em><span>can</span></em><span> say that we have some opaque values for the parameters: </span><code>T = opaquevalue</code><span>.</span>
+<span>Of course, we won</span>&rsquo;<span>t be able to fully evaluate everything and things like </span><code>if (T == int)</code><span> would probably need to propagate opaqueness.</span>
+<span>At the same time, something like the result of </span><code>BoundedArray(opaque)</code><span> would still be pretty useful for an IDE.</span></p>
+<p><span>I am wondering if there</span>&rsquo;<span>s even perhaps some compilation-time savings in this approach?</span>
+<span>My understanding (which might be very wrong!) is that if a generic function contains something like </span><code>90 + 2</code><span>, this expression would be comptime-evaluated anew for every instantiation.</span>
+<span>In theory, what we could do is to partially evaluate this function substituting opaque values for comptime parameters, and then, for any specific instantiation, we can use the result of this partial evaluation as a template.</span>
+<span>Not sure what that would mean precisely though: it definitely would be more complicated than just substituting </span><code>T</code><span>s in the result.</span></p>
+</section>
+<section id="What-is-to-Be-Done">
+
+    <h2>
+    <a href="#What-is-to-Be-Done"><span>What is to Be Done?</span> </a>
+    </h2>
+<p><span>Ast and Zir infra is good.</span>
+<span>It is per-file, so it naturally just works in an IDE.</span></p>
+<p><a href="https://github.com/ziglang/zig/issues/3028"><span>Multibuilds</span></a><span> are important.</span>
+<span>I am somewhat skeptical that they</span>&rsquo;<span>ll actually fly, and it</span>&rsquo;<span>s not a complete game over if they don</span>&rsquo;<span>t</span>
+<span>(Rust has the same problem with conditional compilation, and it does create fundamental problems for both the users and authors of IDEs, but the end result is still pretty useful).</span>
+<span>Still, if Zig does ship multibuilds, that</span>&rsquo;<span>d be awesome.</span></p>
+<p><span>Given the unused function problem, I think it</span>&rsquo;<span>s impossible to avoid at least some amount of abstract interpretation, so </span><code>Sema</code><span> has to learn to deal with opaque values.</span></p>
+<p><span>With abstract interpretation machinery in place, it can be used as a first, responsive layer of IDE support.</span></p>
+<p><span>Computing the full set of monomoprisations in background can be used to augment these limited synchronous features with precise results asynchronously.</span>
+<span>Though, this might be tough to express in existing editor UIs.</span>
+<span>Eg, the goto definition result is now an asynchronous stream of values.</span></p>
+<p><span>Discussion on </span><a href="https://old.reddit.com/r/Zig/comments/10ysssh/blog_post_how_a_zig_ide_could_work/"><span>/r/zig</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-02-10-how-a-zig-ide-could-work.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,1383 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<link href="https://matklad.github.io/feed.xml" rel="self" type="application/atom+xml"/>
+<link href="https://matklad.github.io" rel="alternate" type="text/html"/>
+<updated>2024-03-22T10:49:01.051Z</updated>
+<id>https://matklad.github.io/feed.xml</id>
+<title type="html">matklad</title>
+<subtitle>Yet another programming blog by Alex Kladov aka matklad.</subtitle>
+<author><name>Alex Kladov</name></author>
+
+<entry>
+<title type="text">Zig defer Patterns</title>
+<link href="https://matklad.github.io/2024/03/21/defer-patterns.html" rel="alternate" type="text/html" title="Zig defer Patterns" />
+<published>2024-03-21T00:00:00+00:00</published>
+<updated>2024-03-21T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/03/21/defer-patterns</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[A short note about some unexpected usages of Zig's defer statement.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/03/21/defer-patterns.html"><![CDATA[
+<h1><span>Zig defer Patterns</span> <time datetime="2024-03-21">Mar 21, 2024</time></h1>
+<p><span>A short note about some unexpected usages of Zig</span>&rsquo;<span>s </span><code>defer</code><span> statement.</span></p>
+<p><span>This post assumes that you already know the basics about RAII, </span><code>defer</code><span> and </span><code>errdefer</code><span>. While</span>
+<span>discussing the differences between them is not the point, I will allow myself one high level</span>
+<span>comment. I don</span>&rsquo;<span>t like </span><code>defer</code><span> as a replacement for RAII: after writing Zig for some time, I am</span>
+<span>relatively confident that humans are just not good at not forgetting defers, especially when</span>
+&ldquo;<span>optional</span>&rdquo;<span> ownership transfer is at play (i.e, this function takes ownership of an argument, unless</span>
+<span>an error is returned). But defer is good at discouraging RAII oriented programming. RAII encourages</span>
+<span>binding lifetime of resources (such as memory) with lifetimes of individual domain objects (such as</span>
+<span>a </span><code>String</code><span>). But often, in pursuit of performance and small code size, you want to separate the two</span>
+<span>concerns, and let many domain objects to share the single pool of resources. Instead of each</span>
+<span>individual string managing its own allocation, you might want to store the contents of all related</span>
+<span>strings into a single continuously allocated buffer. Because RAII with defer is painful, Zig</span>
+<span>naturally pushes you towards batching your resource acquisition and release calls, such that you have</span>
+<span>far fewer resources than objects in your program.</span></p>
+<p><span>But, as I</span>&rsquo;<span>ve said, this post isn</span>&rsquo;<span>t about all that. This post is about non-resource-oriented usages</span>
+<span>of </span><code>defer</code><span>. There</span>&rsquo;<span>s more to defer than just RAII, it</span>&rsquo;<span>s a nice little powerful construct! This is way</span>
+<span>to much ado already, so here come the patterns:</span></p>
+<section id="Asserting-Post-Conditions">
+
+    <h2>
+    <a href="#Asserting-Post-Conditions"><span>Asserting Post Conditions</span> </a>
+    </h2>
+<p><code>defer</code><span> gives you poor man</span>&rsquo;<span>s contract programming in the form of</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">assert(precondition)</span>
+<span class="line"><span class="hl-keyword">defer</span> assert(postcondition)</span></code></pre>
+
+</figure>
+<p><span>Real life </span><a href="https://github.com/tigerbeetle/tigerbeetle/blob/73bbc1a32ba2513e369764680350c099fe302285/src/vsr/grid.zig#L298-L309"><span>example</span></a><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">{</span>
+<span class="line">  assert(<span class="hl-operator">!</span>grid.free_set.opened);</span>
+<span class="line">  <span class="hl-keyword">defer</span> assert(grid.free_set.opened);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// Code to open the free set</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Statically-Enforcing-Absence-of-Errors">
+
+    <h2>
+    <a href="#Statically-Enforcing-Absence-of-Errors"><span>Statically Enforcing Absence of Errors</span> </a>
+    </h2>
+<p><span>This is basically peak Zig:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">errdefer</span> <span class="hl-keyword">comptime</span> <span class="hl-keyword">unreachable</span></span></code></pre>
+
+</figure>
+<p><code>errdefer</code><span> runs when a function returns an error (e.g., when a </span><code>try</code><span> fails). </span><code>unreachable</code>
+<span>crashes the program (in </span><code>ReleaseSafe</code><span>). But </span><code>comptime unreachable</code><span> straight up fails compilation</span>
+<span>if the compiler tries to generate the corresponding runtime code. The three together ensure the</span>
+<span>absence of error-returning paths.</span></p>
+<p><span>Here</span>&rsquo;<span>s </span><a href="https://github.com/ziglang/zig/blob/1d82d7987acf7f020bcc6a976f9887a3556ef79c/lib/std/hash_map.zig#L1561-L1584"><span>an example</span></a>
+<span>from the standard library, the function to grow a hash map:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// The function as a whole can fail...</span></span>
+<span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> grow</span>(</span>
+<span class="line">  self: <span class="hl-operator">*</span>Self,</span>
+<span class="line">  allocator: Allocator,</span>
+<span class="line">  new_capacity: Size,</span>
+<span class="line">) Allocator.Error<span class="hl-operator">!</span><span class="hl-type">void</span> {</span>
+<span class="line">  <span class="hl-built_in">@setCold</span>(<span class="hl-literal">true</span>);</span>
+<span class="line">  <span class="hl-keyword">var</span> map: Self = .{};</span>
+<span class="line">  <span class="hl-keyword">try</span> map.allocate(allocator, new_capacity);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// ...but from this point on, failure is impossible</span></span>
+<span class="line">  <span class="hl-keyword">errdefer</span> <span class="hl-keyword">comptime</span> <span class="hl-keyword">unreachable</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// Code to rehash&amp;copy self to map</span></span>
+<span class="line">  std.mem.swap(Self, self, <span class="hl-operator">&amp;</span>map);</span>
+<span class="line">  map.deinit(allocator);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Logging-Errors">
+
+    <h2>
+    <a href="#Logging-Errors"><span>Logging Errors</span> </a>
+    </h2>
+<p><span>Zig</span>&rsquo;<span>s error handling mechanism provides only error code (a number) and an error trace. This is</span>
+<span>usually plenty to programmatically handle the error in an application and for the operator to</span>
+<span>debug a failure, but this is decidedly not enough to provide a nice report for the end user.</span>
+<span>However, if you are in a business of reporting errors to users, you are likely writing an</span>
+<span>application, and application might get away without propagating extra information about the error</span>
+<span>to the caller. Often, there</span>&rsquo;<span>s enough context at the point where the error originates in the first</span>
+<span>place to produce a user-facing report right there.</span></p>
+<p><a href="https://github.com/tigerbeetle/tigerbeetle/blob/73bbc1a32ba2513e369764680350c099fe302285/src/tigerbeetle/benchmark_driver.zig#L158-L163"><span>Example:</span></a></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> port = port: {</span>
+<span class="line">  <span class="hl-keyword">errdefer</span> <span class="hl-operator">|</span>err<span class="hl-operator">|</span> log.err(<span class="hl-string">&quot;failed to read the port number: {}&quot;</span>, .{err});</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">var</span> buf: [fmt.count(<span class="hl-string">&quot;{}<span class="hl-string">\n</span>&quot;</span>, .{maxInt(<span class="hl-type">u16</span>)})]<span class="hl-type">u8</span> = <span class="hl-literal">undefined</span>;</span>
+<span class="line">  <span class="hl-keyword">const</span> len = <span class="hl-keyword">try</span> process.stdout.?.readAll(<span class="hl-operator">&amp;</span>buf);</span>
+<span class="line">  <span class="hl-keyword">break</span> :port <span class="hl-keyword">try</span> fmt.parseInt(<span class="hl-type">u16</span>, buf[<span class="hl-numbers">0</span> .. len <span class="hl-operator">-</span><span class="hl-operator">|</span> <span class="hl-numbers">1</span>], <span class="hl-numbers">10</span>);</span>
+<span class="line">};</span></code></pre>
+
+</figure>
+</section>
+<section id="Post-Increment">
+
+    <h2>
+    <a href="#Post-Increment"><span>Post Increment</span> </a>
+    </h2>
+<p><span>Finally, </span><code>defer</code><span> can be used as an </span><code>i++</code><span> of sorts. </span><a href="https://github.com/tigerbeetle/tigerbeetle/blob/0.15.3/src/lsm/scan_buffer.zig#L97-L102"><span>For</span>
+<span>example</span></a><span>,</span>
+<span>here</span>&rsquo;<span>s how you can pop an item off a free list:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> acquire</span>(self: <span class="hl-operator">*</span>ScanBufferPool) Error<span class="hl-operator">!</span><span class="hl-operator">*</span><span class="hl-keyword">const</span> ScanBuffer {</span>
+<span class="line">  <span class="hl-keyword">if</span> (self.scan_buffer_used <span class="hl-operator">==</span> constants.lsm_scans_max) {</span>
+<span class="line">    <span class="hl-keyword">return</span> Error.ScansMaxExceeded;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">defer</span> self.scan_buffer_used <span class="hl-operator">+=</span> <span class="hl-numbers">1</span>;</span>
+<span class="line">  <span class="hl-keyword">return</span> <span class="hl-operator">&amp;</span>self.scan_buffers[self.scan_buffer_used];</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Kafka versus Nabokov</title>
+<link href="https://matklad.github.io/2024/03/02/Kafka-vs-Nabokov.html" rel="alternate" type="text/html" title="Kafka versus Nabokov" />
+<published>2024-03-02T00:00:00+00:00</published>
+<updated>2024-03-02T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/03/02/Kafka-vs-Nabokov</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[Uplifting a lobste.rs comment to a stand-alone post.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/03/02/Kafka-vs-Nabokov.html"><![CDATA[
+<h1><span>Kafka versus Nabokov</span> <time datetime="2024-03-02">Mar 2, 2024</time></h1>
+<p><span>Uplifting a lobste.rs comment to a stand-alone post.</span></p>
+<p><code>objectif_lune</code><span> </span><a href="https://lobste.rs/s/9xtcun/complex_systems_bridging_between_spec"><span>asks</span></a><span>:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>I am on the cusp (hopefully) of kicking off development of a fairly large and complex system</span>
+<span>(multiple integrated services, kafkas involved, background processes, multiple client frontends,</span>
+<span>etc…). It’s predominantly going to be built in rust (but that’s only trivially relevant; i.e. not</span>
+<span>following standard OOP).</span></p>
+<p><span>Here’s where i’m at:</span></p>
+<ol>
+<li>
+<span>I have defined all the components, services, data stores to use / or develop</span>
+</li>
+<li>
+<span>I have a a fairly concrete conceptualisation of how to structure and manage data on the storage</span>
+<span>end of the system which i’m formalizing into a specification</span>
+</li>
+<li>
+<span>I have a deployment model for the various parts of the system to go into production</span>
+</li>
+</ol>
+<p><span>The problem is, I have a gap, from these specs of the individual components and services that need</span>
+<span>to be built out, to the actual implementation of those services. I’ve scaffolded the code-base</span>
+<span>around what “feels” like sensible semantics, but bridging from the scope, through the high-level</span>
+<span>code organisation through to implementation is where I start to get a bit queasy.</span></p>
+<p><span>In the past, i’ve more or less dove head-first into just starting to implement, but the problem has</span>
+<span>been that I will very easily end up going in circles, or I end up with a lot of duplicated code</span>
+<span>across areas and just generally feel like it’s not working out the way I had hoped (obviously</span>
+<span>because i’ve just gone ahead and implemented).</span></p>
+<p><span>What are some tools, processes, design concepts, thinking patterns that you can use to sort of fill</span>
+<span>in that “last mile” from high-level spec to implementing to try and ensure that things stay on track</span>
+<span>and limit abandonment or going down dead-ends?</span></p>
+<p><span>I’m interested in advice, articles, books, or anything else that makes sense in the rough context</span>
+<span>above. Not specifically around for instance design patterns themselves, i’m more than familiar with</span>
+<span>the tools in that arsenal, but how do you bridge the gap between the concept and the implementation</span>
+<span>without going too deep down the rabbit-hole of modelling out actual code and everything else in UML</span>
+<span>for instance? How do you basically minimize getting mired in massive refactors once you get to</span>
+<span>implementation phase?</span></p>
+</blockquote>
+
+</figure>
+<p><span>My answer:</span></p>
+<hr>
+<p><span>I don’t have much experience building these kind of systems (I like Kafka, but I must say I prefer</span>
+<span>Nabokov’s rendition of similar ideas in “Invitation to a Beheading” and “Pale Fire” more), but</span>
+<span>here’s a couple of things that come to mind.</span></p>
+<p><span>First, </span><a href="https://en.wikipedia.org/wiki/John_Gall_(author)#Gall's_law"><span>every complex system that works started out as a simple system that worked</span></a><span>. Write code top</span>
+<span>down: </span><a href="https://www.teamten.com/lawrence/programming/write-code-top-down.html" class="display url">https://www.teamten.com/lawrence/programming/write-code-top-down.html</a></p>
+<p><span>Even if it is a gigantic complex system with many moving parts, start with spiking and end-to-end</span>
+<span>solution which can handle one particular variation of a happy path. Build skeleton first, flesh can</span>
+<span>be added incrementally.</span></p>
+<p><span>To do this, you’ll need some way to actually run the entire system while it isn’t deployed yet,</span>
+<span>which is something you need to solve before you start writing pages of code.</span></p>
+<p><span>Similarly, include testing strategy in the specification, and start with one single simple</span>
+<span>end-to-end test. I think that TDD as a way to design a class or a function is mostly snake oil</span>
+<span>(because </span><a href="https://matklad.github.io/2021/05/31/how-to-test.html"><span>“unit” tests are mostly snake</span>
+<span>oil</span></a><span>), but the overall large scale design of</span>
+<span>the system should absolutely be driven by the way the system will be tested.</span></p>
+<p><span>It is helpful to dwell on these two laws:</span></p>
+<p><a href="https://martinfowler.com/articles/distributed-objects-microservices.html"><strong><strong><span>First Law of Distributed Object Design:</span></strong></strong></a></p>
+
+<figure class="blockquote">
+<blockquote><p><span>Don’t distribute your objects.</span></p>
+</blockquote>
+
+</figure>
+<p><a href="https://en.wikipedia.org/wiki/Conway%27s_law"><strong><strong><span>Conway’s law:</span></strong></strong></a></p>
+
+<figure class="blockquote">
+<blockquote><p><span>Organizations which design systems are constrained to produce designs which are copies of the</span>
+<span>communication structures of these organizations.</span></p>
+</blockquote>
+
+</figure>
+<p><span>The code architecture of your solution is going to be isomorphic to your org chart, not to your</span>
+<span>deployment topology. Let’s say you want to deploy three different services: </span><code>foo</code><span>, </span><code>bar</code><span>, and </span><code>baz</code><span>.</span>
+<span>Just put all three into a single binary, which can be invoked as </span><code>app foo</code><span>, </span><code>app bar</code><span>, and </span><code>app
+baz</code><span>. This mostly solves any code duplication issues — if there’s shared code, just call it!</span></p>
+<p><span>Finally, system boundaries are the focus of the design:</span>
+<a href="https://www.tedinski.com/2018/02/06/system-boundaries.html" class="display url">https://www.tedinski.com/2018/02/06/system-boundaries.html</a></p>
+<p><span>Figure out hard system boundaries between “your system” and “not your system”, and do design those</span>
+<span>carefully. Anything else that looks like a boundary isn’t. It is useful to spend some effort</span>
+<span>designing those things as well, but it’s more important to make sure that you can easily change</span>
+<span>them. Solid upgrade strategy for deployment trumps any design which seems perfect at a given moment</span>
+<span>in time.</span></p>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Window: Live, Constant Time Grep</title>
+<link href="https://matklad.github.io/2024/02/10/window-live-constant-time-grep.html" rel="alternate" type="text/html" title="Window: Live, Constant Time Grep" />
+<published>2024-02-10T00:00:00+00:00</published>
+<updated>2024-02-10T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/02/10/window-live-constant-time-grep</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[In this post, I describe the design of window --- a small
+grep-like utility I implemented in 500 lines of Rust. The utility itself is likely not that
+interesting --- I bet some greybeared can implement an equivalent in 5 lines of bash. But the
+design principles behind it might be interesting --- this small utility manages to combine core
+ideas of rust-analyzer and TigerBeetle!]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/02/10/window-live-constant-time-grep.html"><![CDATA[
+<h1><span>Window: Live, Constant Time Grep</span> <time datetime="2024-02-10">Feb 10, 2024</time></h1>
+<p><span>In this post, I describe the design of </span><a href="https://github.com/matklad/window/"><span>window</span></a><span> </span>&mdash;<span> a small</span>
+<span>grep-like utility I implemented in 500 lines of Rust. The utility itself is likely not that</span>
+<span>interesting </span>&mdash;<span> I bet some greybeared can implement an equivalent in 5 lines of bash. But the</span>
+<span>design principles behind it might be interesting </span>&mdash;<span> this small utility manages to combine core</span>
+<span>ideas of rust-analyzer and TigerBeetle!</span></p>
+<section id="Problem-Statement">
+
+    <h2>
+    <a href="#Problem-Statement"><span>Problem Statement</span> </a>
+    </h2>
+<p><span>TigerBeetle is tested primarily through a deterministic simulator: a cluster of replicas runs in a</span>
+<span>single process (in a single thread even), replicas are connected to a virtual network and a virtual</span>
+<span>hard drive. Both the net and the disk are extra nasty, and regularly drop, reorder, and corrupt IO</span>
+<span>requests. The cluster has to correctly process randomly generated load in spite of this radioactive</span>
+<span>environment. You can play with visualization of the simulator here:</span>
+<a href="https://sim.tigerbeetle.com" class="display url">https://sim.tigerbeetle.com</a></p>
+<p><span>Of course, sometimes we have bugs, and need to debug crashes found by the simulator. Because</span>
+<span>everything is perfectly deterministic, a crash is a pair of commit hash and a seed for a random</span>
+<span>number generator. We don</span>&rsquo;<span>t yet have any minimization infrastructure, so some crashes tend to be</span>
+<span>rather large: a debug log from a crash can easily reach 50 gigabytes!</span></p>
+<p><span>So that</span>&rsquo;<span>s my problem: given multi-gigabyte log of a crash, find a dozen or so of log-lines which</span>
+<span>explain the crash.</span></p>
+<p><span>I think you are supposed to use </span><code>coreutils</code><span> to solve this problem, but I am not good enough with</span>
+<span>grep to make that efficient: my experience that grepping anything in this large file takes seconds,</span>
+<span>and still produces gigabytes of output which is hard to make heads or tails of.</span></p>
+<p><span>I had relatively more success with </span><a href="https://lnav.org"><span>lnav.org</span></a><span>, but:</span></p>
+<ul>
+<li>
+<span>it is still slower than I would like,</span>
+</li>
+<li>
+<span>it comes with its own unique TUI interface, shortcuts, and workflow, which is at odds with my</span>
+<span>standard editing environment.</span>
+</li>
+</ul>
+</section>
+<section id="Window">
+
+    <h2>
+    <a href="#Window"><span>Window</span> </a>
+    </h2>
+<p><span>So, I made </span><code>window</code><span>. You run it as</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> window huge-file.log &amp;</span></code></pre>
+
+</figure>
+<p><span>It then creates two files:</span></p>
+<ul>
+<li>
+<code>window.toml</code><span> </span>&mdash;<span> the file with the input query,</span>
+</li>
+<li>
+<code>huge-file.log.window</code><span> </span>&mdash;<span> the result of the query.</span>
+</li>
+</ul>
+<p><span>You open both files side-by-side in your editor of choice. Edits to the query file are immediately</span>
+<span>reflected in the results file (assuming the editor has auto-save and automatically reloads files</span>
+<span>changed on disk):</span></p>
+<p><span>Here</span>&rsquo;<span>s a demo in Emacs (you might want to full-screen that video):</span></p>
+<script async id="asciicast-637434" src="https://asciinema.org/a/637434.js"></script>
+<p><span>In the demo, I have to manually save the </span><code>window.toml</code><span> file with </span><code>C-x C-s</code><span>, but in my</span>
+<span>actual usage in VS Code the file is saved automatically after 100ms.</span></p>
+<p><span>As you can see, </span><code>window</code><span> is pretty much instant. How is this possible?</span></p>
+</section>
+<section id="When-Best-Ideas-of-rust-analyzer-and-TigerBeetle-are-Combined-in-a-Tool-of-Questionable-Usefulness">
+
+    <h2>
+    <a href="#When-Best-Ideas-of-rust-analyzer-and-TigerBeetle-are-Combined-in-a-Tool-of-Questionable-Usefulness"><span>When Best Ideas of rust-analyzer and TigerBeetle are Combined in a Tool of Questionable</span>
+<span>Usefulness</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s take a closer look at that query string:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-attr">reverse</span> = <span class="hl-literal">false</span></span>
+<span class="line"><span class="hl-attr">position</span> = <span class="hl-string">&quot;0%&quot;</span></span>
+<span class="line"><span class="hl-attr">anchor</span> = <span class="hl-string">&quot;&quot;</span></span>
+<span class="line"><span class="hl-attr">source_bytes_max</span> = <span class="hl-number">104857600</span></span>
+<span class="line"><span class="hl-attr">target_bytes_max</span> = <span class="hl-number">102400</span></span>
+<span class="line"><span class="hl-attr">target_lines_max</span> = <span class="hl-number">50</span></span>
+<span class="line"><span class="hl-attr">filter_in</span> = [</span>
+<span class="line">      [<span class="hl-string">&quot;(replica): 0&quot;</span>, <span class="hl-string">&quot;view=74&quot;</span>],</span>
+<span class="line">      [<span class="hl-string">&quot;(replica): 1&quot;</span>, <span class="hl-string">&quot;view=74&quot;</span>]</span>
+<span class="line">]</span>
+<span class="line"><span class="hl-attr">filter_out</span> = [</span>
+<span class="line">       <span class="hl-string">&quot;ping&quot;</span>, <span class="hl-string">&quot;pong&quot;</span></span>
+<span class="line">]</span></code></pre>
+
+</figure>
+<p><span>The secret sauce are </span><code>source_bytes_max</code><span> and </span><code>target_bytes_max</code><span> parameters.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with </span><code>target_bytes_max</code><span>. This is a lesson from </span><code>rust-analyzer</code><span>. For dev tools, the user</span>
+<span>of software is a human. Humans are slow, and can</span>&rsquo;<span>t process a lot of information. That means it is</span>
+<span>generally useless to produce more than a hundred lines of output </span>&mdash;<span> a human won</span>&rsquo;<span>t be able to make</span>
+<span>use of a larger result set </span>&mdash;<span> they</span>&rsquo;<span>d rather refine the query than manually sift through pages of</span>
+<span>results.</span></p>
+<p><span>So, when designing software to execute a user-supplied query, the inner loop should have some idea</span>
+<span>about the amount of results produced so far, and a short-circuiting logic. It is more valuable to</span>
+<span>produce some result quickly and to inform the user that the query is not specific, than to spend a</span>
+<span>second computing the full result set.</span></p>
+<p><span>A similar assumption underpins the architecture of a lot of language servers. No matter the size of</span>
+<span>the codebase, the amount of information displayed on the screen in user</span>&rsquo;<span>s IDE at a given point in</span>
+<span>time is O(1). A typical successful language server tries hard to do the absolute minimal amount of</span>
+<span>work to compute the relevant information, and nothing more.</span></p>
+<p><span>So, the </span><code>window</code><span>, by default, limits the output size to the minimum of 100 kilobytes / 50 lines, and</span>
+<span>never tries to compute more than that. If the first 50 lines of the output don</span>&rsquo;<span>t contain the result,</span>
+<span>the user can make the query more specific by adding more AND terms to </span><code>filter_in</code><span> causes, or adding</span>
+<span>OR terms to </span><code>filter_out</code><span>.</span></p>
+<p><span>TigerBeetle gives </span><code>window</code><span> the second magic parameter </span>&mdash;<span> </span><code>source_bytes_max</code><span>. The big insight of</span>
+<span>TigerBeetle is that all software always has limits. Sometimes the limit is a  hard wall: if a server</span>
+<span>runs out of file descriptors, it just crashes. The limit can also be a soft, sloughy bog as well: if</span>
+<span>the server runs out of memory, it might start paging memory in and out, slowing to a crawl. Even if</span>
+<span>some requests are, functionally speaking, fulfilled, the results are useless, as they arrive too</span>
+<span>late. Or, in other words, every request has a (potentially quite large) latency window.</span></p>
+<p><span>It might be a good idea to make the limits explicit, and design software around them. That gives</span>
+<span>predictable performance, and allows the user to manually chunk larger requests in manageable pieces.</span></p>
+<p><span>That is exactly what </span><code>window</code><span> does. Grepping 100 megabytes is pretty fast. Grepping more might be</span>
+<span>slow. So </span><code>window</code><span> just doesn</span>&rsquo;<span>t do it. Here</span>&rsquo;<span>s a rough rundown of the algorithm:</span></p>
+<ol>
+<li>
+<code>mmap</code><span> the entire input file to a </span><code>&amp;[u8]</code><span>.</span>
+</li>
+<li>
+<span>Wait until the control file (</span><code>window.toml</code><span>) changes and contains a valid query.</span>
+</li>
+<li>
+<span>Convert the </span><code>position</code><span> field (which might be absolute or a percentage) to an absolute offset.</span>
+</li>
+<li>
+<span>Select slice of </span><code>source_bytes_max</code><span> starting at that offset.</span>
+</li>
+<li>
+<span>Adjust boundaries of the slice to be on </span><code>\n</code><span>.</span>
+</li>
+<li>
+<span>Iterate lines.</span>
+</li>
+<li>
+<span>If a line matches any of </span><code>filter_out</code><span> conditions, skip over it.</span>
+</li>
+<li>
+<span>If a line matches any of </span><code>filter_in</code><span> conditions, add it to the result.</span>
+</li>
+<li>
+<span>Break when reaching the end of </span><code>source_bytes_max</code><span> window, or when the size of output exceeds</span>
+<code>target_bytes_max</code><span>.</span>
+</li>
+</ol>
+<p><span>The deal is:</span></p>
+<ul>
+<li>
+<span>It</span>&rsquo;<span>s on the user to position a limited window over the interesting part of the input.</span>
+</li>
+<li>
+<span>In exchange, the </span><code>window</code><span> tool guarantees constant-time performance.</span>
+</li>
+</ul>
+</section>
+<section id="Limits-of-Applicability">
+
+    <h2>
+    <a href="#Limits-of-Applicability"><span>Limits of Applicability</span> </a>
+    </h2>
+<p><span>Important pre-requisites to make the </span>&ldquo;<span>limit the size of the output</span>&rdquo;<span> work are:</span></p>
+<ul>
+<li>
+<span>The user can refine the query.</span>
+</li>
+<li>
+<span>The results are computed instantly.</span>
+</li>
+</ul>
+<p><span>If these assumptions are violated, it might be best to return the full list of results.</span></p>
+<p><span>Here</span>&rsquo;<span>s one counterexample! I love reading blogs. When I find a great post, I often try to read all</span>
+<span>other posts by the same author </span>&mdash;<span> older posts which are still relevant usually are much more</span>
+<span>valuable then the news of the day. I love when blogs have a simple chronological list of all</span>
+<span>articles, a-la: </span><a href="https://matklad.github.io" class="display url">https://matklad.github.io</a></p>
+<p><span>Two blogging platforms mess up this feature:</span></p>
+<p><span>WordPress blogs love to have </span>&ldquo;<span>archives</span>&rdquo;<span> organized by month, where a month</span>&rsquo;<span>s page typically has 1 to</span>
+<span>3 entries. What</span>&rsquo;<span>s more, WordPress loves to display a couple of pages of content for each entry. This</span>
+<span>is just comically unusable </span>&mdash;<span> the amount of </span><em><span>entries</span></em><span> on a page is too few to effectively search</span>
+<span>them, but the actual amount of content on a page is overwhelming.</span></p>
+<p><span>Substack</span>&rsquo;<span>s archive is an infinite scroll that fetches 12 entries at a time. 12 entries is a joke!</span>
+<span>It</span>&rsquo;<span>s only 1kb compressed, and is clearly bellow human processing limit. There </span><em><span>might</span></em><span> be some</span>
+<span>argument for client-side pagination to postpone loading of posts</span>&rsquo;<span> images, but feeding the posts</span>
+<span>themselves over the network one tiny droplet at a time seems excessive.</span></p>
+<hr>
+<p><span>To recap:</span></p>
+<ul>
+<li>
+<p><span>Limiting </span><em><span>output</span></em><span> size might be a good idea, because, with a human on the other side of display,</span>
+<span>any additional line of output has a diminishing return (and might even be a net-negative). On the</span>
+<span>other hand, constant-time output allows reducing latency, and can even push a batch workflow into</span>
+<span>an interactive one</span></p>
+</li>
+<li>
+<p><span>Limiting </span><em><span>input</span></em><span> size might be a good idea, because the input is </span><em><span>always</span></em><span> limited anyway. The</span>
+<span>question is whether you know the limit, and whether the clients know how to cut their queries into</span>
+<span>reasonably-sized batches.</span></p>
+</li>
+<li>
+<p><span>If you have exactly the same 20 GB log file problems as me, you might install </span><code>window</code><span> with</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo install --git https://github.com/matklad/window</span></code></pre>
+
+</figure>
+</li>
+</ul>
+</section>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Write Less</title>
+<link href="https://matklad.github.io/2024/01/12/write-less.html" rel="alternate" type="text/html" title="Write Less" />
+<published>2024-01-12T00:00:00+00:00</published>
+<updated>2024-01-12T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/01/12/write-less</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[If we wish to count lines of code, we should not regard them as lines produced but as lines spent]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/01/12/write-less.html"><![CDATA[
+<h1><span>Write Less</span> <time datetime="2024-01-12">Jan 12, 2024</time></h1>
+
+<figure class="blockquote">
+<blockquote><p><span>If we wish to count lines of code, we should not regard them as </span>&ldquo;<span>lines produced</span>&rdquo;<span> but as </span>&ldquo;<span>lines spent</span>&rdquo;</p>
+</blockquote>
+<figcaption><cite><a href="https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html"><span>Dijkstra</span></a></cite></figcaption>
+</figure>
+<p><span>The same applies to technical writing. There</span>&rsquo;<span>s a tendency to think that the more is written, the</span>
+<span>better. It is wrong: given the same information content, a shorter piece of prose is easier to</span>
+<span>understand, up to a reasonable limit.</span></p>
+<p><span>To communicate effectively, write a bullet-point list of ideas that you need to get across. Then,</span>
+<span>write a short paragraph in simple language that communicates these ideas precisely.</span></p>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Of Rats and Ratchets</title>
+<link href="https://matklad.github.io/2024/01/03/of-rats-and-ratchets.html" rel="alternate" type="text/html" title="Of Rats and Ratchets" />
+<published>2024-01-03T00:00:00+00:00</published>
+<updated>2024-01-03T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/01/03/of-rats-and-ratchets</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[This is going to be related to software engineering, pinky promise!]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/01/03/of-rats-and-ratchets.html"><![CDATA[
+<h1><span>Of Rats and Ratchets</span> <time datetime="2024-01-03">Jan 3, 2024</time></h1>
+<p><span>This is going to be related to software engineering, pinky promise!</span></p>
+<p><span>I was re-reading Doctor Zhivago by Boris Pasternak recently. It is a beautiful novel set in Russia</span>
+<span>during the revolutionary years before World War II. It focuses on the life of Yuri Zhivago, a doctor</span>
+<span>and a poet, while the Russian revolutions roar in the background. It is a poignant and topical tale</span>
+<span>of a country descending into blood-thirsty madness.</span></p>
+<p><span>Being a doctor, a literati, and a descendant of once wealthy family, Zhivago is not exactly welcomed</span>
+<span>in the new Russia. That</span>&rsquo;<span>s why a significant part of the novel takes place far away from Moscow and</span>
+<span>St. Petersburg, in Siberia, where it is easier for undesirables to exist in a fragile truce with the</span>
+<span>state.</span></p>
+<p><span>What</span>&rsquo;<span>s your first problem, if you are going to live in someone else</span>&rsquo;<span>s abandoned house in Siberia,</span>
+<span>eking out a living off whatever supplies had been left? The rats, who are also very keen on the said</span>
+<span>supplies. Clearly, rats are a big problem, and require immediate attention.</span></p>
+<p><span>It</span>&rsquo;<span>s easy to exert effort and get rid of the rats </span>&mdash;<span> take a broom, some light source, and just</span>
+<span>chase away the rascals from the house. However observably effective the method is, it is not a</span>
+<span>solution </span>&mdash;<span> the rats will come back as soon as you are asleep. The proper solution starts with</span>
+<span>identifying all the holes through which the pest gets in, and thoroughly plugging those! Only then</span>
+<span>can you hope that the house </span><em><span>stays</span></em><span> rat free.</span></p>
+<p><span>I feel the dynamics plays out in software projects. There</span>&rsquo;<span>s lots of rats, everything</span>&rsquo;<span>s broken and in</span>
+<span>need of fixing, all the time. And there</span>&rsquo;<span>s usually plenty of desire and energy to fix things. The</span>
+<span>problem is, often times the fixes are not durable </span>&mdash;<span> an immediate problem is resolved promptly, but</span>
+<span>then it returns back two years down the line. This is most apparent in benchmarks </span>&mdash;<span> everyone loves</span>
+<span>adding a microbenchmark to motivate a particular change, and then the benchmark bitrots with no one</span>
+<span>to run it.</span></p>
+<p><span>It</span>&rsquo;<span>s important not only to fix things, but to fix them in a durable way; to seal up the holes, not</span>
+<span>just to wave the broom vigorously.</span></p>
+<p><span>The best way to do this is to setup a not rocket science rule, and then to use it as a ratchet to</span>
+<span>monotonically increase the set of properties the codebase possesses, one small check at a time.</span>
+<span>Crucially, the ratchet should be set up up front, </span><em><span>before</span></em><span> any of the problems are actually fixed,</span>
+<span>and it must allow for incremental steps.</span></p>
+<p><span>Let</span>&rsquo;<span>s say you lack documentation, and want to ensure that every file in the code-base has a</span>
+<span>top-level comment explaining  the relevant context. A good way to approach this problem is to write</span>
+<span>a test that reads every file in the project, computes the set of poorly documented files, and xors</span>
+<span>that against the hard-coded naughty list. This test is then committed to the project with the</span>
+<span>naughty list encompassing all the existing files. Although no new docs are added, the ratchet is in</span>
+<span>place </span>&mdash;<span> all new files are guaranteed to be documented. And its easier to move a notch up the</span>
+<span>ratchet by documenting a single file and crossing it out from the naughty list.</span></p>
+<p><span>More generally, widen your view of tests </span>&mdash;<span> a test is a program that checks a property of a</span>
+<span>repository of code at a particular commit. Any property </span>&mdash;<span> code style, absence of warnings,</span>
+<span>licenses of dependencies, the maximum size of any binary file committed into the repository,</span>
+<span>presence of unwanted merge commits, average assertion density.</span></p>
+<p><span>Not everything can be automated though. For things which can</span>&rsquo;<span>t be, the best trick I</span>&rsquo;<span>ve found is</span>
+<span>writing them down. </span><em><span>Just</span></em><span> agreeing that </span><em><span>X</span></em><span> is a team practice is not enough, even if it </span><em><span>might</span></em>
+<span>work for the first six months. Only when </span><em><span>X</span></em><span> is written down in a markdown document inside a</span>
+<span>repository it might becomes a durable practice. But beware </span>&mdash;<span> document what </span><em><span>is</span></em><span>, rather than what</span>
+<em><span>should</span></em><span> be. If there</span>&rsquo;<span>s a clear disagreement between what the docs say the world is, and the actual</span>
+<span>world, the ratcheting effect of the written word disappears. If there</span>&rsquo;<span>s a large diff between reality</span>
+<span>and documentation, don</span>&rsquo;<span>t hesitate to remove conflicting parts of the documentation. Having a ratchet</span>
+<span>that enforces a tiny set of properties is much more valuable than aspirations to enforce everything.</span></p>
+<p><span>Coming back to Doctor Zhivago, it is worth noting that the novel is arranged into a myriad of</span>
+<span>self-contained small chapters </span>&mdash;<span> a blessing for a modern attention-deprived world, as it creates a</span>
+<span>clear sense of progression even when you don</span>&rsquo;<span>t have enough focus to get lost in a book for hours.</span></p>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Git Things</title>
+<link href="https://matklad.github.io/2023/12/31/git-things.html" rel="alternate" type="text/html" title="Git Things" />
+<published>2023-12-31T00:00:00+00:00</published>
+<updated>2023-12-31T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2023/12/31/git-things</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[A grab bag of less frequently talked about git adjacent points.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2023/12/31/git-things.html"><![CDATA[
+<h1><span>Git Things</span> <time datetime="2023-12-31">Dec 31, 2023</time></h1>
+<p><span>A grab bag of less frequently talked about git adjacent points.</span></p>
+<section id="Not-Rocket-Science-Rule-Applies-To-Merge-Commits">
+
+    <h2>
+    <a href="#Not-Rocket-Science-Rule-Applies-To-Merge-Commits"><span>Not Rocket Science Rule Applies To Merge Commits</span> </a>
+    </h2>
+<p><span>Should every commit pass the tests? If it should, then your </span><a href="https://graydon2.dreamwidth.org/1597.html"><span>not rocket science</span>
+<span>rule</span></a><span> implementation must be verifying this property. It</span>
+<span>probably doesn</span>&rsquo;<span>t, and only tests the final result of merging the feature branch into the main</span>
+<span>branch.</span></p>
+<p><span>That</span>&rsquo;<span>s why for typical project it is useful to </span><em><span>merge</span></em><span> pull requests into the main branch </span>&mdash;<span> the</span>
+<span>linear sequence of merge commits is a record of successful CI runs, and is a set of commits you want</span>
+<span>to </span><code>git bisect</code><span> over.</span></p>
+<p><span>Within a feature branch, not every commit necessary passes the tests (or even builds), and that is a</span>
+<span>useful property! Here</span>&rsquo;<span>s some ways this can be exploited:</span></p>
+<ul>
+<li>
+<p><span>When fixing a bug, add a failing test first, as a separate commit.</span>
+<span>That way it becomes easy to verify for anyone that the test indeed fails without the follow up</span>
+<span>fix.</span></p>
+<p><span>Related advice: often I see people commenting out tests that currently fail, or tests that are yet</span>
+<span>to be fixed in the future. That</span>&rsquo;<span>s bad, because commented-out code rots faster than the JavaScript</span>
+<span>framework of the day. Instead, adjust the asserts such that they lock down the current (wrong)</span>
+<span>behavior, and add a clear </span><code>// TODO:</code><span> comment explaining what would be the correct result. This</span>
+<span>prevents such tests from rotting and also catches cases where the behavior is fixed by an</span>
+<span>unrelated change.</span></p>
+</li>
+<li>
+<p><span>To refactor an API which has a lot of usages, split the work in two commits. In the first commit,</span>
+<span>change the API itself, but don</span>&rsquo;<span>t touch the usages. In the second commit, mechanically adjust all</span>
+<span>call sites.</span></p>
+<p><span>That way during review it is trivial to separate meaningful changes from a large, but trivial</span>
+<span>diff.</span></p>
+</li>
+<li>
+<p><code>git mv</code><span> is fake. For a long time, I believed that </span><code>git mv</code><span> adds some special bit of git metadata</span>
+<span>which tells it that the file was moved, such that it can be understood by </span><code>diff</code><span> or </span><code>blame</code><span>.</span>
+<span>That</span>&rsquo;<span>s not the case: </span><code>git mv</code><span> is essentially </span><code>mv</code><span> followed by </span><code>git add</code><span>. There</span>&rsquo;<span>s nothing in git to</span>
+<span>track that a file was moved specifically, the </span>&ldquo;<span>moved</span>&rdquo;<span> illusion is created by the diff tool when it</span>
+<span>heuristically compares repository state at two points in time.</span></p>
+<p><span>For this reason, if you want to reliably record file moves during refactors in git, you should do</span>
+<span>two commits: the first commit </span><em><span>just</span></em><span> moves the file without any changes, the second commit applies</span>
+<span>all the required fixups.</span></p>
+<p><span>Speaking of moves, consider adding this to your </span><code>gitconfig</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">[diff]</span>
+<span class="line">  colormoved = "default"</span>
+<span class="line">  colormovedws = "allow-indentation-change"</span></code></pre>
+
+</figure>
+<p><span>This way, moved lines will be colored differently in </span><code>diff</code><span>, so that code motions not confused</span>
+<span>with additions and deletions, and are easier to review. It is unclear to me why this isn</span>&rsquo;<span>t the</span>
+<span>default, and why this isn</span>&rsquo;<span>t an option in GitHub</span>&rsquo;<span>s UI.</span></p>
+</li>
+</ul>
+<p>&ldquo;<span>Merge into main, but rebase feature branches</span>&rdquo;<span> might be a hard rule to wrap your head around if you</span>
+<span>are new to git. Luckily, it</span>&rsquo;<span>s easy to use not-rocket-science rule to enforce this property. The</span>
+<span>history is as much a part of your project as is the source code. You can write a test that shells</span>
+<span>out to git and checks that the only merge commits in the history are those from the merge bot. While</span>
+<span>you are at it, it would be a good idea to test that no large large files are present in the</span>
+<span>repository </span>&mdash;<span> the size of a repository only grows, and you can</span>&rsquo;<span>t easily remove large blobs from the</span>
+<span>repo later on!</span></p>
+</section>
+<section id="Commit-Messages">
+
+    <h2>
+    <a href="#Commit-Messages"><span>Commit Messages</span> </a>
+    </h2>
+<p><span>Let me phrase this in the most inflammatory way possible :)</span></p>
+<p><span>If your project has great commit messages, with short and precise summary lines and long and</span>
+<span>detailed bodies, this probably means that your CI and code review process suck.</span></p>
+<p><span>Not all changes are equal. In a typical project, most of the changes that </span><em><span>should</span></em><span> be made are small</span>
+<span>and trivial </span>&mdash;<span> some renames, visibility tightening, </span>&ldquo;<span>attention to details</span>&rdquo;<span> polish in user-visible</span>
+<span>features.</span></p>
+<p><span>However, in a typical project, landing a trivial change is slow. How long would it take you to fix</span>
+<code>it's/its</code><span> typo in a comment? Probably 30 seconds to push the actual change, 30 minutes to get the</span>
+<span>CI results, and 3 hours for a review roundtrip.</span></p>
+<p><span>The fixed costs to making a change are tremendous. Main branch gatekeeping strongly incentivizes</span>
+<span>against trivial changes. As a result, such changes either are not being made, or are tacked onto</span>
+<span>larger changes as a drive by bonus. In any case, the total number of commits and PRs goes down. And</span>
+<span>you are crafting a novel of a commit message because you have to wait for your previous PR to land</span>
+<span>anyway.</span></p>
+<p><span>What can be done better?</span></p>
+<p><em><span>First</span></em><span>, make changes smaller and more frequent.</span>
+<span>Most likely, this is possible for you.</span>
+<span>At least, I tend to out-commit most colleagues (</span><a href="https://github.com/intellij-rust/intellij-rust/graphs/contributors"><span>example</span></a><span>).</span>
+<span>That</span>&rsquo;<span>s not because I am more productive </span>&mdash;<span> I just do work in smaller batches.</span></p>
+<p><em><span>Second</span></em><span>, make CI asynchronous.</span>
+<span>At no point in your workflow you should be waiting for CI to pass.</span>
+<span>You should flag a change for merging, move on to the next thing, and only get back if CI fails.</span>
+<span>This is something bors-ng does right </span>&mdash;<span> it</span>&rsquo;<span>s possible to </span><code>r+</code><span> a commit immediately on submission.</span>
+<span>This is something GitHub merge queue does wrong </span>&mdash;<span> it</span>&rsquo;<span>s impossible to add a PR to queue until checks on the PR itself are green.</span></p>
+<p><em><span>Third</span></em><span>, our review process is backwards. Review is done </span><em><span>before</span></em><span> code gets into main, but that</span>&rsquo;<span>s</span>
+<span>inefficient for most of the non-mission critical projects out there. A better approach is to</span>
+<span>optimistically merge most changes as soon as not-rocket-science allows it, and then later review the</span>
+<span>code in situ,  in the main branch. And instead of adding comments in web ui, just changing the code</span>
+<span>in-place, sending a new PR ccing the original author.</span></p>
+
+<figure class="blockquote">
+<blockquote><ol start="14">
+<li>
+<span>Maintainers SHALL NOT make value judgments on correct patches.</span>
+</li>
+<li>
+<span>Maintainers SHALL merge correct patches from other Contributors rapidly.</span>
+</li>
+</ol>
+<p>&hellip;</p>
+<ol start="18">
+<li>
+<span>Any Contributor who has value judgments on a patch SHOULD express these via their own patches.</span>
+</li>
+</ol>
+</blockquote>
+<figcaption><cite><a href="https://rfc.zeromq.org/spec/42/"><span>Collective Code Construction Contract</span></a></cite></figcaption>
+</figure>
+<p><span>I am skeptical that this exact workflow would</span>
+<span>ever fly, but I am cautiously optimistic about </span><a href="https://zed.dev"><span>Zed</span>&rsquo;<span>s</span></a><span> idea about just allowing</span>
+<span>two people to code in the same editor at the same time. I think that achieves a similar effect, and</span>
+<span>nicely dodges unease about allowing temporarily unreviewed code.</span></p>
+<p><span>Ok, back to git!</span></p>
+<p><em><span>First</span></em><span>, not every project needs a clean history. Have you ever looked at the git history of your</span>
+<span>personal blog or dotfiles? If you haven</span>&rsquo;<span>t, feel free to use a </span><code>.</code><span> as a commit message. I do that for</span>
+<span class="display"><a href="https://github.com/matklad/matklad.github.io" class="url">https://github.com/matklad/matklad.github.io</a><span>,</span></span>
+<span>it works fine so far.</span></p>
+<p><em><span>Second</span></em><span>, not every change needs a great commit message. If a change is really minor, I would say</span>
+<code>minor</code><span> is an okay commit message!</span></p>
+<p><em><span>Third</span></em><span>, some changes absolutely do require very detailed commit messages. If there </span><em><span>is</span></em><span> a context,</span>
+<span>by all means, include all of it into the commit message (and spill some as comments in the source</span>
+<span>code). And here</span>&rsquo;<span>s a tip for this case: </span><em><span>write the commit message first!</span></em></p>
+<p><span>When I work on a larger feature, I start with</span>
+<code class="display">git commit --allow-empty</code>
+<span>to type out what I set to do. Most of the time, by the third paragraph of the commit message I</span>
+<span>realize that there</span>&rsquo;<span>s a flaw in my plan and refine it. So, by the time I get to actually writing the</span>
+<span>code, I am already on the second iteration. And, when I am done, I just amend the commit with the</span>
+<span>actual changes, and the commit message is already there, needing only minor adjustments.</span></p>
+<p><span>And the last thing I want to touch about commit messages: </span><code>man git-commit</code><span> tells me that the summary</span>
+<span>line should be shorter than 50 characters. This feels obviously wrong, that</span>&rsquo;<span>s much too short!</span>
+<a href="https://www.kernel.org/doc/html/v4.10/process/submitting-patches.html"><span>Kernel docs</span></a><span> suggest a much</span>
+<span>more reasonable 70-75 limit! And indeed, looking at a some recent kernel commits, 50 is clearly not</span>
+<span>enough!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">&lt;---               50 characters              ---&gt;</span>
+<span class="line"></span>
+<span class="line">get_maintainer: remove stray punctuation when cleaning file emails</span>
+<span class="line">get_maintainer: correctly parse UTF-8 encoded names in files</span>
+<span class="line">locking/osq_lock: Clarify osq_wait_next()</span>
+<span class="line">locking/osq_lock: Clarify osq_wait_next() calling convention</span>
+<span class="line">locking/osq_lock: Move the definition of optimistic_spin_node into osq_lock.c</span>
+<span class="line">ftrace: Fix modification of direct_function hash while in use</span>
+<span class="line">tracing: Fix blocked reader of snapshot buffer</span>
+<span class="line">ring-buffer: Fix wake ups when buffer_percent is set to 100</span>
+<span class="line">platform/x86/intel/pmc: Move GBE LTR ignore to suspend callback</span>
+<span class="line">platform/x86/intel/pmc: Allow reenabling LTRs</span>
+<span class="line">platform/x86/intel/pmc: Add suspend callback</span>
+<span class="line">platform/x86: p2sb: Allow p2sb_bar() calls during PCI device probe</span>
+<span class="line"></span>
+<span class="line">&lt;---               50 characters              ---&gt;</span></code></pre>
+
+</figure>
+<p><span>Happy new year, dear reader!</span></p>
+</section>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">O(1) Build File</title>
+<link href="https://matklad.github.io/2023/12/31/O(1)-build-file.html" rel="alternate" type="text/html" title="O(1) Build File" />
+<published>2023-12-31T00:00:00+00:00</published>
+<updated>2023-12-31T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2023/12/31/O(1)-build-file</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[Rule of thumb: the size of build or CI configuration should be mostly independent of the project size.
+In other words, adding, say, a new test should not require adding a new line to the build file to build the test, and a new line to .yml to run it on CI.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2023/12/31/O(1)-build-file.html"><![CDATA[
+<h1><span>O(1) Build File</span> <time datetime="2023-12-31">Dec 31, 2023</time></h1>
+<p><span>Rule of thumb: the size of build or CI configuration should be mostly independent of the project size.</span>
+<span>In other words, adding, say, a new test should not require adding a new line to the build file to build the test, and a new line to </span><code>.yml</code><span> to run it on CI.</span></p>
+<p><span>Lines in CI config are costly </span>&mdash;<span> each line is typically a new entry point,</span>
+<span>and a bit of required knowledge to be able to run the project locally.</span>
+<span>That is, every time </span><em><span>you</span></em><span> add something to CI, you need to explain that to your colleagues,</span>
+<span>so that they know that they need to run more things locally.</span></p>
+<p><span>Lines in build config are usually a little cheaper, but are still far from free.</span>
+<span>Often a new build config also implies a new entry point.</span>
+<span>At other times, it</span>&rsquo;<span>s just a new build artifact tied to an existing entry point, for example, a new integration test binary.</span>
+<span>Build artifacts are costly in terms of compile time </span>&mdash;<span> as your project is linked with every build artifact, the total linking time is quadratic.</span></p>
+<p><span>What to do instead?</span></p>
+<p><em><span>Minimize</span></em><span> the number of entry points and artifacts.</span>
+<span>Enumerate </span><code>O(1)</code><span> of project entry points explicitly.</span>
+<span>You probably need:</span></p>
+<ul>
+<li>
+<code>run</code><span>, to get the local built-from-source copy of software running,</span>
+</li>
+<li>
+<code>test</code><span>, to run bounded-in-time automated checks that the current version of software is</span>
+<span>self-consistent,</span>
+</li>
+<li>
+<code>fuzz</code><span>, to run unbounded-in-time checks,</span>
+</li>
+<li>
+<code>deploy</code><span> to publish a given version of software for wider use</span>
+</li>
+</ul>
+<p><span>This is a point of contention, but consider if you can avoid separate </span><code>lint</code><span> and </span><code>fmt</code><span> entry points, as those are a form of automated tests.</span></p>
+<p><span>Of course, an entry point can allow filters to run a subset of things: </span><span class="display"><code>run --test-filter=tidy</code><span>.</span></span>
+<span>It</span>&rsquo;<span>s much easier to discover how to filter out things you don</span>&rsquo;<span>t need,</span>
+<span>than to realize that there</span>&rsquo;<span>s something you need to opt into.</span></p>
+<p><em><span>Minimize</span></em><span> the number of build artifacts, </span><a href="https://matklad.github.io/2021/02/27/delete-cargo-integration-tests.html"><em><span>Delete Cargo Integration Tests</span></em></a><span>.</span>
+<span>You probably need separate production and test builds, to avoid linking in test code with the production binaries.</span>
+<span>But chances are, these two binaries are all you need.</span>
+<span>Avoid building a set of related binaries, use subcommands or BusyBox-style multicall binaries instead.</span>
+<span>Not only does this improve compile times, it also helps with putting out fires in the field, as the binary you have in production also contains all the debug tools.</span></p>
+<hr>
+<p><span>On rules of thumb in general: for me, the term </span><em><span>doesn</span>&rsquo;<span>t</span></em><span> mean that what follows is the correct way to do things, better than alternatives.</span>
+<span>Rather:</span></p>
+<ul>
+<li>
+<span>First and foremost, a rule focuses attention, it makes me </span><em><span>notice</span></em><span> things I</span>&rsquo;<span>d otherwise autopilot through.</span>
+<span>The main value of today</span>&rsquo;<span>s rule is to make me pause whenever I add to </span><code>build.zig</code><span> and think for a second.</span>
+</li>
+<li>
+<span>Second, a rule is a concise summary of the arguments that motivate the rule.</span>
+<span>The bad thing is slow builds and multiple entry points.</span>
+<span>But that</span>&rsquo;<span>s a fuzzy concept that is hard to keep at the forefront of the mind.</span>
+<span>I am not going to ask myself constantly </span>&ldquo;<span>Hey, am I adding a new entry point here?</span>&rdquo;<span>.</span>
+<span>In contrast, </span>&ldquo;<span>don</span>&rsquo;<span>t change .yml</span>&rdquo;<span> is simple and mechanical, and it reliably triggers the cluster of ideas about entry points.</span>
+</li>
+</ul>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">CI Dream</title>
+<link href="https://matklad.github.io/2023/12/24/ci-dream.html" rel="alternate" type="text/html" title="CI Dream" />
+<published>2023-12-24T00:00:00+00:00</published>
+<updated>2023-12-24T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2023/12/24/ci-dream</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[This is more of an android dream (that one with a unicorn) than a coherent post, but please indulge me.
+It's a short one at least!]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2023/12/24/ci-dream.html"><![CDATA[
+<h1><span>CI Dream</span> <time datetime="2023-12-24">Dec 24, 2023</time></h1>
+<p><span>This is more of an android dream (that one with a unicorn) than a coherent post, but please indulge me.</span>
+<span>It</span>&rsquo;<span>s a short one at least!</span></p>
+<p><span>Several years ago, it made sense for things like Travis CI or GitHub Actions to exist as technical products as well as businesses.</span>
+<span>Back in the day, maintaining a fleet of machines was hard.</span>
+<span>So you could take that shepherd job onto yourself, and provide your users and customers with an API to run their tests.</span></p>
+<p><span>Is it true today though?</span>
+<span>I am not well-versed in cloud things, but my impression is that today one can rent machines as a commodity.</span>
+<span>Cloud providers give you a distributed computer which you pay for as you go.</span></p>
+<p><span>In this world, CI as a SaaS feels like accidental complexity of </span><a href="https://lwn.net/Articles/336262/"><span>midlayer mistake</span></a><span> variety.</span>
+<span>Can we make it simpler?</span>
+<span>Can we say that CI is just a </span>&ldquo;<span>program</span>&rdquo;<span> for a distributed computer?</span>
+<span>So, in your project</span>&rsquo;<span>s repo, there</span>&rsquo;<span>s a </span><code>./ci</code><span> folder with a such program </span>&mdash;
+<span>a bunch of Docker files, or .yamls, or whatever is the </span>&ldquo;<span>programming language of the cloud</span>&rdquo;<span>.</span>
+<span>You then point, say, AWS to it, tell it </span>&ldquo;<span>run this, here are my credentials</span>&rdquo;<span>, and you get your entire CI infra,</span>
+<span>with not rocket science rule, continuous fuzzing, releases, and what not.</span>
+<span>And, crucially, whatever project specific logic you need </span>&mdash;<span> AWS doesn</span>&rsquo;<span>t care what it runs, everything is under your control.</span></p>
+<p><span>Of course, there</span>&rsquo;<span>s a hefty amount of logic required </span>&mdash;
+<span>interacting with your forge webhooks,</span>
+<span>UI through @magic comments and maybe a web server with an HTML GUI,</span>
+<span>the management of storage to ensure that cross-build caches stay close,</span>
+<span>the management of compute and idempotence, to allow running on cheap spot instances,</span>
+<span>and perhaps a thousands of other CI concerns.</span></p>
+<p><span>But it feels like all that could conceivably be a library (an ecosystem of competing projects even)?</span></p>
+<p><span>If I want to have a merge queue, why are these my choices?:</span></p>
+<ul>
+<li>
+<span>GitHub Merge Queue, which is </span><a href="https://matklad.github.io/2023/06/18/GitHub-merge-queue.html"><span>not good</span></a><span>.</span>
+</li>
+<li>
+<a href="https://mergify.com"><span>Mergify</span></a><span>, which I am reluctant even to try due to strength of </span>&ldquo;<span>this is a product</span>&rdquo;<span> vibes.</span>
+</li>
+<li>
+<span>Self-hosting </span><a href="https://github.com/bors-ng/bors-ng"><span>bors-ng</span></a><span>, managing an individual server as a pet.</span>
+</li>
+</ul>
+<p><span>Why this isn</span>&rsquo;<span>t the world we live in?:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cd ci</span>
+<span class="line"><span class="hl-title function_">$</span> cargo add protection-agency</span></code></pre>
+
+</figure>
+<p><strong><strong><span>Update(2024-01-01):</span></strong></strong><span> If you like this post, please also read</span>
+<a href="https://gregoryszorc.com/blog/2021/04/07/modern-ci-is-too-complex-and-misdirected/" class="display url">https://gregoryszorc.com/blog/2021/04/07/modern-ci-is-too-complex-and-misdirected/</a></p>
+<p><span>Although that post contains much fewer references to</span>
+<a href="https://open.spotify.com/track/7DklRKMUGf8D9anitG68kj"><span>Philip K. Dick</span></a><span>,</span>
+<span>it is much better in every other respect.</span></p>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Retry Loop</title>
+<link href="https://matklad.github.io/2023/12/21/retry-loop.html" rel="alternate" type="text/html" title="Retry Loop" />
+<published>2023-12-21T00:00:00+00:00</published>
+<updated>2023-12-21T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2023/12/21/retry-loop</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[A post about writing a retry loop. Not a smart post about avoiding thundering heards and resonance.
+A simpleton kind of post about wrangling ifs and fors together to minimize bugs.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2023/12/21/retry-loop.html"><![CDATA[
+<h1><span>Retry Loop</span> <time datetime="2023-12-21">Dec 21, 2023</time></h1>
+<p><span>A post about writing a retry loop. Not a smart post about avoiding thundering heards and resonance.</span>
+<span>A simpleton kind of post about wrangling ifs and fors together to minimize bugs.</span></p>
+<p><em><span>Stage:</span></em><span> you are writing a script for some build automation or some such.</span></p>
+<p><em><span>Example problem:</span></em><span> you want to get a freshly deployed package from Maven Central. As you learn after</span>
+<span>a CI failure, packages in Maven don</span>&rsquo;<span>t become available immediately after a deploy, there could be a</span>
+<span>delay. This is a poor API which breaks causality and makes it impossible to code correctly against,</span>
+<span>but what other alternative do you have? You just need to go and write a retry loop.</span></p>
+<p><span>You want to retry some </span><code>action</code><span>. The action either succeeds or fails. Some, but not all, failures</span>
+<span>are transient and can be retried after a timeout. If a failure persists after a bounded number</span>
+<span>of retries, it should be propagated.</span></p>
+<p><span>The </span><em><span>runtime</span></em><span> sequence of event we want to see is:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">action()</span>
+<span class="line">sleep()</span>
+<span class="line">action()</span>
+<span class="line">sleep()</span>
+<span class="line">action()</span></code></pre>
+
+</figure>
+<p><span>It has that mightily annoying a-loop-and-a-half shape.</span></p>
+<p><span>Here</span>&rsquo;<span>s the set of properties I would like to see in a solution:</span></p>
+<ol>
+<li>
+<span>No useless sleep. A naive loop would sleep one extra time before reporting a retry failure, but</span>
+<span>we don</span>&rsquo;<span>t want to do that.</span>
+</li>
+<li>
+<span>In the event of a retry failure, the underlying error is reported. I don</span>&rsquo;<span>t want to see </span><em><span>just</span></em>
+<span>that all attempts failed, I want to see an actual error from the last attempt.</span>
+</li>
+<li>
+<span>Obvious upper bound: I don</span>&rsquo;<span>t want to write a </span><code>while (true)</code><span> loop with a break in the middle. If I</span>
+<span>am to do at most 5 attempts, I want to see a </span><code>for (0..5)</code><span> loop. Don</span>&rsquo;<span>t ask me</span>
+<a href="https://github.com/tigerbeetle/tigerbeetle/pull/1367"><span>why</span></a><span>.</span>
+</li>
+<li>
+<span>No syntactic redundancy </span>&mdash;<span> there should be a single call to action and a single sleep in the</span>
+<span>source code.</span>
+</li>
+</ol>
+<p><span>I don</span>&rsquo;<span>t know how to achieve all four. That</span>&rsquo;<span>s the best I can do:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> action</span>() <span class="hl-operator">!</span><span class="hl-keyword">enum</span> { ok, retry: <span class="hl-type">anyerror</span> } {</span>
+<span class="line"></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> retry_loop</span>() <span class="hl-operator">!</span><span class="hl-type">void</span> {</span>
+<span class="line">    <span class="hl-keyword">for</span> (<span class="hl-numbers">0</span>..<span class="hl-numbers">5</span>) {</span>
+<span class="line">        <span class="hl-keyword">if</span> (<span class="hl-keyword">try</span> action() <span class="hl-operator">==</span> .ok) <span class="hl-keyword">break</span>;</span>
+<span class="line">        sleep();</span>
+<span class="line">    } <span class="hl-keyword">else</span> {</span>
+<span class="line">        <span class="hl-keyword">switch</span> (<span class="hl-keyword">try</span> action()) {</span>
+<span class="line">            .ok =&gt; {},</span>
+<span class="line">            .retry =&gt; <span class="hl-operator">|</span>err<span class="hl-operator">|</span> <span class="hl-keyword">return</span> err</span>
+<span class="line">        }</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This solution achieves 1-3, fails at 4, and relies on a somewhat esoteric language feature </span>&mdash;
+<code>for/else</code><span>.</span></p>
+<p><span>Salient points:</span></p>
+<ul>
+<li>
+<p><span>Because there is a syntactic repetition in call to action, it is imperative to extract it into a</span>
+<span>function.</span></p>
+</li>
+<li>
+<p><span>The return type of </span><code>action</code><span> has to be elaborate. There are three possibilities:</span></p>
+<ul>
+<li>
+<span>an action succeeds,</span>
+</li>
+<li>
+<span>an action fails fatally, error must be propagated,</span>
+</li>
+<li>
+<span>an action fails with a transient error, a retry can be attempted.</span>
+</li>
+</ul>
+<p><span>For the transient failure case, it is important to return an error object itself, so that the real</span>
+<span>error can be propagated if a retry fails.</span></p>
+</li>
+<li>
+<p><span>The core is a bounded </span><code>for (0..5)</code><span> loop. Can</span>&rsquo;<span>t mess that up!</span></p>
+</li>
+<li>
+<p><span>For </span>&ldquo;<span>and a half</span>&rdquo;<span> aspect, an </span><code>else</code><span> is used. Here we incur syntactic repetition, but that feels</span>
+<span>some what justified, as the last call </span><em><span>is</span></em><span> actually special, as it rethrows the error, rather than</span>
+<span>just swallowing it.</span></p>
+</li>
+</ul>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Non-Send Futures When?</title>
+<link href="https://matklad.github.io/2023/12/10/nsfw.html" rel="alternate" type="text/html" title="Non-Send Futures When?" />
+<published>2023-12-10T00:00:00+00:00</published>
+<updated>2023-12-10T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2023/12/10/nsfw</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[Ever since reading
+What If We Pretended That a Task = Thread?
+I can't stop thinking about borrowing non-Sync data across .await.
+In this post, I'd love to take one more look at the problem.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2023/12/10/nsfw.html"><![CDATA[
+<h1><span>Non-Send Futures When?</span> <time datetime="2023-12-10">Dec 10, 2023</time></h1>
+<p><span>Ever since reading</span>
+<a href="https://blaz.is/blog/post/lets-pretend-that-task-equals-thread/" class="display"><em><span>What If We Pretended That a Task = Thread?</span></em></a>
+<span>I can</span>&rsquo;<span>t stop thinking about borrowing non-</span><code>Sync</code><span> data across </span><code>.await</code><span>.</span>
+<span>In this post, I</span>&rsquo;<span>d love to take one more look at the problem.</span></p>
+<section id="Send-And-Sync">
+
+    <h2>
+    <a href="#Send-And-Sync"><span>Send And Sync</span> </a>
+    </h2>
+<p><span>To warm up, a refresher on</span>
+<a href="https://doc.rust-lang.org/stable/std/marker/trait.Send.html"><code>Send</code></a><span> and</span>
+<a href="https://doc.rust-lang.org/stable/std/marker/trait.Sync.html"><code>Sync</code></a><span> auto-traits.</span>
+<span>These traits are a </span><em><span>library</span></em><span> feature that enable fearless concurrency </span>&mdash;<span> a statically checked</span>
+<span>guarantee that non-thread-safe data structures don</span>&rsquo;<span>t escape from their original thread.</span></p>
+<p><span>Why do we need two traits, rather than just a single </span><code>ThreadSafe</code><span>? Because there are two degrees of</span>
+<span>thread-unsafety.</span></p>
+<p><span>Some types are fine to use from multiple threads, as long as only a single thread at a time uses a</span>
+<span>particular value. An example here would be a </span><code>Cell&lt;i32&gt;</code><span>. If two threads have a reference to a cell</span>
+<span>at the same time, a </span><code>&amp;Cell&lt;i32&gt;</code><span>, we are in trouble </span>&mdash;<span> </span><code>Cell</code>&rsquo;<span>s loads and stores are not atomic</span>
+<span>and are UB by definition if used concurrently. However, if two different threads have exclusive</span>
+<span>access to a </span><code>Cell</code><span>, that</span>&rsquo;<span>s fine </span>&mdash;<span> because the access is exclusive, it necessary means that it is</span>
+<span>not simultaneous. That is, it</span>&rsquo;<span>s OK for thread A to </span><em><span>send</span></em><span> a </span><code>Cell&lt;i32&gt;</code><span> to a different thread B,</span>
+<span>as long as A itself loses access to the cell.</span></p>
+<p><span>But there are also types which are unsafe to use from multiple threads even if only a single thread</span>
+<span>at a time has access to a value. An example here would be an </span><code>Arc&lt;Cell&lt;i32&gt;&gt;</code><span>. It</span>&rsquo;<span>s not possible</span>
+<span>to safely send such an </span><code>Arc</code><span> to a different thread, because a </span><code>.clone</code><span> call can be used to get an</span>
+<span>independent copy of an </span><code>Arc</code><span>, effectively creating a </span><em><span>share</span></em><span> operation out of a </span><em><span>send</span></em><span> one.</span></p>
+<p><span>But turns out both cases are covered by just a single trait, </span><code>Send</code><span>. The thing is, to </span><em><span>share</span></em><span> a</span>
+<code>Cell&lt;i32&gt;</code><span> across two threads, it is necessary to </span><em><span>send</span></em><span> an </span><code>&amp;Cell&lt;i32&gt;</code><span>. So we get the following</span>
+<span>table:</span></p>
+<table>
+<tr>
+<th style="text-align: left;"><code>Send</code><span></span></th>
+<th style="text-align: left;"><code>!Send</code><span></span></th>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Cell&lt;i32&gt;</code></td>
+<td style="text-align: left;"><code>&amp;Cell&lt;i32&gt;</code><span></span></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>i32</code><span></span></td>
+<td style="text-align: left;"><code>Arc&lt;Cell&lt;i32&gt;&gt;</code><span></span></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>&amp;i32</code><span></span></td>
+<td style="text-align: left;"><code>&amp;Arc&lt;Cell&lt;i32&gt;&gt;</code></td>
+</tr>
+</table>
+<p><span>If </span><code>T</code><span> is </span><code>Send</code><span>, </span><code>&amp;T</code><span> might or might not be </span><code>Send</code><span>. And that</span>&rsquo;<span>s where the </span><code>Sync</code><span> traits</span>
+<span>comes from: </span><code>&amp;T: Send</code><span> if and only if (iff) </span><code>T: Sync</code><span>. Which gives the following table:</span></p>
+<table>
+<tr>
+<td></td>
+<td><strong><code>Send</code></strong><span></span></td>
+<td><strong><code>!Send</code></strong><span></span></td>
+</tr>
+<tr>
+<td><strong><code>Sync</code></strong><span></span></td>
+<td><code>i32</code><span></span></td>
+<td></td>
+</tr>
+<tr>
+<td><strong><code>!Sync</code></strong><span></span></td>
+<td><code>Cell&lt;i32&gt;</code><span></span></td>
+<td><code>Arc&lt;Cell&lt;i32&gt;&gt;</code></td>
+</tr>
+</table>
+<p><span>What about that last empty cell? Types which are </span><code>Sync</code><span> and </span><code>!Send</code><span> are indeed quite rare, and I</span>
+<span>don</span>&rsquo;<span>t know examples which don</span>&rsquo;<span>t boil down to </span>&ldquo;<span>underlying API mandates that a type doesn</span>&rsquo;<span>t leave a</span>
+<span>thread</span>&rdquo;<span>. One example here would be </span><code>MutexGuard</code><span> from the standard library </span>&mdash;<span> pthreads </span><em><span>require</span></em>
+<span>that only the thread that originally locked a mutex can unlock it. This isn</span>&rsquo;<span>t a fundamental</span>
+<span>requirement for a mutex </span>&mdash;<span> a </span><code>MutexGuard</code><span> from parking lot</span>
+<a href="https://github.com/Amanieu/parking_lot/tree/adbad82729d4843a051defb9e9eff38c83e7f289?tab=readme-ov-file#usage"><span>can be </span><code>Send</code></a><span>.</span></p>
+</section>
+<section id="Thread-Safety-And-Async">
+
+    <h2>
+    <a href="#Thread-Safety-And-Async"><span>Thread Safety And Async</span> </a>
+    </h2>
+<p><span>As you see, the </span><code>Send</code><span> &amp; </span><code>Sync</code><span> infrastructure is quite intricate. Is it worth it? Absolutely, as it</span>
+<span>leads to simpler code. In Rust, you can explicitly designate certain parts of a code base as</span>
+<span>non-thread-safe, and then avoid worrying about threads, because compiler will catch your hand if you</span>
+<em><span>accidentally</span></em><span> violate this constraint.</span></p>
+<p><span>The power of Rust is not defensively making everything thread safe, its the ability to use</span>
+<span>thread-unsafe code fearlessly.</span></p>
+<p><span>And it seems like </span><code>async</code><span> doesn</span>&rsquo;<span>t quite have this power. Let</span>&rsquo;<span>s build an example, a litmus test!</span></p>
+<p><span>Let</span>&rsquo;<span>s start with a </span><code>Context</code><span> pattern,  where a bunch of stuff is grouped into a single struct, so</span>
+<span>that they can be threaded through the program as one parameter. Such </span><code>Context</code><span> object is usually</span>
+<span>scoped to a particular operation </span>&mdash;<span> the ultimate owner of </span><code>Context</code><span> is a local variable in some</span>
+<span>top-level </span>&ldquo;<span>main</span>&rdquo;<span> function, it is threaded as </span><code>&amp;Context</code><span> or </span><code>&amp;mut Context</code><span> everywhere, and usually</span>
+<span>isn</span>&rsquo;<span>t stored anywhere. For the </span><code>&amp;Context</code><span> variant, it is also customary to add some interior</span>
+<span>mutability for things like caches. One real-life example would be a </span><code>Config</code><span> type from Cargo:</span>
+<a href="https://github.com/rust-lang/cargo/blob/a092469d46c0d7e8d899dbaebfcddf052f8f435d/src/cargo/util/config/mod.rs#L168"><span>config/mod.rs#L168</span></a><span>.</span></p>
+<p><span>Distilling the pattern down, we get something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Context</span> {</span>
+<span class="line">  counter: Cell&lt;<span class="hl-type">i32</span>&gt;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Context</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">increment</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">self</span>.counter.<span class="hl-title function_ invoke__">set</span>(<span class="hl-keyword">self</span>.counter.<span class="hl-title function_ invoke__">get</span>() + <span class="hl-number">1</span>);</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, a </span><code>counter</code><span> is an interior-mutable value which could, e.g., track cache hit rate. And here how</span>
+<span>this type could be used:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>(context: &amp;Context) {</span>
+<span class="line">  <span class="hl-title function_ invoke__">g</span>(context);</span>
+<span class="line">  context.<span class="hl-title function_ invoke__">increment</span>();</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">g</span>(_context: &amp;Context) {</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>However, the async version of the code doesn</span>&rsquo;<span>t really work, and in a subtle way:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>(context: &amp;Context) {</span>
+<span class="line">  <span class="hl-title function_ invoke__">g</span>(context).<span class="hl-keyword">await</span>;</span>
+<span class="line">  context.<span class="hl-title function_ invoke__">increment</span>();</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">g</span>(_context: &amp;Context) {</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Do you see the problem? Surprisingly, even </span><code>rustc</code><span> doesn</span>&rsquo;<span>t see it, the code above compiles in</span>
+<span>isolation. However, when we start </span><em><span>using</span></em><span> it with Tokio</span>&rsquo;<span>s work-stealing runtime,</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">task_main</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">context</span> = Context::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line">  <span class="hl-title function_ invoke__">f</span>(&amp;context).<span class="hl-keyword">await</span>;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[tokio::main]</span></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  tokio::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-title function_ invoke__">task_main</span>());</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>we</span>&rsquo;<span>ll hit an error:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">error: future cannot be sent between threads safely</span>
+<span class="line"></span>
+<span class="line">--&gt; src/main.rs:29:18</span>
+<span class="line"> |</span>
+<span class="line"> | tokio::spawn(task_main());</span>
+<span class="line"> |              ^^^^^^^^^^^ future returned by `task_main` is not `Send`</span>
+<span class="line"> |</span>
+<span class="line"></span>
+<span class="line">within `Context`, the trait `Sync` is not implemented for `Cell&lt;i32&gt;`.</span>
+<span class="line"></span>
+<span class="line">if you want to do aliasing and mutation between multiple threads,</span>
+<span class="line">use `std::sync::RwLock` or `std::sync::atomic::AtomicI32` instead.</span></code></pre>
+
+</figure>
+<p><span>What happened here? When compiling </span><code>async fn f</code><span>, compiler reifies its stack frame as a Rust struct:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">FStackFrame</span>&lt;<span class="hl-symbol">&#x27;a</span>&gt; {</span>
+<span class="line">  context: &amp;<span class="hl-symbol">&#x27;a</span> Context,</span>
+<span class="line">  await_state: <span class="hl-type">usize</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This struct contains a reference to our </span><code>Context</code><span> type, and then </span><code>Context: !Sync</code><span> implies </span><code>&amp;Context:
+!Send</code><span> implies </span><code>FStackFrame&lt;'_&gt;: !Send </code><span>. And that finally clashes with the signature of</span>
+<code>tokio::spawn</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;F&gt;(future: F) <span class="hl-punctuation">-&gt;</span> JoinHandle&lt;F::Output&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">    F: Future + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>, <span class="hl-comment">// &lt;- note this Send</span></span>
+<span class="line">    F::Output: <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span></code></pre>
+
+</figure>
+<p><span>Tokio</span>&rsquo;<span>s default executor is work-stealing. It</span>&rsquo;<span>s going to poll the future from different threads, and that</span>&rsquo;<span>s</span>
+<span>why it is required that the future is </span><code>Send</code><span>.</span></p>
+<p><span>In my eyes this is a rather significant limitation, and a big difference with synchronous Rust.</span>
+<span>Async Rust has to be defensively thread-safe, while sync Rust is free to use non-thread-safe data</span>
+<span>structures when convenient.</span></p>
+</section>
+<section id="A-Better-Spawn">
+
+    <h2>
+    <a href="#A-Better-Spawn"><span>A Better Spawn</span> </a>
+    </h2>
+<p><span>One solution here is to avoid work-stealing executors:</span></p>
+<p><a href="https://maciej.codes/2022-06-09-local-async.html" class="display"><em><span>Local Async Executors and Why They Should be the Default</span></em></a></p>
+<p><span>That post correctly identifies the culprit:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>I suggest to you, dear reader, that this function signature:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;T&gt;(future: T) <span class="hl-punctuation">-&gt;</span> JoinHandle&lt;T::Output&gt; <span class="hl-keyword">where</span></span>
+<span class="line">    T: Future + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line">    T::Output: <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span></code></pre>
+
+</figure>
+<p><span>is a gun.</span></p>
+</blockquote>
+
+</figure>
+<p><span>But as for the fix, I think Auri (</span><a href="https://blaz.is"><span>blaz.is</span></a><span>) got it right. The fix is </span><em><span>not</span></em><span> to</span>
+<span>remove </span><code>+ Send</code><span> bound, but rather to mirror </span><code>std::thread::spawn</code><span> more closely:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// std::thread::spawn</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;F, T&gt;(f: F) <span class="hl-punctuation">-&gt;</span> JoinHandle&lt;T&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">    F: <span class="hl-title function_ invoke__">FnOnce</span>() <span class="hl-punctuation">-&gt;</span> T + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line">    T: <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// A hypothetical better async spawn</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;F, Fut&gt;(f: F) <span class="hl-punctuation">-&gt;</span> JoinHandle&lt;Fut::Output&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">    F: <span class="hl-title function_ invoke__">FnOnce</span>() <span class="hl-punctuation">-&gt;</span> Fut + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line">    Fut: Future,</span>
+<span class="line">    Fut::Output: <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span></code></pre>
+
+</figure>
+<p><span>Let me explain first why this works, and then why this can</span>&rsquo;<span>t work.</span></p>
+<p><span>A </span><code>Future</code><span> is essentially a stack-frame of an asynchronous function. Original tokio version requires</span>
+<span>that all such stack frames are thread safe. This is not what happens in synchronous code </span>&mdash;<span> there,</span>
+<span>functions are free to put cells on their stacks. The </span><code>Send</code><span>ness is only guarded when data are</span>
+<span>actually send to a different thread, in </span><code>Chanel::send</code><span> and </span><code>thread::spawn</code><span>. The </span><code>spawn</code><span> function in</span>
+<span>particular says nothing about the </span><em><span>stack</span></em><span> of a new thread. It only requires that the data used to</span>
+<span>create the first stack frame is </span><code>Send</code><span>.</span></p>
+<p><span>And that</span>&rsquo;<span>s what we do in the async version: instead of spawning a future directly, it, just like the</span>
+<span>sync version, takes a closure. The closure is moved to a different execution context, so it must be</span>
+<code>: Send</code><span>. The actual future created by the closure in the new context can be whatever. An async</span>
+<span>runtime is free to poll this future from different threads regardless of its </span><code>Sync</code><span> status.</span></p>
+<p><span>Async work-stealing still works for the same reason that blocking work stealing works. Logical</span>
+<span>threads of execution can migrate between physical CPU cores because OS restores execution context</span>
+<span>when switching threads. Task can migrate between threads because async runtime restores execution</span>
+<span>context when switching tasks. Go is a proof that this is possible </span>&mdash;<span> goroutines migrate between</span>
+<span>different threads but they are free to use on-stack non-thread safe state. The pattern is clearly</span>
+<span>sound, the question is, can we express this fundamental soundness in Rust</span>&rsquo;<span>s type system, like we</span>
+<span>managed to do for OS threads?</span></p>
+<p><span>This is going to be tricky, because </span><code>Send</code><span> </span><em><span>today</span></em><span> absolutely means </span>&ldquo;<span>same thread</span>&rdquo;<span>, not </span>&ldquo;<span>same</span>
+<span>execution context</span>&rdquo;<span>. Here</span>&rsquo;<span>s one example that would break:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">sneaky</span>() {</span>
+<span class="line">  thread_local! { <span class="hl-keyword">static</span> TL: Rc&lt;()&gt; = Rc::<span class="hl-title function_ invoke__">new</span>(()); }</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">rc</span> = TL.<span class="hl-title function_ invoke__">with</span>(|it| it.<span class="hl-title function_ invoke__">clone</span>());</span>
+<span class="line">  <span class="hl-keyword">async</span> {}.<span class="hl-keyword">await</span>;</span>
+<span class="line">  rc.<span class="hl-title function_ invoke__">clone</span>();</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>If the </span><code>.await</code><span> migrates to a different thread, we are in trouble: two tasks can start on the same</span>
+<span>thread, then diverge, but continue to hammer the same non-atomic reference count.</span></p>
+<p><span>Another breakage example is various OS APIs that just mandate that things happen on a particular</span>
+<span>execution thread, like </span><code>pthread_mutex_unlock</code><span>. Though I think that the turtle those APIs stand on</span>
+<span>are thread locals again?</span></p>
+<p><span>Can we fix it? As an absolute strawman proposal, let</span>&rsquo;<span>s redefine </span><code>Send</code><span> &amp; </span><code>Sync</code><span> in terms of abstract</span>
+&ldquo;<span>execution contexts</span>&rdquo;<span>, add </span><code>OsThreadSend</code><span> and </span><code>OsThreadSync</code><span>, and change API which involve thread</span>
+<span>locals to use the </span><code>OsThread</code><span> variants. It seems that everything else works?</span></p>
+</section>
+<section id="Four-Questions">
+
+    <h2>
+    <a href="#Four-Questions"><span>Four Questions</span> </a>
+    </h2>
+<p><span>I would like to posit four questions to the wider async Rust community.</span></p>
+<ol>
+<li>
+<p><span>Does this work in theory? As far as I can tell, this does indeed works, but I am not an async</span>
+<span>expert. Am I missing something?</span></p>
+<p><span>Ideally, I</span>&rsquo;<span>d love to see small, self-contained litmus test  examples that break </span><code>OsThreadSend</code>
+<span>Rust.</span></p>
+</li>
+<li>
+<p><span>Is this an important problem in practice to look into? On the one hand, people are quite</span>
+<span>successful with async Rust as it is. On the other hand, the expressivity gap here is real, and</span>
+<span>Rust, as a systems programming language, strives to minimize such gaps. And then there</span>&rsquo;<span>s the fact</span>
+<span>that failure mode today is rather nasty </span>&mdash;<span> although the actual type error is inside the </span><code>f</code>
+<span>function, we learn about it only at the call site in </span><code>main</code><span>.</span></p>
+<p><span>EDIT: I am also wondering </span>&mdash;<span> if we stop caring whether futures are </span><code>: Send</code><span>, does that mean we</span>
+<span>no longer need an explicit syntax for </span><code>Send</code><span> bounds in async traits?</span></p>
+</li>
+<li>
+<p><span>Assuming that this idea does work, and we decide that we care enough to try to fix it, is there a</span>
+<span>backwards-compatible path we could take to make this a reality?</span></p>
+<p><span>EDIT: to clarify, no way we are really adding a new auto-trait like </span><code>OsThreadSend</code><span>. But there</span>
+<span>could be some less invasive change to get the desired result. For example, a more promising</span>
+<span>approach is to expose some runtime hook for async runtimes to switch TLS, such that each task</span>
+<span>gets an independent copy of thread-local storage, as if task=thread.</span></p>
+</li>
+<li>
+<p><span>Is it a new idea that </span><code>!Send</code><span> futures and work-stealing don</span>&rsquo;<span>t conflict with each other? For me,</span>
+<span>that </span><a href="https://blaz.is/blog/post/lets-pretend-that-task-equals-thread/"><span>22.05.2023 post</span></a>
+<span>was the first time I</span>&rsquo;<span>ve learned that having a </span><code>&amp;Cell&lt;i32&gt;</code><span> in a future</span>&rsquo;<span>s state machine does not</span>
+<span>preclude polling it from different OS threads. But there</span>&rsquo;<span>s nothing particularly new there, the</span>
+<span>relevant APIs were stabilized years ago. Was this issue articulated and discussed back when the</span>
+<span>async Rust was designed, or is it a genuinely new finding?</span></p>
+</li>
+</ol>
+<hr>
+<p><strong><strong><span>Update(2023-12-30):</span></strong></strong><span> there was some discussion of the ideas on</span>
+<a href="https://rust-lang.zulipchat.com/#narrow/stream/187312-wg-async/topic/Non-.60Sync.60.20borrow.20across.20.60.2Eawait.60.3F"><span>Zulip</span></a><span>.</span>
+<span>It looks this isn</span>&rsquo;<span>t completely broken and that, indeed, thread-locals are the main principled obstacle.</span></p>
+<p><span>I think I also got a clear picture of a solution for ideal world, where we are not bound by</span>
+<span>backwards compatibility requirements: make thread local access unsafe. Specifically:</span></p>
+<p><em><span>First</span></em><span>, remove any references to OS threads from the definition of </span><code>Send</code><span> and </span><code>Sync</code><span>. Instead,</span>
+<span>define them in terms of abstract concurrency. I am not well-versed enough in formal side of things</span>
+<span>to understand precisely what that should entail, but I have a litmus test. The new definition should</span>
+<span>work for interrupt handlers in embedded. In OS and embedded programming, one needs to deal with</span>
+<span>interrupt handlers </span>&mdash;<span> code that is run by a CPU as a response to a hardware interrupt. When CPU is</span>
+<span>interrupted, it saves the current execution context, runs the interrupt, and then restores the</span>
+<span>original context. Although it all happens on a single core and there are no OS-threads in sight, the</span>
+<span>restrictions are similar to those of threads: an interrupt can arrive in the middle of reference</span>
+<span>counter upgrade. To rephrase: </span><code>Sync</code><span> should be a </span><code>core</code><span> trait. Right now it is defined in </span><code>core</code><span>,</span>
+<span>but its definition references OS threads </span>&mdash;<span> a concept </span><code>no_std</code><span> is agnostic about!</span></p>
+<p><em><span>Second</span></em><span>, replace </span><code>thread_local!</code><span> macro with a </span><code>#[thread_local]</code><span> attribute on (unsafe) statics.</span>
+<span>There are two reasons why people reach for thread locals:</span></p>
+<ul>
+<li>
+<span>to implement really fast concurrent data structures (eg, a global allocator or an async runtime),</span>
+</li>
+<li>
+<span>as a programming shortcut, to avoid passing a </span><code>Context</code><span> argument everywhere.</span>
+</li>
+</ul>
+<p><span>The </span><code>thread_local!</code><span> macro mostly addresses the second use-case </span>&mdash;<span> for a very long time, it even was</span>
+<span>a non-zero cost abstraction, so that implementing a fast allocator in Rust was impossible! But,</span>
+<span>given that this pattern is rare in software (and, where it is used, it then takes years to refactor</span>
+<span>it away, like it was the case with rustc</span>&rsquo;<span>s usage of thread locals for parsing session), I think it</span>&rsquo;<span>s</span>
+<span>OK to say that Rust flat-out doesn</span>&rsquo;<span>t support it safely, like it doesn</span>&rsquo;<span>t support mutable statics.</span></p>
+<p><span>The safety contract for </span><code>#[thread_local]</code><span> statics would be more strict then the contract on </span><code>static
+mut</code><span>: the user must also ensure that the value isn</span>&rsquo;<span>t used past the corresponding thread</span>&rsquo;<span>s lifetime.</span></p>
+</section>
+]]></content>
+</entry>
+
+</feed>

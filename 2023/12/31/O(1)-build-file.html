@@ -1,0 +1,163 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>O(1) Build File</title>
+  <meta name="description" content="Rule of thumb: the size of build or CI configuration should be mostly independent of the project size.
+In other words, adding, say, a new test should not require adding a new line to the build file to build the test, and a new line to .yml to run it on CI.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/12/31/O(1)-build-file.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>O(1) Build File</span> <time datetime="2023-12-31">Dec 31, 2023</time></h1>
+<p><span>Rule of thumb: the size of build or CI configuration should be mostly independent of the project size.</span>
+<span>In other words, adding, say, a new test should not require adding a new line to the build file to build the test, and a new line to </span><code>.yml</code><span> to run it on CI.</span></p>
+<p><span>Lines in CI config are costly </span>&mdash;<span> each line is typically a new entry point,</span>
+<span>and a bit of required knowledge to be able to run the project locally.</span>
+<span>That is, every time </span><em><span>you</span></em><span> add something to CI, you need to explain that to your colleagues,</span>
+<span>so that they know that they need to run more things locally.</span></p>
+<p><span>Lines in build config are usually a little cheaper, but are still far from free.</span>
+<span>Often a new build config also implies a new entry point.</span>
+<span>At other times, it</span>&rsquo;<span>s just a new build artifact tied to an existing entry point, for example, a new integration test binary.</span>
+<span>Build artifacts are costly in terms of compile time </span>&mdash;<span> as your project is linked with every build artifact, the total linking time is quadratic.</span></p>
+<p><span>What to do instead?</span></p>
+<p><em><span>Minimize</span></em><span> the number of entry points and artifacts.</span>
+<span>Enumerate </span><code>O(1)</code><span> of project entry points explicitly.</span>
+<span>You probably need:</span></p>
+<ul>
+<li>
+<code>run</code><span>, to get the local built-from-source copy of software running,</span>
+</li>
+<li>
+<code>test</code><span>, to run bounded-in-time automated checks that the current version of software is</span>
+<span>self-consistent,</span>
+</li>
+<li>
+<code>fuzz</code><span>, to run unbounded-in-time checks,</span>
+</li>
+<li>
+<code>deploy</code><span> to publish a given version of software for wider use</span>
+</li>
+</ul>
+<p><span>This is a point of contention, but consider if you can avoid separate </span><code>lint</code><span> and </span><code>fmt</code><span> entry points, as those are a form of automated tests.</span></p>
+<p><span>Of course, an entry point can allow filters to run a subset of things: </span><span class="display"><code>run --test-filter=tidy</code><span>.</span></span>
+<span>It</span>&rsquo;<span>s much easier to discover how to filter out things you don</span>&rsquo;<span>t need,</span>
+<span>than to realize that there</span>&rsquo;<span>s something you need to opt into.</span></p>
+<p><em><span>Minimize</span></em><span> the number of build artifacts, </span><a href="https://matklad.github.io/2021/02/27/delete-cargo-integration-tests.html"><em><span>Delete Cargo Integration Tests</span></em></a><span>.</span>
+<span>You probably need separate production and test builds, to avoid linking in test code with the production binaries.</span>
+<span>But chances are, these two binaries are all you need.</span>
+<span>Avoid building a set of related binaries, use subcommands or BusyBox-style multicall binaries instead.</span>
+<span>Not only does this improve compile times, it also helps with putting out fires in the field, as the binary you have in production also contains all the debug tools.</span></p>
+<hr>
+<p><span>On rules of thumb in general: for me, the term </span><em><span>doesn</span>&rsquo;<span>t</span></em><span> mean that what follows is the correct way to do things, better than alternatives.</span>
+<span>Rather:</span></p>
+<ul>
+<li>
+<span>First and foremost, a rule focuses attention, it makes me </span><em><span>notice</span></em><span> things I</span>&rsquo;<span>d otherwise autopilot through.</span>
+<span>The main value of today</span>&rsquo;<span>s rule is to make me pause whenever I add to </span><code>build.zig</code><span> and think for a second.</span>
+</li>
+<li>
+<span>Second, a rule is a concise summary of the arguments that motivate the rule.</span>
+<span>The bad thing is slow builds and multiple entry points.</span>
+<span>But that</span>&rsquo;<span>s a fuzzy concept that is hard to keep at the forefront of the mind.</span>
+<span>I am not going to ask myself constantly </span>&ldquo;<span>Hey, am I adding a new entry point here?</span>&rdquo;<span>.</span>
+<span>In contrast, </span>&ldquo;<span>don</span>&rsquo;<span>t change .yml</span>&rdquo;<span> is simple and mechanical, and it reliably triggers the cluster of ideas about entry points.</span>
+</li>
+</ul>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-12-31-O(1)-build-file.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

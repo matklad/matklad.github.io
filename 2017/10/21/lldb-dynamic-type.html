@@ -1,0 +1,168 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dynamic types in LLDB</title>
+  <meta name="description" content="If you are wondering how debuggers work, I suggest reading Eli Bendersky's
+eli-on-debuggers. However after having read these notes myself, I still
+had one question unanswered. Namely, how can debugger show fields of a class, if
+the type of the class is known only at runtime?">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2017/10/21/lldb-dynamic-type.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Dynamic types in LLDB</span> <time datetime="2017-10-21">Oct 21, 2017</time></h1>
+<p><span>If you are wondering how debuggers work, I suggest reading Eli Bendersky</span>&rsquo;<span>s</span>
+<a href="https://eli.thegreenplace.net/tag/debuggers"><span>eli-on-debuggers</span></a><span>. However after having read these notes myself, I still</span>
+<span>had one question unanswered. Namely, how can debugger show fields of a class, if</span>
+<span>the type of the class is known only at runtime?</span></p>
+<section id="Example">
+
+    <h2>
+    <a href="#Example"><span>Example</span> </a>
+    </h2>
+<p><span>Consider this situation: you have a pointer of type </span><code>A*</code><span>, which at runtime holds</span>
+<span>a value of some subtype of </span><code>A</code><span>. Could the debugger display the fields of the</span>
+<span>actual type? Turns out, it can handle cases like the one below just fine!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Base</span> { ... };</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Derived</span>: Base { ... };</span>
+<span class="line"></span>
+<span class="line"><span class="hl-function"><span class="hl-type">void</span> <span class="hl-title">foo</span><span class="hl-params">(Base&amp; x)</span> </span>{</span>
+<span class="line">    <span class="hl-comment">// `x` can be `Derived` or `Base` here.</span></span>
+<span class="line">    <span class="hl-comment">// How can debugger show fields of `Derived` then?</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="DWARF">
+
+    <h2>
+    <a href="#DWARF"><span>DWARF</span> </a>
+    </h2>
+<p><span>Could it be possible that information about dynamic types is present in DWARF?</span>
+<span>If we look at the DWARF, we</span>&rsquo;<span>ll see that there</span>&rsquo;<span>s layout information for both</span>
+<code>Base</code><span> and </span><code>Derive</code><span> types, as well as a entry for </span><code>x</code><span> parameter, which says that</span>
+<span>it has type </span><code>Base</code><span>. And this makes sense: we don</span>&rsquo;<span>t know that </span><code>x</code><span> is  </span><code>Derived</code>
+<span>until runtime! So debugger must somehow figure the type of the variable</span>
+<span>dynamically.</span></p>
+</section>
+<section id="No-Magic">
+
+    <h2>
+    <a href="#No-Magic"><span>No Magic</span> </a>
+    </h2>
+<p><span>As usual, there</span>&rsquo;<span>s no magic. For example, LLDB has a hard-coded knowledge of C++</span>
+<span>programming language, which allows debugger to inspect types at runtime.</span>
+<span>Specifically, this is handled by </span><code>LanguageRuntime</code><span> LLDB </span><strong><span>plugin</span></strong><span>, which has a</span>
+<span>curious function </span><a href="https://github.com/llvm-mirror/lldb/blob/bc19e289f759c26e4840aab450443d4a85071139/include/lldb/Target/LanguageRuntime.h#L82"><code>GetDynamicTypeAndAddress</code></a><span>, whose job is to poke the</span>
+<span>representation of value to get its real type and adjust pointer, if necessary</span>
+<span>(remember, with multiple inheritance, casts may change the value of the</span>
+<span>pointer).</span></p>
+<p><span>The implementation of this function for C++ language lives in</span>
+<a href="https://github.com/llvm-mirror/lldb/blob/bc19e289f759c26e4840aab450443d4a85071139/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp#L185"><span>ItaniumABILanguageRuntime.cpp</span></a><span> although, unlike C, C++ lacks a</span>
+<span>standardized ABI, almost all compilers on all non-windows platforms use a</span>
+<a href="http://refspecs.linuxbase.org/cxxabi-1.83.html"><span>specific ABI</span></a><span>, confusingly called Itanium (after a now effectively dead</span>
+<span>64-bit CPU architecture).</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2017-10-21-lldb-dynamic-type.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

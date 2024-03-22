@@ -1,0 +1,389 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Role Of Algorithms</title>
+  <meta name="description" content="This is lobste.rs comment as an article, so expect even more abysmal editing than usual.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/08/13/role-of-algorithms.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Role Of Algorithms</span> <time datetime="2023-08-13">Aug 13, 2023</time></h1>
+<p><span>This is lobste.rs comment as an article, so expect even more abysmal editing than usual.</span></p>
+<p><span>Let me expand on something I mentioned in the</span>
+<a href="https://matklad.github.io/2023/08/06/fantastic-learning-resources.html" class="display url">https://matklad.github.io/2023/08/06/fantastic-learning-resources.html</a>
+<span>post:</span></p>
+<p>&ldquo;<span>Algorithms</span>&rdquo;<span> are a useful skill not because you use it at work every day, but because they train you</span>
+<span>to be better at particular aspects of software engineering.</span></p>
+<p><span>Specifically:</span></p>
+<p><em><span>First</span></em><span>, algorithms drill the skill of bug-free coding. Algorithms are hard and frustrating! Subtle</span>
+<span>off-by-one might not matter for simple tests, but breaks corner cases. But if you practice</span>
+<span>algorithms, you get better at this particular skill of writing correct small programs, and I think</span>
+<span>this probably generalizes.</span></p>
+<p><span>To give an array of analogies:</span></p>
+<ul>
+<li>
+<p><span>People do cardio or strength exercises not because they need to lift heavy weights in real life.</span>
+<span>Quite the opposite </span>&mdash;<span> there</span>&rsquo;<span>s </span><em><span>too little</span></em><span> physical exertion in our usual lives, so we need extra</span>
+<span>exercises for our bodies to gain generalized health (which </span><em><span>is</span></em><span> helpful in day-to-day life).</span></p>
+</li>
+<li>
+<p><span>You don</span>&rsquo;<span>t practice complex skill by mere repetition. You first break it down into atomic trainable</span>
+<span>sub skills, and drill each sub skill separately in unrealistic condition. Writing correct</span>
+<span>algorithmy code is a sub skill of software engineering.</span></p>
+</li>
+<li>
+<p><span>When you optimize system, you don</span>&rsquo;<span>t just repeatedly run end-to-end test until things go fast. You</span>
+<span>first identify the problematic area, then write a targeted micro benchmark to isolate this</span>
+<span>particular effect, and then you optimize that using much shorter event loop.</span></p>
+</li>
+</ul>
+<p><span>I still remember two specific lessons I learned when I started doing algorithms many years ago:</span></p>
+<dl>
+<dt><span>Debugging complex code is hard, </span><em><span>first</span></em><span> simplify, </span><em><span>then</span></em><span> debug</span></dt>
+<dd>
+<p><span>Originally, when I was getting a failed test, I sort of tried to add more code to my program to</span>
+<span>make it pass. At some point I realized that this is going nowhere, and then I changed my workflow</span>
+<span>to first try to </span><em><span>remove</span></em><span> as much code as I can, and only then investigate the problematic test</span>
+<span>case (which with time morphed into a skill of not writing more code then necessary in the first</span>
+<span>place).</span></p>
+</dd>
+<dt><span>Single source of truth is good</span></dt>
+<dd>
+<p><span>A lot of my early bugs was due to me duplicating the same piece of information in two places and</span>
+<span>then getting them out of sync. Internalizing that as a single source of truth fixed the issues.</span></p>
+</dd>
+</dl>
+<p><span>Meta note: if you already know this, my lessons are useless. If you don</span>&rsquo;<span>t yet know them, they are</span>
+<em><span>still</span></em><span> useless and most likely will bounce off you. This is tacit knowledge </span>&mdash;<span> it</span>&rsquo;<span>s very hard to</span>
+<span>convey it verbally, it is much more efficient to learn these things yourself by doing.</span></p>
+<p><span>Somewhat related, I noticed a surprising correlation between programming skills in the small, and</span>
+<span>programming skills in the large. You can solve a problem in five lines of code, or, if you try hard,</span>
+<span>in ten lines of code. If you consistently come up with concise solutions in the small, chances are</span>
+<span>large scale design will be simple as well.</span></p>
+<p><span>I don</span>&rsquo;<span>t know how true is that, as I never tried to look at a proper study, but it looks very</span>
+<span>plausible from what I</span>&rsquo;<span>ve seen. </span><em><span>If</span></em><span> this is true, the next interesting question is: </span>&ldquo;<span>if you train</span>
+<span>programming-in-the-small skills, do they transfer to programming in the large?</span>&rdquo;<span>. Again, I don</span>&rsquo;<span>t</span>
+<span>know, but I</span>&rsquo;<span>d take this Pascal</span>&rsquo;<span>s wager. As an imperfect and self-serving illustration of this point,</span>
+<span>consider that both</span>
+<a href="https://matklad.github.io/2023/12/21/retry-loop.html" class="display url">https://matklad.github.io/2023/12/21/retry-loop.html</a>
+<span>and</span>
+<a href="https://users.rust-lang.org/t/soft-question-scaling-codebase-50k-loc-500k-loc/104129/10" class="display url">https://users.rust-lang.org/t/soft-question-scaling-codebase-50k-loc-500k-loc/104129/10</a>
+<span>were written in a span of a single morning.</span></p>
+<p><em><span>Second</span></em><span>, algorithms teach about properties and invariants. Some lucky people get those skills from</span>
+<span>a hard math background, but algorithms are a much more accessible way to learn them, as everything</span>
+<span>is very visual, immediately testable, and has very short and clear feedback loop.</span></p>
+<p><span>And properties and invariants is what underlines most big and successful systems. Like 90% of the</span>
+<span>code is just fluff and glue, and if you have the skill to see the 10% that is architecturally</span>
+<span>salient properties, you could comprehend the system much faster.</span></p>
+<p><em><span>Third</span></em><span>, algorithms occasionally </span><em><span>are</span></em><span> useful at the job! Just last week on our design walk&amp;talk we</span>
+<span>were brainstorming one particular problem, and I was like</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>Wait, so the problem here is that our solution is O(1) amortized, but really that means O(N)</span>
+<span>occasionally and that creates problem. I wonder if we could shift amortized work to when we do the</span>
+<span>real work, sort of how there are helper threads in concurrent programming. Ohh, this actually sounds</span>
+<span>like range query problem! Yeah, I think that cryptic trick that is called </span>&ldquo;<span>дерево отрезков</span>&rdquo;<span> in</span>
+<span>Russian and doesn</span>&rsquo;<span>t have a meme name in English (</span>&ldquo;<span>monoid tree</span>&rdquo;<span> is a good, but unknown, name) could</span>
+<span>help here. Yup, that actually does solve amortization issue, this will be O(log N) non-amortized.</span></p>
+</blockquote>
+
+</figure>
+<p><span>We probably won</span>&rsquo;<span>t go with that solution as that</span>&rsquo;<span>s too complex algorithmically for what ultimately is</span>
+<span>a corner case, </span><em><span>but</span></em><span> it</span>&rsquo;<span>s important that we understand problem space in detail before we pick a</span>
+<span>solution.</span></p>
+<p><span>Note also how algorithms </span><em><span>vocabulary</span></em><span> helps me to think about the problem. In math (including</span>
+<span>algorithms), there</span>&rsquo;<span>s just like a handful of ideas which are applied again and again under different</span>
+<span>guises. You need some amount of insight of course, but, for most simple problems, what you actually</span>
+<span>need is just an ability to recognize the structure you</span>&rsquo;<span>ve seen somewhere already.</span></p>
+<p><em><span>Fourth</span></em><span>, connecting to the previous ones, the ideas really do form interconnected web which, on a</span>
+<span>deep level, underpins a whole lot of stuff. So, if you do have non-zero amount of pure curiosity</span>
+<span>when it comes to learning programming, algorithms cut pretty deep to the foundation. Let me repeat</span>
+<span>the list from the last post, but with explicit connections to other things:</span></p>
+<dl>
+<dt><span>linear search</span></dt>
+<dd>
+<p><span>assoc lists in most old functional languages work that way</span></p>
+</dd>
+<dt><span>binary search</span></dt>
+<dd>
+<p><span>It is literally everywhere. Also, binary search got a cute name, but actually it isn</span>&rsquo;<span>t the</span>
+<span>primitive operation. The primitive operation is </span><code>partition_point</code><span>, a predicate version of binary</span>
+<span>search. This is what you should add to your language</span>&rsquo;<span>s stdlib as a primitive, and base everything</span>
+<span>else in terms of it. Also, it is one of the few cases where we know lower bound of complexity. If</span>
+<span>an algorithm does k binary comparisons, it can give at most 2</span><sup><span>k</span></sup><span> distinct answers. So, to find</span>
+<span>insertion point among n items, you need at least k questions such that 2</span><sup><span>k</span></sup><span> &gt; n.</span></p>
+</dd>
+<dt><span>quadratic sorting</span></dt>
+<dd>
+<p><span>We use it at work! Some collections are statically bound by a small constant, and quadratically</span>
+<span>sorting them just needs less machine code. We are also a bit paranoid that production sort</span>
+<span>algorithms are very complex and </span><em><span>might</span></em><span> have subtle bugs, esp in newer languages.</span></p>
+</dd>
+<dt><span>merge sort</span></dt>
+<dd>
+<p><span>This is how you sort things on disk. This is also how LSM-trees, the most practically important</span>
+<span>data structure you haven</span>&rsquo;<span>t learned about in school, works! And k-way merge also is occasionally</span>
+<span>useful (this is from work from three weeks ago).</span></p>
+</dd>
+<dt><span>heap sort</span></dt>
+<dd>
+<p><span>Well, this one is only actually useful for the heap, </span><em><span>but</span></em><span> I think maybe the kernel uses it when</span>
+<span>it needs to sort something in place, without extra memory, and in guaranteed O(N log N)?</span></p>
+</dd>
+<dt><span>binary heap</span></dt>
+<dd>
+<p><span>Binary heaps are everywhere! Notably, simple timers are a binary heap of things in the order of</span>
+<span>expiration. This is also a part of Dijkstra and k-way-merge.</span></p>
+</dd>
+<dt><span>growable array</span></dt>
+<dd>
+<p><span>That</span>&rsquo;<span>s the mostly widely used collection of them all! Did you know that grow factor 2 has a</span>
+<span>problem that the size after </span><code>n</code><span> reallocations is larger then the sum total of all previous sizes,</span>
+<span>so the allocator can</span>&rsquo;<span>t re-use the space? Anecdotally, growth factors less than two are preferable</span>
+<span>for this reason.</span></p>
+</dd>
+<dt><span>doubly-linked list</span></dt>
+<dd>
+<p><span>At the heart of rust-analyzer is a </span><a href="https://github.com/rust-analyzer/rowan/blob/87909d03dfe78d07ae932151e105dfde7ae87536/src/sll.rs"><span>two-dimensional doubly-linked</span>
+<span>list</span></a><span>.</span></p>
+</dd>
+<dt><span>binary search tree</span></dt>
+<dd>
+<p><span>Again, rust-analyzer green tree are binary search trees using offset as an implicit key.</span>
+<span>Monoid trees are also binary search trees.</span></p>
+</dd>
+<dt><span>AVL tree</span></dt>
+<dd>
+<p><span>Ok, this one I actually don</span>&rsquo;<span>t know a direct application of! </span><em><span>But</span></em><span> I remember two</span>
+<span>programming-in-the-small lessons AVL could have taught me, but didn</span>&rsquo;<span>t. I struggled a lot</span>
+<span>implementing all of </span>&ldquo;<span>small left rotation</span>&rdquo;<span>, </span>&ldquo;<span>small right rotation</span>&rdquo;<span>, </span>&ldquo;<span>big left rotation</span>&rdquo;<span>, </span>&ldquo;<span>big right</span>
+<span>rotation</span>&rdquo;<span>. Some years later, I</span>&rsquo;<span>ve learned that you don</span>&rsquo;<span>t do</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">left: Tree,</span>
+<span class="line">right: Tree,</span></code></pre>
+
+</figure>
+<p><span>as that forces code duplication. Rather, you do </span><code class="display">children: [Tree; 2]</code><span> and then you could</span>
+<span>use </span><code>child_index</code><span> and </span><code>child_index ^ 1</code><span> to abstract over left-right.</span></p>
+<p><span>And then some years later still I read in wikipedia that big rotations are actually a composition</span>
+<span>of two small rotations.</span></p>
+<p><span>Actually, I</span>&rsquo;<span>ve lied that I don</span>&rsquo;<span>t know connections here. You use the same rotations for the splay</span>
+<span>tree.</span></p>
+</dd>
+<dt><span>Red Black Tree</span></dt>
+<dd>
+<p><span>red-black tree is a 2-3 tree is a B-tree. Also, you probably use jemalloc, and it has a red-black</span>
+<span>tree </span><a href="https://github.com/aerospike/jemalloc/blob/05108b5010a511226fb7586543f4162dd2d31d2b/include/jemalloc/internal/rb.h#L338"><span>implemented as a C</span>
+<span>macro</span></a><span>.</span>
+<span>Left-leaning red-black tree are an interesting variation, which is claimed to be simpler, but is</span>
+<span>also claimed to not actually be simpler, because it is not symmetric and neuters the </span><code>children</code>
+<span>trick.</span></p>
+</dd>
+<dt><span>B-tree</span></dt>
+<dd>
+<p><span>If you use Rust, you probably use B-tree. Also, if you use a database, it stores data either in</span>
+<span>LSM or in a B-tree. Both of these are because B-trees play nice with memory hierarchy.</span></p>
+</dd>
+<dt><span>Splay Tree</span></dt>
+<dd>
+<p><span>Worth knowing just to have a laugh at </span><a href="https://www.link.cs.cmu.edu/splay/tree5.jpg" class="url">https://www.link.cs.cmu.edu/splay/tree5.jpg</a><span>.</span></p>
+</dd>
+<dt><span>HashTable</span></dt>
+<dd>
+<p><span>Literally everywhere, both chaining and open-addressing versions are widely used.</span></p>
+</dd>
+<dt><span>Depth First Search</span></dt>
+<dd>
+<p><span>This is something I have to code, explicitly or implicitly, fairly often. Every time where you</span>
+<span>have a DAG, when things depend on other things, you</span>&rsquo;<span>d have a DFS somewhere. In rust-analyzer,</span>
+<span>there are at least a couple </span>&mdash;<span> one in borrow checker for something (have no idea what that does,</span>
+<span>just grepped for </span><code>fn dfs</code><span>) and one in crate graph to detect cycles.</span></p>
+</dd>
+<dt><span>Breadth First Search</span></dt>
+<dd>
+<p><span>Ditto, any kind of exploration problem is usually solved with bfs. Eg, rust-analyzer uses </span><code>bfs</code>
+<span>for directory traversal.</span></p>
+<p><span>Which is better, </span><code>bfs</code><span> or </span><code>dfs</code><span>? Why not both?! Take a look at bdfs from rust-analyzer:</span></p>
+<p><a href="https://github.com/rust-lang/rust-analyzer/blob/2fbe69d117ff8e3ffb9b21c4a564f835158eb67b/crates/hir-expand/src/ast_id_map.rs#L195-L222" class="url">https://github.com/rust-lang/rust-analyzer/blob/2fbe69d117ff8e3ffb9b21c4a564f835158eb67b/crates/hir-expand/src/ast_id_map.rs#L195-L222</a></p>
+</dd>
+<dt><span>Topological Sort</span></dt>
+<dd>
+<p><span>Again, comes up every time you deal with things which depend on each other. rust-analyzer has</span>
+<code>crates_in_topological_order</code></p>
+</dd>
+<dt><span>Strongly Connected Components</span></dt>
+<dd>
+<p><span>This is needed every time things depend on each other, but you also allow cyclic dependencies. I</span>
+<span>don</span>&rsquo;<span>t think I</span>&rsquo;<span>ve needed this one in real life. But, given that SCC is how you solve 2-SAT in</span>
+<span>polynomial time, seems important to know to understand the 3 in 3-SAT</span></p>
+</dd>
+<dt><span>Minimal Spanning Tree</span></dt>
+<dd>
+<p><span>Ok, really drawing a blank here! Connects to sorting, disjoint set union (which is needed for</span>
+<span>unification in type-checkers), and binary heap. Seems practically important algorithm though! Ah,</span>
+<span>MST also gives an approximation for planar traveling salseman I think, another border between hard</span>
+<span>&amp; easy problems.</span></p>
+</dd>
+<dt><span>Dijkstra</span></dt>
+<dd>
+<p><span>Dijkstra is what I think about when I imagine a Platonic </span><dfn><span>algorithm</span></dfn><span>, though</span>
+<span>I don</span>&rsquo;<span>t think I</span>&rsquo;<span>ve used it in practice? Connects to heap.</span></p>
+<p><span>Do you know why we use </span><code>i</code><span>, </span><code>j</code><span>, </span><code>k</code><span> for loop indices? Because </span><code>D ijk stra</code><span>!</span></p>
+</dd>
+<dt><span>Floyd-Warshall</span></dt>
+<dd>
+<p><span>This one is cool! Everybody knows why any regular expression can be complied to an equivalent</span>
+<span>finite state machine. Few people know the reverse, why each automaton has an equivalent regex</span>
+<span>(many people know this fact, but few understand why). Well, because Floyd-Warshall! To convert an</span>
+<span>automaton to regex use the same algorithm you use to find pairwise distances in a graph.</span></p>
+<p><span>Also, this is a final boss of dynamic programming. If you understand why this algorithm works, you</span>
+<span>understand dynamic programming. Despite being tricky to understand, it</span>&rsquo;<span>s very easy to implement! I</span>
+<span>randomly stumbled into Floyd-Warshall, when I tried to implement a different, wrong approach, and</span>
+<span>made a bug which turned my broken algo into a correct Floyd-Warshall.</span></p>
+</dd>
+<dt><span>Bellman-Ford</span></dt>
+<dd>
+<p><span>Again, not much practical applicaions here, but the theory is well connected. All shortest path</span>
+<span>algorithms are actually fixed-point iterations! But with Bellman-Ford and its explicit edge</span>
+<span>relaxation operator that</span>&rsquo;<span>s most obvious. Next time you open static analysis textbook and learn</span>
+<span>about fixed point iteration, map that onto the problem of finding shortest paths!</span></p>
+</dd>
+<dt><span>Quadratic Substring Search</span></dt>
+<dd>
+<p><span>This is what you language standard library does</span></p>
+</dd>
+<dt><span>Rabin-Karp</span></dt>
+<dd>
+<p><span>An excellent application of hashes. The same idea, </span><span class="display"><code>hash(composite) =
+compbine(hash(component)*)</code><span>,</span></span><span> is used in rust-analyzer to </span><a href="https://github.com/rust-analyzer/rowan/blob/87909d03dfe78d07ae932151e105dfde7ae87536/src/green/node_cache.rs#L86-L97"><span>intern syntax</span>
+<span>trees</span></a><span>.</span></p>
+</dd>
+<dt><span>Boyer-Moore</span></dt>
+<dd>
+<p><span>This is beautiful and practical algorithm which probably handles the bulk of real-world searches</span>
+<span>(that is, it</span>&rsquo;<span>s probably the hottest bit of </span><code>ripgrep</code><span> as used by an average person). Delightfully,</span>
+<span>this algorithm is faster than theoretically possible </span>&mdash;<span> it doesn</span>&rsquo;<span>t even look at every byte of</span>
+<span>input data!</span></p>
+</dd>
+<dt><span>Knuth-Morris-Pratt</span></dt>
+<dd>
+<p><span>Another </span>&ldquo;<span>this is how you do string search in the real world</span>&rdquo;<span> algorithm. It also is the platonic</span>
+<span>ideal of a finite state machine, and almost everything is an FSM. It also is Aho-Corasick.</span></p>
+</dd>
+<dt><span>Aho-Corasick</span></dt>
+<dd>
+<p><span>This is the same as Knuth-Morris-Pratt, but also teaches you about tries. Again, super-useful for</span>
+<span>string searches. As it is an FSM, and a regex is an FSM, and there</span>&rsquo;<span>s a general construct for</span>
+<span>building a product of two FSMs, you can use it to implement fuzzy search. </span>&ldquo;<span>Workspace symbol</span>&rdquo;
+<span>feature in rust-analyzer works like this. Here</span>&rsquo;<span>s </span><a href="https://github.com/BurntSushi/fst/pull/64"><span>a part</span>
+<span>of</span></a><span> implementation.</span></p>
+</dd>
+<dt><span>Edit Distance</span></dt>
+<dd>
+<p><span>Everywhere in Bioinformatics (not the actual edit distance, but this problem shape). The first</span>
+<span>post on this blog is about this problem:</span></p>
+<p><a href="https://matklad.github.io/2017/03/12/min-of-three.html" class="url">https://matklad.github.io/2017/03/12/min-of-three.html</a></p>
+<p><span>It</span>&rsquo;<span>s not about algorithms though, its about CPU-level parallelism.</span></p>
+</dd>
+</dl>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-08-13-role-of-algorithms.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

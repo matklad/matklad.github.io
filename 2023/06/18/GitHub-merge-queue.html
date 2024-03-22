@@ -1,0 +1,129 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GitHub Merge Queue</title>
+  <meta name="description" content="Short, unedited note on GitHub merge queue.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/06/18/GitHub-merge-queue.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>GitHub Merge Queue</span> <time datetime="2023-06-18">Jun 18, 2023</time></h1>
+<p><span>Short, unedited note on </span><a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue"><span>GitHub merge queue</span></a><span>.</span></p>
+<p><span>TL;DR, </span><a href="https://bors.tech" class="url">https://bors.tech</a><span> delivers a meaningfully better experience, although it suffers from being a third-party integration.</span></p>
+<p><span>Specific grievances:</span></p>
+<p><em><span>Complexity</span></em><span>. This is a vague feeling, but merge queue feels like it is built by complexity merchants </span>&mdash;<span> there are a lot of unclear settings and voluminous and byzantine docs.</span>
+<span>Good for allocating extra budget towards build engineering, bad for actual build engineering.</span></p>
+<p><em><span>GUI-only configuration</span></em><span>. Bors is setup using bors.toml in the repository, merge queue is setup by clicking through web GUI.</span>
+<span>To share config with other maintainers, I resorted to a zoomed-out screenshot of the page.</span></p>
+<p><em><span>Unclear set of checks</span></em><span>. The purpose of the merge queue is to enforce not rocket science rule of software engineering </span>&mdash;<span> making sure that the code in the main branch satisfies certain quality invariants (all tests are passing).</span>
+<span>It is impossible to tell what merge queue actually enforces.</span>
+<span>Typically, when you enable merge queue, you subsequently find out that it actually merges anything, without any checks whatsoever.</span></p>
+<p><em><span>Double latency</span></em><span>. One of the biggest benefits of a merge queue for a high velocity project is its </span><em><span>asynchrony</span></em><span>.</span>
+<span>After submitting a PR, you can do a review and schedule PR to be merged </span><em><span>without</span></em><span> waiting for CI to finish.</span>
+<span>This is massive: it is 2X reduction to human attention required.</span>
+<span>Without queue, you need to look at a PR twice: once to do a review, and once to click merge after the green checkmark is in.</span>
+<span>With the queue, you only need a review, and the green checkmark comes in asynchronously.</span>
+<span>Except that with GitHub merge queue, you can</span>&rsquo;<span>t actually add a PR to the queue until you get a green checkmark.</span>
+<span>In effect, that</span>&rsquo;<span>s still 2X attention, and then a PR runs through the same CI checks twice (yes, you can have separate checks for merge queue and PR. No, this is not a good idea, this is complexity and busywork).</span></p>
+<p><em><span>Lack of delegation</span></em><span>. With bors, you can use </span><code>bors delegate+</code><span> to delegate merging of a single, specific pull request to its author.</span>
+<span>This is helpful to drive contributor engagement, and to formalize </span>&ldquo;<span>LGTM with the nits fixed</span>&rdquo;<span> approval (which again reduces number of human round trips).</span></p>
+<p><span>You still should use GitHub merge queue, rather than bors-ng, as that</span>&rsquo;<span>s now a first-party feature.</span>
+<span>Still, its important to understand how things </span><em><span>should</span></em><span> work, to be able to improve state of the art some other time.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-06-18-GitHub-merge-queue.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

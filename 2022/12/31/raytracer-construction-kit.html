@@ -1,0 +1,558 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ray Tracer Construction Kit</title>
+  <meta name="description" content="Ray or path tracing is an algorithm for getting a 2D picture out of a 3D virtual scene, by simulating a trajectory of a particle of light which hits the camera.
+It's one of the fundamental techniques of computer graphics, but that's not why it is the topic for today's blog post.
+Implementing a toy ray tracer is one of the best exercises for learning a particular programming language (and a great deal about software architecture in general as well), and that's the why? for this text.
+My goal here is to teach you to learn new programming languages better, by giving a particularly good exercise for that.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2022/12/31/raytracer-construction-kit.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Ray Tracer Construction Kit</span> <time datetime="2022-12-31">Dec 31, 2022</time></h1>
+<p><span>Ray or path tracing is an algorithm for getting a 2D picture out of a 3D virtual scene, by simulating a trajectory of a particle of light which hits the camera.</span>
+<span>It</span>&rsquo;<span>s one of the fundamental techniques of computer graphics, but that</span>&rsquo;<span>s not why it is the topic for today</span>&rsquo;<span>s blog post.</span>
+<span>Implementing a toy ray tracer is one of the best exercises for learning a particular programming language (and a great deal about software architecture in general as well), and that</span>&rsquo;<span>s the </span>&ldquo;<span>why?</span>&rdquo;<span> for this text.</span>
+<span>My goal here is to teach you to learn new programming languages better, by giving a particularly good exercise for that.</span></p>
+<p><span>But first, some background</span></p>
+<section id="Background">
+
+    <h2>
+    <a href="#Background"><span>Background</span> </a>
+    </h2>
+<p><span>Learning a programming language consists of learning the theory (knowledge) and the set of tricks to actually make computer do things (skills).</span>
+<span>For me, the best way to learn skills is to practice them.</span>
+<span>Ray tracer is an exceptionally good practice dummy, because:</span></p>
+<ul>
+<li>
+<span>It is a project of an appropriate scale: a couple of weekends.</span>
+</li>
+<li>
+<span>It is a project with a flexible scale </span>&mdash;<span> if you get carried away, you can sink </span><em><span>a lot</span></em><span> of weekends before you hit diminishing returns on effort.</span>
+</li>
+<li>
+<span>Ray tracer can make use of a lot of aspects of the language </span>&mdash;<span> modules, static and runtime polymorphism, parallelism, operator overloading, IO, string parsing, performance optimization, custom data structures.</span>
+<span>Really, I think the project doesn</span>&rsquo;<span>t touch only a couple of big things, namely networking and evented programming.</span>
+</li>
+<li>
+<span>It is a very visual and feedback-friendly project </span>&mdash;<span> a bug is not some constraint violation deep in the guts of the database, it</span>&rsquo;<span>s a picture upside-down!</span>
+</li>
+</ul>
+<p><span>I want to stress once again that here I view ray tracer as a learning exercise.</span>
+<span>We aren</span>&rsquo;<span>t going to draw any beautiful photorealistic pictures here, we</span>&rsquo;<span>ll settle for ugly things with artifacts.</span></p>
+<p><span>Eg, this </span>&ldquo;<span>beauty</span>&rdquo;<span> is the </span><em><span>final</span></em><span> result of my last exercise:</span></p>
+
+<figure>
+
+<img alt="" src="https://user-images.githubusercontent.com/1711539/194287665-05583649-dcb0-4014-82b9-424f945e19a4.png">
+</figure>
+<p><span>And, to maximize learning, I think its better to do everything yourself from scratch.</span>
+<span>A crappy teapot which you did from the first principles is full to the brim with knowledge, while a beautiful landscape which you got by following step-by-step instructions is hollow.</span></p>
+<p><span>And that</span>&rsquo;<span>s the gist of the post: I</span>&rsquo;<span>ll try to teach you as little about ray tracing as possible, to give you just enough clues to get some pixels to the screen.</span>
+<span>To be more poetic, you</span>&rsquo;<span>ll draw the rest of the proverbial owl.</span></p>
+<p><span>This is in contrast to </span><a href="https://raytracing.github.io"><span>Ray Tracing in One Weekend</span></a><span> which does a splendid job teaching ray tracing, but contains way to many spoilers if you want to learn software architecture (rather than graphics programming).</span>
+<span>In particular, it contains snippets of code.</span>
+<span>We won</span>&rsquo;<span>t see that here </span>&mdash;<span> as a corollary, all the code you</span>&rsquo;<span>ll write is fully your invention!</span></p>
+<p><span>Sadly, there</span>&rsquo;<span>s one caveat to the plan: as the fundamental task is tracing a ray as it gets reflected through the 3D scene, we</span>&rsquo;<span>ll need a hefty amount of math.</span>
+<span>Not an insurmountable amount </span>&mdash;<span> everything is going to be pretty visual and logical.</span>
+<span>But still, we</span>&rsquo;<span>ll need some of the more advanced stuff, such as vectors and cross product.</span></p>
+<p><span>If you are very comfortable with that, you can approach the math parts the same way as the programming parts </span>&mdash;<span> grab a pencil and a stack of paper and try to work out formulas yourself.</span>
+<span>If solving math puzzlers is not your cup of tea, feel </span><em><span>absolutely</span></em><span> free to just look up formulas online.</span>
+<a href="https://avikdas.com/build-your-own-raytracer" class="url">https://avikdas.com/build-your-own-raytracer</a><span> is a great resource for that.</span>
+<span>If, however, linear algebra is your worst nightmare, you might want to look for a more step-by-step tutorial (or maybe pick a different problem altogether! Another good exercise is a small chat server, for example).</span></p>
+</section>
+<section id="Algorithm-Overview">
+
+    <h2>
+    <a href="#Algorithm-Overview"><span>Algorithm Overview</span> </a>
+    </h2>
+<p><span>So, what exactly is ray tracing?</span>
+<span>Imagine a 3D scene with different kinds of objects: an infinite plane, a sphere, a bunch of small triangles which resemble a teapot from afar.</span>
+<span>The scene is illuminated by some distant light source, and so objects cast shadows and reflect each other.</span>
+<span>We observe the scene from a particular view point.</span>
+<span>Roughly, a ray of light is emitted by a light source, bounces off scene objects and eventually, if it gets into our eye, we perceive a sensation of color, which is mixed from light</span>&rsquo;<span>s original color, as well the colors of all the objects the ray reflected from.</span></p>
+<p><span>Now, we are going to crudely simplify the picture.</span>
+<span>Rather than casting rays from the light source, we</span>&rsquo;<span>ll cast rays from the point of view.</span>
+<span>Whatever is intersected by the ray will be painted as a pixels in the resulting image.</span></p>
+<p><span>Let</span>&rsquo;<span>s do this step-by-step</span></p>
+</section>
+<section id="Images">
+
+    <h2>
+    <a href="#Images"><span>Images</span> </a>
+    </h2>
+<p><span>The ultimate result of our ray tracer is an image.</span>
+<span>A straightforward way to represent an image is to use a 2D grid of pixels, where each pixel is an </span>&ldquo;<span>red, green, blue</span>&rdquo;<span> triple where color values vary from 0 to 255.</span>
+<span>How do we display the image?</span>
+<span>One can reach out for graphics libraries like OpenGL, or image formats like BMP or PNG.</span></p>
+<p><span>But, in the spirit of simplifying the problem so that we can do everything ourselves, we will simplify the problem!</span>
+<span>As a first step, we</span>&rsquo;<span>ll display image as text in the terminal.</span>
+<span>That is, we</span>&rsquo;<span>ll print </span><code>.</code><span> for </span>&ldquo;<span>white</span>&rdquo;<span> pixels and </span><code>x</code><span> for </span>&ldquo;<span>black</span>&rdquo;<span> pixels.</span></p>
+<p><span>So, as the very first step, let</span>&rsquo;<span>s write some code to display such image by just printing it.</span>
+<span>A good example image would be 64 by 48 pixels wide, with 5 pixel large circle in the center.</span>
+<span>And here</span>&rsquo;<span>s the first encounter of math: to do this, we want to iterate all </span><code>(x, y)</code><span> pixels and fill them if they are inside the circle.</span>
+<span>It</span>&rsquo;<span>s useful to recall equation for circle at the origin: </span><code>x^2 + y^2 = r^2</code><span> where </span><code>r</code><span> is the radius.</span></p>
+<p><span>🎉 we got hello-world working!</span>
+<span>Now, let</span>&rsquo;<span>s go for more image-y images.</span>
+<span>We can roll our own </span>&ldquo;<span>real</span>&rdquo;<span> format like BMP (I think that one is comparatively simple), but there</span>&rsquo;<span>s a cheat code here.</span>
+<span>There are text-based image formats!</span>
+<span>In particular, PPM is the one especially convenient.</span>
+<a href="https://en.wikipedia.org/wiki/Netpbm"><span>Wikipedia Article</span></a><span> should be enough to write our own impl.</span>
+<span>I suggest using </span><code>P3</code><span> variation, but </span><code>P6</code><span> is also nice if you want something less offensively inefficient.</span></p>
+<p><span>So, rewrite your image outputting code to produce a </span><code>.ppm</code><span> file, and also make sure that you have an image viewer that can actually display it.</span>
+<span>Spend some time viewing your circle in its colorful glory (can you color it with a gradient?).</span></p>
+<p><span>If you made it this far, I think you understand the spirit of the exercise </span>&mdash;<span> you</span>&rsquo;<span>ve just implemented an encoder for a real image format, using nothing but a Wikipedia article.</span>
+<span>It might not be the fastest encoder out there, but it</span>&rsquo;<span>s the thing you did yourself.</span>
+<span>You probably want to encapsulate it in a module or something, and do a nice API over it.</span>
+<span>Go for it! Experiment with various abstractions in the language.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>There are two ways to </span>&ldquo;<span>write a .ppm file</span>&rdquo;<span>: your ray tracer can write to a specific named file on disk.</span>
+<span>Alternatively, it can print directly to stdout, to facilitate redirection:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> my-ray-tracer &gt; image.ppm</span></code></pre>
+
+</figure>
+<p><span>These days, I find printing to stdout more convenient, but I used to prefer writing directly to a file!</span></p>
+</div>
+</aside></section>
+<section id="One-Giant-Leap-Into-3D">
+
+    <h2>
+    <a href="#One-Giant-Leap-Into-3D"><span>One Giant Leap Into 3D</span> </a>
+    </h2>
+<p><span>Now that we can display stuff, let</span>&rsquo;<span>s do an absolutely basic ray tracer.</span>
+<span>We</span>&rsquo;<span>ll use a very simple scene: just a single sphere with the camera looking directly at it.</span>
+<span>And we</span>&rsquo;<span>ll use a trivial ray tracing algorithm: shoot the ray from the camera, if it hit the sphere, paint black, else, paint white.</span>
+<span>If you do this as a mental experiment, you</span>&rsquo;<span>ll realize that the end result is going to be </span><em><span>exactly</span></em><span> what we</span>&rsquo;<span>ve got so far: a picture with a circle in it.</span>
+<span>Except now, it</span>&rsquo;<span>s going to be in 3D!</span></p>
+<p><span>This is going to be the most annoying part, as there are a lot of fiddly details to get this right, while the result is, ahem, underwhelming.</span>
+<span>Let</span>&rsquo;<span>s do this though.</span></p>
+<p><span>First, the sphere.</span>
+<span>For simplicity, let</span>&rsquo;<span>s assume that its center is at the origin, and it has radius 5, and so it</span>&rsquo;<span>s equation is</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">x^2 + y^2 + z^2 = 25</span></code></pre>
+
+</figure>
+<p><span>Or, in vector form:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">v̅ ⋅ v̅ = 25</span></code></pre>
+
+</figure>
+<p><span>Here, </span><code>v̅</code><span> is a point on a sphere (an </span><code>(x, y, z)</code><span> vector) and </span><code>⋅</code><span> is the dot product.</span>
+<span>As a bit of foreshadowing, if you are brave enough to take a stab at deriving various formulas, keeping to vector notation might be simpler.</span></p>
+<p><span>Now, let</span>&rsquo;<span>s place the camera.</span>
+<span>It is convenient to orient axes such that </span><code>Y</code><span> points up, </span><code>X</code><span> points to the right, and </span><code>Z</code><span> points at the viewer (ie, </span><code>Z</code><span> is depth).</span>
+<span>So let</span>&rsquo;<span>s say that camera is at </span><code>(0, 0, -20)</code><span> and it looks at </span><code>(0, 0, 0)</code><span> (so, directly at the sphere</span>&rsquo;<span>s center).</span></p>
+<p><span>Now, the fiddly bit.</span>
+<span>It</span>&rsquo;<span>s somewhat obvious how to cast a ray from the camera. If camera</span>&rsquo;<span>s position is </span><code>C̅</code><span>, and we cast the ray in the direction </span><code>d̅</code><span>, then the equation of points on the ray is</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">C̅ + t d̅</span></code></pre>
+
+</figure>
+<p><span>where </span><code>t</code><span> is a scalar parameter.</span>
+<span>Or, in the cartesian form,</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">(0 + t dx, 0 + t dy, -20 + t dz)</span></code></pre>
+
+</figure>
+<p><span>where </span><code>(dx, dy, dz)</code><span> is the direction vector for a particular ray.</span>
+<span>For example, for a ray which goes straight to the center of the sphere, that would be </span><code>(0, 0, 1)</code><span>.</span></p>
+<p><span>What is not obvious is how do we pick direction </span><code>d</code><span>?</span>
+<span>We</span>&rsquo;<span>ll figure that out later.</span>
+<span>For now, assume that we have some magical box, which, given </span><code>(x, y)</code><span> position of the pixel in the image, gives us the </span><code>(dx, dy, dz)</code><span> of the corresponding ray.</span>
+<span>With that, we can use the following algorithm:</span></p>
+<p><span>Iterate through all </span><code>(x, y)</code><span> pixels of our 64x48 the image.</span>
+<span>From the </span><code>(x, y)</code><span> of each pixel, compute the corresponding ray</span>&rsquo;<span>s </span><code>(dx, dy, dz)</code><span>.</span>
+<span>Check if the ray intersects the sphere.</span>
+<span>If it does, plaint the </span><code>(x, y)</code><span> pixel black.</span></p>
+<p><span>To check for intersection, we can plug the ray equation, </span><code>C̅ + t d̅</code><span>, into the sphere equation, </span><code>v̅ ⋅ v̅ = r^2</code><span>.</span>
+<span>That is, we can substitute </span><code>C̅ + t d̅</code><span> for </span><code>v̅</code><span>.</span>
+<span>As </span><code>C̅</code><span>, </span><code>d̅</code><span> and </span><code>r</code><span> are specific numbers, the resulting equation would have only a single variable, </span><code>t</code><span>, and we could solve for that.</span>
+<span>For details, either apply pencil and paper, or look up </span>&ldquo;<span>ray sphere intersection</span>&rdquo;<span>.</span></p>
+<p><span>But how do we find d̅ for each pixel?</span>
+<span>To do that, we actually need to add the screen to the scene.</span>
+<span>Our image is 64x48 rectangle.</span>
+<span>So let</span>&rsquo;<span>s place that between the camera and the sphere.</span></p>
+<p><span>We have camera at </span><code>(0, 0, -20)</code><span> our rectangular screen at, say, </span><code>(0, 0, -10)</code><span> and a sphere at </span><code>(0, 0, 0)</code><span>.</span>
+<span>Now, each pixel in our 2D image has a corresponding point in our 3D scene, and we</span>&rsquo;<span>ll cast the ray from camera</span>&rsquo;<span>s position through this point.</span></p>
+<p><span>The full list of parameters to define the scene is:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">sphere center:   0 0 0</span>
+<span class="line">sphere radius:   5</span>
+<span class="line">camera position: 0 0 -20</span>
+<span class="line">camera up:       0 1 0</span>
+<span class="line">camera right:    1 0 0</span>
+<span class="line">focal distance:  10</span>
+<span class="line">screen width:    64</span>
+<span class="line">screen height:   48</span></code></pre>
+
+</figure>
+<p><span>Focal distance is the distance from the camera to the screen.</span>
+<span>If we know the direction camera is looking along and the focal distance, we can calculate the position of the center of the screen, but that</span>&rsquo;<span>s not enough.</span>
+<span>The screen can rotate, as we didn</span>&rsquo;<span>t fixed which side is up, so we need an extra parameter for that.</span>
+<span>We also add a parameter for direction to the right for convenience, though it</span>&rsquo;<span>s possible to derive </span>&ldquo;<span>right</span>&rdquo;<span> from </span>&ldquo;<span>up</span>&rdquo;<span> and </span>&ldquo;<span>forward</span>&rdquo;<span> directions.</span></p>
+<p><span>Given this set of parameters, how do we calculate the ray corresponding to, say, </span><code>(10, 20)</code><span> pixel?</span>
+<span>Well, I</span>&rsquo;<span>ll leave that up to you, but one hint I</span>&rsquo;<span>ll give is that you can calculate the middle of the screen (camera position + view direction × focal distance).</span>
+<span>If you have the middle of the screen, you can get to </span><code>(x, y)</code><span> pixel by stepping </span><code>x</code><span> steps up (and we know up!) and </span><code>y</code><span> steps right (and we know right!).</span>
+<span>Once we know the coordinates of the point of the screen through which the ray shoots, we can compute ray</span>&rsquo;<span>s direction as the difference between that point and camera</span>&rsquo;<span>s origin.</span></p>
+<p><span>Again, this is super fiddly and frustrating!</span>
+<span>My suggestion would be:</span></p>
+<ul>
+<li>
+<span>Draw some illustrations to understand relation between camera, screen, sphere, and rays.</span>
+</li>
+<li>
+<span>Try to write the code which, given </span><code>(x, y)</code><span> position of the pixel in the image, gives </span><code>(dx, dy, dz)</code><span> coordinates of the direction of the ray from the camera through the pixel.</span>
+</li>
+<li>
+<span>If that doesn</span>&rsquo;<span>t work, lookup the solution, </span><a href="https://avikdas.com/build-your-own-raytracer/01-casting-rays/project.html" class="url">https://avikdas.com/build-your-own-raytracer/01-casting-rays/project.html</a><span> describes one way to do it!</span>
+</li>
+</ul>
+<p><span>Coding wise, we obviously want to introduce some machinery here.</span>
+<span>The basic unit we need is a 3D vector </span>&mdash;<span> a triple of three real numbers </span><code>(x, y, z)</code><span>.</span>
+<span>It should support all the expected operations </span>&mdash;<span> addition, subtraction, multiplication by scalar, dot product, etc.</span>
+<span>If your language supports operator overloading, you might look that up know.</span>
+<span>Is it a good idea to overload operator for dot product?</span>
+<span>You won</span>&rsquo;<span>t know unless you try!</span></p>
+<p><span>We also need something to hold the info about sphere, camera and the screen and to do the ray casting.</span></p>
+<p><span>If everything works, you should get a familiar image of the circle.</span>
+<span>But it</span>&rsquo;<span>s now powered by a real ray tracer and its real honest to god 3D, even if it doesn</span>&rsquo;<span>t look like it!</span>
+<span>Indeed, with ray casting and ray-sphere intersection code, all the essential aspects are in place, from now on everything else are just bells and whistles.</span></p>
+</section>
+<section id="Second-Sphere">
+
+    <h2>
+    <a href="#Second-Sphere"><span>Second Sphere</span> </a>
+    </h2>
+<p><span>Ok, now that we can see one sphere, let</span>&rsquo;<span>s add the second one.</span>
+<span>We need to solve two subproblems for this to make sense.</span>
+<em><span>First</span></em><span>, we need to parameterize our single sphere with the color (so that the second one looks differently, once we add it).</span>
+<em><span>Second</span></em><span>, we should no longer hard-code </span><code>(0, 0, 0)</code><span> as a center of the sphere, and make that a parameter, adjusting the formulas accordingly.</span>
+<span>This is a good place to debug the code.</span>
+<span>If you think you move the sphere up, does it actually moves up in the image?</span></p>
+<p><span>Now, the second sphere can be added with different radius, position and color.</span>
+<span>The ray casting code now needs to be adjusted to say </span><em><span>which</span></em><span> sphere intersected the ray.</span>
+<span>Additionally, it needs to handle the case where the ray intersects </span><em><span>both</span></em><span> spheres and figure out which one is closer.</span></p>
+<p><span>With this machinery in hand, we can now create some true 3D scenes.</span>
+<span>If one sphere is fully in front of the other, that</span>&rsquo;<span>s just concentric circles.</span>
+<span>But if the spheres intersect, the picture is somewhat more interesting.</span></p>
+</section>
+<section id="Let-There-Be-Phong">
+
+    <h2>
+    <a href="#Let-There-Be-Phong"><span>Let There Be Phong</span> </a>
+    </h2>
+<p><span>The next step is going to be comparatively easy implementation wise, but it will fill our spheres with vibrant colors and make them spring out in their full 3D glory.</span>
+<span>We will add light to the scene.</span></p>
+<p><span>Light source will be parameterized by two values:</span></p>
+<ul>
+<li>
+<span>Position of the light source.</span>
+</li>
+<li>
+<span>Color and intensity of light.</span>
+</li>
+</ul>
+<p><span>For the latter, we can use a vector with three components </span><code>(red, green, blue)</code><span>, where each components varies from 0.0 (no light) to 1.0 (maximally bright light).</span>
+<span>We can use a similar vector to describe a color of the object.</span>
+<span>Now, when the light hits the object, the resulting color would be a componentwise product of the light</span>&rsquo;<span>s color and the object</span>&rsquo;<span>s color.</span></p>
+<p><span>Another contributor is the direction of light.</span>
+<span>If the light falls straight at the object, it seems bright.</span>
+<span>If the light falls obliquely, it is more dull.</span></p>
+<p><span>Let</span>&rsquo;<span>s get more specific:</span></p>
+<ul>
+<li>
+<code>P̅</code><span> is a point on our sphere where the light falls.</span>
+</li>
+<li>
+<code>N̅</code><span> is the normal vector at </span><code>P̅</code><span>.</span>
+<span>That is, it</span>&rsquo;<span>s a vector with length 1, which is locally perpendicular to the surface at </span><code>P̅</code>
+</li>
+<li>
+<code>L̅</code><span> is the position of the light source</span>
+</li>
+<li>
+<code>R̅</code><span> is a vector of length one from </span><code>P̅</code><span> to </span><code>L̅</code><span>: </span><code>R̅ = (L̅ - P̅) / |L̅ - P̅|</code>
+</li>
+</ul>
+<p><span>Then, </span><code>R̅ ⋅ N̅</code><span> gives us this </span>&ldquo;<span>is the light falling straight at the surface?</span>&rdquo;<span> coefficient between 0 and 1.</span>
+<span>Dot product between two unit vectors measures how similar their direction is (it is 0 for perpendicular vectors, and 1 for collinear ones).</span>
+<span>So, </span>&ldquo;<span>is light perpendicular</span>&rdquo;<span> is the same as </span>&ldquo;<span>is light collinear with normal</span>&rdquo;<span> is dot product.</span></p>
+<p><span>The final color will be the memberwise product of light</span>&rsquo;<span>s color and sphere</span>&rsquo;<span>s color multiplied by this attenuating coefficient.</span>
+<span>Putting it all together:</span></p>
+<p><span>For each pixel </span><code>(x, y)</code><span> we cast a </span><code>C̅ + t d̅</code><span> ray through it.</span>
+<span>If the ray hits the sphere, we calculate point </span><code>P</code><span> where it happens, as well as sphere</span>&rsquo;<span>s normal at point </span><code>P</code><span>.</span>
+<span>For sphere, normal is a vector which connects sphere</span>&rsquo;<span>s center with </span><code>P</code><span>.</span>
+<span>Then we cast a ray from </span><code>P</code><span> to the light source </span><code>L̅</code><span>.</span>
+<span>If this ray hits the other sphere, the point is occluded and the pixel remains dark.</span>
+<span>Otherwise, we compute the color using using the angle between normal and direction to the light.</span></p>
+<p><span>With this logic in place, the picture now should display two 3D-looking spheres, rather than a pair of circles.</span>
+<span>In particular, our spheres now cast shadows!</span></p>
+<p><span>What we implemented here is a part of </span><a href="https://en.wikipedia.org/wiki/Phong_reflection_model"><span>Phong reflection model</span></a><span>, specifically, the diffuse part.</span>
+<span>Extending the code to include ambient and specular parts is a good way to get some nicer looking pictures!</span></p>
+</section>
+<section id="Scene-Description-Language">
+
+    <h2>
+    <a href="#Scene-Description-Language"><span>Scene Description Language</span> </a>
+    </h2>
+<p><span>At this point, we accumulated quite a few parameters: camera config, positions of spheres, there colors, light sources (you totally can have many of them!).</span>
+<span>Specifying all those things as constants in the code makes experimentation hard, so a next logical step is to devise some kind of textual format which describes the scene.</span>
+<span>That way, our ray tracer reads a textual screen description as an input, and renders a </span><code>.ppm</code><span> as an output.</span></p>
+<p><span>One obvious choice is to use JSON, though it</span>&rsquo;<span>s not too convenient to edit by hand, and bringing in a JSON parser is contrary to our </span>&ldquo;<span>do it yourself</span>&rdquo;<span> approach.</span>
+<span>So I would suggest to design your own small language to specify the scene.</span>
+<span>You might want to take a look at </span><a href="https://kdl.dev" class="url">https://kdl.dev</a><span> for the inspiration.</span></p>
+<p><span>Note how the program grows bigger </span>&mdash;<span> there are now distinctive parts for input parsing, output formatting, rendering per-se, as well as the underlying nascent 3D geometry library.</span>
+<span>As usual, if you feel like organizing all that somewhat better, go for it!</span></p>
+</section>
+<section id="Plane-And-Other-Shapes">
+
+    <h2>
+    <a href="#Plane-And-Other-Shapes"><span>Plane And Other Shapes</span> </a>
+    </h2>
+<p><span>So far, we</span>&rsquo;<span>ve only rendered spheres.</span>
+<span>There</span>&rsquo;<span>s a huge variety of other shapes we can add, and it makes sense to tackle at least a couple.</span>
+<span>A good candidate is a plane.</span>
+<span>To specify a plane, we need a normal, and a point on a plane.</span>
+<span>For example, </span><code>N̅ ⋅ v̅ = 0</code><span> is the equation of the plain which goes through the origin and is orthogonal to </span><code>N̅</code><span>.</span>
+<span>We can plug our ray equation instead of </span><code>v̅</code><span> and solve for </span><code>t</code><span> as usual.</span></p>
+<p><span>The second shape to add is a triangle.</span>
+<span>A triangle can be naturally specified using its three vertexes.</span>
+<span>One of the more advanced math exercises would be to derive a formula for ray-triangle intersection.</span>
+<span>As usual, math isn</span>&rsquo;<span>t the point of the exercise, so feel free to just look that up!</span></p>
+<p><span>With spheres, planes and triangles which are all shapes, there clearly is some amount of polymorphism going on!</span>
+<span>You might want to play with various ways to best express that in your language of choice!</span></p>
+</section>
+<section id="Meshes">
+
+    <h2>
+    <a href="#Meshes"><span>Meshes</span> </a>
+    </h2>
+<p><span>Triangles are interesting, because there are a lot of existing 3D models specified as a bunch of triangles.</span>
+<span>If you download such a model and put it into the scene, you can render somewhat impressive images.</span></p>
+<p><span>There are many formats for storing 3D meshes, but for out purposes </span><a href="https://en.wikipedia.org/wiki/Wavefront_.obj_file"><span>.obj</span></a><span> files are the best.</span>
+<span>Again, this is a plain text format which you can parse by hand.</span></p>
+<p><span>There are plenty of </span><code>.obj</code><span> models to download, with the </span><a href="https://graphics.cs.utah.edu/courses/cs6620/fall2013/prj05/teapot.obj"><span>Utah teapot</span></a><span> being the most famous one.</span></p>
+<p><span>Note that the model specifies three parameters for each triangle</span>&rsquo;<span>s vertex:</span></p>
+<ul>
+<li>
+<span>coordinate (</span><code>v</code><span>)</span>
+</li>
+<li>
+<span>normal (</span><code>vn</code><span>)</span>
+</li>
+<li>
+<span>texture (</span><code>vt</code><span>)</span>
+</li>
+</ul>
+<p><span>For the first implementation, you</span>&rsquo;<span>d want to ignore </span><code>vn</code><span> and </span><code>vt</code><span>, and aim at getting a highly polygonal teapot on the screen.</span>
+<span>Note that the model contains thousands of triangles, and would take significantly more time to render.</span>
+<span>You might want to downscale the resolution a bit until we start optimizing performance.</span></p>
+<p><span>To make the picture less polygony, you</span>&rsquo;<span>d want to look at those </span><code>vn</code><span> normals.</span>
+<span>The idea here is that, instead of using a true triangle</span>&rsquo;<span>s normal when calculating light, to use a fake normal as if the the triangle wasn</span>&rsquo;<span>t actually flat.</span>
+<span>To do that, the </span><code>.obj</code><span> files specifies </span>&ldquo;<span>fake</span>&rdquo;<span> normals for each vertex of a triangle.</span>
+<span>If a ray intersects a triangle somewhere in the middle, you can compute a fake normal at that point by taking a weighted average of the three normals at the vertexes.</span></p>
+<p><span>At this point, you should get a picture roughly comparable to the one at the start of the article!</span></p>
+</section>
+<section id="Performance-Optimizations">
+
+    <h2>
+    <a href="#Performance-Optimizations"><span>Performance Optimizations</span> </a>
+    </h2>
+<p><span>With all bells and whistles, our ray tracer should be rather slow, especially for larger images.</span>
+<span>There are three tricks I suggest to make it faster (and also to learn a bunch of stuff).</span></p>
+<p><em><span>First</span></em><span>, ray tracing is an embarrassingly parallel task: each pixel is independent from the others.</span>
+<span>So, as a quick win, make sure that you program uses all the cores for rendering.</span>
+<span>Did you manage to get a linear speedup?</span></p>
+<p><em><span>Second</span></em><span>, its a good opportunity to look into profiling tools.</span>
+<span>Can you figure out what specifically is the slowest part?</span>
+<span>Can you make it faster?</span></p>
+<p><em><span>Third</span></em><span>, our implementation which loops over each shape to find the closest intersection is a bit naive.</span>
+<span>It would be cool if we had something like a binary search tree, which would show us the closest shape automatically.</span>
+<span>As far as I know, there isn</span>&rsquo;<span>t a general algorithmically optimal index data structure for doing spatial lookups.</span>
+<span>However, there</span>&rsquo;<span>s a bunch of somewhat heuristic data structures which tend to work well in practice.</span></p>
+<p><span>One that I suggest implementing is the bounding volume hierarchy.</span>
+<span>The crux of the idea is that we can take a bunch of triangles and place them inside a bigger object (eg, a gigantic sphere).</span>
+<span>Then, if a ray doesn</span>&rsquo;<span>t intersect this bigger object, we don</span>&rsquo;<span>t need to check any triangles contained within.</span>
+<span>There</span>&rsquo;<span>s a certain freedom in how one picks such bounding objects.</span></p>
+<p><span>For BVH, we will use axis-aligned bounding box as our bounding volumes.</span>
+<span>It is a cuboid whose edges are parallel to the coordinate axis.</span>
+<span>You can parametrize an AABB with two points </span>&mdash;<span> the one with the lowest coordinates, and the one with the highest.</span>
+<span>It</span>&rsquo;<span>s also easy to construct an AABB which bounds a set of shapes </span>&mdash;<span> take the minimum and maximum coordinates of all vertexes.</span>
+<span>Similarly, intersecting an AABB with a ray is fast.</span></p>
+<p><span>The next idea is to define a hierarchy of AABBs.</span>
+<span>First, we define a root AABB for the whole scene.</span>
+<span>If the ray doesn</span>&rsquo;<span>t hit it, we are done.</span>
+<span>The root box is then subdivided into two smaller boxes.</span>
+<span>The ray can hit one or two of them, and we recur into each box that got hit.</span>
+<span>Worst case, we are recurring into both subdivisions, which isn</span>&rsquo;<span>t any faster, but in the common case we can skip at least a half.</span>
+<span>For simplicity, we also start with computing an AABB for each triangle we have in a scene, so we can think uniformly about a bunch of AABBs.</span></p>
+<p><span>Putting everything together, we start with a bunch of small AABBs for our primitives.</span>
+<span>As a first step, we compute their common AABB.</span>
+<span>This will be the basis of our recursion step: a bunch of small AABBs, and a huge AABB encompassing all of them.</span>
+<span>We want to subdivide the big box.</span>
+<span>To do that, we select its longest axis (eg, if the big box is very tall, we aim to cut it in two horizontally), and find a midpoint.</span>
+<span>Then, we sort small AABBs into those whoche center is before or after midpoint along this axis.</span>
+<span>Finally, for each of the two subsets we compute a pair of new AABBs, and then recur.</span></p>
+<p><span>Crucially, the two new bounding boxes might intersect.</span>
+<span>We can</span>&rsquo;<span>t just cut the root box in two and unambiguously assign small AABBs to the two half, as they might not be entirely within one.</span>
+<span>But, we can expect the intersection to be pretty small in practice.</span></p>
+</section>
+<section id="Next-Steps">
+
+    <h2>
+    <a href="#Next-Steps"><span>Next Steps</span> </a>
+    </h2>
+<p><span>If you</span>&rsquo;<span>ve made it this far, you have a pretty amazing pice of software!</span>
+<span>While it probably clocks at only a couple of thousands lines of code, it covers a pretty broad range of topics, from text file parsing to advanced data structures for spatial data.</span>
+<span>I deliberately spend no time explaining how to best fit all these pieces into a single box, that</span>&rsquo;<span>s the main thing for you to experiment with and to learn.</span></p>
+<p><span>There are two paths one can take from here:</span></p>
+<ul>
+<li>
+<span>If you liked the graphics programming aspect of the exercise, there</span>&rsquo;<span>s a </span><em><span>lot</span></em><span> you can do to improve the quality of the output.</span>
+<a href="https://pbrt.org" class="url">https://pbrt.org</a><span> is the canonical book on the topic.</span>
+</li>
+<li>
+<span>If you liked the software engineering side of the project, you can try to re-implement it in different programming languages, to get a specific benchmark to compare different programming paradigms.</span>
+<span>Alternatively, you might want to look for other similar self-contained hand-made projects.</span>
+<span>Some options include:</span>
+<ul>
+<li>
+<span>Software rasterizer: rather than simulating a path of a ray, we can project triangles onto the screen.</span>
+<span>This is potentially much faster, and should allow for real-time rendering.</span>
+</li>
+<li>
+<span>A highly concurrent chat server: a program which listens on a TCP port, allows clients to connect to it and exchange messages.</span>
+</li>
+<li>
+<span>A toy programming language: going full road from a text file to executable </span><code>.wasm</code><span>. Bonus points if you also do an LSP server for your language.</span>
+</li>
+<li>
+<span>A distributed key-value store based on Paxos or Raft.</span>
+</li>
+<li>
+<span>A toy relational database</span>
+</li>
+</ul>
+</li>
+</ul>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2022-12-31-raytracer-construction-kit.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

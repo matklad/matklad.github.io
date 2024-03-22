@@ -1,0 +1,669 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Generate All the Things</title>
+  <meta name="description" content="In this post, we'll look at one technique from property-based testing repertoire: full coverage / exhaustive testing.
+Specifically, we will learn how to conveniently enumerate any kind of combinatorial object without using recursion.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2021/11/07/generate-all-the-things.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Generate All the Things</span> <time datetime="2021-11-07">Nov 7, 2021</time></h1>
+<p><span>In this post, we</span>&rsquo;<span>ll look at one technique from property-based testing repertoire: full coverage / exhaustive testing.</span>
+<span>Specifically, we will learn how to conveniently enumerate any kind of combinatorial object without using recursion.</span></p>
+<p><span>To start, let</span>&rsquo;<span>s assume we have some algorithmic problem to solve.</span>
+<span>For example, we want to sort an array of numbers:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">sort</span>(xs: &amp;<span class="hl-keyword">mut</span> [<span class="hl-type">u32</span>]) {</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>To test that the </span><code>sort</code><span> function works, we can write a bunch of example-based test cases.</span>
+<span>This approach has two flaws:</span></p>
+<ul>
+<li>
+<span>Generating examples by hand is time consuming.</span>
+</li>
+<li>
+<span>It might be hard to come up with interesting examples </span>&mdash;<span> any edge cases we</span>&rsquo;<span>ve thought about is probably already handled in the code.</span>
+<span>We want to find cases which we didn</span>&rsquo;<span>t think of before.</span>
+</li>
+</ul>
+<p><span>A better approach is randomized testing: just generate a random array and check that it is sorted:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">naive_randomized_testing</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">rng</span> = rand::<span class="hl-title function_ invoke__">thread_rng</span>();</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..<span class="hl-number">100_000</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">n</span>: <span class="hl-type">usize</span> = rng.<span class="hl-title function_ invoke__">gen_range</span>(<span class="hl-number">0</span>..<span class="hl-number">1_000</span>);</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">xs</span>: <span class="hl-type">Vec</span>&lt;<span class="hl-type">u32</span>&gt; =</span>
+<span class="line">      std::iter::<span class="hl-title function_ invoke__">repeat_with</span>(|| rng.<span class="hl-title function_ invoke__">gen</span>()).<span class="hl-title function_ invoke__">take</span>(n).<span class="hl-title function_ invoke__">collect</span>();</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-title function_ invoke__">sort</span>(&amp;<span class="hl-keyword">mut</span> xs);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> <span class="hl-number">1</span>..xs.<span class="hl-title function_ invoke__">len</span>() {</span>
+<span class="line">      <span class="hl-built_in">assert!</span>(xs[i - <span class="hl-number">1</span>] &lt;= xs[i]);</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, we generated one hundred thousand completely random test cases!</span></p>
+<p><span>Sadly, the result might actually be </span><em><span>worse</span></em><span> than a small set of hand-picked examples.</span>
+<span>The problem here is that, if you pick an array completely at random (sample uniformly), it will be a rather ordinary array.</span>
+<span>In particular, given that the elements are arbitrary </span><code>u32</code><span> numbers, it</span>&rsquo;<span>s highly unlikely that we generate an array with at least some equal elements.</span>
+<span>And when I write quick sort, I always have that nasty bug that it just loops infinitely when </span><em><span>all</span></em><span> elements are equal.</span></p>
+<p><span>There are several fixes for the problem.</span>
+<span>The simplest one is to just make the sampling space smaller:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">std::iter::<span class="hl-title function_ invoke__">repeat_with</span>(|| rng.<span class="hl-title function_ invoke__">gen_range</span>(<span class="hl-number">0</span>..<span class="hl-number">10</span>)).<span class="hl-title function_ invoke__">take</span>(n).<span class="hl-title function_ invoke__">collect</span>();</span></code></pre>
+
+</figure>
+<p><span>If we generate not an arbitrary </span><code>u32</code><span>, but a number between 0 and 10, we</span>&rsquo;<span>ll get some short arrays where all elements are equal.</span>
+<span>Another trick is to use a property-based testing library, which comes with some strategies for generating interesting sequences predefined.</span>
+<span>Yet another approach is to combine property-based testing and coverage guided fuzzing.</span>
+<span>When checking a particular example, we will collect coverage information for this specific input.</span>
+<span>Given a set of inputs with coverage info, we can apply targeted genetic algorithms to try to cover more of the code.</span>
+<span>A particularly fruitful insight here is that we don</span>&rsquo;<span>t have to invent a novel structure-aware fuzzer for this.</span>
+<span>We can take an existing fuzzer which emits a sequence of bytes, and use those bytes as a sequence of random numbers to generate structured input.</span>
+<span>Essentially, we say that the fuzzer </span><em><span>is</span></em><span> a random number generator.</span>
+<span>That way, when the fuzzer flips bits in the raw bytes array, it applies local semantically valid transformations to the random data structure.</span></p>
+<p><span>But this post isn</span>&rsquo;<span>t about those techniques :)</span>
+<span>Instead, it is about the idea of full coverage.</span>
+<em><span>Most</span></em><span> of the bugs involve small, tricky examples.</span>
+<span>If a sorting routine breaks on some array with ten thousand elements it</span>&rsquo;<span>s highly likely that there</span>&rsquo;<span>s a much smaller array (a handful of elements), which exposes the same bug.</span>
+<span>So what we can do is to just generate </span><em><span>every</span></em><span> array of length at most </span><code>n</code><span> with numbers up to </span><code>m</code><span> and exhaustively check them all:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">exhaustive_testing</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">xs</span> <span class="hl-keyword">in</span> <span class="hl-title function_ invoke__">every_array</span>(n, m) {</span>
+<span class="line">    <span class="hl-title function_ invoke__">sort</span>(&amp;<span class="hl-keyword">mut</span> xs);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> <span class="hl-number">1</span>..xs.<span class="hl-title function_ invoke__">len</span>() {</span>
+<span class="line">      <span class="hl-built_in">assert!</span>(xs[i - <span class="hl-number">1</span>] &lt;= xs[i]);</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The problem here is that implementing </span><code>every_array</code><span> is tricky.</span>
+<span>It is one of those puzzlers you know how to solve, but which are excruciatingly annoying  to implement for the umpteenth time:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">every_array</span>(n: <span class="hl-type">usize</span>, m: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Vec</span>&lt;<span class="hl-type">Vec</span>&lt;<span class="hl-type">u32</span>&gt;&gt; {</span>
+<span class="line">  <span class="hl-keyword">if</span> n == <span class="hl-number">0</span> {</span>
+<span class="line">    <span class="hl-keyword">return</span> <span class="hl-built_in">vec!</span>[<span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>()];</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">res</span> = <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">xs</span> <span class="hl-keyword">in</span> <span class="hl-title function_ invoke__">every_array</span>(n - <span class="hl-number">1</span>, m) {</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">x</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..=m {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">ys</span> = xs.<span class="hl-title function_ invoke__">clone</span>();</span>
+<span class="line">      ys.<span class="hl-title function_ invoke__">push</span>(x);</span>
+<span class="line">      res.<span class="hl-title function_ invoke__">push</span>(ys)</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  res</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>What</span>&rsquo;<span>s more, for algorithms you often need to generate permutations, combinations and subsets, and they all have similar simple but tricky recursive solutions.</span></p>
+<p><span>Yesterday I needed to generate a sequence of up to </span><code>n</code><span> segments with integer coordinates up to </span><code>m</code><span>, which finally pushed me to realize that there</span>&rsquo;<span>s a relatively simple way to exhaustively enumerate arbitrary combinatorial objects.</span>
+<span>I don</span>&rsquo;<span>t recall seeing it anywhere else, which is surprising, as the technique seems rather elegant.</span></p>
+<hr>
+<p><span>Let</span>&rsquo;<span>s look again at how we generate a random array:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">l</span>: <span class="hl-type">usize</span> = rng.<span class="hl-title function_ invoke__">gen_range</span>(<span class="hl-number">0</span>..l);</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">xs</span>: <span class="hl-type">Vec</span>&lt;<span class="hl-type">u32</span>&gt; =</span>
+<span class="line">  std::iter::<span class="hl-title function_ invoke__">repeat_with</span>(|| rng.<span class="hl-title function_ invoke__">gen</span>(..m)).<span class="hl-title function_ invoke__">take</span>(m).<span class="hl-title function_ invoke__">collect</span>();</span></code></pre>
+
+</figure>
+<p><span>This is definitely much more straightforward than the </span><code>every_array</code><span> function above, although it does sort-of the same thing.</span>
+<span>The trick is to take this </span>&ldquo;<span>generate </span><em><span>a random</span></em><span> thing</span>&rdquo;<span> code and just make it generate </span><em><span>every</span></em><span> thing instead.</span>
+<span>In the above code, we base decisions on random numbers.</span>
+<span>Specifically, an input sequence of random numbers generates one element in the search space.</span>
+<span>If we enumerate all sequences of random numbers, we then explore the whole space.</span></p>
+<p><span>Essentially, we</span>&rsquo;<span>ll rig the </span><code>rng</code><span> to not be random, but instead to emit all finite sequences of numbers.</span>
+<span>By writing a single generator of such sequences, we gain an ability to enumerate arbitrary objects.</span>
+<span>As we are interested in generating all </span>&ldquo;<span>small</span>&rdquo;<span> objects, we always pass an upper bound when asking for a </span>&ldquo;<span>random</span>&rdquo;<span> number.</span>
+<span>We can use the bounds to enumerate only the sequences which fit under them.</span></p>
+<p><span>So, the end result will look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">for_every_array</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = <span class="hl-number">4</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">l</span> = g.<span class="hl-title function_ invoke__">gen</span>(n) <span class="hl-keyword">as</span> <span class="hl-type">usize</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">xs</span>: <span class="hl-type">Vec</span>&lt;_&gt; =</span>
+<span class="line">      std::iter::<span class="hl-title function_ invoke__">repeat_with</span>(|| g.<span class="hl-title function_ invoke__">gen</span>(m)).<span class="hl-title function_ invoke__">take</span>(l).collect::&lt;_&gt;();</span>
+<span class="line">    <span class="hl-comment">// `xs` enumerates all arrays</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The implementation of </span><code>Gen</code><span> is relatively straightforward.</span>
+<span>On each iteration, we will remember the sequence of numbers we generated together with bounds the user requested, something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">value:  3 1 4 4</span>
+<span class="line">bound:  5 4 4 4</span></code></pre>
+
+</figure>
+<p><span>To advance to the next iteration, we will find the smallest sequence of values which is larger than the current one, but still satisfies all the bounds.</span>
+&ldquo;<span>Smallest</span>&rdquo;<span> means that we</span>&rsquo;<span>ll try to increment the rightmost number.</span>
+<span>In the above example, the last two fours already match the bound, so we can</span>&rsquo;<span>t increment them.</span>
+<span>However, we </span><em><span>can</span></em><span> increment one to get </span><code>3 2 4 4</code><span>.</span>
+<span>This isn</span>&rsquo;<span>t the smallest sequence though, </span><code>3 2 0 0</code><span> would be smaller.</span>
+<span>So, after incrementing the rightmost number we can increment, we zero the rest.</span></p>
+<p><span>Here</span>&rsquo;<span>s the full implementation:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Gen</span> {</span>
+<span class="line">  started: <span class="hl-type">bool</span>,</span>
+<span class="line">  v: <span class="hl-type">Vec</span>&lt;(<span class="hl-type">u32</span>, <span class="hl-type">u32</span>)&gt;,</span>
+<span class="line">  p: <span class="hl-type">usize</span>,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Gen</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">new</span>() <span class="hl-punctuation">-&gt;</span> Gen {</span>
+<span class="line">    Gen { started: <span class="hl-literal">false</span>, v: <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>(), p: <span class="hl-number">0</span> }</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">done</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">bool</span> {</span>
+<span class="line">    <span class="hl-keyword">if</span> !<span class="hl-keyword">self</span>.started {</span>
+<span class="line">      <span class="hl-keyword">self</span>.started = <span class="hl-literal">true</span>;</span>
+<span class="line">      <span class="hl-keyword">return</span> <span class="hl-literal">false</span>;</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">i</span> <span class="hl-keyword">in</span> (<span class="hl-number">0</span>..<span class="hl-keyword">self</span>.v.<span class="hl-title function_ invoke__">len</span>()).<span class="hl-title function_ invoke__">rev</span>() {</span>
+<span class="line">      <span class="hl-keyword">if</span> <span class="hl-keyword">self</span>.v[i].<span class="hl-number">0</span> &lt; <span class="hl-keyword">self</span>.v[i].<span class="hl-number">1</span> {</span>
+<span class="line">        <span class="hl-keyword">self</span>.v[i].<span class="hl-number">0</span> += <span class="hl-number">1</span>;</span>
+<span class="line">        <span class="hl-keyword">self</span>.v.<span class="hl-title function_ invoke__">truncate</span>(i + <span class="hl-number">1</span>);</span>
+<span class="line">        <span class="hl-keyword">self</span>.p = <span class="hl-number">0</span>;</span>
+<span class="line">        <span class="hl-keyword">return</span> <span class="hl-literal">false</span>;</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-literal">true</span></span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">gen</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>, bound: <span class="hl-type">u32</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">if</span> <span class="hl-keyword">self</span>.p == <span class="hl-keyword">self</span>.v.<span class="hl-title function_ invoke__">len</span>() {</span>
+<span class="line">      <span class="hl-keyword">self</span>.v.<span class="hl-title function_ invoke__">push</span>((<span class="hl-number">0</span>, <span class="hl-number">0</span>));</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">self</span>.p += <span class="hl-number">1</span>;</span>
+<span class="line">    <span class="hl-keyword">self</span>.v[<span class="hl-keyword">self</span>.p - <span class="hl-number">1</span>].<span class="hl-number">1</span> = bound;</span>
+<span class="line">    <span class="hl-keyword">self</span>.v[<span class="hl-keyword">self</span>.p - <span class="hl-number">1</span>].<span class="hl-number">0</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Some notes:</span></p>
+<ul>
+<li>
+<span>We need </span><code>start</code><span> field to track the first iteration, and to make </span><code>while !g.done()</code><span> syntax work.</span>
+<span>It</span>&rsquo;<span>s a bit more natural to remove </span><code>start</code><span> and use a </span><code>do { } while !g.done()</code><span> loop, but it</span>&rsquo;<span>s not available in Rust.</span>
+</li>
+<li>
+<code>v</code><span> stores </span><code>(value, bound)</code><span> pairs.</span>
+</li>
+<li>
+<code>p</code><span> tracks the current position in the middle of the iteration.</span>
+</li>
+<li>
+<code>v</code><span> is conceptually an infinite vector with finite number of non-zero elements.</span>
+<span>So, when </span><code>p</code><span> gets past then end of </span><code>v</code><span>, we just materialize the implicit zero by pushing it onto </span><code>v</code><span>.</span>
+</li>
+<li>
+<span>As we store zeros implicitly anyway, we can just truncate the vector in </span><code>done</code><span> instead of zeroing-out the elements after the incremented one.</span>
+</li>
+<li>
+<span>Somewhat unusually, the bounds are treated inclusively.</span>
+<span>This removes the panic when </span><code>bound</code><span> is zero, and allows to generate a full set of numbers via </span><code>gen(u32::MAX)</code><span>.</span>
+</li>
+</ul>
+<p><span>Let</span>&rsquo;<span>s see how our </span><code>gen</code><span> fairs for generating random arrays of length at most </span><code>n</code><span>.</span>
+<span>We</span>&rsquo;<span>ll count how many distinct cases were covered:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">gen_arrays</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = <span class="hl-number">4</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">expected_total</span> =</span>
+<span class="line">    (<span class="hl-number">0</span>..=n).<span class="hl-title function_ invoke__">map</span>(|l| (m + <span class="hl-number">1</span>).<span class="hl-title function_ invoke__">pow</span>(l)).sum::&lt;<span class="hl-type">u32</span>&gt;();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">all</span> = HashSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">l</span> = g.<span class="hl-title function_ invoke__">gen</span>(n) <span class="hl-keyword">as</span> <span class="hl-type">usize</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">xs</span>: <span class="hl-type">Vec</span>&lt;_&gt; =</span>
+<span class="line">      std::iter::<span class="hl-title function_ invoke__">repeat_with</span>(|| g.<span class="hl-title function_ invoke__">gen</span>(m)).<span class="hl-title function_ invoke__">take</span>(l).collect::&lt;_&gt;();</span>
+<span class="line"></span>
+<span class="line">    all.<span class="hl-title function_ invoke__">insert</span>(xs);</span>
+<span class="line">    total += <span class="hl-number">1</span></span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(all.<span class="hl-title function_ invoke__">len</span>(), total);</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, total <span class="hl-keyword">as</span> <span class="hl-type">u32</span>)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This test passes.</span>
+<span>That is, the </span><code>gen</code><span> approach for this case is both exhaustive (it generates all arrays) and efficient (each array is generated once).</span></p>
+<p><span>As promised in the post</span>&rsquo;<span>s title, let</span>&rsquo;<span>s now generate </span><em><span>all</span></em><span> the things.</span></p>
+<p><span>First case: there should be only one nothing (that</span>&rsquo;<span>s the reason why we need </span><code>start</code><span>):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">gen_nothing</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">expected_total</span> = <span class="hl-number">1</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    total += <span class="hl-number">1</span>;</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, total)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Second case: we expect to see </span><code>n</code><span> numbers and </span><code>n*2</code><span> ordered pairs of numbers.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">gen_number</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">expected_total</span> = n + <span class="hl-number">1</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">all</span> = HashSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">a</span> = g.<span class="hl-title function_ invoke__">gen</span>(n);</span>
+<span class="line"></span>
+<span class="line">    all.<span class="hl-title function_ invoke__">insert</span>(a);</span>
+<span class="line">    total += <span class="hl-number">1</span>;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, total);</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, all.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span>);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">gen_number_pair</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">expected_total</span> = (n + <span class="hl-number">1</span>) * (n + <span class="hl-number">1</span>);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">all</span> = HashSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">a</span> = g.<span class="hl-title function_ invoke__">gen</span>(n);</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">b</span> = g.<span class="hl-title function_ invoke__">gen</span>(n);</span>
+<span class="line"></span>
+<span class="line">    all.<span class="hl-title function_ invoke__">insert</span>((a, b));</span>
+<span class="line">    total += <span class="hl-number">1</span>;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, total);</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, all.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Third case: we expect to see </span><code>n * (n - 1) / 2</code><span> unordered pairs of numbers.</span>
+<span>This one is interesting </span>&mdash;<span> here, our second decision is based on the first one, but we still enumerate all the cases efficiently (without duplicates).</span>
+<span>(Aside: did you ever realise that the number of ways to pick two objects out of </span><code>n</code><span> is equal to the sum of first </span><code>n</code><span> natural numbers?)</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">gen_number_combination</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">expected_total</span> = n * (n + <span class="hl-number">1</span>) / <span class="hl-number">2</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">all</span> = HashSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">a</span> = g.<span class="hl-title function_ invoke__">gen</span>(n - <span class="hl-number">1</span>);</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">b</span> = a + <span class="hl-number">1</span> + g.<span class="hl-title function_ invoke__">gen</span>(n - a - <span class="hl-number">1</span>);</span>
+<span class="line">    all.<span class="hl-title function_ invoke__">insert</span>((a, b));</span>
+<span class="line">    total += <span class="hl-number">1</span>;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, total);</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, all.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>We</span>&rsquo;<span>ve already generated all arrays, so let</span>&rsquo;<span>s try to create all permutations.</span>
+<span>Still efficient:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">gen_permutations</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">expected_total</span> = (<span class="hl-number">1</span>..=n).product::&lt;<span class="hl-type">u32</span>&gt;();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">all</span> = HashSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">candidates</span>: <span class="hl-type">Vec</span>&lt;<span class="hl-type">i32</span>&gt; = (<span class="hl-number">1</span>..=n).<span class="hl-title function_ invoke__">collect</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">permutation</span> = <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..n {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">idx</span> = g.<span class="hl-title function_ invoke__">gen</span>(candidates.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span> - <span class="hl-number">1</span>);</span>
+<span class="line">      permutation.<span class="hl-title function_ invoke__">push</span>(candidates.<span class="hl-title function_ invoke__">remove</span>(idx <span class="hl-keyword">as</span> <span class="hl-type">usize</span>));</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    all.<span class="hl-title function_ invoke__">insert</span>(permutation);</span>
+<span class="line">    total += <span class="hl-number">1</span>;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, total);</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, all.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Subsets:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">gen_subset</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">expected_total</span> = <span class="hl-number">1</span> &lt;&lt; n;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">all</span> = HashSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">    <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">s</span>: <span class="hl-type">Vec</span>&lt;_&gt; = (<span class="hl-number">0</span>..n).<span class="hl-title function_ invoke__">map</span>(|_| g.<span class="hl-title function_ invoke__">gen</span>(<span class="hl-number">1</span>) == <span class="hl-number">1</span>).<span class="hl-title function_ invoke__">collect</span>();</span>
+<span class="line"></span>
+<span class="line">        all.<span class="hl-title function_ invoke__">insert</span>(s);</span>
+<span class="line">        total += <span class="hl-number">1</span>;</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(expected_total, total);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(expected_total, all.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Combinations:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">gen_combinations</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = <span class="hl-number">3</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">fact</span> = |n: <span class="hl-type">u32</span>| <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> { (<span class="hl-number">1</span>..=n).<span class="hl-title function_ invoke__">product</span>() };</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">expected_total</span> = <span class="hl-title function_ invoke__">fact</span>(n) / (<span class="hl-title function_ invoke__">fact</span>(m) * <span class="hl-title function_ invoke__">fact</span>(n - m));</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">all</span> = HashSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">    <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">candidates</span>: <span class="hl-type">Vec</span>&lt;<span class="hl-type">u32</span>&gt; = (<span class="hl-number">1</span>..=n).<span class="hl-title function_ invoke__">collect</span>();</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">combination</span> = BTreeSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">        <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..m {</span>
+<span class="line">            <span class="hl-keyword">let</span> <span class="hl-variable">idx</span> = g.<span class="hl-title function_ invoke__">gen</span>(candidates.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span> - <span class="hl-number">1</span>);</span>
+<span class="line">            combination.<span class="hl-title function_ invoke__">insert</span>(candidates.<span class="hl-title function_ invoke__">remove</span>(idx <span class="hl-keyword">as</span> <span class="hl-type">usize</span>));</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        all.<span class="hl-title function_ invoke__">insert</span>(combination);</span>
+<span class="line">        total += <span class="hl-number">1</span>;</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(expected_total, total);</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(expected_total, all.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Now, this one actually fails </span>&mdash;<span> while this code generates all combinations, some combinations are generated more than once.</span>
+<span>Specifically, what we are generating here are k-permutations (combinations with significant order of elements).</span>
+<span>While this is not efficient, this is OK for the purposes of exhaustive testing (as we still generate any combination).</span>
+<span>Nonetheless, there</span>&rsquo;<span>s an efficient version as well:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">combination</span> = BTreeSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line"><span class="hl-keyword">for</span> <span class="hl-variable">c</span> <span class="hl-keyword">in</span> <span class="hl-number">1</span>..=n {</span>
+<span class="line">  <span class="hl-keyword">if</span> combination.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span> == m {</span>
+<span class="line">    <span class="hl-keyword">break</span>;</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">if</span> combination.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span> + (n - c + <span class="hl-number">1</span>) == m {</span>
+<span class="line">    combination.<span class="hl-title function_ invoke__">extend</span>(c..=n);</span>
+<span class="line">    <span class="hl-keyword">break</span>;</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">if</span> g.<span class="hl-title function_ invoke__">gen</span>(<span class="hl-number">1</span>) == <span class="hl-number">1</span> {</span>
+<span class="line">    combination.<span class="hl-title function_ invoke__">insert</span>(c);</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>I think this covers all standard combinatorial structures.</span>
+<span>What</span>&rsquo;<span>s interesting, this approach works for non-standard structures as well.</span>
+<span>For example, for </span><a href="https://cses.fi/problemset/task/2168" class="url">https://cses.fi/problemset/task/2168</a><span>, the problem which started all this, I need to generate sequences of segments:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">gen_segments</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">m</span> = <span class="hl-number">6</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">all</span> = HashSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">l</span> = g.<span class="hl-title function_ invoke__">gen</span>(n);</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">xs</span> = <span class="hl-type">Vec</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..l {</span>
+<span class="line">      <span class="hl-keyword">if</span> m &gt; <span class="hl-number">0</span> {</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">l</span> = g.<span class="hl-title function_ invoke__">gen</span>(m - <span class="hl-number">1</span>);</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-variable">r</span> = l + <span class="hl-number">1</span> + g.<span class="hl-title function_ invoke__">gen</span>(m - l - <span class="hl-number">1</span>);</span>
+<span class="line">        <span class="hl-keyword">if</span> !xs.<span class="hl-title function_ invoke__">contains</span>(&amp;(l, r)) {</span>
+<span class="line">          xs.<span class="hl-title function_ invoke__">push</span>((l, r))</span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    all.<span class="hl-title function_ invoke__">insert</span>(xs);</span>
+<span class="line">    total += <span class="hl-number">1</span>;</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(all.<span class="hl-title function_ invoke__">len</span>(), <span class="hl-number">2_593_942</span>);</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(total, <span class="hl-number">4_288_306</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Due to the </span><code>.contains</code><span> check there are some duplicates, but that</span>&rsquo;<span>s not a problem as long as all sequences of segments are generated.</span>
+<span>Additionally, examples are strictly ordered by their complexity </span>&mdash;<span> earlier examples have fewer segments with smaller coordinates.</span>
+<span>That means that the first example which fails a property test is actually guaranteed to be the smallest counterexample! Nifty!</span></p>
+<p><span>That</span>&rsquo;<span>s all!</span>
+<span>Next time when you need to test something, consider if you can just exhaustively enumerate all </span>&ldquo;<span>sufficiently small</span>&rdquo;<span> inputs.</span>
+<span>If that</span>&rsquo;<span>s feasible, you can either write the classical recursive enumerator, or use this imperative </span><code>Gen</code><span> thing.</span></p>
+<p><strong><strong><span>Update(2021-11-28):</span></strong></strong></p>
+<p><span>There are now Rust (</span><a href="https://crates.io/crates/exhaustigen"><span>crates.io link</span></a><span>) and C++ (</span><a href="https://github.com/graydon/exhaustigen"><span>GitHub link</span></a><span>) implementations.</span>
+<a href="https://arxiv.org/abs/1710.10385">&ldquo;<span>Capturing the Future by Replaying the Past</span>&rdquo;</a><span> is a related paper which includes the above technique as a special case of </span>&ldquo;<span>simulate any monad by simulating delimited continuations via exceptions and replay</span>&rdquo;<span> trick.</span></p>
+<p><span>Balanced parentheses sequences:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">gen_parenthesis</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">n</span> = <span class="hl-number">5</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">expected_total</span> = <span class="hl-number">1</span> + <span class="hl-number">1</span> + <span class="hl-number">2</span> + <span class="hl-number">5</span> + <span class="hl-number">14</span> + <span class="hl-number">42</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">total</span> = <span class="hl-number">0</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">all</span> = HashSet::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">l</span> = g.<span class="hl-title function_ invoke__">gen</span>(n);</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">s</span> = <span class="hl-type">String</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">bra</span> = <span class="hl-number">0</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">ket</span> = <span class="hl-number">0</span>;</span>
+<span class="line">    <span class="hl-keyword">while</span> ket &lt; l {</span>
+<span class="line">      <span class="hl-keyword">if</span> bra &lt; l &amp;&amp; (bra == ket || g.<span class="hl-title function_ invoke__">gen</span>(<span class="hl-number">1</span>) == <span class="hl-number">1</span>) {</span>
+<span class="line">        s.<span class="hl-title function_ invoke__">push</span>(<span class="hl-string">&#x27;(&#x27;</span>);</span>
+<span class="line">        bra += <span class="hl-number">1</span>;</span>
+<span class="line">      } <span class="hl-keyword">else</span> {</span>
+<span class="line">        s.<span class="hl-title function_ invoke__">push</span>(<span class="hl-string">&#x27;)&#x27;</span>);</span>
+<span class="line">        ket += <span class="hl-number">1</span>;</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    all.<span class="hl-title function_ invoke__">insert</span>(s);</span>
+<span class="line">    total += <span class="hl-number">1</span>;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, total);</span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(expected_total, all.<span class="hl-title function_ invoke__">len</span>() <span class="hl-keyword">as</span> <span class="hl-type">u32</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2021-11-07-generate-all-the-things.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

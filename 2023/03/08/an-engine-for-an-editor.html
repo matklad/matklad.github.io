@@ -1,0 +1,204 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>An Engine For An Editor</title>
+  <meta name="description" content="A common trope is how, if one wants to build a game, one should build a game, rather than a game engine, because it is all too easy to fall into a trap of building a generic solution, without getting to the game proper.
+It seems to me that the situation with code editors is the opposite --- many people build editors, but few are building editor engines.
+What's an editor engine? A made up term I use to denote a thin waist the editor is build upon, the set of core concepts, entities and APIs which power the variety of editor's components.
+In this post, I will highlight Emacs' thin waist, which I think is worthy of imitation!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/03/08/an-engine-for-an-editor.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>An Engine For An Editor</span> <time datetime="2023-03-08">Mar 8, 2023</time></h1>
+<p><span>A common trope is how, if one wants to build a game, one should build a game, rather than a game engine, because it is all too easy to fall into a trap of building a generic solution, without getting to the game proper.</span>
+<span>It seems to me that the situation with code editors is the opposite </span>&mdash;<span> many people build editors, but few are building </span>&ldquo;<span>editor engines</span>&rdquo;<span>.</span>
+<span>What</span>&rsquo;<span>s an </span>&ldquo;<span>editor engine</span>&rdquo;<span>? A made up term I use to denote a </span><a href="https://www.oilshell.org/blog/2022/02/diagrams.html"><dfn><span>thin waist</span></dfn></a><span> the editor is build upon, the set of core concepts, entities and APIs which power the variety of editor</span>&rsquo;<span>s components.</span>
+<span>In this post, I will highlight Emacs</span>&rsquo;<span> thin waist, which I think is worthy of imitation!</span></p>
+<p><span>Before we get to Emacs, lets survey various APIs for building interactive programs.</span></p>
+<dl>
+<dt><span>Plain text</span></dt>
+<dd>
+<p><span>The simplest possible thing, the UNIX way of programs-filters, reading input from stdin and writing data to stdout.</span>
+<span>The language here is just plain text.</span></p>
+</dd>
+<dt><span>ANSI escape sequences</span></dt>
+<dd>
+<p><span>Adding escape codes to plain text (and a bunch of </span><code>ioctl</code><span>s) allows changing colors and clearing the screen.</span>
+<span>The language becomes a sequence of commands for the terminal (with </span>&ldquo;<span>print text</span>&rdquo;<span> being a fairly frequent one).</span>
+<span>This already is rich enough to power a variety of terminal applications, such as vim!</span></p>
+</dd>
+<dt><span>HTML</span></dt>
+<dd>
+<p><span>With more structure, we can disentangle ourselves from text, and say that all the stuff is made of trees of attributed elements (whose content might be text).</span>
+<span>That turns out to be enough to express basically whatever, as the world of modern web apps testifies.</span></p>
+</dd>
+<dt><span>Canvas</span></dt>
+<dd>
+<p><span>Finally, to achieve maximal flexibility, we can start with a clean 2d canvas with pixels and an event stream, and let the app draw however it likes.</span>
+<span>Desktop GUIs usually work that way (using some particular widget library to encapsulate common patterns of presentation and event handling).</span></p>
+</dd>
+</dl>
+<hr>
+<p><span>Emacs is different.</span>
+<span>Its thin waist consists of (using idiosyncratic olden editor terminology) frames, windows, buffers and attributed text.</span>
+<span>This is </span><em><span>less</span></em><span> general than canvas or HTML, but more general (and way more principled) than ANSI escapes.</span>
+<span>Crucially, this also retains most of plain text</span>&rsquo;<span>s </span><em><span>composability</span></em><span>.</span></p>
+<p><span>The foundation is a text with attributes </span>&mdash;<span> a pair of a string and a map from string</span>&rsquo;<span>s subranges to key-value dictionaries.</span>
+<span>Attributes express presentation (color, font, text decoration), but also semantics.</span>
+<span>A range of text can be designated as clickable.</span>
+<span>Or it can specify a custom keymap, which is only active when the cursor is on this range.</span></p>
+<p><span>I find this to be a sweet spot for building efficient user interfaces.</span>
+<span>Consider </span><a href="https://magit.vc"><span>magit</span></a><span>:</span></p>
+
+<figure>
+
+<img alt="" src="/assets/magit.png">
+</figure>
+<p><span>The interface is built from text, but it is more discoverable, more readable, and more efficient than GUI solutions.</span></p>
+<p><span>Text is </span><a href="https://graydon2.dreamwidth.org/193447.html"><span>surprisingly good</span></a><span> at communicating with humans!</span>
+<span>Forgoing arbitrary widgets and restricting oneself to a grid of characters greatly constrains the set of possible designs, but designs which come out of these constraints tend to be better.</span></p>
+<hr>
+<p><span>The rest (buffers, windows, and frames) serve to present attributed strings to the user.</span>
+<span>A Buffer holds a piece of text and stores position of the cursor (and the rest of editor</span>&rsquo;<span>s state for this particular piece of text).</span>
+<span>A tiling window manager displays buffers:</span></p>
+<ul>
+<li>
+<span>there</span>&rsquo;<span>s a set of floating windows (frames in Emacs terminology) managed by a desktop environment</span>
+</li>
+<li>
+<span>each floating window is subdivided into a tree of vertical and horizontal splits (windows) managed by Emacs</span>
+</li>
+<li>
+<span>each split displays a buffer, although some buffers might not have a corresponding split</span>
+</li>
+</ul>
+<p><span>There</span>&rsquo;<span>s also a tasteful selection of extras outside this orthogonal model.</span>
+<span>A buffer holds a status bar at the bottom and a set of fringe decorations at the left edge.</span>
+<span>Each floating window has a minibuffer </span>&mdash;<span> an area to type commands into (minibuffer </span><em><span>is</span></em><span> a buffer though </span>&mdash;<span> only presentation is slightly unusual).</span></p>
+<p><span>But the vast majority of everything else is not special </span>&mdash;<span> every significant thing is a buffer.</span>
+<span>So, </span><code>./main.rs</code><span> file, </span><code>./src</code><span> file tree, a terminal session where you type </span><code>cargo build</code><span> are all displayed as attributed text.</span>
+<span>All use the same tools for navigation and manipulation.</span></p>
+<p><span>Universality is the power of the model.</span>
+<span>Good old UNIX pipes, except interactive.</span>
+<span>With a GUI file manager, mass-renaming files requires </span><a href="https://apps.kde.org/krename/"><span>a dedicated utility</span></a><span>.</span>
+<span>In Emacs, file manager</span>&rsquo;<span>s state is text, so you can use standard text-manipulation tools (regexes, multiple cursors, vim</span>&rsquo;<span>s </span><kbd><kbd>.</kbd></kbd><span>) for the same task.</span></p>
+<section id="Conclusions">
+
+    <h2>
+    <a href="#Conclusions"><span>Conclusions</span> </a>
+    </h2>
+<p><span>Pay more attention to the editor</span>&rsquo;<span>s thin waist.</span>
+<span>Don</span>&rsquo;<span>t take it as a given that an editor should be a terminal, HTML, or GUI app </span>&mdash;<span> there might be a better vocabulary.</span>
+<span>In particular, Emacs seems to hit the sweet spot with its language of attributed strings and buffers.</span></p>
+<p><span>I am not sure that Emacs is the best we can do, but having a Rust library which implements Emacs model more or less as is would be nice!</span>
+<span>The two best resources to learn about this model are</span></p>
+<ul>
+<li>
+<span>this diagram:</span><br>
+<a href="https://www2.lib.uchicago.edu/keith/emacs/#org9c6cafa" class="url">https://www2.lib.uchicago.edu/keith/emacs/#org9c6cafa</a>
+</li>
+<li>
+<span>this section of Emacs docs:</span><br>
+<a href="https://www.gnu.org/software/emacs/manual/html_node/elisp/Text-Properties.html" class="url">https://www.gnu.org/software/emacs/manual/html_node/elisp/Text-Properties.html</a>
+</li>
+</ul>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-03-08-an-engine-for-an-editor.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

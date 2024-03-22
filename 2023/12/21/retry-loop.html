@@ -1,0 +1,207 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Retry Loop</title>
+  <meta name="description" content="A post about writing a retry loop. Not a smart post about avoiding thundering heards and resonance.
+A simpleton kind of post about wrangling ifs and fors together to minimize bugs.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/12/21/retry-loop.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Retry Loop</span> <time datetime="2023-12-21">Dec 21, 2023</time></h1>
+<p><span>A post about writing a retry loop. Not a smart post about avoiding thundering heards and resonance.</span>
+<span>A simpleton kind of post about wrangling ifs and fors together to minimize bugs.</span></p>
+<p><em><span>Stage:</span></em><span> you are writing a script for some build automation or some such.</span></p>
+<p><em><span>Example problem:</span></em><span> you want to get a freshly deployed package from Maven Central. As you learn after</span>
+<span>a CI failure, packages in Maven don</span>&rsquo;<span>t become available immediately after a deploy, there could be a</span>
+<span>delay. This is a poor API which breaks causality and makes it impossible to code correctly against,</span>
+<span>but what other alternative do you have? You just need to go and write a retry loop.</span></p>
+<p><span>You want to retry some </span><code>action</code><span>. The action either succeeds or fails. Some, but not all, failures</span>
+<span>are transient and can be retried after a timeout. If a failure persists after a bounded number</span>
+<span>of retries, it should be propagated.</span></p>
+<p><span>The </span><em><span>runtime</span></em><span> sequence of event we want to see is:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">action()</span>
+<span class="line">sleep()</span>
+<span class="line">action()</span>
+<span class="line">sleep()</span>
+<span class="line">action()</span></code></pre>
+
+</figure>
+<p><span>It has that mightily annoying a-loop-and-a-half shape.</span></p>
+<p><span>Here</span>&rsquo;<span>s the set of properties I would like to see in a solution:</span></p>
+<ol>
+<li>
+<span>No useless sleep. A naive loop would sleep one extra time before reporting a retry failure, but</span>
+<span>we don</span>&rsquo;<span>t want to do that.</span>
+</li>
+<li>
+<span>In the event of a retry failure, the underlying error is reported. I don</span>&rsquo;<span>t want to see </span><em><span>just</span></em>
+<span>that all attempts failed, I want to see an actual error from the last attempt.</span>
+</li>
+<li>
+<span>Obvious upper bound: I don</span>&rsquo;<span>t want to write a </span><code>while (true)</code><span> loop with a break in the middle. If I</span>
+<span>am to do at most 5 attempts, I want to see a </span><code>for (0..5)</code><span> loop. Don</span>&rsquo;<span>t ask me</span>
+<a href="https://github.com/tigerbeetle/tigerbeetle/pull/1367"><span>why</span></a><span>.</span>
+</li>
+<li>
+<span>No syntactic redundancy </span>&mdash;<span> there should be a single call to action and a single sleep in the</span>
+<span>source code.</span>
+</li>
+</ol>
+<p><span>I don</span>&rsquo;<span>t know how to achieve all four. That</span>&rsquo;<span>s the best I can do:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> action</span>() <span class="hl-operator">!</span><span class="hl-keyword">enum</span> { ok, retry: <span class="hl-type">anyerror</span> } {</span>
+<span class="line"></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> retry_loop</span>() <span class="hl-operator">!</span><span class="hl-type">void</span> {</span>
+<span class="line">    <span class="hl-keyword">for</span> (<span class="hl-numbers">0</span>..<span class="hl-numbers">5</span>) {</span>
+<span class="line">        <span class="hl-keyword">if</span> (<span class="hl-keyword">try</span> action() <span class="hl-operator">==</span> .ok) <span class="hl-keyword">break</span>;</span>
+<span class="line">        sleep();</span>
+<span class="line">    } <span class="hl-keyword">else</span> {</span>
+<span class="line">        <span class="hl-keyword">switch</span> (<span class="hl-keyword">try</span> action()) {</span>
+<span class="line">            .ok =&gt; {},</span>
+<span class="line">            .retry =&gt; <span class="hl-operator">|</span>err<span class="hl-operator">|</span> <span class="hl-keyword">return</span> err</span>
+<span class="line">        }</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This solution achieves 1-3, fails at 4, and relies on a somewhat esoteric language feature </span>&mdash;
+<code>for/else</code><span>.</span></p>
+<p><span>Salient points:</span></p>
+<ul>
+<li>
+<p><span>Because there is a syntactic repetition in call to action, it is imperative to extract it into a</span>
+<span>function.</span></p>
+</li>
+<li>
+<p><span>The return type of </span><code>action</code><span> has to be elaborate. There are three possibilities:</span></p>
+<ul>
+<li>
+<span>an action succeeds,</span>
+</li>
+<li>
+<span>an action fails fatally, error must be propagated,</span>
+</li>
+<li>
+<span>an action fails with a transient error, a retry can be attempted.</span>
+</li>
+</ul>
+<p><span>For the transient failure case, it is important to return an error object itself, so that the real</span>
+<span>error can be propagated if a retry fails.</span></p>
+</li>
+<li>
+<p><span>The core is a bounded </span><code>for (0..5)</code><span> loop. Can</span>&rsquo;<span>t mess that up!</span></p>
+</li>
+<li>
+<p><span>For </span>&ldquo;<span>and a half</span>&rdquo;<span> aspect, an </span><code>else</code><span> is used. Here we incur syntactic repetition, but that feels</span>
+<span>some what justified, as the last call </span><em><span>is</span></em><span> actually special, as it rethrows the error, rather than</span>
+<span>just swallowing it.</span></p>
+</li>
+</ul>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-12-21-retry-loop.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,216 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>On Modularity of Lexical Analysis</title>
+  <meta name="description" content="I was going to write a long post about designing an IDE-friendly language. I wrote an intro and
+figured that it would make a better, shorter post on its own. Enjoy!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/08/01/on-modularity-of-lexical-analysis.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>On Modularity of Lexical Analysis</span> <time datetime="2023-08-01">Aug 1, 2023</time></h1>
+<p><span>I was going to write a long post about designing an IDE-friendly language. I wrote an intro and</span>
+<span>figured that it would make a better, shorter post on its own. Enjoy!</span></p>
+<p><span>The big idea of language server construction is that language servers are not magic </span>&mdash;<span> capabilities</span>
+<span>and performance of tooling are constrained by the syntax and semantics of the underlying language.</span>
+<span>If a language is not designed with toolability in mind, some capabilities (e.g, fully automated</span>
+<span>refactors) are impossible to implement correctly. What</span>&rsquo;<span>s more, an IDE-friendly language turns out to</span>
+<span>be a fast-to-compile language with easy-to-compose libraries!</span></p>
+<p><span>More abstractly, there</span>&rsquo;<span>s this cluster of unrelated at a first sight, but intimately intertwined and</span>
+<span>mutually supportive properties:</span></p>
+<ul>
+<li>
+<span>parallel, separate compilation,</span>
+</li>
+<li>
+<span>incremental compilation,</span>
+</li>
+<li>
+<span>resilience to errors.</span>
+</li>
+</ul>
+<p><span>Separate compilation measures how fast we can compile codebase from scratch if we have unlimited</span>
+<span>number of CPU cores. For a language server, it solves the cold start problem </span>&mdash;<span> time to</span>
+<span>code-completion when the user opens the project for the first time or switches branches. Incremental</span>
+<span>compilation is the steady state of the language server </span>&mdash;<span> user types code and expects to see</span>
+<span>immediate effects throughout the project. Resilience to errors is important for two different</span>
+<span>sub-reasons. First, when the user edits the code it is by definition incomplete and erroneous, but a</span>
+<span>language server still must analyze the surrounding context correctly. But the killer feature of</span>
+<span>resilience is that, if you are absolutely immune to some errors, you don</span>&rsquo;<span>t even have to look at the</span>
+<span>code. If a language server can ignore errors in function bodies, it doesn</span>&rsquo;<span>t have to look at the</span>
+<span>bodies of functions from dependencies.</span></p>
+<p><span>All three properties, parallelism, incrementality, and resilience, boil down to modularity </span>&mdash;
+<span>partitioning the code into disjoint components with well-defined interfaces, such that each</span>
+<span>particular component is aware only about the interfaces of other components.</span></p>
+<section id="Minimized-Example-Lexical-Analysis">
+
+    <h2>
+    <a href="#Minimized-Example-Lexical-Analysis"><span>Minimized Example: Lexical Analysis</span> </a>
+    </h2>
+<p><span>Lets do a short drill and observe how the three properties interact at a small scale. Let</span>&rsquo;<span>s</span>
+<span>minimize the problem of separate compilation to just </span>&hellip;<span> lexical analysis. How can we build a</span>
+<span>language that is easier to tokenize for an language server?</span></p>
+<p><span>An unclosed quote is a nasty little problem! Practically, it is rare enough that it doesn</span>&rsquo;<span>t really</span>
+<span>matter how you handle it, but qualitatively it is illuminating. In a language like Rust, where</span>
+<span>strings can span multiple lines, inserting a </span><code>"</code><span> in the middle of a file changes the lexical structure</span>
+<span>of the following text completely (</span><code>/*</code><span>, start of a block comment, has the same effect). When tokens</span>
+<span>change, so does the syntax tree and the set of symbols defined by the file. A tiny edit, just one</span>
+<span>symbol, unhinges semantic structure of the entire compilation unit.</span></p>
+<p><span>Zig solves this problem. In Zig, no token can span several lines. That is, it would be correct to</span>
+<span>first split Zig source file by </span><code>\n</code><span>, and then tokenize each line separately. This is achieved by</span>
+<span>solving underlying problems requiring multi-line tokens better. Specifically:</span></p>
+<ul>
+<li>
+<p><span>there</span>&rsquo;<span>s a single syntax for comments, </span><code>//</code><span>,</span></p>
+</li>
+<li>
+<p><span>double-quoted strings can</span>&rsquo;<span>t contain a </span><code>\n</code><span>,</span></p>
+</li>
+<li>
+<p><span>but there</span>&rsquo;<span>s a really nice syntax for multiline strings:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> greeting =</span>
+<span class="line">    <span class="hl-string">\\This is</span></span>
+<span class="line">    <span class="hl-string">\\a multiline string</span></span>
+<span class="line">    <span class="hl-string">\\   &lt;- with a leading whitespace here.</span></span>
+<span class="line">    <span class="hl-string">\\</span></span></code></pre>
+
+</figure>
+</li>
+</ul>
+<p><span>Do you see modules here? Disjoint-partitioning into interface-connected components? From the</span>
+<span>perspective of lexical analysis, each </span><em><span>line</span></em><span> is a module. And a line always has a trivial, empty</span>
+<span>interface </span>&mdash;<span> different lines are completely independent. As a result:</span></p>
+<p><em><span>First</span></em><span>, we can do lexical analysis in parallel. If you have N CPU cores, you can split file into N</span>
+<span>equal chunks, then in parallel locally adjust chunk boundaries such that they fall on newlines, and</span>
+<span>then tokenize each chunk separately.</span></p>
+<p><em><span>Second</span></em><span>, we have quick incremental tokenization </span>&mdash;<span> given a source edit, you determine the set of</span>
+<span>lines affected, and re-tokenize only those. The work is proportional to the size of the edit plus at</span>
+<span>most two boundary lines.</span></p>
+<p><em><span>Third</span></em><span>, any lexical error in a line is isolated just to this line. There</span>&rsquo;<span>s no unclosed quote</span>
+<span>problem, mistakes are contained.</span></p>
+<p><span>I am by no means saying that line-by-line lexing is a requirement for an IDE-friendly language</span>
+<span>(though it would be nice)! Rather, I want you to marvel how the same underlying structure of the</span>
+<span>problem can be exploited for quarantining errors, reacting to changes quickly, and parallelizing the</span>
+<span>processing.</span></p>
+<p><span>The three properties are just three different faces of modularity in the end!</span></p>
+<hr>
+<p><span>I do want to write that </span>&ldquo;<span>IDE-friendly language</span>&rdquo;<span> post at some point, but, as a hedge (after all, I</span>
+<span>still owe you </span>&ldquo;<a href="https://matklad.github.io/2022/04/25/why-lsp.html"><span>Why LSP</span></a><span> Sucks?</span>&rdquo;<span> one</span>&hellip;<span>), here are two comments where I explored the idea somewhat:</span>
+<a href="https://todo.sr.ht/~icefox/garnet/52#event-242650"><span>1</span></a><span>,</span>
+<a href="https://lobste.rs/s/u7y4lk/modules_matter_most_for_masses#c_i6a8n9"><span>2</span></a><span>.</span></p>
+<p><span>I also recommend these posts, which explore the same underlying phenomenon from the software</span>
+<span>architecture perspective:</span></p>
+<ul>
+<li>
+<a href="https://www.tedinski.com/2018/01/30/the-one-ring-problem-abstraction-and-power.html" class="url">https://www.tedinski.com/2018/01/30/the-one-ring-problem-abstraction-and-power.html</a>
+</li>
+<li>
+<a href="https://www.tedinski.com/2018/02/06/system-boundaries.html" class="url">https://www.tedinski.com/2018/02/06/system-boundaries.html</a>
+</li>
+<li>
+<a href="https://www.pathsensitive.com/2023/03/modules-matter-most-for-masses.html" class="url">https://www.pathsensitive.com/2023/03/modules-matter-most-for-masses.html</a>
+</li>
+</ul>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-08-01-on-modularity-of-lexical-analysis.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

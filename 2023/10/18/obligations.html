@@ -1,0 +1,161 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unless Explicitly Specified Otherwise, Open Source Software With Users Carries Moral Obligations</title>
+  <meta name="description" content="My thoughts on the topic of whether maintainers owe you anything. Speaking as an author, a maintainer,
+a user of, and a contributor to open-source software.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/10/18/obligations.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Unless Explicitly Specified Otherwise, Open Source Software With Users Carries Moral Obligations</span> <time datetime="2023-10-18">Oct 18, 2023</time></h1>
+<p><span>My thoughts on the topic of whether maintainers owe you anything. Speaking as an author, a maintainer,</span>
+<span>a user of, and a contributor to open-source software.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with a thing which I find obvious and non-negotiable: I can</span>&rsquo;<span>t lie in my README.md.</span></p>
+<p><span>I can</span>&rsquo;<span>t write </span>&ldquo;<span>this software is reliable, fast, and secure</span>&rdquo;<span> if in fact my software is slow,</span>
+<span>crashes, and comes with a backdoor pre-installed. More generally, if I promise something in the</span>
+<span>readme, I</span>&rsquo;<span>d better follow up on the promise and be ready to apologize if I fail.</span></p>
+<p><span>If I create expectations between me and my users, I am on the hook for conforming to them.</span></p>
+<p><span>The subtle point here is, if I make an Open Source Project, push it to some forge, write a nice</span>
+<span>readme explaining why one would want to use it, provide one-liner for installation, and publish</span>
+<span>builds to some package registries, I am already creating some expectations. The act of inviting</span>
+<span>users (and writing usage instructions aimed at a general audience </span><em><span>is</span></em><span> an act of inviting users)</span>
+<span>forms an agreement between me as a maintainer and the user.</span></p>
+<p><span>Expectations, but how great? Let</span>&rsquo;<span>s say that tomorrow at this place I am run over by an automobile.</span>
+<span>That would be a tragedy for many reasons! But should I worry, on top of all that, that I can no</span>
+<span>longer swiftly react to vulnerabilities reported against my open-source software? Obviously not! And</span>
+<span>that</span>&rsquo;<span>s the bound on expectations here: it is absolutely ok for a maintainer to do absolutely</span>
+<span>nothing.</span></p>
+<p><span>At the same time, if I publish a project, write a nice readme, provide installation instructions,</span>
+<span>etc, and then add a backdoor to my software, I am wrong. Yes, I didn</span>&rsquo;<span>t explicitly mention in the</span>
+<span>readme that I am not going to add a backdoor. Still, there is a basic, implicit expectation about</span>
+<span>software security, and it is wrong for me to violate it without an explicit mention.</span></p>
+<p><span>So I think the default expectations for a published open-source project boil down to:</span></p>
+<ul>
+<li>
+<span>As a maintainer, I can do absolutely nothing, and that</span>&rsquo;<span>s OK.</span>
+</li>
+<li>
+<span>At the same time, I can not be actively hostile to my users.</span>
+</li>
+<li>
+<span>I can spell out any extra carve-outs in either direction in my README.md.</span>
+<span>E.g., if I promise that releases follow SemVer, I should try to make it so! Conversely, if I am</span>
+<span>implementing my own crypto for fun for credentials-handling software, it</span>&rsquo;<span>s ok for me to just</span>
+<span>prominently mention that in the documentation.</span>
+</li>
+</ul>
+<p><span>What about the license? Doesn</span>&rsquo;<span>t it say that THE SOFTWARE IS PROVIDED </span>&ldquo;<span>AS IS</span>&rdquo;<span>, WITHOUT WARRANTY OF</span>
+<span>ANY KIND, EXPRESS OR IMPLIED?</span></p>
+<p><span>It does, but that</span>&rsquo;<span>s a statement about legality, not ethicality. If my readme says that my software</span>
+<span>is fit for a particular purpose, while it actually (and subtly) isn</span>&rsquo;<span>t in a big way, my users have</span>
+<span>the moral right to be mad at me. They don</span>&rsquo;<span>t have the legal right to sue me though.</span></p>
+<p><span>So, if you, as an open-source maintainer, publish your software and gain users, you should ask</span>
+<span>yourself: </span>&ldquo;<span>do I actually want to have users?</span>&rdquo;<span>. It is totally fine if the answer is </span>&ldquo;<span>no</span>&rdquo;<span>! It is a</span>
+<span>safe default answer and what governs most of the git repositories out there.</span></p>
+<p><span>Never the less, if the answer to question of users is </span>&ldquo;<span>no</span>&rdquo;<span>, you should make it clear in your Readme</span>
+<span>that it is a hobby, non-production-ready project which isn</span>&rsquo;<span>t intended to be used by anyone but you.</span>
+<span>Usually, it</span>&rsquo;<span>s enough to just not have a readme at all, or have a very short readme which makes it</span>
+<span>obvious that the project isn</span>&rsquo;<span>t supported.</span></p>
+<p><span>However, if you do have a nice README with installation instructions and such, that constitutes a</span>
+&ldquo;<span>yes</span>&rdquo;<span> answer. And then you, as a maintainer, are responsible for a tiny bit of life of your</span>
+<span>explicitly invited users. It</span>&rsquo;<span>s not expected that you do much (in fact, doing nothing is totally OK),</span>
+<span>but the amount of expectation is greater than zero.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-10-18-obligations.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

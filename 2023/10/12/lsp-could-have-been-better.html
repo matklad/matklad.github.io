@@ -1,0 +1,508 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LSP could have been better</title>
+  <meta name="description" content="We talk about programming like it is about writing code, but the code ends up being less important
+than the architecture, and the architecture ends up being less important than social issues.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/10/12/lsp-could-have-been-better.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>LSP could have been better</span> <time datetime="2023-10-12">Oct 12, 2023</time></h1>
+
+<figure class="blockquote">
+<blockquote><p><span>We talk about programming like it is about writing code, but the code ends up being less important</span>
+<span>than the architecture, and the architecture ends up being less important than social issues.</span></p>
+</blockquote>
+<figcaption><cite><a href="https://neugierig.org/software/blog/2020/05/ninja.html"><span>The Success and Failure of Ninja</span></a></cite></figcaption>
+</figure>
+<p><span>The  </span><a href="https://matklad.github.io/2022/04/25/why-lsp.html"><em><span>Why LSP</span></em></a><span> post discusses the </span>&ldquo;<span>social</span>
+<span>issues</span>&rdquo;<span> solved by LSP. LSP (as a part of overarching Microsoft strategy) is brilliant, because it</span>
+<span>moved the world to a new equilibrium where not having basic IDE support is frowned upon. This post</span>
+<span>instead discusses architectural aspects of LSP, which I personally find not as brilliant(especially given that</span>
+<a href="https://htmlpreview.github.io/?https://github.com/dart-lang/sdk/blob/8e6a02d899ef62ef5b8405518b36340e609198e2/pkg/analysis_server/doc/api.html"><span>Dart Analysis Protocol</span></a>
+<span>predates LSP and is technically superior in some aspects). Perhaps it</span>
+<span>could be useful for someone designing other LSP-shaped protocols! Note that it</span>&rsquo;<span>s been couple of</span>
+<span>years since I was actively involved in LSP, probably the grass is greener these days!</span></p>
+<p><span>Let</span>&rsquo;<span>s get to the list of properties, good and bad, in no particular order.</span></p>
+<section id="Focus-on-Presentation">
+
+    <h2>
+    <a href="#Focus-on-Presentation"><span>Focus on Presentation</span> </a>
+    </h2>
+<p><span>And let</span>&rsquo;<span>s start with an aspect of the architecture which is genius, and which, I think, is</span>
+<span>responsible for a big share of LSP success on the technical side. If you build a tool for working</span>
+<span>with </span><em><span>multiple</span></em><span> programming languages, one of the biggest questions is how to find common ground</span>
+<span>among different, but ultimately similar, languages. A first attempt is to uncover essential</span>
+<span>commonality: after all, all languages have files, variables, functions, classes, right? This is </span>&hellip;
+<span>maybe not necessary a dead end, but definitely a thorny and treacherous path </span>&mdash;<span> languages are</span>
+<span>different, each language is weird in at least some of its aspects, and common ground risks to level</span>
+<span>away meaningful distinctions.</span></p>
+<p><span>So, what does LSP do here? It just doesn</span>&rsquo;<span>t provide a semantic model of the code base. Instead, it is</span>
+<span>focused squarely on the presentation. No matter how different each programming language is, they</span>
+<span>all, in the end, use the same completion widget. So LSP is formulated in terms of what</span>&rsquo;<span>s shown in</span>
+<span>the completion widget, not in terms of the underlying semantic language entities. That means that</span>
+<span>each language has an internal semantic model which is full fidelity </span><em><span>for this particular language</span></em><span>,</span>
+<span>and uses it to provide the best completion experience which is possible for a given completion</span>
+<span>widget. This is how rust-analyzer is structured internally as well:</span></p>
+<ol>
+<li>
+<span>Compiler layer deals with the messy language analysis tasks, it derives more structured</span>
+<span>information (types) from less structured information (source text), explicitly tracking analysis</span>
+<span>layers and phases.</span>
+</li>
+<li>
+<span>The HIR (high-level intermediate representation) is a façade around the compiler, which provides</span>
+<span>a rich graph-based object model of code which looks as if all derived information, like types, is</span>
+<span>pre-computed.</span>
+</li>
+<li>
+<span>The IDE layer uses HIR to compute things like completions, and presents them as Rust-specific,</span>
+<span>but semantics-less POD structures to be shown to the user in GUI more or less as is.</span>
+</li>
+</ol>
+<p><span>One consequence of this architecture is that LSP requests map to editor widgets, and not to the</span>
+<span>underlying language concepts, even when several different widgets are powered by the same underlying</span>
+<span>data. For example, LSP has separate requests for:</span></p>
+<ul>
+<li>
+<span>hierarchical outline of a file displayed in the side bar,</span>
+</li>
+<li>
+&ldquo;<span>breadcrumbs</span>&rdquo;<span> shown in the header,</span>
+</li>
+<li>
+<span>syntax-aware selection ranges,</span>
+</li>
+<li>
+<span>code folding.</span>
+</li>
+</ul>
+<p><span>Although all four features are just different views into an AST, there</span>&rsquo;<span>s no </span>&ldquo;<span>get AST</span>&rdquo;<span> request in the</span>
+<span>LSP. Different requests allow to fine-tune presentation for the  different use-cases, and the</span>
+<span>details do differ! Semantic selection might contain some sub-syntax ranges inside string literals</span>
+<span>and comments, breadcrumb need to include things like conditionals of </span><code>if</code><span> expressions, while the</span>
+<span>outline might want to get rid of less important nodes. Attentive reader will notice that breadcrumbs</span>
+<span>and the outline actually use the same LSP request. Even LSP doesn</span>&rsquo;<span>t follow LSP philosophy fully!</span></p>
+</section>
+<section id="Transport">
+
+    <h2>
+    <a href="#Transport"><span>Transport</span> </a>
+    </h2>
+<p><span>After a big thing that LSP did right, let</span>&rsquo;<span>s look at a small thing that it got wrong. Let</span>&rsquo;<span>s look at</span>
+<span>how information is transmitted over the wire.</span></p>
+<p><span>JSON is actually OK! Many people complain that JSON is slow, but that</span>&rsquo;<span>s not actually the case</span>
+<span>generally. There are some edge cases, where particular client libraries can be slow as was the case</span>
+<span>at least at some point with Swift and Emacs, but JSON is definitely fast enough for Rust, Java and</span>
+<span>JavaScript. Of course, something substantially better than JSON is possible in </span><em><span>theory</span></em><span>.</span></p>
+<p><span>I think ideally we need </span>&ldquo;<span>WebAssembly for IPC</span>&rdquo;<span>, a format that:</span></p>
+<ul>
+<li>
+<span>has dual text and binary encoding,</span>
+</li>
+<li>
+<span>is stupidly simple,</span>
+</li>
+<li>
+<span>is thoroughly, readably, and precisely specified,</span>
+</li>
+<li>
+<span>and, in general, is principled and a joy to use.</span>
+</li>
+</ul>
+<p><span>There</span>&rsquo;<span>s no such format yet, so JSON it is. Good enough.</span></p>
+<p><span>HTTP framing is not OK. On the wire, the messages framed like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Content-Length: 92 \r\n</span>
+<span class="line">\r\n</span>
+<span class="line">Actual message</span></code></pre>
+
+</figure>
+<p><span>That is:</span></p>
+<ul>
+<li>
+<span>case-insensitive </span>&ldquo;<span>content-length</span>&rdquo;<span> header,</span>
+</li>
+<li>
+<span>followed by length of the following message, formatted as a decimal number in ASCII,</span>
+</li>
+<li>
+<span>followed by double </span><code>\r\n</code><span>,</span>
+</li>
+<li>
+<span>followed by the actual message.</span>
+</li>
+</ul>
+<p><span>This resembles HTTP, but is not actual HTTP, so you need to write a bit of custom code to deal</span>
+<span>with the framing. That</span>&rsquo;<span>s not hard:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">size</span> = <span class="hl-literal">None</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">buf</span> = <span class="hl-type">String</span>::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">loop</span> {</span>
+<span class="line">    buf.<span class="hl-title function_ invoke__">clear</span>();</span>
+<span class="line">    <span class="hl-keyword">if</span> inp.<span class="hl-title function_ invoke__">read_line</span>(&amp;<span class="hl-keyword">mut</span> buf)? == <span class="hl-number">0</span> {</span>
+<span class="line">      <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">Ok</span>(<span class="hl-literal">None</span>);</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">if</span> !buf.<span class="hl-title function_ invoke__">ends_with</span>(<span class="hl-string">&quot;\r\n&quot;</span>) {</span>
+<span class="line">      <span class="hl-keyword">return</span> <span class="hl-title function_ invoke__">Err</span>(invalid_data!(<span class="hl-string">&quot;malformed header: {:?}&quot;</span>, buf));</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">buf</span> = &amp;buf[..buf.<span class="hl-title function_ invoke__">len</span>() - <span class="hl-number">2</span>];</span>
+<span class="line">    <span class="hl-keyword">if</span> buf.<span class="hl-title function_ invoke__">is_empty</span>() {</span>
+<span class="line">      <span class="hl-keyword">break</span>;</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">parts</span> = buf.<span class="hl-title function_ invoke__">splitn</span>(<span class="hl-number">2</span>, <span class="hl-string">&quot;: &quot;</span>);</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">header_name</span> = parts.<span class="hl-title function_ invoke__">next</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">header_value</span> = parts.<span class="hl-title function_ invoke__">next</span>().<span class="hl-title function_ invoke__">ok_or_else</span>(|| {</span>
+<span class="line">      invalid_data!(<span class="hl-string">&quot;malformed header: {:?}&quot;</span>, buf)</span>
+<span class="line">    })?;</span>
+<span class="line">    <span class="hl-keyword">if</span> header_name.<span class="hl-title function_ invoke__">eq_ignore_ascii_case</span>(<span class="hl-string">&quot;Content-Length&quot;</span>) {</span>
+<span class="line">      size = <span class="hl-title function_ invoke__">Some</span>(</span>
+<span class="line">        header_value.parse::&lt;<span class="hl-type">usize</span>&gt;().<span class="hl-title function_ invoke__">map_err</span>(invalid_data)?,</span>
+<span class="line">      );</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">size</span>: <span class="hl-type">usize</span> =</span>
+<span class="line">    size.<span class="hl-title function_ invoke__">ok_or_else</span>(|| invalid_data!(<span class="hl-string">&quot;no Content-Length&quot;</span>))?;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">buf</span> = buf.<span class="hl-title function_ invoke__">into_bytes</span>();</span>
+<span class="line">  buf.<span class="hl-title function_ invoke__">resize</span>(size, <span class="hl-number">0</span>);</span>
+<span class="line">  inp.<span class="hl-title function_ invoke__">read_exact</span>(&amp;<span class="hl-keyword">mut</span> buf)?;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">buf</span> = <span class="hl-type">String</span>::<span class="hl-title function_ invoke__">from_utf8</span>(buf).<span class="hl-title function_ invoke__">map_err</span>(invalid_data)?;</span></code></pre>
+
+</figure>
+<p><span>But, still, decoding ASCII message length from variable-length header? That</span>&rsquo;<span>s accidental complexity.</span>
+<span>Just separate json objects with newlines instead:</span></p>
+<p><a href="https://jsonlines.org" class="url">https://jsonlines.org</a></p>
+<p><span>Framing using </span><code>\n</code><span> as a separator is almost certainly available out of the box in the programming</span>
+<span>language of choice.</span></p>
+<p><span>Wiping away the tears and peeling one more layer from the onion, we see json-rpc:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-punctuation">{</span></span>
+<span class="line">    <span class="hl-attr">&quot;jsonrpc&quot;</span><span class="hl-punctuation">:</span> <span class="hl-string">&quot;2.0&quot;</span><span class="hl-punctuation">,</span></span>
+<span class="line">    <span class="hl-attr">&quot;method&quot;</span><span class="hl-punctuation">:</span> <span class="hl-string">&quot;initialize&quot;</span><span class="hl-punctuation">,</span></span>
+<span class="line">    <span class="hl-attr">&quot;id&quot;</span><span class="hl-punctuation">:</span> <span class="hl-number">1</span><span class="hl-punctuation">,</span></span>
+<span class="line">    <span class="hl-attr">&quot;params&quot;</span><span class="hl-punctuation">:</span> <span class="hl-punctuation">{</span> ... <span class="hl-punctuation">}</span></span>
+<span class="line"><span class="hl-punctuation">}</span></span></code></pre>
+
+</figure>
+<p><span>This again is a bit of needless accidental complexity. Again, not hard to handle:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">_write</span>(<span class="hl-keyword">self</span>, w: &amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">dyn</span> Write) <span class="hl-punctuation">-&gt;</span> io::<span class="hl-type">Result</span>&lt;()&gt; {</span>
+<span class="line">  <span class="hl-meta">#[derive(Serialize)]</span></span>
+<span class="line">  <span class="hl-keyword">struct</span> <span class="hl-title class_">JsonRpc</span> {</span>
+<span class="line">    jsonrpc: &amp;<span class="hl-symbol">&#x27;static</span> <span class="hl-type">str</span>,</span>
+<span class="line">    <span class="hl-meta">#[serde(flatten)]</span></span>
+<span class="line">    msg: Message,</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">text</span> = serde_json::<span class="hl-title function_ invoke__">to_string</span>(&amp;JsonRpc {</span>
+<span class="line">    jsonrpc: <span class="hl-string">&quot;2.0&quot;</span>,</span>
+<span class="line">    msg: <span class="hl-keyword">self</span>,</span>
+<span class="line">  })?;</span>
+<span class="line">  <span class="hl-title function_ invoke__">write_msg_text</span>(w, &amp;text)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>But:</span></p>
+<ul>
+<li>
+<span>Prone to complexity amplification, invites jsonrpc framework with all the latest patterns.</span>
+</li>
+<li>
+<code>"jsonrpc": "2.0"</code><span> is meaningless noise which you have to look at during debugging.</span>
+</li>
+<li>
+<span>Error codes like </span><code>-32601</code><span> (ah, that comes from xml-rpc!).</span>
+</li>
+<li>
+<span>Includes notifications. Notification are a big anti-pattern in RPC, for a somewhat subtle reason.</span>
+<span>More on this later.</span>
+</li>
+</ul>
+<p><span>What to do instead? Do what Dart does, some excerpts from </span><a href="https://htmlpreview.github.io/?https://github.com/dart-lang/sdk/blob/8e6a02d899ef62ef5b8405518b36340e609198e2/pkg/analysis_server/doc/api.html"><span>the specification</span></a><span>:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>Messages are delineated by newlines. This means,</span>
+<span>in particular, that the JSON encoding process must not introduce newlines within a message. Note</span>
+<span>however that newlines are used in this document for readability.</span></p>
+<p><span>To ease interoperability with Lisp-based clients (which may not be able to easily distinguish</span>
+<span>between empty lists, empty maps, and null), client-to-server communication is allowed to replace any</span>
+<span>instance of </span>&ldquo;<code>{}</code>&rdquo;<span> or </span>&ldquo;<code>[]</code>&rdquo;<span> with null. The server will always properly represent empty lists as </span>&ldquo;<code>[]</code>&rdquo;
+<span>and empty maps as </span>&ldquo;<code>{}</code>&rdquo;<span>.</span></p>
+<p><span>Clients can make a request of the server and the server will provide a response for each request</span>
+<span>that it receives. </span><strong><span>While many of the requests that can be made by a client are informational in</span>
+<span>nature, we have chosen to always return a response so that clients can know whether the request was</span>
+<span>received and was correct.</span></strong></p>
+<p><span>Example request:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">request: {</span>
+<span class="line">  "id": String</span>
+<span class="line">  "method": "server.getVersion"</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">response: {</span>
+<span class="line">  "id": String</span>
+<span class="line">  "error": optional RequestError</span>
+<span class="line">  "result": {</span>
+<span class="line">    "version": String</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</blockquote>
+
+</figure>
+<p><span>That</span>&rsquo;<span>s basically jsonrpc, the good parts, including using </span><code>"UNKNOWN_REQUEST"</code><span> instead of </span><code>-32601</code><span>.</span></p>
+</section>
+<section id="Coordinates">
+
+    <h2>
+    <a href="#Coordinates"><span>Coordinates</span> </a>
+    </h2>
+<p><span>LSP uses </span><code>(line, column)</code><span> pairs for coordinates. The neat thing here is that this solves significant</span>
+<span>chunk of </span><code>\n</code><span> vs </span><code>\r\n</code><span> problems </span>&mdash;<span> client and server may represent line endings differently, but</span>
+<span>this doesn</span>&rsquo;<span>t matter, because coordinates are the same.</span></p>
+<p><span>Focus on the presentation provides another motivation, because location information received by the</span>
+<span>client can be directly presented to the user, without the need to parse the underlying file. I have</span>
+<span>mixed feelings about this.</span></p>
+<p><span>The problem, </span><code>column</code><span> is counted using UTF-16 code units. This is, like, </span>&ldquo;<span>no</span>&rdquo;<span>. For many reasons,</span>
+<span>but in particular, UTF-16 is definitely the wrong number to show to the user as a </span>&ldquo;<span>column</span>&rdquo;<span>.</span></p>
+<p><span>There</span>&rsquo;<span>s no entirely obvious answer what should be used instead. My personal favorite would be</span>
+<span>counting utf-8 code units (so, just bytes). You need </span><em><span>some</span></em><span> coordinate space. Any reasonable</span>
+<span>coordinate space won</span>&rsquo;<span>t be useful for presentation, so you might as well use the space that matches</span>
+<span>the underlying utf-8 encoding, so that accessing substrings is O(1).</span></p>
+<p><span>Using unicode codepoints would perhaps be the most agreeable solution. Codepoints are useless </span>&mdash;
+<span>you</span>&rsquo;<span>ll need to convert to grapheme clusters for presentation, and to utf-8 code units to do anything</span>
+<span>with the string. Still, codepoints are a common denominator, they are more often correct if</span>
+<span>incorrectly used for presentation, and they have a nice property that any index less then length is</span>
+<span>valid irrespective of the actual string.</span></p>
+</section>
+<section id="Causality-Casualty">
+
+    <h2>
+    <a href="#Causality-Casualty"><span>Causality Casualty</span> </a>
+    </h2>
+<p><span>As mentioned above, one drawback of one-way notifications from jsonrpc is that they don</span>&rsquo;<span>t allow</span>
+<span>signaling errors. But there</span>&rsquo;<span>s a more subtle problem here: because you don</span>&rsquo;<span>t receive response to a</span>
+<span>notification, it might be hard to order it relative to other events. The Dart protocol is pretty</span>
+<span>strict about the ordering of events:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>There is no guarantee concerning the order in which responses will be returned, but there is a</span>
+<span>guarantee that the server will process requests in the order in which they are sent as long as the</span>
+<span>transport mechanism also makes this guarantee.</span></p>
+</blockquote>
+
+</figure>
+<p><span>This guarantee ensures that the client and the server mutually understand each other</span>&rsquo;<span>s state. For</span>
+<span>every request the client knows which file modifications happened before it, and which came afterwards.</span></p>
+<p><span>In LSP, when the client wants to modify the state of a file on the server, it sends a notification.</span>
+<span>LSP also supports server-initiated edits. Now, if the client sends a </span><code>didChangeTextDocument</code>
+<span>notification, and then receives a </span><code>workspace/applyEdit</code><span> request from the server, there</span>&rsquo;<span>s no way for</span>
+<span>the client to know whether the edit takes the latest change into the account or not. Were</span>
+<code>didChangeTextDocument</code><span> a request instead, the client could have looked at the relative order of the</span>
+<span>corresponding response and </span><code>workspace/applyEdit</code><span>.</span></p>
+<p><span>LSP papers over this fundamental loss of causality by including numeric versions of the documents</span>
+<span>with every edit, but this is a best effort solution. Edits might be invalidated by changes to</span>
+<span>unrelated documents. For example, for a rename refactor, if a new usage was introduced in a new file</span>
+<span>after the refactor was computed, version numbers of the changed files would wrongly tell you that</span>
+<span>the edit is still correct, while it will miss this new usage.</span></p>
+<p><span>Practically, this is a small problem </span>&mdash;<span> it works most of the  time (I </span><em><span>think</span></em><span> I have seen zero</span>
+<span>actual bugs caused by causality loss), and even the proper solution can</span>&rsquo;<span>t order events originating</span>
+<span>from the client relative to the events originating from the file system. But the fix is also very</span>
+<span>simple </span>&mdash;<span> just don</span>&rsquo;<span>t voluntarily lose causality links!</span></p>
+</section>
+<section id="Remote-Procedural-State-Synchronization">
+
+    <h2>
+    <a href="#Remote-Procedural-State-Synchronization"><span>Remote Procedural State Synchronization</span> </a>
+    </h2>
+<p><span>And this touches what I think is the biggest architectural issue with LSP. LSP is an RPC protocol</span>
+&mdash;<span> it is formed by </span>&ldquo;<span>edge triggered</span>&rdquo;<span> requests that make something happen on the other side. But this</span>
+<span>is not how most of IDE features work. What actually is needed is </span>&ldquo;<span>level triggered</span>&rdquo;<span> </span><strong><span>state</span>
+<span>synchronization</span></strong><span>. The client and the server need to agree what something </span><em><span>is</span></em><span>, deciding the course</span>
+<span>of action is secondary. It is </span>&ldquo;<span>to be or not to be</span>&rdquo;<span> rather than </span>&ldquo;<span>what is to be done</span>&rdquo;<span>.</span></p>
+<p><span>At the bottom is synchronization of text documents </span>&mdash;<span> the server and the client need to agree which</span>
+<span>files there are, and what is their content.</span></p>
+<p><span>Above is synchronization of derived data. For example, there</span>&rsquo;<span>s a set of errors in the project. This</span>
+<span>set changes when the underlying text files change. Errors change with some lag, as it takes time to</span>
+<span>compute them (and sometimes files changes faster than the errors could be re-computed).</span></p>
+<p><span>Things like file outline, syntax highlighting, cross-reference information, e.t.c, all follow the</span>
+<span>same pattern.</span></p>
+<p><span>Crucially, predicting which changes to the source invalidate which derived data requires language</span>
+<span>specific knowledge. Changing the text of </span><code>foo.rs</code><span> might affect syntax highlighting in </span><code>bar.rs</code><span> (as</span>
+<span>syntax highlighting is affected by types).</span></p>
+<p><span>In LSP, highlighting and such are requests. This means that either the client is incorrect and shows</span>
+<span>stale highlighting results, or it conservatively re-queries all highlighting results after every</span>
+<span>change, wasting the CPU, and </span><em><span>still</span></em><span> showing stale results sometimes, when an update happens outside</span>
+<span>of the client (eg, when </span><code>cargo</code><span> finished downloading external crates).</span></p>
+<p><span>The Dart model is more flexible, performant and elegant. Instead of highlighting being a request, it</span>
+<span>is a </span><em><span>subscription</span></em><span>. The client subscribes to syntax highlighting of particular files, the server</span>
+<span>notifies the client whenever highlights for the selected files change. That is, two pieces of state</span>
+<span>are synchronized between the client and the server:</span></p>
+<ul>
+<li>
+<span>The set of files the client is subscribed to</span>
+</li>
+<li>
+<span>The actual state of syntax highlighting for these files.</span>
+</li>
+</ul>
+<p><span>The former is synchronized by sending the whole </span>&ldquo;<span>current set</span>&rdquo;<span> of files in a request, whenever the</span>
+<span>set changes. The latter is synchronized by sending incremental updates.</span></p>
+<p><span>Subscriptions are granular both in terms of the file set, as well as in terms of features. The</span>
+<span>client might subscribe for errors in the whole project, and for highlights in the currently opened</span>
+<span>documents only.</span></p>
+<p><span>Subscriptions are implemented in terms of RPC, but they are an overarching organizational pattern</span>
+<span>followed by the majority of the requests. LSP doesn</span>&rsquo;<span>t have an equivalent, and has real bugs with</span>
+<span>outdated information shown to the user.</span></p>
+<p><span>I don</span>&rsquo;<span>t think Dart goes as far as possible here. JetBrains Rider, if I understand correctly, does</span>
+<span>something smarter:</span></p>
+<p><a href="https://www.codemag.com/Article/1811091/Building-a-.NET-IDE-with-JetBrains-Rider" class="url">https://www.codemag.com/Article/1811091/Building-a-.NET-IDE-with-JetBrains-Rider</a></p>
+<p><span>I think the idea behind the rider protocol is that you directly define the state you want to</span>
+<span>synchronize between the client and the server as state. The protocol then manages </span>&ldquo;<span>magic</span>&rdquo;
+<span>synchronization of the state by sending minimal diffs.</span></p>
+</section>
+<section id="Simplistic-Refactorings">
+
+    <h2>
+    <a href="#Simplistic-Refactorings"><span>Simplistic Refactorings</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s unwind to something more down to earth, like refactorings. Not the simple ones, like rename,</span>
+<span>but complex ones, like </span>&ldquo;<span>change signature</span>&rdquo;<span>:</span></p>
+<p><a href="https://www.jetbrains.com/idea/guide/tips/change-signature/" class="url">https://www.jetbrains.com/idea/guide/tips/change-signature/</a></p>
+<p><span>In this refactoring, the user selects a function declaration, then rearranges</span>
+<span>parameters in some way (reorders, removes, adds, renames, changes types, whatever), and then the IDE</span>
+<span>fixes all call-sites.</span></p>
+<p><span>The thing that makes this refactor complex is that it is interactive </span>&mdash;<span> it</span>&rsquo;<span>s not an atomic request</span>
+&ldquo;<span>rename </span><code>foo</code><span> to </span><code>bar</code>&rdquo;<span>, it</span>&rsquo;<span>s a dialog between the IDE and the user. There are many parameters that</span>
+<span>the user tweaks based on the analysis of the original code and the already specified aspects of the</span>
+<span>refactoring.</span></p>
+<p><span>LSP doesn</span>&rsquo;<span>t support this workflows. Dart somewhat supports them, though each refactoring gets to use</span>
+<span>custom messages (that is, there</span>&rsquo;<span>s quite good overall protocol for multistep refactorings, but each</span>
+<span>refactoring essentially sends </span><code>any</code><span> over the wire, and the IDE on the other side hard-codes specific</span>
+<span>GUIs for specific refactorings). This per-refactoring work is not nice, but it is much better than</span>
+<span>not having these complex refactorings at all.</span></p>
+</section>
+<section id="Dynamic-Registration">
+
+    <h2>
+    <a href="#Dynamic-Registration"><span>Dynamic Registration</span> </a>
+    </h2>
+<p><span>A small one to conclude. Significant chunk of conceptual LSP complexity comes from support for</span>
+<span>dynamic registration of capabilities. I don</span>&rsquo;<span>t understand why that features is there, rust-analyzer</span>
+<span>uses dynamic registration only for specifying which files should be watched. And that would be much</span>
+<span>simpler if it used a plain request (or a subscription mechanism).</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-10-12-lsp-could-have-been-better.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

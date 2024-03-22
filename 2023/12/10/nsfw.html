@@ -1,0 +1,474 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Non-Send Futures When?</title>
+  <meta name="description" content="Ever since reading
+What If We Pretended That a Task = Thread?
+I can't stop thinking about borrowing non-Sync data across .await.
+In this post, I'd love to take one more look at the problem.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/12/10/nsfw.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Non-Send Futures When?</span> <time datetime="2023-12-10">Dec 10, 2023</time></h1>
+<p><span>Ever since reading</span>
+<a href="https://blaz.is/blog/post/lets-pretend-that-task-equals-thread/" class="display"><em><span>What If We Pretended That a Task = Thread?</span></em></a>
+<span>I can</span>&rsquo;<span>t stop thinking about borrowing non-</span><code>Sync</code><span> data across </span><code>.await</code><span>.</span>
+<span>In this post, I</span>&rsquo;<span>d love to take one more look at the problem.</span></p>
+<section id="Send-And-Sync">
+
+    <h2>
+    <a href="#Send-And-Sync"><span>Send And Sync</span> </a>
+    </h2>
+<p><span>To warm up, a refresher on</span>
+<a href="https://doc.rust-lang.org/stable/std/marker/trait.Send.html"><code>Send</code></a><span> and</span>
+<a href="https://doc.rust-lang.org/stable/std/marker/trait.Sync.html"><code>Sync</code></a><span> auto-traits.</span>
+<span>These traits are a </span><em><span>library</span></em><span> feature that enable fearless concurrency </span>&mdash;<span> a statically checked</span>
+<span>guarantee that non-thread-safe data structures don</span>&rsquo;<span>t escape from their original thread.</span></p>
+<p><span>Why do we need two traits, rather than just a single </span><code>ThreadSafe</code><span>? Because there are two degrees of</span>
+<span>thread-unsafety.</span></p>
+<p><span>Some types are fine to use from multiple threads, as long as only a single thread at a time uses a</span>
+<span>particular value. An example here would be a </span><code>Cell&lt;i32&gt;</code><span>. If two threads have a reference to a cell</span>
+<span>at the same time, a </span><code>&amp;Cell&lt;i32&gt;</code><span>, we are in trouble </span>&mdash;<span> </span><code>Cell</code>&rsquo;<span>s loads and stores are not atomic</span>
+<span>and are UB by definition if used concurrently. However, if two different threads have exclusive</span>
+<span>access to a </span><code>Cell</code><span>, that</span>&rsquo;<span>s fine </span>&mdash;<span> because the access is exclusive, it necessary means that it is</span>
+<span>not simultaneous. That is, it</span>&rsquo;<span>s OK for thread A to </span><em><span>send</span></em><span> a </span><code>Cell&lt;i32&gt;</code><span> to a different thread B,</span>
+<span>as long as A itself loses access to the cell.</span></p>
+<p><span>But there are also types which are unsafe to use from multiple threads even if only a single thread</span>
+<span>at a time has access to a value. An example here would be an </span><code>Arc&lt;Cell&lt;i32&gt;&gt;</code><span>. It</span>&rsquo;<span>s not possible</span>
+<span>to safely send such an </span><code>Arc</code><span> to a different thread, because a </span><code>.clone</code><span> call can be used to get an</span>
+<span>independent copy of an </span><code>Arc</code><span>, effectively creating a </span><em><span>share</span></em><span> operation out of a </span><em><span>send</span></em><span> one.</span></p>
+<p><span>But turns out both cases are covered by just a single trait, </span><code>Send</code><span>. The thing is, to </span><em><span>share</span></em><span> a</span>
+<code>Cell&lt;i32&gt;</code><span> across two threads, it is necessary to </span><em><span>send</span></em><span> an </span><code>&amp;Cell&lt;i32&gt;</code><span>. So we get the following</span>
+<span>table:</span></p>
+<table>
+<tr>
+<th style="text-align: left;"><code>Send</code><span></span></th>
+<th style="text-align: left;"><code>!Send</code><span></span></th>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Cell&lt;i32&gt;</code></td>
+<td style="text-align: left;"><code>&amp;Cell&lt;i32&gt;</code><span></span></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>i32</code><span></span></td>
+<td style="text-align: left;"><code>Arc&lt;Cell&lt;i32&gt;&gt;</code><span></span></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>&amp;i32</code><span></span></td>
+<td style="text-align: left;"><code>&amp;Arc&lt;Cell&lt;i32&gt;&gt;</code></td>
+</tr>
+</table>
+<p><span>If </span><code>T</code><span> is </span><code>Send</code><span>, </span><code>&amp;T</code><span> might or might not be </span><code>Send</code><span>. And that</span>&rsquo;<span>s where the </span><code>Sync</code><span> traits</span>
+<span>comes from: </span><code>&amp;T: Send</code><span> if and only if (iff) </span><code>T: Sync</code><span>. Which gives the following table:</span></p>
+<table>
+<tr>
+<td></td>
+<td><strong><code>Send</code></strong><span></span></td>
+<td><strong><code>!Send</code></strong><span></span></td>
+</tr>
+<tr>
+<td><strong><code>Sync</code></strong><span></span></td>
+<td><code>i32</code><span></span></td>
+<td></td>
+</tr>
+<tr>
+<td><strong><code>!Sync</code></strong><span></span></td>
+<td><code>Cell&lt;i32&gt;</code><span></span></td>
+<td><code>Arc&lt;Cell&lt;i32&gt;&gt;</code></td>
+</tr>
+</table>
+<p><span>What about that last empty cell? Types which are </span><code>Sync</code><span> and </span><code>!Send</code><span> are indeed quite rare, and I</span>
+<span>don</span>&rsquo;<span>t know examples which don</span>&rsquo;<span>t boil down to </span>&ldquo;<span>underlying API mandates that a type doesn</span>&rsquo;<span>t leave a</span>
+<span>thread</span>&rdquo;<span>. One example here would be </span><code>MutexGuard</code><span> from the standard library </span>&mdash;<span> pthreads </span><em><span>require</span></em>
+<span>that only the thread that originally locked a mutex can unlock it. This isn</span>&rsquo;<span>t a fundamental</span>
+<span>requirement for a mutex </span>&mdash;<span> a </span><code>MutexGuard</code><span> from parking lot</span>
+<a href="https://github.com/Amanieu/parking_lot/tree/adbad82729d4843a051defb9e9eff38c83e7f289?tab=readme-ov-file#usage"><span>can be </span><code>Send</code></a><span>.</span></p>
+</section>
+<section id="Thread-Safety-And-Async">
+
+    <h2>
+    <a href="#Thread-Safety-And-Async"><span>Thread Safety And Async</span> </a>
+    </h2>
+<p><span>As you see, the </span><code>Send</code><span> &amp; </span><code>Sync</code><span> infrastructure is quite intricate. Is it worth it? Absolutely, as it</span>
+<span>leads to simpler code. In Rust, you can explicitly designate certain parts of a code base as</span>
+<span>non-thread-safe, and then avoid worrying about threads, because compiler will catch your hand if you</span>
+<em><span>accidentally</span></em><span> violate this constraint.</span></p>
+<p><span>The power of Rust is not defensively making everything thread safe, its the ability to use</span>
+<span>thread-unsafe code fearlessly.</span></p>
+<p><span>And it seems like </span><code>async</code><span> doesn</span>&rsquo;<span>t quite have this power. Let</span>&rsquo;<span>s build an example, a litmus test!</span></p>
+<p><span>Let</span>&rsquo;<span>s start with a </span><code>Context</code><span> pattern,  where a bunch of stuff is grouped into a single struct, so</span>
+<span>that they can be threaded through the program as one parameter. Such </span><code>Context</code><span> object is usually</span>
+<span>scoped to a particular operation </span>&mdash;<span> the ultimate owner of </span><code>Context</code><span> is a local variable in some</span>
+<span>top-level </span>&ldquo;<span>main</span>&rdquo;<span> function, it is threaded as </span><code>&amp;Context</code><span> or </span><code>&amp;mut Context</code><span> everywhere, and usually</span>
+<span>isn</span>&rsquo;<span>t stored anywhere. For the </span><code>&amp;Context</code><span> variant, it is also customary to add some interior</span>
+<span>mutability for things like caches. One real-life example would be a </span><code>Config</code><span> type from Cargo:</span>
+<a href="https://github.com/rust-lang/cargo/blob/a092469d46c0d7e8d899dbaebfcddf052f8f435d/src/cargo/util/config/mod.rs#L168"><span>config/mod.rs#L168</span></a><span>.</span></p>
+<p><span>Distilling the pattern down, we get something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Context</span> {</span>
+<span class="line">  counter: Cell&lt;<span class="hl-type">i32</span>&gt;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Context</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">increment</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">self</span>.counter.<span class="hl-title function_ invoke__">set</span>(<span class="hl-keyword">self</span>.counter.<span class="hl-title function_ invoke__">get</span>() + <span class="hl-number">1</span>);</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, a </span><code>counter</code><span> is an interior-mutable value which could, e.g., track cache hit rate. And here how</span>
+<span>this type could be used:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>(context: &amp;Context) {</span>
+<span class="line">  <span class="hl-title function_ invoke__">g</span>(context);</span>
+<span class="line">  context.<span class="hl-title function_ invoke__">increment</span>();</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">g</span>(_context: &amp;Context) {</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>However, the async version of the code doesn</span>&rsquo;<span>t really work, and in a subtle way:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>(context: &amp;Context) {</span>
+<span class="line">  <span class="hl-title function_ invoke__">g</span>(context).<span class="hl-keyword">await</span>;</span>
+<span class="line">  context.<span class="hl-title function_ invoke__">increment</span>();</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">g</span>(_context: &amp;Context) {</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Do you see the problem? Surprisingly, even </span><code>rustc</code><span> doesn</span>&rsquo;<span>t see it, the code above compiles in</span>
+<span>isolation. However, when we start </span><em><span>using</span></em><span> it with Tokio</span>&rsquo;<span>s work-stealing runtime,</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">task_main</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">context</span> = Context::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line">  <span class="hl-title function_ invoke__">f</span>(&amp;context).<span class="hl-keyword">await</span>;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[tokio::main]</span></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">main</span>() {</span>
+<span class="line">  tokio::<span class="hl-title function_ invoke__">spawn</span>(<span class="hl-title function_ invoke__">task_main</span>());</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>we</span>&rsquo;<span>ll hit an error:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">error: future cannot be sent between threads safely</span>
+<span class="line"></span>
+<span class="line">--&gt; src/main.rs:29:18</span>
+<span class="line"> |</span>
+<span class="line"> | tokio::spawn(task_main());</span>
+<span class="line"> |              ^^^^^^^^^^^ future returned by `task_main` is not `Send`</span>
+<span class="line"> |</span>
+<span class="line"></span>
+<span class="line">within `Context`, the trait `Sync` is not implemented for `Cell&lt;i32&gt;`.</span>
+<span class="line"></span>
+<span class="line">if you want to do aliasing and mutation between multiple threads,</span>
+<span class="line">use `std::sync::RwLock` or `std::sync::atomic::AtomicI32` instead.</span></code></pre>
+
+</figure>
+<p><span>What happened here? When compiling </span><code>async fn f</code><span>, compiler reifies its stack frame as a Rust struct:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">FStackFrame</span>&lt;<span class="hl-symbol">&#x27;a</span>&gt; {</span>
+<span class="line">  context: &amp;<span class="hl-symbol">&#x27;a</span> Context,</span>
+<span class="line">  await_state: <span class="hl-type">usize</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This struct contains a reference to our </span><code>Context</code><span> type, and then </span><code>Context: !Sync</code><span> implies </span><code>&amp;Context:
+!Send</code><span> implies </span><code>FStackFrame&lt;'_&gt;: !Send </code><span>. And that finally clashes with the signature of</span>
+<code>tokio::spawn</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;F&gt;(future: F) <span class="hl-punctuation">-&gt;</span> JoinHandle&lt;F::Output&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">    F: Future + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>, <span class="hl-comment">// &lt;- note this Send</span></span>
+<span class="line">    F::Output: <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span></code></pre>
+
+</figure>
+<p><span>Tokio</span>&rsquo;<span>s default executor is work-stealing. It</span>&rsquo;<span>s going to poll the future from different threads, and that</span>&rsquo;<span>s</span>
+<span>why it is required that the future is </span><code>Send</code><span>.</span></p>
+<p><span>In my eyes this is a rather significant limitation, and a big difference with synchronous Rust.</span>
+<span>Async Rust has to be defensively thread-safe, while sync Rust is free to use non-thread-safe data</span>
+<span>structures when convenient.</span></p>
+</section>
+<section id="A-Better-Spawn">
+
+    <h2>
+    <a href="#A-Better-Spawn"><span>A Better Spawn</span> </a>
+    </h2>
+<p><span>One solution here is to avoid work-stealing executors:</span></p>
+<p><a href="https://maciej.codes/2022-06-09-local-async.html" class="display"><em><span>Local Async Executors and Why They Should be the Default</span></em></a></p>
+<p><span>That post correctly identifies the culprit:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>I suggest to you, dear reader, that this function signature:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;T&gt;(future: T) <span class="hl-punctuation">-&gt;</span> JoinHandle&lt;T::Output&gt; <span class="hl-keyword">where</span></span>
+<span class="line">    T: Future + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line">    T::Output: <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span></code></pre>
+
+</figure>
+<p><span>is a gun.</span></p>
+</blockquote>
+
+</figure>
+<p><span>But as for the fix, I think Auri (</span><a href="https://blaz.is"><span>blaz.is</span></a><span>) got it right. The fix is </span><em><span>not</span></em><span> to</span>
+<span>remove </span><code>+ Send</code><span> bound, but rather to mirror </span><code>std::thread::spawn</code><span> more closely:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// std::thread::spawn</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;F, T&gt;(f: F) <span class="hl-punctuation">-&gt;</span> JoinHandle&lt;T&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">    F: <span class="hl-title function_ invoke__">FnOnce</span>() <span class="hl-punctuation">-&gt;</span> T + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line">    T: <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// A hypothetical better async spawn</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;F, Fut&gt;(f: F) <span class="hl-punctuation">-&gt;</span> JoinHandle&lt;Fut::Output&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">    F: <span class="hl-title function_ invoke__">FnOnce</span>() <span class="hl-punctuation">-&gt;</span> Fut + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line">    Fut: Future,</span>
+<span class="line">    Fut::Output: <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span></code></pre>
+
+</figure>
+<p><span>Let me explain first why this works, and then why this can</span>&rsquo;<span>t work.</span></p>
+<p><span>A </span><code>Future</code><span> is essentially a stack-frame of an asynchronous function. Original tokio version requires</span>
+<span>that all such stack frames are thread safe. This is not what happens in synchronous code </span>&mdash;<span> there,</span>
+<span>functions are free to put cells on their stacks. The </span><code>Send</code><span>ness is only guarded when data are</span>
+<span>actually send to a different thread, in </span><code>Chanel::send</code><span> and </span><code>thread::spawn</code><span>. The </span><code>spawn</code><span> function in</span>
+<span>particular says nothing about the </span><em><span>stack</span></em><span> of a new thread. It only requires that the data used to</span>
+<span>create the first stack frame is </span><code>Send</code><span>.</span></p>
+<p><span>And that</span>&rsquo;<span>s what we do in the async version: instead of spawning a future directly, it, just like the</span>
+<span>sync version, takes a closure. The closure is moved to a different execution context, so it must be</span>
+<code>: Send</code><span>. The actual future created by the closure in the new context can be whatever. An async</span>
+<span>runtime is free to poll this future from different threads regardless of its </span><code>Sync</code><span> status.</span></p>
+<p><span>Async work-stealing still works for the same reason that blocking work stealing works. Logical</span>
+<span>threads of execution can migrate between physical CPU cores because OS restores execution context</span>
+<span>when switching threads. Task can migrate between threads because async runtime restores execution</span>
+<span>context when switching tasks. Go is a proof that this is possible </span>&mdash;<span> goroutines migrate between</span>
+<span>different threads but they are free to use on-stack non-thread safe state. The pattern is clearly</span>
+<span>sound, the question is, can we express this fundamental soundness in Rust</span>&rsquo;<span>s type system, like we</span>
+<span>managed to do for OS threads?</span></p>
+<p><span>This is going to be tricky, because </span><code>Send</code><span> </span><em><span>today</span></em><span> absolutely means </span>&ldquo;<span>same thread</span>&rdquo;<span>, not </span>&ldquo;<span>same</span>
+<span>execution context</span>&rdquo;<span>. Here</span>&rsquo;<span>s one example that would break:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">sneaky</span>() {</span>
+<span class="line">  thread_local! { <span class="hl-keyword">static</span> TL: Rc&lt;()&gt; = Rc::<span class="hl-title function_ invoke__">new</span>(()); }</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">rc</span> = TL.<span class="hl-title function_ invoke__">with</span>(|it| it.<span class="hl-title function_ invoke__">clone</span>());</span>
+<span class="line">  <span class="hl-keyword">async</span> {}.<span class="hl-keyword">await</span>;</span>
+<span class="line">  rc.<span class="hl-title function_ invoke__">clone</span>();</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>If the </span><code>.await</code><span> migrates to a different thread, we are in trouble: two tasks can start on the same</span>
+<span>thread, then diverge, but continue to hammer the same non-atomic reference count.</span></p>
+<p><span>Another breakage example is various OS APIs that just mandate that things happen on a particular</span>
+<span>execution thread, like </span><code>pthread_mutex_unlock</code><span>. Though I think that the turtle those APIs stand on</span>
+<span>are thread locals again?</span></p>
+<p><span>Can we fix it? As an absolute strawman proposal, let</span>&rsquo;<span>s redefine </span><code>Send</code><span> &amp; </span><code>Sync</code><span> in terms of abstract</span>
+&ldquo;<span>execution contexts</span>&rdquo;<span>, add </span><code>OsThreadSend</code><span> and </span><code>OsThreadSync</code><span>, and change API which involve thread</span>
+<span>locals to use the </span><code>OsThread</code><span> variants. It seems that everything else works?</span></p>
+</section>
+<section id="Four-Questions">
+
+    <h2>
+    <a href="#Four-Questions"><span>Four Questions</span> </a>
+    </h2>
+<p><span>I would like to posit four questions to the wider async Rust community.</span></p>
+<ol>
+<li>
+<p><span>Does this work in theory? As far as I can tell, this does indeed works, but I am not an async</span>
+<span>expert. Am I missing something?</span></p>
+<p><span>Ideally, I</span>&rsquo;<span>d love to see small, self-contained litmus test  examples that break </span><code>OsThreadSend</code>
+<span>Rust.</span></p>
+</li>
+<li>
+<p><span>Is this an important problem in practice to look into? On the one hand, people are quite</span>
+<span>successful with async Rust as it is. On the other hand, the expressivity gap here is real, and</span>
+<span>Rust, as a systems programming language, strives to minimize such gaps. And then there</span>&rsquo;<span>s the fact</span>
+<span>that failure mode today is rather nasty </span>&mdash;<span> although the actual type error is inside the </span><code>f</code>
+<span>function, we learn about it only at the call site in </span><code>main</code><span>.</span></p>
+<p><span>EDIT: I am also wondering </span>&mdash;<span> if we stop caring whether futures are </span><code>: Send</code><span>, does that mean we</span>
+<span>no longer need an explicit syntax for </span><code>Send</code><span> bounds in async traits?</span></p>
+</li>
+<li>
+<p><span>Assuming that this idea does work, and we decide that we care enough to try to fix it, is there a</span>
+<span>backwards-compatible path we could take to make this a reality?</span></p>
+<p><span>EDIT: to clarify, no way we are really adding a new auto-trait like </span><code>OsThreadSend</code><span>. But there</span>
+<span>could be some less invasive change to get the desired result. For example, a more promising</span>
+<span>approach is to expose some runtime hook for async runtimes to switch TLS, such that each task</span>
+<span>gets an independent copy of thread-local storage, as if task=thread.</span></p>
+</li>
+<li>
+<p><span>Is it a new idea that </span><code>!Send</code><span> futures and work-stealing don</span>&rsquo;<span>t conflict with each other? For me,</span>
+<span>that </span><a href="https://blaz.is/blog/post/lets-pretend-that-task-equals-thread/"><span>22.05.2023 post</span></a>
+<span>was the first time I</span>&rsquo;<span>ve learned that having a </span><code>&amp;Cell&lt;i32&gt;</code><span> in a future</span>&rsquo;<span>s state machine does not</span>
+<span>preclude polling it from different OS threads. But there</span>&rsquo;<span>s nothing particularly new there, the</span>
+<span>relevant APIs were stabilized years ago. Was this issue articulated and discussed back when the</span>
+<span>async Rust was designed, or is it a genuinely new finding?</span></p>
+</li>
+</ol>
+<hr>
+<p><strong><strong><span>Update(2023-12-30):</span></strong></strong><span> there was some discussion of the ideas on</span>
+<a href="https://rust-lang.zulipchat.com/#narrow/stream/187312-wg-async/topic/Non-.60Sync.60.20borrow.20across.20.60.2Eawait.60.3F"><span>Zulip</span></a><span>.</span>
+<span>It looks this isn</span>&rsquo;<span>t completely broken and that, indeed, thread-locals are the main principled obstacle.</span></p>
+<p><span>I think I also got a clear picture of a solution for ideal world, where we are not bound by</span>
+<span>backwards compatibility requirements: make thread local access unsafe. Specifically:</span></p>
+<p><em><span>First</span></em><span>, remove any references to OS threads from the definition of </span><code>Send</code><span> and </span><code>Sync</code><span>. Instead,</span>
+<span>define them in terms of abstract concurrency. I am not well-versed enough in formal side of things</span>
+<span>to understand precisely what that should entail, but I have a litmus test. The new definition should</span>
+<span>work for interrupt handlers in embedded. In OS and embedded programming, one needs to deal with</span>
+<span>interrupt handlers </span>&mdash;<span> code that is run by a CPU as a response to a hardware interrupt. When CPU is</span>
+<span>interrupted, it saves the current execution context, runs the interrupt, and then restores the</span>
+<span>original context. Although it all happens on a single core and there are no OS-threads in sight, the</span>
+<span>restrictions are similar to those of threads: an interrupt can arrive in the middle of reference</span>
+<span>counter upgrade. To rephrase: </span><code>Sync</code><span> should be a </span><code>core</code><span> trait. Right now it is defined in </span><code>core</code><span>,</span>
+<span>but its definition references OS threads </span>&mdash;<span> a concept </span><code>no_std</code><span> is agnostic about!</span></p>
+<p><em><span>Second</span></em><span>, replace </span><code>thread_local!</code><span> macro with a </span><code>#[thread_local]</code><span> attribute on (unsafe) statics.</span>
+<span>There are two reasons why people reach for thread locals:</span></p>
+<ul>
+<li>
+<span>to implement really fast concurrent data structures (eg, a global allocator or an async runtime),</span>
+</li>
+<li>
+<span>as a programming shortcut, to avoid passing a </span><code>Context</code><span> argument everywhere.</span>
+</li>
+</ul>
+<p><span>The </span><code>thread_local!</code><span> macro mostly addresses the second use-case </span>&mdash;<span> for a very long time, it even was</span>
+<span>a non-zero cost abstraction, so that implementing a fast allocator in Rust was impossible! But,</span>
+<span>given that this pattern is rare in software (and, where it is used, it then takes years to refactor</span>
+<span>it away, like it was the case with rustc</span>&rsquo;<span>s usage of thread locals for parsing session), I think it</span>&rsquo;<span>s</span>
+<span>OK to say that Rust flat-out doesn</span>&rsquo;<span>t support it safely, like it doesn</span>&rsquo;<span>t support mutable statics.</span></p>
+<p><span>The safety contract for </span><code>#[thread_local]</code><span> statics would be more strict then the contract on </span><code>static
+mut</code><span>: the user must also ensure that the value isn</span>&rsquo;<span>t used past the corresponding thread</span>&rsquo;<span>s lifetime.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-12-10-nsfw.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,305 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data Oriented Blogging</title>
+  <meta name="description" content="Wherein I describe the setup of this blog. The main take away from the post are not specific
+technical tools, but the underlying principles and ideas, which I wish I had articulated earlier.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/11/07/dta-oriented-blogging.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Data Oriented Blogging</span> <time datetime="2023-11-07">Nov 7, 2023</time></h1>
+<p><span>Wherein I describe the setup of this blog. The main take away from the post are not specific</span>
+<span>technical tools, but the underlying principles and ideas, which I wish I had articulated earlier.</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>If you don’t understand the data you don’t understand the problem.</span></p>
+</blockquote>
+<figcaption><cite><a href="https://youtu.be/rX0ItVEVjHc?si=2IzGZSFKsi1xkls8&amp;t=780"><span>Sun Tzu</span></a></cite></figcaption>
+</figure>
+<p><span>Physically, a typical blog is a directory of </span><code>.html</code><span> and </span><code>.css</code><span> files which are available over HTTP.</span>
+<span>The simplest way to create those files is to just write them by hand. While in some cases that might</span>
+<span>be enough, often it isn</span>&rsquo;<span>t.</span></p>
+<p><span>If a blog has multiple pages, you usually want to have some common elements </span>&mdash;<span> header, footer,</span>
+<span>style, etc. It </span><em><span>is</span></em><span> possible to get common style by copy-pasting an existing page every time you</span>
+<span>need to add something. This makes changes hard </span>&mdash;<span> having consistent layout at a single point in time</span>
+<span>is not sufficient, one almost always wants to be able to apply consistent modifications as well.</span></p>
+<p><span>The second issue with hand-written html is that some parts might be very annoying to hand-write. For</span>
+<span>example, code snippets with syntax highlighting require quite a few tags.</span></p>
+<p><span>Finally, writing html by hand is not necessarily most convenient. A </span><code>*</code><span> bullet-list certainly is more</span>
+<span>pleasant to look at than an </span><code>&lt;ul&gt;&lt;li&gt;&lt;/li&gt;&lt;/ul&gt;</code><span>!</span></p>
+<p><span>That</span>&rsquo;<span>s why a blog usually is some sort of a script (a program) which reads input content in some</span>
+<span>light markup language (Markdown typically) and writes HTML. As most blogs are similar, it is</span>
+<span>possible to generalize and abstract such a script, and the result would be called a </span>&ldquo;<span>static site</span>
+<span>generator</span>&rdquo;<span>. I don</span>&rsquo;<span>t like this term very much, as it sounds more complicated than the underlying</span>
+<span>problem at hand </span>&mdash;<span> reading </span><code>.md</code><span> files and writing out </span><code>.html</code><span>s.</span></p>
+<p><span>Static Site Generators are an example of the </span><dfn><span>template method</span></dfn><span> pattern, where the framework</span>
+<span>provides the overall control flow, but also includes copious extension points for customizing</span>
+<span>behaviors. Template method allows for some code re-use at the cost of obscure and indirect control</span>
+<span>flow. This pattern pays off when you have many different invocations of template method with few, if</span>
+<span>any, non-trivial customizations. Conversely, a template method with a single, highly customized</span>
+<span>call-site probably should be refactored away in favor of direct control flow.</span></p>
+<p><span>If you maintain dozens mostly identical websites, you definitely need a static site generator. If</span>
+<span>you have only one site to maintain, you might consider writing the overall scaffolding yourself.</span></p>
+<p><span>If you pick an SSG, pay close attention to its extensibility mechanism, you want to avoid situations</span>
+<span>where you know how to do something </span>&ldquo;<span>by hand</span>&rdquo;<span>, but the SSG is not flexible enough to express that.</span>
+<span>Flexible SSG typically have some way to inject user code in their processing, for free-form</span>
+<span>customization. For this reason, I am somewhat skeptical of static site generators implemented in</span>
+<span>languages without eval, such as Go and Rust. They might be excellent as long as they fulfill your</span>
+<span>needs exactly. However, should you need something more custom than what</span>&rsquo;<span>s available out of the box,</span>
+<span>you might find yourself unable to implement that. This creates discontinuity in complexity.</span></p>
+<p><span>Note that I am </span><em><span>not</span></em><span> saying that every site out there needs some custom plugins. Most (certainly,</span>
+<span>most well-maintained ones) work just fine with fairly vanilla configurations. Rather, it</span>&rsquo;<span>s a</span>
+<span>statement about risks </span>&mdash;<span> there</span>&rsquo;<span>s small, but non-zero probability that you</span>&rsquo;<span>ll need something quite</span>
+<span>unusual. However, should you find yourself with a use-case which is not supported by your SSG</span>&rsquo;<span>s</span>
+<span>available customization options, the cost of the work-around could be very high.</span></p>
+<p><span>I only have to maintain this single blog, and I want the freedom to experiment with fairly custom</span>
+<span>things, so, in this context, writing the scaffolding script myself makes more sense.</span></p>
+<section id="The-Best-Tool-For-The-Job">
+
+    <h2>
+    <a href="#The-Best-Tool-For-The-Job"><span>The Best Tool For The Job</span> </a>
+    </h2>
+<p><span>Converting from one text format to another isn</span>&rsquo;<span>t particularly resource intensive and is trivial to</span>
+<span>parallelize. But it requires a fair amount of work with strings, dates, file-system and such, which</span>
+<span>points towards a higher-level programming language. However, the overriding concern is stability </span>&mdash;
+<span>blogs usually don</span>&rsquo;<span>t enjoy active daily maintenance, and nothing can distract more than the need to</span>
+<span>sort out the tooling even before you get to writing.</span></p>
+<p><span>I wish I could recommend a stable high-level scripting language, but, to my knowledge, there isn</span>&rsquo;<span>t</span>
+<span>any yet. Python falls apart as soon as you need to install a dependency. While I highly recommend</span>
+<a href="https://www.b-list.org/weblog/2022/may/13/boring-python-dependencies/"><em><span>Boring Dependency Management</span></em></a><span>,</span>
+<span>knowing that </span><code>pip-compile</code><span> is that one extra tool you need is one extra tool too many. While Node</span>
+<span>works for adding dependencies, it makes it hard to keep up with them (in Node.JS, dependencies</span>
+<span>manage you). I don</span>&rsquo;<span>t know a lot about Ruby, but, in the Jekyll days of this blog, I</span>&rsquo;<span>ve never learned</span>
+<span>how to configure </span><code>bundler</code><span> (or is it </span><code>gem</code><span>?) to use project-local dependencies by default.</span></p>
+<p><span>For this reason, I</span>&rsquo;<span>d say picking Go or Rust for the task makes sense. Yes, those are quite a bit</span>
+<span>more verbose than what you</span>&rsquo;<span>d ideally need for bossing Markdown around, but their quality of</span>
+<span>implementation is great, and QoI is what matters here most.</span></p>
+<p><span>I use </span><a href="https://deno.land"><span>Deno</span></a><span> for this blog. Deno is poised to become that scripting environment I</span>
+<span>wish existed: </span><a href="https://matklad.github.io/2023/02/12/a-love-letter-to-deno.html" class="display url">https://matklad.github.io/2023/02/12/a-love-letter-to-deno.html</a></p>
+<p><span>In addition to the overall QoI, it has particular affinity for web stuff. Out of the box, it has</span>
+<span>extra niceties, like file system watching and hot-reloading, or the permissions system to catch</span>
+<span>mistakes when reading or writing wrong files. The only reason to recommend Rust and Go over Deno at</span>
+<span>this point is that Deno is still pretty young, and, subjectively, needs more time to graduate into</span>
+<span>boring tech.</span></p>
+<p><span>Having picked the language, which text format should be the input?</span></p>
+</section>
+<section id="Data-In">
+
+    <h2>
+    <a href="#Data-In"><span>Data In</span> </a>
+    </h2>
+<p><span>The most typical choice here is Markdown. Markdown is </span>&hellip;<span> fine overall, but it does have one pretty</span>
+<span>glaring deficiency </span>&mdash;<span> vanilla Markdown doesn</span>&rsquo;<span>t allow for custom elements. An example of a custom</span>
+<span>element would be a shortcut, like </span><kbd><kbd>ctrl </kbd> + <kbd> c</kbd></kbd><span>. In stock Markdown, there</span>&rsquo;<span>s no syntactic</span>
+<span>mechanism to designate something as </span>&ldquo;<span>this is my custom element</span>&rdquo;<span>. You can add syntactic extensions,</span>
+<span>but then you</span>&rsquo;<span>ll need new syntax for each custom element. Alternatively, you can use a Markdown</span>
+<span>dialect which supports generic extensibility, like </span><a href="https://pandoc.org/MANUAL.html#extension-fenced_divs"><span>Pandoc</span>
+<span>Markdown</span></a><span> or </span><a href="https://mdxjs.com"><span>MDX</span></a><span>.</span></p>
+<p><span>An interesting choice for source data format would be HTML with custom tags. If you write some HTML</span>
+<span>by hand, that doesn</span>&rsquo;<span>t mean you have to write all HTML manually </span>&mdash;<span> a script can desugar hand-written</span>
+<span>HTML into more verbose form for the browser. For example, the source for a post can contain a</span>
+<span>snippet like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-tag">&lt;<span class="hl-name">listing</span> <span class="hl-attr">lang</span>=<span class="hl-string">&quot;rust&quot;</span>&gt;</span></span>
+<span class="line">fn main() {</span>
+<span class="line">    println!(&quot;Hello, World!&quot;)</span>
+<span class="line">}</span>
+<span class="line"><span class="hl-tag">&lt;/<span class="hl-name">listing</span>&gt;</span></span></code></pre>
+
+</figure>
+<p><span>The script then reads and parses this HTML, and produces appropriate </span><code>pre &gt; code</code><span> with syntax</span>
+<span>highlighting soup.</span></p>
+<p><span>HTML would  be my recommendation if I were optimizing for stability. These days, many editors have</span>
+<a href="https://emmet.io"><span>emmet</span></a><span> out of the box, which makes producing HTML not that horrible:</span></p>
+
+<figure>
+
+<video src="https://user-images.githubusercontent.com/1711539/281008432-9c84db2c-66ca-4c77-9551-b1584d40284d.webm" autoplay muted=true loop=true></video>
+</figure>
+<p><span>But wouldn</span>&rsquo;<span>t it be great if there was an extensible light markup language, which combines concise</span>
+<span>syntax and tasty sugar of Markdown with extensibility and flexibility of HTML,</span>
+<a href="https://matklad.github.io/2022/10/28/elements-of-a-great-markup-language.html"><em><span>The Elements of a Great Markup Language</span></em></a><span>?</span>
+<span>It actually sort-of-exists already:</span>
+<a href="https://djot.net" class="display url">https://djot.net</a></p>
+<p><span>Djot is quite a bit like Deno in that it takes well established good ideas, and just doesn</span>&rsquo;<span>t mess up</span>
+<span>the implementation. But it is also an emerging technology at this point, not even at 1.0, so use at</span>
+<span>your own risk.</span></p>
+</section>
+<section id="Data-Out">
+
+    <h2>
+    <a href="#Data-Out"><span>Data Out</span> </a>
+    </h2>
+<p><span>The output clearly has to be HTML, but there are many ways to manufacture this markup. Producing</span>
+<span>HTML is not an entirely solved problem. Usually, some sort of textual templating is used, but that</span>&rsquo;<span>s</span>
+<span>a fundamentally wrong approach: </span><a href="https://www.devever.net/~hl/stringtemplates" class="display url">https://www.devever.net/~hl/stringtemplates</a></p>
+<p><span>For this problem, the shape of data is not that of a string, rather it is a tree.</span></p>
+<p><span>Luckily for the blogging domain, the main motivation for proper solution is protection from XSS.</span>
+<span>Blogs usually don</span>&rsquo;<span>t include user-submitted content, so one can play fast and loose with escaping.</span>
+<span>That is to say, if your language supports </span><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals"><span>string</span>
+<span>interpolation</span></a><span>,</span>
+<span>that might be enough of a templating engine. That is what this blog does </span>&mdash;<span> just backticks in</span>
+<span>TypeScript.</span></p>
+<p><span>What</span>&rsquo;<span>s tantalizing is that the proper solutions is clearly visible, and is </span><em><span>just</span></em><span> out of reach. We</span>
+<span>have JSX now, the proper </span>&ldquo;<span>write code to produce trees</span>&rdquo;<span> solution. Sadly, I don</span>&rsquo;<span>t think it</span>&rsquo;<span>s</span>
+<span>immediately usable as of yet. </span><a href="https://docs.deno.com/runtime/manual/advanced/jsx_dom/jsx#jsx-import-source"><span>Deno</span>
+<span>docs</span></a><span> mention some</span>
+&ldquo;<span>new</span>&rdquo;<span> JSX API, with an initial support. I also don</span>&rsquo;<span>t see some built-in (or obviously blessed) way to</span>
+<span>take my JSX syntax and convert it to string when writing to an </span><code>.html</code><span> file.</span></p>
+</section>
+<section id="Look-and-Feel">
+
+    <h2>
+    <a href="#Look-and-Feel"><span>Look and Feel</span> </a>
+    </h2>
+<p><span>It</span>&rsquo;<span>s not enough to produce HTML, it also has to look good. I don</span>&rsquo;<span>t find this acceptable:</span></p>
+<p><a href="https://danluu.com/input-lag/" class="display url">https://danluu.com/input-lag/</a></p>
+<p><span>It is completely unreadable on a 16:9 screen. Which might have good second-order effects (people</span>
+<span>clearly come for content rather than for style), but, really, just no :-)</span></p>
+<p><span>It would be fair to say that that</span>&rsquo;<span>s browser</span>&rsquo;<span>s (aka backwards compatibility) fault </span>&mdash;<span> ideally,</span>
+<span>unstyled HTML would look good, with some reasonable max-width and default body font-size a touch</span>
+<span>larger than 16px. I</span>&rsquo;<span>d love if there were some sort of </span><code>&lt;style modern/&gt;</code><span> tag to opt-into a new set of</span>
+<span>default css rules, which would be consistent across browsers (obviating the need for CSS reset), and</span>
+<span>would make classless HTML readable. Alas, we don</span>&rsquo;<span>t have that, and need to provide browsers with some</span>
+<span>minimum amount of CSS ourselves.</span></p>
+<p><span>The good news is, that</span>&rsquo;<span>s not so hard this days. When I was starting with programming, web dev was</span>
+<span>pretty arcane, and consisted </span><em><span>mostly</span></em><span> of clever hacks, like tables &amp; floats. At that time, I didn</span>&rsquo;<span>t</span>
+<span>feel qualified to do CSS.</span></p>
+<p><span>Today, the specifications evolved to become much simpler to use (if sprawling at the edges), and</span>
+<span>browsers are significantly more uniform, so even I can cook up something presentable. Some survival</span>
+<span>tips here:</span></p>
+<ul>
+<li>
+<span>At small scale, built-in web technologies work. HTML&amp;CSS are plenty; you could use, but you don</span>&rsquo;<span>t</span>
+<span>necessary need React, css processors, transpilers, and the rest.</span>
+</li>
+<li>
+<a href="https://developer.mozilla.org/en-US/docs/Web/HTML"><span>MDN docs</span></a><span> are awesome.</span>
+</li>
+<li>
+<a href="https://developer.mozilla.org/en-US/docs/Web/CSS/box-sizing#border-box"><code>box-sizing: border-box</code></a>
+<span>and understanding </span><a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_box_model/Mastering_margin_collapsing"><span>margin</span>
+<span>collapsing</span></a>
+<span>are two required things to make sense of layout in the small.</span>
+</li>
+<li>
+<a href="https://developer.mozilla.org/en-US/docs/Learn/CSS/CSS_layout/Flexbox"><span>Flexbox</span></a><span> is the modern,</span>
+<span>intuitive way for layout in the large.</span>
+</li>
+<li>
+<span>CSS reset/normalization is sadly still a thing. Browsers come with default CSS rules for various</span>
+<span>elements, and sometimes these rules differ between them, which requires an explicit override in</span>
+<span>the css you write. Unfortunately, I don</span>&rsquo;<span>t know much beyond that, but</span>
+<a href="https://github.com/sindresorhus/modern-normalize" class="url">https://github.com/sindresorhus/modern-normalize</a><span> looks like a reasonable place to start.</span>
+</li>
+</ul>
+<hr>
+<p><span>To conclude, let</span>&rsquo;<span>s circle back to that claim that a typical blog is a directory with a bunch of</span>
+<span>.html and .css files. This is not true. There</span>&rsquo;<span>s no physical relation between HTTP requests and</span>
+<span>responses, and the contents of the file system. Rather, it</span>&rsquo;<span>s just a thin waist, a convention</span>
+<span>collectively employed by many different HTTP servers to allow easy customization of HTTP responses,</span>
+<span>yet another template method pattern. This is a remarkably successful thin waist though, it merges</span>
+<span>completely with the background and is invisible unless you really go looking for it.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-11-07-dta-oriented-blogging.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

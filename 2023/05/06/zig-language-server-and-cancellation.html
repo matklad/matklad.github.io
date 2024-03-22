@@ -1,0 +1,292 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zig Language Server And Cancellation</title>
+  <meta name="description" content="I already have a dedicated post about a hypothetical Zig language server.
+But perhaps the most important thing I've written so far on the topic is the short note at the end of Zig and Rust.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/05/06/zig-language-server-and-cancellation.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Zig Language Server And Cancellation</span> <time datetime="2023-05-06">May 6, 2023</time></h1>
+<p><span>I already have a dedicated post about a hypothetical </span><a href="https://matklad.github.io/2023/02/10/how-a-zig-ide-could-work.html"><span>Zig language server</span></a><span>.</span>
+<span>But perhaps the most important thing I</span>&rsquo;<span>ve written so far on the topic is the short note at the end of </span><a href="https://matklad.github.io/2023/03/26/zig-and-rust.html#ide"><em><span>Zig and Rust</span></em></a><span>.</span></p>
+<p><span>If you want to implement an LSP for a language, you need to start with a data model.</span>
+<span>If you correctly implement a store of source code which evolves over time and allows computing (initially trivial) derived data, then filling in the data until it covers the whole language is a question of incremental improvement.</span>
+<span>If, however, you don</span>&rsquo;<span>t start with a rock-solid data model, and rush to implement language features, you might find yourself needing to make a sharp U-turn several years down the road.</span></p>
+<p><span>I find this pretty insightful!</span>
+<span>At least, this evening I</span>&rsquo;<span>ve been pondering a  particular aspect of the data model, and I think I realized something new about the problem space!</span>
+<span>The aspect is cancellation.</span></p>
+<section id="Cancellation">
+
+    <h2>
+    <a href="#Cancellation"><span>Cancellation</span> </a>
+    </h2>
+<p><span>Consider this.</span>
+<span>Your language server is happily doing something very useful and computationally-intensive </span>&mdash;
+<span>typechecking a </span><a href="https://github.com/microsoft/TypeScript/blob/04d4580f4eedc036b014ef4329cffe9979da3af9/src/compiler/checker.ts"><span>giant typechecker</span></a><span>,</span>
+<span>computing comptime </span><a href="https://en.wikipedia.org/wiki/Ackermann_function"><span>Ackermann function</span></a><span>,</span>
+<span>or </span><a href="https://github.com/launchbadge/sqlx#sqlx-is-not-an-orm"><span>talking to Postgres</span></a><span>.</span>
+<span>Now, the user comes in and starts typing in the very file the server is currently processing.</span>
+<span>What is the desired behavior, and how could it be achieved?</span></p>
+<p><span>One useful model here is strong consistency.</span>
+<span>If the language server acknowledged a source code edit, all future semantic requests (like </span>&ldquo;<span>go to definition</span>&rdquo;<span> or </span>&ldquo;<span>code completion</span>&rdquo;<span>) reflect this change.</span>
+<span>The behavior is </span><em><span>as if</span></em><span> all changes and requests are sequentially ordered, and the server fully processes all preceding edits before responding to a request.</span>
+<span>There are two great benefits to this model.</span>
+<span>First, for the implementor it</span>&rsquo;<span>s an easy model to reason about. It</span>&rsquo;<span>s always clear what the answer to a particular request should be, the model is fully deterministic.</span>
+<span>Second, the model gives maximally useful guarantees to the user, strict serializability.</span></p>
+<p><span>So consider this sequence of events:</span></p>
+<ol>
+<li>
+<span>User types </span><code>fo</code><span>.</span>
+</li>
+<li>
+<span>The editor sends the edit to the language server.</span>
+</li>
+<li>
+<span>The editor requests completions for </span><code>fo</code><span>.</span>
+</li>
+<li>
+<span>The server starts furiously typechecking modified file to compute the result.</span>
+</li>
+<li>
+<span>User types </span><code>o</code><span>.</span>
+</li>
+<li>
+<span>The editor sends the </span><code>o</code><span>.</span>
+</li>
+<li>
+<span>The editor re-requests completions, now for </span><code>foo</code><span>.</span>
+</li>
+</ol>
+<p><span>How does the server deal with this?</span></p>
+<p><span>The trivial solution is to run everything sequentially to completion.</span>
+<span>So, on the step </span><code>6</code><span>, the server doesn</span>&rsquo;<span>t immediately acknowledge the edit, but rather blocks until it fully completes </span><code>4</code><span>.</span>
+<span>This is a suboptimal behavior, because reads (computing completion) block writes (updating source code).</span>
+<span>As a rule of thumb, writes should be prioritized over reads, because they reflect more up-to-date and more useful data.</span></p>
+<p><span>A more optimal solution is to make the whole data model of the server immutable, such that edits do not modify data inplace, but rather create a separate, new state.</span>
+<span>In this model, computing results for </span><code>3</code><span> and </span><code>7</code><span> proceeds in parallel, and, crucially, the edit </span><code>6</code><span> is accepted immediately.</span>
+<span>The cost of this model is the requirement that all data structures are immutable.</span>
+<span>It also is a bit wasteful </span>&mdash;<span> burning CPU to compute code completion for an already old file is useless, better dedicate all cores to the latest version.</span></p>
+<p><span>A third approach is cancellation.</span>
+<span>On step </span><code>6</code><span>, when the server becomes aware about the pending edit, it actively cancels all in-flight work pertaining to the old state and then applies modification in-place.</span>
+<span>That way we don</span>&rsquo;<span>t need to defensively copy the data, and also avoid useless CPU work.</span>
+<span>This is the strategy employed by rust-analyzer.</span></p>
+<p><span>It</span>&rsquo;<span>s useful to think about why the server can</span>&rsquo;<span>t just, like, apply the edit in place completely ignoring any possible background work.</span>
+<span>The edit ultimately changes some memory somewhere, which might be concurrently read by the code completion thread, yielding a data race and full-on UB.</span>
+<span>It is possible to work-around this by applying </span><a href="https://dl.acm.org/doi/10.1145/2723372.2737784"><span>feral concurrency control</span></a><span> and just wrapping each individual bit of data in a mutex.</span>
+<span>This removes the data race, but leads to excessive synchronization, sprawling complexity and broken logical invariants (function body might change in the middle of typechecking).</span></p>
+<p><span>Finally, there</span>&rsquo;<span>s this final solution, or rather, idea for a solution.</span>
+<span>One interesting approach for dealing with memory which is needed now, but not in the future, is semi-space garbage collection.</span>
+<span>We divide the available memory in two equal parts, use one half as a working copy which accumulates useful objects and garbage, and then at some point switch the halves, copying the live objects (but not the garbage) over.</span>
+<span>Another place where this idea comes up is Carmack</span>&rsquo;<span>s architecture for functional games.</span>
+<span>On every frame, a game copies over the game state applying frame update function.</span>
+<span>Because frames happen sequentially, you only need two copies of game state for this.</span>
+<span>We can think about applying something like that for cancellation </span>&mdash;<span> without going for full immutability, we can let cancelled analysis to work with the old half-state, while we switch to the new one.</span></p>
+<p><span>This </span>&hellip;<span> is not particularly actionable, but a good set of ideas to start thinking about evolution of a state in a language server.</span>
+<span>And now for something completely different!</span></p>
+</section>
+<section id="Relaxed-Consistency">
+
+    <h2>
+    <a href="#Relaxed-Consistency"><span>Relaxed Consistency</span> </a>
+    </h2>
+<p><span>The strict consistency is a good default, and works especially well for languages with good support for separate compilation, as the amount of work a language server needs to do after an update is proportional to the size of the update, and to the amount of code on the screen, both of which are typically O(1).</span>
+<span>For Zig, whose compilation model is </span>&ldquo;<span>start from the entry point and lazily compile everything that</span>&rsquo;<span>s actually used</span>&rdquo;<span>, this might be difficult to pull off.</span>
+<span>It seems that Zig naturally gravitates to a smalltalk-like image-based programming model, where the server stores fully resolved code all the time, and, if some edit triggers re-analysis of a huge chunk of code, the user just has to wait until the server catches up.</span></p>
+<p><span>But what if we don</span>&rsquo;<span>t do strong consistency?</span>
+<span>What if we allow IDE to temporarily return non-deterministic and wrong results?</span>
+<span>I think we can get some nice properties in exchange, if we use that semi-space idea.</span></p>
+<p><span>The state of our language server would be comprised of three separate pieces of data:</span></p>
+<ul>
+<li>
+<span>A fully analyzed snapshot of the world, </span><strong><code>ready</code></strong><span>.</span>
+<span>This is a bunch of source file, plus their ASTs, ZIRs and AIRs.</span>
+<span>This also probably contains an index of cross-references, so that finding all usages of an identifier requires just listing already precomputed results.</span>
+</li>
+<li>
+<span>The next snapshot, which is being analyzed, </span><strong><code>working</code></strong><span>.</span>
+<span>This is essentially the same data, but the AIR is being constructed.</span>
+<span>We need </span><em><span>two</span></em><span> snapshots because we want to be able to query one of them while the second one is being updated.</span>
+</li>
+<li>
+<span>Finally, we also hold ASTs for the files which are currently being modified, </span><strong><code>pending</code></strong><span>.</span>
+</li>
+</ul>
+<p><span>The overall evolution of data is as follows.</span></p>
+<p><span>All edits synchronously go to the </span><code>pending</code><span> state.</span>
+<code>pending</code><span> is organized strictly on a per-file basis, so updating it can be done quickly on the main thread (maaaybe we want to move the parsing off the main thread, but my gut feeling is that we don</span>&rsquo;<span>t need to).</span>
+<code>pending</code><span> always reflects the latest state of the world, it </span><em><span>is</span></em><span> the latest state of the world.</span></p>
+<p><span>Periodically, we collect a batch of changes from </span><code>pending</code><span>, create a new </span><code>working</code><span> and kick off a full analysis in background.</span>
+<span>A good point to do that would be when there</span>&rsquo;<span>s no syntax errors, or when the user saves a file.</span>
+<span>There</span>&rsquo;<span>s at most one analysis in progress, so we accumulate changes in </span><code>pending</code><span> until the previous analysis finishes.</span></p>
+<p><span>When </span><code>working</code><span> is fully processed, we atomically update the </span><code>ready</code><span>.</span>
+<span>As </span><code>ready</code><span> is just an inert piece of data, it can be safely accessed from whatever thread.</span></p>
+<p><span>When processing requests, we only use </span><code>ready</code><span> and </span><code>pending</code><span>.</span>
+<span>Processing requires some heuristics.</span>
+<code>ready</code><span> and </span><code>pending</code><span> describe different states of the world.</span>
+<code>pending</code><span> guarantees that its state is up-to-date, but it only has AST-level data.</span>
+<code>ready</code><span> is outdated, </span><em><span>but</span></em><span> it has every bit of semantic information pre-computed.</span>
+<span>In particular, it includes cross-reference data.</span></p>
+<p><span>So, our choices for computing results are:</span></p>
+<ul>
+<li>
+<p><span>Use the </span><code>pending</code><span> AST.</span>
+<span>Features like displaying the outline of the current file or globally fuzzy-searching function by name can be implemented like this.</span>
+<span>These features always give correct results.</span></p>
+</li>
+<li>
+<p><span>Find the match between the </span><code>pending</code><span> AST and the </span><code>ready</code><span> semantics.</span>
+<span>This works perfectly for non-local </span>&ldquo;<span>goto definition</span>&rdquo;<span>.</span>
+<span>Here, we can temporarily get </span>&ldquo;<span>wrong</span>&rdquo;<span> results, or no result at all.</span>
+<span>However, the results we get are always instant.</span></p>
+</li>
+<li>
+<p><span>Re-analyze </span><code>pending</code><span> AST using results from </span><code>ready</code><span> for the analysis of the context.</span>
+<span>This is what we</span>&rsquo;<span>ll use for code completion.</span>
+<span>For code completion, </span><code>pending</code><span> will be maximally diverging from </span><code>ready</code><span> (especially if we use </span>&ldquo;<span>no syntax errors</span>&rdquo;<span> as a heuristic for promoting </span><code>pending</code><span> to </span><code>working</code><span>),</span>
+<span>so we won</span>&rsquo;<span>t be able to complete based purely on </span><code>ready</code><span>.</span>
+<span>At the same time, completion is heavily semantics-dependent, so we won</span>&rsquo;<span>t be able to drive it through </span><code>pending</code><span>.</span>
+<span>And we also can</span>&rsquo;<span>t launch full semantic analysis on </span><code>pending</code><span> (what we effectively do in </span><code>rust-analyzer</code><span>), due to </span>&ldquo;<span>from root</span>&rdquo;<span> analysis nature.</span></p>
+<p><span>But we can merge two analysis techniques.</span>
+<span>For example, if we are completing in a function which starts as </span><span class="display"><code>fn f(comptime T: type, param: T)</code><span>,</span></span>
+<span>we can use </span><code>ready</code><span> to get a set of values of </span><code>T</code><span> the function is actually called with, to complete </span><code>param.</code><span> in a useful way.</span>
+<span>Dually, if inside </span><code>f</code><span> we have something like </span><span class="display"><code>const list = std.ArrayList(u32){}</code><span>,</span></span><span> we don</span>&rsquo;<span>t have to </span><code>comptime</code><span> evaluate the </span><code>ArrayList</code><span> function, we can fetch the result from </span><code>ready</code><span>.</span></p>
+<p><span>Of course, we must also handle the case where there</span>&rsquo;<span>s no </span><code>ready</code><span> yet (it</span>&rsquo;<span>s a first compilation, or we switched branches), so completion would be somewhat non-deterministic.</span></p>
+</li>
+</ul>
+<p><span>One important flow where non-determinism would get in a way is refactoring.</span>
+<span>When you rename something, you should be 100% sure that you</span>&rsquo;<span>ve found all usages.</span>
+<span>So, any refactor would have to be a blocking operation where we first wait for the current </span><code>working</code><span> to complete, then update </span><code>working</code><span> with the </span><code>pending</code><span> accumulated so far, and wait for </span><em><span>that</span></em><span> to complete, to, finally, apply the refactor using only up-to-date </span><code>ready</code><span>.</span>
+<span>Luckily, refactoring is almost always a two-phase flow, reminiscent of a GET/POST flow for HTTP form (</span><a href="https://rust-analyzer.github.io/blog/2020/09/28/how-to-make-a-light-bulb.html"><span>more about that</span></a><span>).</span>
+<span>Any refactor starts with read-only analysis to inform the user about available options and to gather input.</span>
+<span>For </span>&ldquo;<span>rename</span>&rdquo;<span>, you wait for the user to type the new name, for </span>&ldquo;<span>change signature</span>&rdquo;<span> the user needs to rearrange params.</span>
+<span>This brief interactive window should give enough headroom to flush all </span><code>pending</code><span> changes, masking the latency.</span></p>
+<p><span>I am pretty excited about this setup.</span>
+<span>I think that</span>&rsquo;<span>s the way to go for Zig.</span></p>
+<ul>
+<li>
+<span>The approach meshes extremely well with the ambition of doing incremental binary patching, both because it leans on complete global analysis, and because it contains an explicit notion of switching from one snapshot to the next one</span>
+<span>(in contrast, rust-analyzer never really thinks about </span>&ldquo;<span>previous</span>&rdquo;<span> state of the code. There</span>&rsquo;<span>s always only the </span>&ldquo;<span>current</span>&rdquo;<span> state, with lazy, partially complete analysis).</span>
+</li>
+<li>
+<span>Zig lacks declared interfaces, so a quick </span>&ldquo;<span>find all calls to this function</span>&rdquo;<span> operation is required for useful completion.</span>
+<span>Fully resolved historical snapshot gives us just that.</span>
+</li>
+<li>
+<span>Zig is carefully designed to make a lot of semantic information obvious just from the syntax.</span>
+<span>Unlike Rust, Zig lacks syntactic macros or glob imports.</span>
+<span>This makes is possible to do a lot of analysis correctly using only </span><code>pending</code><span> ASTs.</span>
+</li>
+<li>
+<span>This approach nicely dodges the cancellation problem I</span>&rsquo;<span>ve spend half of the blog post explaining, and has a relatively simple threading story, which reduces implementation complexity.</span>
+</li>
+<li>
+<span>Finally, it feels like it should be </span><em><span>super</span></em><span> fast (if not the most CPU efficient).</span>
+</li>
+</ul>
+
+<figure>
+
+<img alt="" src="/assets/zig-lsp.jpg">
+</figure>
+<p><span>Discussion on </span><a href="https://old.reddit.com/r/Zig/comments/13a8d9l/blog_post_zig_language_server_and_cancellation/"><span>/r/Zig</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-05-06-zig-language-server-and-cancellation.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

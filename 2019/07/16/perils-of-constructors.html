@@ -1,0 +1,424 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Perils of Constructors</title>
+  <meta name="description" content="One of my favorite blog posts about Rust is Things Rust Shipped Without by Graydon Hoare.
+To me, footguns that don't exist in a language are usually more important than expressiveness.
+In this slightly philosophical essay, I want to tell about a missing Rust feature I especially like: constructors.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2019/07/16/perils-of-constructors.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Perils of Constructors</span> <time datetime="2019-07-16">Jul 16, 2019</time></h1>
+<p><span>One of my favorite blog posts about Rust is </span><a href="https://graydon2.dreamwidth.org/218040.html"><span>Things Rust Shipped Without</span></a><span> by Graydon Hoare.</span>
+<span>To me, footguns that don</span>&rsquo;<span>t exist in a language are usually more important than expressiveness.</span>
+<span>In this slightly philosophical essay, I want to tell about a missing Rust feature I especially like: constructors.</span></p>
+<section id="What-Is-Constructor">
+
+    <h2>
+    <a href="#What-Is-Constructor"><span>What Is Constructor</span> </a>
+    </h2>
+<p><span>Constructors are typically found in Object Oriented languages.</span>
+<span>The job of a constructor is to fully initialize an object before the rest of the world sees it.</span>
+<span>At the first blush, this seems like a really good idea:</span></p>
+<ol>
+<li>
+<span>You </span><strong><span>establish invariants</span></strong><span> in the constructor.</span>
+</li>
+<li>
+<span>Each method takes care to </span><strong><span>maintain</span></strong><span> invariants.</span>
+</li>
+<li>
+<span>Together, these two properties mean that it is possible to reason about the object in terms of coarse-grained invariants, instead of fine-grained internal state.</span>
+</li>
+</ol>
+<p><span>The constructor plays a role of induction base here, as it is the only way to create a new object.</span></p>
+<p><span>Unfortunately, there</span>&rsquo;<span>s a hole in this reasoning: constructor itself observes an object in an inconsistent state, and that creates a number of problems.</span></p>
+</section>
+<section id="Value-of-this">
+
+    <h2>
+    <a href="#Value-of-this"><span>Value of </span><code>this</code> </a>
+    </h2>
+<p><span>When the constructor initializes the object, it starts with some dummy state.</span>
+<span>But how do you define a dummy state for an arbitrary object?</span></p>
+<p><span>The easiest answer is to set all fields to default values: booleans to false, numbers to 0, and reference types to null.</span>
+<span>But this requires that every type has a default value, and forces the infamous null into the language.</span>
+<span>This is exactly the path that Java took: at the start of construction, all fields are zero or null.</span></p>
+<p><span>It</span>&rsquo;<span>s really hard to paper over this if you want to get rid of null afterwards.</span>
+<span>A good case study here is Kotlin.</span>
+<span>Kotlin uses non-nullable types by default, but has to work with pre-exiting JVM semantics.</span>
+<span>The language-design heroics to hide this fact are really impressive and work well in practice, but are </span><strong><strong><span>unsound</span></strong></strong><span>.</span>
+<span>That is, with constructors it is possible to circumvent Kotlin null-checking.</span></p>
+<p><span>Kotlin</span>&rsquo;<span>s main trick is to encourage usage of so-called </span>&ldquo;<span>primary constructors</span>&rdquo;<span>, which </span><strong><span>simultaneously</span></strong><span> declare a field and set it before any user code runs:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">class</span> <span class="hl-title class_">Person</span>(</span>
+<span class="line">  <span class="hl-keyword">val</span> firstName: String,</span>
+<span class="line">  <span class="hl-keyword">val</span> lastName: String</span>
+<span class="line">) { ... }</span></code></pre>
+
+</figure>
+<p><span>Alternatively, if the field is not declared in the constructor, the programmer is encouraged to immediately initialize it:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">class</span> <span class="hl-title class_">Person</span>(<span class="hl-keyword">val</span> firstName: String, <span class="hl-keyword">val</span> lastName: String) {</span>
+<span class="line">    <span class="hl-keyword">val</span> fullName: String = <span class="hl-string">&quot;<span class="hl-variable">$firstName</span> <span class="hl-variable">$lastName</span>&quot;</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Trying to use a field before initialization is forbidden statically on the best effort basis:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">class</span> <span class="hl-title class_">Person</span>(<span class="hl-keyword">val</span> firstName: String, <span class="hl-keyword">val</span> lastName: String) {</span>
+<span class="line">    <span class="hl-keyword">val</span> fullName: String</span>
+<span class="line">    <span class="hl-keyword">init</span> {</span>
+<span class="line">        println(fullName) <span class="hl-comment">// error: variable must be initialized</span></span>
+<span class="line">        fullName = <span class="hl-string">&quot;<span class="hl-variable">$firstName</span> <span class="hl-variable">$lastName</span>&quot;</span></span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>But, with some creativity, one can get around these checks.</span>
+<span>For example, a method call would do:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">class</span> <span class="hl-title class_">A</span> {</span>
+<span class="line">    <span class="hl-keyword">val</span> x: Any</span>
+<span class="line">    <span class="hl-keyword">init</span> {</span>
+<span class="line">        observeNull()</span>
+<span class="line">        x = <span class="hl-number">92</span></span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-function"><span class="hl-keyword">fun</span> <span class="hl-title">observeNull</span><span class="hl-params">()</span></span> = println(x) <span class="hl-comment">// prints null</span></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-function"><span class="hl-keyword">fun</span> <span class="hl-title">main</span><span class="hl-params">()</span></span> {</span>
+<span class="line">    A()</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>As well as capturing </span><code>this</code><span> by a lambda (spelled </span><code>{ args -&gt; body }</code><span> in Kotlin):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">class</span> <span class="hl-title class_">B</span> {</span>
+<span class="line">    <span class="hl-keyword">val</span> x: Any = { y }()</span>
+<span class="line">    <span class="hl-keyword">val</span> y: Any = x</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-function"><span class="hl-keyword">fun</span> <span class="hl-title">main</span><span class="hl-params">()</span></span> {</span>
+<span class="line">    println(B().x) <span class="hl-comment">// prints null</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Examples like these seem contorted (and they are), but I did hit similar issues</span>
+<span>in real code</span>
+<span>(Kolmogorov</span>&rsquo;<span>s zero</span>&ndash;<span>one law of software engineering: in a sufficiently large code base, every code pattern exists almost surely, unless it is statically rejected by the compiler, in which case it almost surely doesn</span>&rsquo;<span>t exist).</span></p>
+<p><span>The reason why Kotlin can get away with this unsoundness is the same as with Java</span>&rsquo;<span>s covariant arrays: runtime does null checks anyway.</span>
+<span>All in all, I wouldn</span>&rsquo;<span>t want to complicate Kotlin</span>&rsquo;<span>s type system to make the above cases rejected at compile time:</span>
+<span>given existing constraints (JVM semantics), cost/benefit ratio of a runtime check is much better than that of a static check.</span></p>
+<p><span>What if the language doesn</span>&rsquo;<span>t have a reasonable default for every type?</span>
+<span>For example, in C++, where user defined types are not necessary references, one can not just assign nulls to every field and call it a day!</span>
+<span>Instead, C++ invents special kind of syntactic machinery for specifying initial values of the fields: initializer lists:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#<span class="hl-keyword">include</span> <span class="hl-string">&lt;string&gt;</span></span></span>
+<span class="line"><span class="hl-meta">#<span class="hl-keyword">include</span> <span class="hl-string">&lt;utility&gt;</span></span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">class</span> <span class="hl-title class_">person</span> {</span>
+<span class="line">  <span class="hl-built_in">person</span>(std::string first_name, std::string last_name)</span>
+<span class="line">    : <span class="hl-built_in">first_name</span>(std::<span class="hl-built_in">move</span>(first_name))</span>
+<span class="line">    , <span class="hl-built_in">last_name</span>(std::<span class="hl-built_in">move</span>(last_name))</span>
+<span class="line">  {}</span>
+<span class="line"></span>
+<span class="line">  std::string first_name;</span>
+<span class="line">  std::string last_name;</span>
+<span class="line">};</span></code></pre>
+
+</figure>
+<p><span>Being a special syntax, the rest of the language doesn</span>&rsquo;<span>t work completely flawlessly with it.</span>
+<span>For example, it</span>&rsquo;<span>s hard to fit arbitrary statements in initializer lists, because C++ is not expression-oriented language (which by itself is OK!).</span>
+<span>Working with exceptions from initializer lists needs </span><a href="https://en.cppreference.com/w/cpp/language/function-try-block"><span>yet another obscure language feature</span></a><span>.</span></p>
+</section>
+<section id="Calling-Methods-From-Constructor">
+
+    <h2>
+    <a href="#Calling-Methods-From-Constructor"><span>Calling Methods From Constructor</span> </a>
+    </h2>
+<p><span>As Kotlin examples alluded, all hell breaks loose if one calls a method from a constructor.</span>
+<span>Generally, methods expect that </span><code>this</code><span> object is fully constructed and valid (adheres to invariants).</span>
+<span>But, in Java or Kotlin, nothing prevents you from calling a method in constructor, and that way a semi-alive object can </span>&ldquo;<span>escape</span>&rdquo;<span>.</span>
+<span>Constructor promises to establish invariants, but is actually the easiest place to break them!</span></p>
+<p><span>A particularly bizarre thing happens when the base class calls a method overridden in the subclass:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">abstract</span> <span class="hl-keyword">class</span> <span class="hl-title class_">Base</span> {</span>
+<span class="line">    <span class="hl-keyword">init</span> {</span>
+<span class="line">        initialize()</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-keyword">abstract</span> <span class="hl-function"><span class="hl-keyword">fun</span> <span class="hl-title">initialize</span><span class="hl-params">()</span></span></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">class</span> <span class="hl-title class_">Derived</span>: <span class="hl-type">Base</span>() {</span>
+<span class="line">    <span class="hl-keyword">val</span> x: Any = <span class="hl-number">92</span></span>
+<span class="line">    <span class="hl-keyword">override</span> <span class="hl-function"><span class="hl-keyword">fun</span> <span class="hl-title">initialize</span><span class="hl-params">()</span></span> = println(x) <span class="hl-comment">// prints null!</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Just think about it: code for Derived runs </span><strong><span>before</span></strong><span> the its constructor!</span>
+<span>Doing a similar thing in C++ leads to even curiouser results.</span>
+<span>Instead of calling the function from Derived, a function from Base will be called.</span>
+<span>This makes </span><em><span>some</span></em><span> sense, because Derived is not at all initialized (remember, we can</span>&rsquo;<span>t just say that all fields are null).</span>
+<span>However, if the function in Base happens to be pure virtual, undefined behavior occurs.</span></p>
+</section>
+<section id="Constructor-s-Signature">
+
+    <h2>
+    <a href="#Constructor-s-Signature"><span>Constructor</span>&rsquo;<span>s Signature</span> </a>
+    </h2>
+<p><span>Breaking invariants isn</span>&rsquo;<span>t the only problem with constructors.</span>
+<span>They also have signature with fixed name (empty) and return type (the class itself).</span>
+<span>That makes constructor overloads confusing for humans.</span></p>
+
+<aside class="admn quiz">
+<svg class="icon"><use href="/assets/icons.svg#question"/></svg>
+<div><p><span>Quick, what is </span><code>std::vector&lt;int&gt; xs(92, 2)</code><span>?</span></p>
+<ol type="a">
+<li>
+<span>A vector of length 92 of twos</span>
+</li>
+<li>
+<code>[92, 92]</code>
+</li>
+<li>
+<code>[92, 2]</code>
+</li>
+</ol>
+</div>
+</aside><p><span>The problem with return type usually comes up if construction can fail.</span>
+<span>You can</span>&rsquo;<span>t return </span><code>Result&lt;MyClass, io::Error&gt;</code><span> or null from a constructor!</span></p>
+<p><span>This is often used as an argument that C++ with exceptions disabled is not viable, and that using constructors force one to use exceptions as well.</span>
+<span>I don</span>&rsquo;<span>t think that</span>&rsquo;<span>s a valid argument though: factory functions solve both problems, because they can have arbitrary names and can return arbitrary types.</span>
+<span>I actually this to be an occasionally useful pattern in OO-languages:</span></p>
+<ul>
+<li>
+<p><span>Make a single </span><strong><strong><span>private</span></strong></strong><span> constructor that accepts all the fields as arguments and just sets them.</span>
+<span>That is, this constructor acts almost like a record literal in Rust.</span>
+<span>It can also validate any invariants, but it shouldn</span>&rsquo;<span>t do anything else with arguments or fields.</span></p>
+</li>
+<li>
+<p><span>For public API, provide the necessary public factory functions, with</span>
+<span>appropriate naming and adjusted return types.</span></p>
+</li>
+</ul>
+<p><span>A similar problem with constructors is that, because they are a special kind of thing, it</span>&rsquo;<span>s hard to be generic over them.</span>
+<span>In C++, </span>&ldquo;<span>default constructable</span>&rdquo;<span> or </span>&ldquo;<span>copy constructable</span>&rdquo;<span> can</span>&rsquo;<span>t be expressed more directly than </span>&ldquo;<span>certain </span><em><span>syntax</span></em><span> works</span>&rdquo;<span>.</span>
+<span>Contrast this with Rust, where these concepts have appropriate signatures:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">trait</span> <span class="hl-title class_">Default</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">default</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-keyword">Self</span>;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">trait</span> <span class="hl-title class_">Clone</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">clone</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-keyword">Self</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Life-Without-Constructors">
+
+    <h2>
+    <a href="#Life-Without-Constructors"><span>Life Without Constructors</span> </a>
+    </h2>
+<p><span>In Rust, there</span>&rsquo;<span>s only one way to create a struct: providing values for all the fields.</span>
+<span>Factory functions, like the conventional </span><code>new</code><span>, play the role of constructors, but, crucially, don</span>&rsquo;<span>t allow calling any methods until you have at least a basically valid struct instance on hand.</span></p>
+<p><span>A perceived downside of this approach is that any code can create a struct, so there</span>&rsquo;<span>s no the single place, like the constructor, to enforce invariants.</span>
+<span>In practice, this is easily solved by privacy: if struct</span>&rsquo;<span>s fields are private it can only be created inside its declaring module.</span>
+<span>Within a </span><em><span>single</span></em><span> module, it</span>&rsquo;<span>s not at all hard to maintain a convention like </span>&ldquo;<span>all construction must go via the </span><code>new</code><span> method</span>&rdquo;<span>.</span>
+<span>One can even imagine a language extension that allows one to mark certain functions with a </span><code>#[constructor]</code><span> attribute, with the effect that the record literal syntax is available only in the marked functions.</span>
+<span>But, again, additional language machinery seems unnecessary: maintaining </span><strong><span>local</span></strong><span> conventions needs little effort.</span></p>
+<p><span>I personally think that this tradeoff looks the same for first-class contract programming in general.</span>
+<span>Contracts like </span>&ldquo;<span>not null</span>&rdquo;<span> or </span>&ldquo;<span>positive</span>&rdquo;<span> are best encoded in types.</span>
+<span>For complex invariants, just writing </span><code>assert!(self.validate())</code><span> in each method manually is not that hard.</span>
+<span>Between these two patterns there</span>&rsquo;<span>s little room for language-level or macro-based </span><code>#[pre]</code><span> and </span><code>#[post]</code><span> conditions.</span></p>
+</section>
+<section id="A-Case-of-Swift">
+
+    <h2>
+    <a href="#A-Case-of-Swift"><span>A Case of Swift</span> </a>
+    </h2>
+<p><span>An interesting language to look at the constructor machinery is Swift.</span>
+<span>Like Kotlin, Swift is a null-safe language.</span>
+<span>Unlike Kotlin, Swift</span>&rsquo;<span>s null-checking needs to be sound, so it employs interesting tricks to mitigate constructor-induced damage.</span></p>
+<p><em><span>First</span></em><span>, Swift embraces named arguments, and that helps quite a bit with </span>&ldquo;<span>all constructors have the same name</span>&rdquo;<span>.</span>
+<span>In particular, having two constructors with the same types of parameters is not a problem:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-type">Celsius</span>(fromFahrenheit: <span class="hl-number">212.0</span>)</span>
+<span class="line"><span class="hl-type">Celsius</span>(fromKelvin: <span class="hl-number">273.15</span>)</span></code></pre>
+
+</figure>
+<p><em><span>Second</span></em><span>, to solve </span>&ldquo;<span>constructor calls virtual function from an object</span>&rsquo;<span>s class that didn</span>&rsquo;<span>t came into existence yet</span>&rdquo;<span> problem, Swift uses elaborate two-phase initialization protocol.</span>
+<span>Although there</span>&rsquo;<span>s no special syntax for initializer lists, compiler statically checks that constructor</span>&rsquo;<span>s body has just the right, safe and sound, form.</span>
+<span>For example, calling methods is only allowed after all fields of the class and its ancestors are set.</span></p>
+<p><em><span>Third</span></em><span>, there</span>&rsquo;<span>s special language-level support for failable constructors.</span>
+<span>A constructor can be declared nullable, which makes the result of a call to a constructor an option.</span>
+<span>A constructor can also have </span><code>throws</code><span> modifier, which works somewhat nicer with Swifts</span>&rsquo;<span>s semantic two-phase initialization than with C++ syntactic initializer lists.</span></p>
+<p><span>Swift manages to plug all of the holes in constructors I am ranting about.</span>
+<span>This comes at a price, however: </span><a href="https://docs.swift.org/swift-book/LanguageGuide/Initialization.html"><span>the initialization chapter</span></a><span> is one of the longest in Swift book!</span></p>
+</section>
+<section id="When-Constructors-Are-Necessary">
+
+    <h2>
+    <a href="#When-Constructors-Are-Necessary"><span>When Constructors Are Necessary</span> </a>
+    </h2>
+<p><span>However, I can think of at least two reasons why constructors can</span>&rsquo;<span>t be easily substituted with Rust-style record literals.</span></p>
+<p><em><span>First</span></em><span>, inheritance more or less forces the language to have constructors.</span>
+<span>One can imagine extending the record syntax with support for base classes:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Base</span> { ... }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">Derived</span>: Base { foo: <span class="hl-type">i32</span> }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Derived</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">new</span>() <span class="hl-punctuation">-&gt;</span> Derived {</span>
+<span class="line">        Derived {</span>
+<span class="line">            Base::<span class="hl-title function_ invoke__">new</span>()..,</span>
+<span class="line">            foo: <span class="hl-number">92</span>,</span>
+<span class="line">        }</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>But this won</span>&rsquo;<span>t work in a typical single-inheritance OO language  object layout!</span>
+<span>Usually, an object starts with a header and continues with fields of classes, from the base one to the most derived one.</span>
+<span>This way, a prefix of an object of a derived class forms a valid object of a base class.</span>
+<span>For this layout to work though, constructor needs to allocate memory for the whole object at once.</span>
+<span>It can</span>&rsquo;<span>t allocate just enough space for base, and than append derived fields afterwards.</span>
+<span>But such piece-wise allocation is required if we want a record syntax were we can just specify a value for a base class.</span></p>
+<p><em><span>Second</span></em><span>, unlike records, constructors have a placement-friendly ABI.</span>
+<span>Constructor acts on the </span><code>this</code><span> pointer, which points to a chunk of memory which a newborn object should occupy.</span>
+<span>Crucially, a constructor can easily pass pointer to subobject</span>&rsquo;<span>s constructors, allowing to create a complex tree of values in-place.</span>
+<span>In contrast, in Rust constructing records semantically involves quite a few copies of memory, and we are at the mercy of the optimizer here.</span>
+<span>It</span>&rsquo;<span>s not a coincidence that there</span>&rsquo;<span>s still no accepted RFC for placement in Rust!</span></p>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/ceimgw/blog_post_perils_of_constructors/"><span>/r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2019-07-16-perils-of-constructors.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

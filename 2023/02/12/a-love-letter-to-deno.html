@@ -1,0 +1,206 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>&lt;3 Deno</title>
+  <meta name="description" content="Deno is a relatively new JavaScript runtime.
+I find quite interesting and aesthetically appealing, in-line with the recent trend to rein in the worse-is-better law of software evolution.
+This post explains why.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2023/02/12/a-love-letter-to-deno.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>&lt;3 Deno</span> <time datetime="2023-02-12">Feb 12, 2023</time></h1>
+<p><a href="https://deno.land/manual@v1.30.3/introduction"><span>Deno</span></a><span> is a relatively new JavaScript runtime.</span>
+<span>I find quite interesting and aesthetically appealing, in-line with the recent trend to rein in the worse-is-better law of software evolution.</span>
+<span>This post explains why.</span></p>
+<p><span>The way I see it, the primary goal of Deno is to simplify development of software, relative to the status quo.</span>
+<span>Simplifying means removing the accidental complexity.</span>
+<span>To me, a big source of accidental complexity in today</span>&rsquo;<span>s software are implicit dependencies.</span>
+<span>Software is built of many components, and while some components are relatively well-defined (Linux syscall interface, amd64 ISA), others are much less so.</span>
+<span>Example: upgrading OpenSSL for your Rust project from 1.1.1 to 3.0.0 works on your machine, but breaks on CI, because 3.0.0 now needs some new perl module, which is </span><em><span>expected</span></em><span> to usually be there together with the perl installation, but that is not universally so.</span>
+<span>One way to solve these kinds of problems is by putting </span><del><span>an abstraction boundary</span></del><span> a docker container around them.</span>
+<span>But a different approach is to very carefully avoid creating the issues.</span>
+<span>Deno, in the general sense, picks this second noble hard path.</span></p>
+<p><span>One of the first problems in this area is bootstrapping.</span>
+<span>In general, you can paper over quite a bit of complexity by writing some custom script to do all the grunt work.</span>
+<span>But how do you run it?</span></p>
+<p><span>One answer is to use a shell script, as the shell is already installed.</span>
+<span>Which shell? Bash, sh, powershell?</span>
+<span>Probably POSIX sh is a sane choice, Windows users can just run </span><del><span>a docker container</span></del><span> a Linux in their subsystem.</span>
+<span>You</span>&rsquo;<span>ll also want to install shellcheck to make sure you don</span>&rsquo;<span>t accidentally use bashisms.</span>
+<span>At some point your script grows too large, and you rewrite it in Python.</span>
+<span>You now have to install Python, I</span>&rsquo;<span>ve heard it</span>&rsquo;<span>s much easier these days on Windows.</span>
+<span>Of course, you</span>&rsquo;<span>ll run that inside </span><del><span>a docker container</span></del><span> a virtual environment.</span>
+<span>And you would be careful to use </span><code>python3 -m pip</code><span> rather than </span><code>pip3</code><span> to make sure you use the right thing.</span></p>
+<p><span>Although scripting and plumbing should be a way to combat complexity, just getting to the point where every contributor to your software can run scripts requires </span><del><span>a docker container</span></del><span> a great deal of futzing with the environment!</span></p>
+<p><span>Deno doesn</span>&rsquo;<span>t solve the problem of just being already there on every imaginable machine.</span>
+<span>However, it strives very hard to not create additional problems once you get the </span><code>deno</code><span> binary onto the machine.</span>
+<span>Some manifestations of that:</span></p>
+<p><span>Deno comes with a code formatter (</span><code>deno fmt</code><span>) and an LSP server (</span><code>deno lsp</code><span>) out of the box.</span>
+<span>The high order bit here is not that these are high-value features which drive productivity (though that is so), but that you don</span>&rsquo;<span>t need to pull extra deps to get these features.</span>
+<span>Similarly, Deno is a TypeScript runtime </span>&mdash;<span> there</span>&rsquo;<span>s no transpilation step involved, you just </span><code>deno main.ts</code><span>.</span></p>
+<p><span>Deno does not rely on system</span>&rsquo;<span>s shell.</span>
+<span>Most scripting environments, including node, python, and ruby, make a grave mistake of adding an API to spawn a process intermediated by the shell.</span>
+<span>This is slow, insecure, and brittle (</span><em><span>which</span></em><span> shell was that, again?).</span>
+<span>I have a  </span><a href="https://matklad.github.io/2021/07/30/shell-injection.html"><span>longer post</span></a><span> about the issue.</span>
+<span>Deno doesn</span>&rsquo;<span>t have this vulnerable API.</span>
+<span>Not that </span>&ldquo;<span>not having an API</span>&rdquo;<span> is a particularly challenging technical achievement, but it </span><em><span>is</span></em><span> better than the current default.</span></p>
+<p><span>Deno has a correctly designed tasks system.</span>
+<span>Whenever you do a non-trivial software project, there inevitably comes a point where you need to write some software to orchestrate your software.</span>
+<span>Accidental complexity creeps in the form of a </span><code>Makefile</code><span> (</span><em><span>which</span></em><span> </span><code>make</code><span> is that?) or a </span><code>./scripts/*.sh</code><span> directory.</span>
+<span>Node (as far as I know) pioneered a great idea to treat these as a first-class concern of the project, by including a </span><code>scripts</code><span> field in the </span><code>package.json</code><span>.</span>
+<span>It then botched the execution by running the scripts through system</span>&rsquo;<span>s shell, which downgrades it to </span><code>./scripts</code><span> directory with more indirection.</span>
+<span>In contrast, Deno runs the scripts in </span><a href="https://github.com/denoland/deno_task_shell"><code>deno_task_shell</code></a><span> </span>&mdash;<span> a purpose-built small cross-platform shell.</span>
+<span>You no longer need to worry that </span><code>rm</code><span> might behave differently depending on </span><code>which rm</code><span> it is, because it</span>&rsquo;<span>s a shell</span>&rsquo;<span>s built-in now.</span></p>
+<p><span>These are all engineering nice-to-haves.</span>
+<span>They don</span>&rsquo;<span>t necessary matter as much in isolation, but together they point at project values which align very well with my own ones.</span>
+<span>But there are a couple of innovative, bigger features as well.</span></p>
+<p><span>The first big feature is the permissions system.</span>
+<span>When you run a Deno program, you need to specify explicitly which OS resources it can access.</span>
+<span>Pinging </span><code>google.com</code><span> would require an explicit opt-in.</span>
+<span>You can safely run</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> deno run https://shady.website.eu/caesar-cipher.ts &lt; in.txt &gt; out.txt</span></code></pre>
+
+</figure>
+<p><span>and be sure that this won</span>&rsquo;<span>t steal your secrets.</span>
+<span>Of course, it can still burn the CPU indefinitely or fill </span><code>out.txt</code><span> with garbage, but it won</span>&rsquo;<span>t be able to read anything beyond explicitly passed input.</span>
+<span>For many, if not most, scripting tasks this is a nice extra protection from supply chain attacks.</span></p>
+<p><span>The second big feature is Deno</span>&rsquo;<span>s interesting, minimal, while still practical, take on dependency management.</span>
+<span>First, it goes without saying that there are no global dependencies.</span>
+<span>Everything is scoped to the current project.</span>
+<span>Naturally, there are also lockfiles with checksums.</span></p>
+<p><span>However, there</span>&rsquo;<span>s no package registry or even a separate package manager.</span>
+<span>In Deno, a dependency is always a URL.</span>
+<span>The runtime itself understands URLs, downloads their contents and loads the resulting TypeScript or JavaScript.</span>
+<span>Surprisingly, it feels like this is enough to express various dependency patterns.</span>
+<span>For example, if you need a centralized registry, like </span><a href="https://deno.land/x" class="url">https://deno.land/x</a><span>, you can use URLs pointing to that!</span>
+<span>URLs can also express semver, with </span><code>foo@1</code><span> redirecting to </span><code>foo@1.2.3</code><span>.</span>
+<a href="https://deno.land/manual@v1.30.3/basics/import_maps"><span>Import maps</span></a><span> are a standard, flexible way to remap dependencies, for when you need to tweak something deep in the tree.</span>
+<span>Crucially, in addition to lockfiles Deno comes with a built in </span><code>deno vendor</code><span> command, which fetches all of the dependencies of the current project and puts them into a subfolder, making production deployments immune to dependencies</span>&rsquo;<span> hosting failures.</span></p>
+<p><span>Deno</span>&rsquo;<span>s approach to built-in APIs beautifully bootstraps from its url-based dependency management.</span>
+<span>First, Deno provides a set of runtime APIs.</span>
+<span>These APIs are absolutely stable, follow existing standards (eg, </span><code>fetch</code><span> for doing networking), and play the role of providing cross-platform interface for the underlying OS.</span>
+<span>Then there</span>&rsquo;<span>s the standard library.</span>
+<span>There</span>&rsquo;<span>s an ambition to provide a comprehensive batteries included standard library, which is vetted by core developers, a-la Go.</span>
+<span>At the same time, </span><em><span>huge</span></em><span> stdlib requires a lot of work over many years.</span>
+<span>So, as a companion to a stable 1.30.3 runtime APIs, which is a part of </span><code>deno</code><span> binary, there</span>&rsquo;<span>s 0.177.0 version of stdlib, which is downloaded just like any other dependency.</span>
+<span>I am fairly certain that in time this will culminate in actually stable, comprehensive, and high quality stdlib.</span></p>
+<p><span>All these together mean that you can be sure that, if you got </span><code>deno --version</code><span> working, then </span><code>deno run your-script.ts</code><span> will always work, as the surface area for things to go wrong due to differences in the environment is drastically cut.</span></p>
+<p><span>The only big drawback of Deno is the language </span>&mdash;<span> all this runtime awesomeness is tied to TypeScript.</span>
+<span>JavaScript is a curious beast </span>&mdash;<span> post ES6, it is actually quite pleasant to use, and has some really good parts, like injection-proof template literal semantics.</span>
+<span>But all the old </span><a href="https://www.destroyallsoftware.com/talks/wat"><span>WATs</span></a><span> like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">[<span class="hl-string">&quot;10&quot;</span>, <span class="hl-string">&quot;10&quot;</span>, <span class="hl-string">&quot;10&quot;</span>].<span class="hl-title function_">map</span>(<span class="hl-built_in">parseInt</span>)</span></code></pre>
+
+</figure>
+<p><span>are still there.</span>
+<span>TypeScript does an admirable job with typing JavaScript, as it exists in the wild, but the resulting type system is not simple.</span>
+<span>It seems that, linguistically, something substantially better than TypeScript is possible in theory.</span>
+<span>But among the actually existing languages, TypeScript seems like a solid choice.</span></p>
+<p><span>To sum up, historically the domain of </span>&ldquo;<span>scripting</span>&rdquo;<span> and </span>&ldquo;<span>glue code</span>&rdquo;<span> was plagued by the problem of accidentally supergluing oneself to a particular UNIX flavor at hand.</span>
+<span>Deno finally seems like a technology that tries to solve this issue of implicit dependencies by not having the said dependencies </span><del><span>instead of putting everything in a docker container</span></del><span>.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-02-12-a-love-letter-to-deno.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

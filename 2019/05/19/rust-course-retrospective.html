@@ -1,0 +1,189 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rust Course Retrospective</title>
+  <meta name="description" content="It was the last week of the Rust course at Computer Science Center.
+This post is my experience report from teaching this course.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2019/05/19/rust-course-retrospective.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Rust Course Retrospective</span> <time datetime="2019-05-19">May 19, 2019</time></h1>
+<p><span>It was the last week of the Rust course at </span><a href="https://compscicenter.ru"><span>Computer Science Center</span></a><span>.</span>
+<span>This post is my experience report from teaching this course.</span></p>
+<section id="Materials">
+
+    <h2>
+    <a href="#Materials"><span>Materials</span> </a>
+    </h2>
+<p><span>Note that the course is in Russian :-)</span></p>
+<p><span>Course slides are available under CC-BY at </span><a href="https://github.com/matklad/rust-course" class="url">https://github.com/matklad/rust-course</a><span>.</span>
+<span>See </span><a href="/2019/05/19/consider-using-asciidoctor-for-your-next-presentation.html"><span>the sibling post</span></a><span> if you want to learn more about how the slides were made</span>
+<span>(TL;DR: Asciidoctor is better than beamer, Google Docs, slides.com, reveal.js, remark).</span></p>
+<p><span>High-quality recordings of lectures are available on YouTube:</span></p>
+<p><a href="https://www.youtube.com/playlist?list=PLlb7e2G7aSpTfhiECYNI2EZ1uAluUqE_e" class="url">https://www.youtube.com/playlist?list=PLlb7e2G7aSpTfhiECYNI2EZ1uAluUqE_e</a></p>
+<p><span>The homework is not available, but it was based on the </span><a href="http://www.realtimerendering.com/raytracing/Ray%20Tracing%20in%20a%20Weekend.pdf"><span>Ray Tracing in One Weekend</span></a><span> book.</span></p>
+</section>
+<section id="Good-Parts">
+
+    <h2>
+    <a href="#Good-Parts"><span>Good Parts</span> </a>
+    </h2>
+<p><span>Teaching is hard, but very rewarding.</span>
+<span>Teaching Rust feels especially good because the language is very well designed and the quality of the implementation is great.</span>
+<span>Overall, I don</span>&rsquo;<span>t feel like this was a particularly hard course for the students.</span>
+<span>In the end most of the folks successfully completed all assignments, which were fairly representative of the typical Rust code.</span></p>
+</section>
+<section id="Hard-Parts">
+
+    <h2>
+    <a href="#Hard-Parts"><span>Hard Parts</span> </a>
+    </h2>
+<p><span>There were one extremely hard topic and one poorly explained topic.</span></p>
+<p><span>The hard one was the module system.</span>
+<span>Many students were completely stumped by it.</span>
+<span>It</span>&rsquo;<span>s difficult to point out the specific hard aspect of the current (Rust 2018) module system: each student struggled in their own way.</span></p>
+<p><span>Here</span>&rsquo;<span>s a selection of points of confusion:</span></p>
+<ul>
+<li>
+<span>you don</span>&rsquo;<span>t need to wrap contents of </span><code>foo.rs</code><span> in </span><code>mod foo { ... }</code>
+</li>
+<li>
+<span>you don</span>&rsquo;<span>t need to add </span><code>mod lib;</code><span> to </span><code>main.rs</code>
+</li>
+<li>
+<span>child module lives in the </span><code>parent/child.rs</code><span> file, </span><strong><strong><span>unless</span></strong></strong><span> the parent is </span><code>lib.rs</code><span> or </span><code>main.rs</code>
+</li>
+</ul>
+<p><span>I feel like my explanation of modules was an OK one, it contained all the relevant details and talked about how things work under the hood.</span>
+<span>However, it seems like just explaining the modules is not enough: one really needs to arrange a series of exercises about modules, and make sure that all students successfully pass them.</span></p>
+<p><span>I don</span>&rsquo;<span>t think that modules are the hardest feature of the language: advanced lifetimes and </span><code>unsafe</code><span> subtleties are more difficult.</span>
+<span>However, you don</span>&rsquo;<span>t really write </span><code>mem::transmute</code><span> or HRTB every day, while you face modules pretty early.</span></p>
+<p><span>The poorly explained topic was </span><code>Send/Sync</code><span>.</span>
+<span>I was like </span>&ldquo;<span>compiler infers </span><code>Send/Sync</code><span> automatically, and after that your code just fails to compile if it would had a data race, isn</span>&rsquo;<span>t Rust wonderful?</span>&rdquo;<span>.</span>
+<span>But this misses the crucial point: in generic code (both for </span><code>impl T</code><span> and </span><code>dyn T</code><span>), you</span>&rsquo;<span>ll need to write </span><code>: Sync</code><span> bounds yourself.</span>
+<span>Of course the homework was about generic code, and there were a number of solutions with (unsound) </span><code>unsafe impl&lt;T&gt; Sync for MyThing&lt;T&gt;</code><span> :-)</span></p>
+</section>
+<section id="Annoying-Parts">
+
+    <h2>
+    <a href="#Annoying-Parts"><span>Annoying Parts</span> </a>
+    </h2>
+<p><span>It</span>&rsquo;<span>s very hard to google Rust documentation at the moment, because google links</span>
+<span>you to redirect stubs of the old book, which creates that weird feeling that you</span>
+<span>are inside of a </span><a href="https://en.wikipedia.org/wiki/Sepulka"><span>science-fiction novel</span></a><span>.</span>
+<span>I know that the problem is already fixed, and we just need to wait until the new version of the old book is deployed, but I wish we could have fixed it earlier.</span></p>
+<p><span>Editions are a minor annoyance as well. I</span>&rsquo;<span>ve completely avoided talking about Rust 2015, hoping that I</span>&rsquo;<span>ll just teach the shiny new thing.</span>
+<span>But of course students google for help and get outdated info.</span></p>
+<ul>
+<li>
+<span>many used </span><code>extern crate</code><span> syntax</span>
+</li>
+<li>
+<code>dyn</code><span> in </span><code>dyn T</code><span> was sometimes omitted</span>
+</li>
+<li>
+<span>there was a couple of </span><code>mod.rs</code>
+</li>
+</ul>
+<p><span>Additionally, several students somehow ended up without </span><code>edition = "2015"</code><span> in </span><code>Cargo.toml</code><span>.</span></p>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/bqlctn/rust_course_retrospective/"><span>/r/rust</span></a><span>.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2019-05-19-rust-course-retrospective.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

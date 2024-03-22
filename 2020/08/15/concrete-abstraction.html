@@ -1,0 +1,271 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Code Smell: Concrete Abstraction</title>
+  <meta name="description" content="This is a hand-wavy philosophical article about programming, without quantifiable justification, but with some actionable advice and a case study.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2020/08/15/concrete-abstraction.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/resume.html">Resume</a>
+      <a href="/links.html">Links</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Code Smell: Concrete Abstraction</span> <time datetime="2020-08-15">Aug 15, 2020</time></h1>
+<p><span>This is a hand-wavy philosophical article about programming, without quantifiable justification, but with some actionable advice and a case study.</span></p>
+<p><span>Suppose that there are two types in the program, </span><code>Blorb</code><span> and </span><code>Gonk</code><span>.</span>
+<span>Suppose also that they both can </span><code>blag</code><span>.</span></p>
+<p><span>Does it make sense to add the following trait?</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">trait</span> <span class="hl-title class_">Blag</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">blag</span>(&amp;<span class="hl-keyword">mut</span> <span class="hl-keyword">self</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>I claim that it makes sense only if you have a function like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">blagyify</span>&lt;T: Blag&gt;(x: T) {</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>That is, if some part of you program is generic over </span><code>T: Blag</code><span>.</span></p>
+<p><span>If in every </span><code>x.blag()</code><span> the </span><code>x</code><span> is either </span><code>Blorg</code><span>, or </span><code>Gonk</code><span>, but never a </span><code>T</code><span> (each usage is </span><em><span>concrete</span></em><span>), you don</span>&rsquo;<span>t need this abstraction.</span>
+&ldquo;<span>Need</span>&rdquo;<span> is used in a literal sense here: replace a trait with two inherent methods named </span><code>blag</code><span>, and the code will be essentially the same.</span>
+<span>Using a trait here doesn</span>&rsquo;<span>t achieve any </span><a href="https://caseymuratori.com/blog_0015"><span>semantic compression</span></a><span>.</span></p>
+<p><span>Given that abstractions have costs </span>&ldquo;<span>don</span>&rsquo;<span>t need</span>&rdquo;<span> can be strengthen to </span>&ldquo;<span>probably shouldn</span>&rsquo;<span>t</span>&rdquo;<span>.</span></p>
+
+<aside class="block">
+<div class="title">What Is The Cost of Abstraction?</div>
+<p><em><span>First</span></em><span> is the cognitive cost </span>&mdash;<span> generics (and abstractions in general) are often harder to understand than concretions.</span>
+<span>I think this is true regardless of the abstraction </span><em><span>skill</span></em><span>.</span>
+<span>I am skilled with  math which is incomparably more complicated than the typical code; still, I find concrete code easier to understand.</span>
+<span>There are exceptions here (you can do less things with </span><code>T: Default</code><span> than with </span><code>Blorb</code><span>), but they seem to be exceptions rather than a common case.</span></p>
+<p><em><span>Second</span></em><span>, in the context of Rust, is the compile time cost.</span>
+<span>It is important to understand </span><em><span>why</span></em><span> it is the case.</span>
+&ldquo;<span>Traits are more complicated for compiler to understand</span>&rdquo;<span> would be a wrong reason.</span>
+<span>Rust uses monomorphization to compile generic code.</span>
+<span>An </span><code>fn foo&lt;T&gt;</code><span> is compiled afresh for each different </span><code>T</code><span>, </span><em><span>per crate</span></em><span>.</span>
+<span>If </span><code>foo&lt;T&gt;</code><span> is defined in crate </span><code>a</code><span>, and </span><code>foo::&lt;i32&gt;</code><span> is called in crates </span><code>b</code><span> and </span><code>c</code><span>, then </span><code>rustc</code><span> compiles the same code twice.</span></p>
+<p><em><span>Third</span></em><span>, it often is just more code to write and read.</span>
+<span>Consider the original </span><code>Blag</code><span> example.</span>
+<span>For non-abstract case, there are two inherent impls with </span><code>blag</code><span> function.</span>
+<span>For abstract case there are these same two impls, plus a trait definition, </span><em><span>plus</span></em><span> a </span><code>use Blag</code><span> on every call-site.</span></p>
+
+</aside>
+  <p><span>Not going for an abstraction often allows a for more specific interface.</span>
+<span>A monad in Haskell is a thing with </span><code>&gt;&gt;=</code><span>.</span>
+<span>Which isn</span>&rsquo;<span>t telling much.</span>
+<span>Languages like Rust and OCaml can</span>&rsquo;<span>t express a general monad, but they still have concrete monads.</span>
+<span>The </span><code>&gt;&gt;=</code><span> is called </span><code>and_then</code><span> for futures and </span><code>flat_map</code><span> for lists.</span>
+<span>These names are </span><em><span>more specific</span></em><span> than </span><code>&gt;&gt;=</code><span> and are easier to understand.</span>
+<span>The </span><code>&gt;&gt;=</code><span> is only required if you want to write code generic over type of monad itself, which happens rarely.</span></p>
+<p><span>Another example of abstraction which is used mostly concretely are collection hierarchies.</span>
+<span>In Java or Scala, there</span>&rsquo;<span>s a whole type hierarchy for things which can hold other things.</span>
+<span>Rust</span>&rsquo;<span>s type system can</span>&rsquo;<span>t express </span><code>Collection</code><span> trait, so we have to get by with using </span><code>Vec</code><span>, </span><code>HashSet</code><span> and </span><code>BTreeSet</code><span> directly.</span>
+<span>And it isn</span>&rsquo;<span>t actually a problem in practice.</span>
+<span>Turns out, writing code which is generic over collections (and not just over iterators) is not that useful.</span>
+<span>The </span>&ldquo;<span>but I can change the collection type later</span>&rdquo;<span> argument also seems overrated </span>&mdash;<span> often, there</span>&rsquo;<span>s only single collection type that makes sense.</span>
+<span>Moreover, swapping </span><code>HashSet</code><span> for </span><code>BTreeSet</code><span> is mostly just a change at the definition site, as the two happen to have almost identical interface anyway.</span>
+<span>The only case where I miss Java collections is when I return </span><code>Vec&lt;T&gt;</code><span>, but mean a generic </span><em><span>unordered</span></em><span> collection.</span>
+<span>In Java, the difference is captured by </span><code>List&lt;T&gt;</code><span> vs </span><code>Collection&lt;T&gt;</code><span>.</span>
+<span>In Rust, there</span>&rsquo;<span>s nothing built-in for this.</span>
+<span>It is possible to define a </span><code>VecSet&lt;T&gt;(Vec&lt;T&gt;)</code><span>, but doesn</span>&rsquo;<span>t seem worth the effort.</span></p>
+<p><span>Collections also suffer from </span><code>&gt;&gt;=</code><span> problem </span>&mdash;<span> collapsing similar synonyms under a single name.</span>
+<span>Java</span>&rsquo;<span>s</span>
+<a href="https://docs.oracle.com/javase/7/docs/api/java/util/Queue.html"><span>Queue</span></a>
+<span>has </span><code>add</code><span>, </span><code>offer</code><span>, </span><code>remove</code><span>, and </span><code>poll</code><span> methods, because it needs to be a collection, but also is a special kind of collection.</span>
+<span>In C++, you have to spell </span><code>push_back</code><span> for </span><code>vector</code>&rsquo;<span>s push operation, so that it duck-types with </span><code>deque</code>&rsquo;<span>s </span><code>front</code><span> and </span><code>back</code><span>.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>Collection hierarchy is a sufficient, but not necessary condition for mixing up method names.</span>
+<span>Rust</span>&rsquo;<span>s </span><code>BinaryHeap</code><span> should have had </span><code>BinaryHeap::pop_max</code><span> method.</span>
+<span>Alas, we are stuck with </span><code>pop</code><span>, which, coupled with the fact that the heap is surprisingly and uselessly a max-heap, means many student-hours wasted on debugging misbehaving Dijkstra algorithm.</span></p>
+</div>
+</aside><p><span>Finally, the promised case study!</span>
+<span>rust-analyzer needs to convert a bunch of internal type to types suitable for converting them into JSON message of the Language Server Protocol.</span>
+<code>ra::Completion</code><span> is converted into </span><code>lsp::Completion</code><span>; </span><code>ra::Completion</code><span> contains </span><code>ra::TextRange</code><span> which is converted to </span><code>lsp::Range</code><span>, etc.</span></p>
+<p><span>The first implementation started with an abstraction for conversion:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">trait</span> <span class="hl-title class_">Conv</span> {</span>
+<span class="line">    <span class="hl-keyword">type</span> <span class="hl-title class_">Output</span>;</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">conv</span>(<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-keyword">Self</span>::Output;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This abstraction doesn</span>&rsquo;<span>t work for all cases </span>&mdash;<span> sometimes the conversion requires additional context.</span>
+<span>For example, to convert a rust-analyzer</span>&rsquo;<span>s offset (a position of byte in the file) to an LSP position (</span><code>(line, column)</code><span> pair), a table with positions of newlines is needed.</span>
+<span>This is easy to handle:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">trait</span> <span class="hl-title class_">ConvWith</span>&lt;CTX&gt; {</span>
+<span class="line">    <span class="hl-keyword">type</span> <span class="hl-title class_">Output</span>;</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">conv_with</span>(<span class="hl-keyword">self</span>, ctx: CTX) <span class="hl-punctuation">-&gt;</span> <span class="hl-keyword">Self</span>::Output;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Naturally, there was an intricate web of delegating impls.</span>
+<span>The typical one looked like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">ConvWith</span>&lt;&amp;LineIndex&gt; <span class="hl-keyword">for</span> <span class="hl-title class_">TextRange</span> {</span>
+<span class="line">    <span class="hl-keyword">type</span> <span class="hl-title class_">Output</span> = Range;</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">conv_with</span>(</span>
+<span class="line">        <span class="hl-keyword">self</span>,</span>
+<span class="line">        line_index: &amp;LineIndex,</span>
+<span class="line">    ) <span class="hl-punctuation">-&gt;</span> lsp_types::Range {</span>
+<span class="line">        Range::<span class="hl-title function_ invoke__">new</span>(</span>
+<span class="line">            <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">start</span>().<span class="hl-title function_ invoke__">conv_with</span>(line_index),</span>
+<span class="line">            <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">end</span>().<span class="hl-title function_ invoke__">conv_with</span>(line_index),</span>
+<span class="line">        )</span>
+<span class="line">    }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>There were a couple of genuinely generic impls for converting iterators of convertible things.</span></p>
+<p><span>The code was hard to understand.</span>
+<span>It also was hard to use: if calling </span><code>.conv</code><span> didn</span>&rsquo;<span>t work immediately, it took a lot of time to find which specific impl didn</span>&rsquo;<span>t apply.</span>
+<span>Finally, there were many accidental (as in </span>&ldquo;<span>accidental complexity</span>&rdquo;<span>) changes to the shape of code: </span><code>CTX</code><span> being passed by value or by reference, switching between generic parameters and associated types, etc.</span></p>
+<p><span>I was really annoyed by how this conceptually simple pure boilerplate operation got expressed as clever and fancy abstraction.</span>
+<span>Crucially, almost all of the usages of the abstraction (besides those couple of iterator impls) were concrete.</span>
+<span>So I replaced the whole edifice with much simpler code, a bunch of functions:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">range</span>(</span>
+<span class="line">    line_index: &amp;LineIndex,</span>
+<span class="line">    range: TextRange,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> lsp_types::Range {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">start</span> = <span class="hl-title function_ invoke__">position</span>(line_index, range.<span class="hl-title function_ invoke__">start</span>());</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">end</span> = <span class="hl-title function_ invoke__">position</span>(line_index, range.<span class="hl-title function_ invoke__">end</span>());</span>
+<span class="line">    lsp_types::Range::<span class="hl-title function_ invoke__">new</span>(start, end)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">position</span>(</span>
+<span class="line">    line_index: &amp;LineIndex,</span>
+<span class="line">    offset: TextSize,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> lsp_types::Position {</span>
+<span class="line">    ...</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Simplicity and ease of use went up tremendously.</span>
+<span>Now instead of typing </span><code>x.conv()</code><span> and trying to figure out why an impl I think should apply doesn</span>&rsquo;<span>t apply, I just auto-complete </span><code>to_proto::range</code><span> and let the compiler tell me exactly which types don</span>&rsquo;<span>t line up.</span></p>
+<p><span>I</span>&rsquo;<span>ve lost fancy iterator impls, but the</span>
+<a href="https://github.com/rust-analyzer/rust-analyzer/pull/4418/commits/1586bab0b97bef411e6187dfc389557edbc5a16e"><span>total diff</span></a>
+<span>for the commit was </span><code>+999,-1123</code><span>.</span>
+<span>There was some genuine code re-use in those impls, but it was not justified by the overall compression, even disregarding additional complexity tax.</span></p>
+<p><span>To sum up, </span>&ldquo;<span>is this abstraction used exclusively concretely?</span>&rdquo;<span> is a meaningful question about the overall shape of code.</span>
+<span>If the answer is </span>&ldquo;<span>Yes!</span>&rdquo;<span>, then the abstraction can be replaced by a number of equivalent non-abstract implementations.</span>
+<span>As the latter tend to be simpler, shorter, and more direct, </span>&ldquo;<span>Concrete Abstraction</span>&rdquo;<span> can be considered a code smell.</span>
+<span>As usual though, any abstract programming advice can be applied only in a concrete context </span>&mdash;<span> don</span>&rsquo;<span>t blindly replace abstractions with concretions, check if provided justifications work for your particular case!</span></p>
+<p><span>Discussion on </span><a href="https://www.reddit.com/r/rust/comments/iaic5w/blog_post_code_smell_concrete_abstraction/"><span>/r/rust</span></a><span>.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2020-08-15-concrete-abstraction.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
