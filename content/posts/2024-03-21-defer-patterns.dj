@@ -92,7 +92,7 @@ place to produce a user-facing report right there.
 
 ```zig
 const port = port: {
-  errdefer log.err("failed to read the port number", .{});
+  errdefer |err| log.err("failed to read the port number: {}", .{err});
 
   var buf: [fmt.count("{}\n", .{maxInt(u16)})]u8 = undefined;
   const len = try process.stdout.?.readAll(&buf);
