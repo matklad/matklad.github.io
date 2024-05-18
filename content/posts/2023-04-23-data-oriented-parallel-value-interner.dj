@@ -338,7 +338,7 @@ We can apply the sharding trick again, and shard all our `SegmentList`s.
 But that would mean that we have to dedicate some bits from `Value` index to the shard number, and to waste some extra space for non-perfectly balanced shards.
 
 There's a better way --- we can amortize atomic increments by allowing each thread to bulk-allocate indexes.
-That is, if a thread wants to allocate a new value, it atomically increments `value_cont` by, say, `1024`, and uses those indexes for the next thousand allocations.
+That is, if a thread wants to allocate a new value, it atomically increments `value_count` by, say, `1024`, and uses those indexes for the next thousand allocations.
 In addition to `ValueTable`, each thread now gets its own distinct `LocalTable`:
 
 ```zig
