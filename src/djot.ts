@@ -43,7 +43,7 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
     },
     heading: (node: Heading, r: djot.HTMLRenderer) => {
       const tag = `h${node.level}`;
-      const date = node.level == 1 && ctx.date ? time(ctx.date).value : "";
+      const date = node.level == 1 && ctx.date ? time(ctx.date, "meta").value : "";
       const children = r.renderChildren(node);
       if (node.level == 1) ctx.title = get_string_content(node);
       const id = node.level > 1 && section?.attributes?.id;

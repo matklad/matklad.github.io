@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { Post } from "./main.ts";
+import * as blogroll from "./blogroll.ts";
 
 const site_url = "https://matklad.github.io";
 
@@ -88,6 +89,7 @@ export const base = (
       <a href="/about.html">About</a>
       <a href="/resume.html">Resume</a>
       <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
     </nav>
   </header>
 
@@ -137,7 +139,7 @@ export const post_list = (posts: Post[]): HtmlString => {
   const list_items = posts.map((post) =>
     html`
 <li>
-  <h2>${time(post.date)} <a href="${post.path}">${post.title}</a></h2>
+  <h2>${time(post.date, "meta")} <a href="${post.path}">${post.title}</a></h2>
 </li>`
   );
 
@@ -162,7 +164,31 @@ export function post(post: Post, spellcheck: boolean): HtmlString {
   });
 }
 
-export function time(date: Date): HtmlString {
+export const blogroll_list = (posts: blogroll.FeedEntry[]): HtmlString => {
+  function domain(url: string): string {
+    return new URL(url).host;
+  }
+
+  const list_items = posts.map((post) =>
+    html`
+<li>
+  <h2>
+  <span class="meta">${time(post.date)}, ${domain(post.url)}</span>
+    <a href="${post.url}">${post.title}</a>
+  </h2>
+</li>`
+  );
+
+  return base({
+    path: "",
+    title: "matklad",
+    description: blurb,
+    src: "/src/templates.ts",
+    content: html`<ul class="post-list">${list_items}</ul>`,
+  });
+};
+
+export function time(date: Date, cls?: string): HtmlString {
   const human = date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -170,7 +196,9 @@ export function time(date: Date): HtmlString {
     timeZone: "UTC",
   });
   const machine = yyyy_mm_dd(date);
-  return html`<time datetime="${machine}">${human}</time>`;
+  return html`<time ${
+    cls ? `class="${cls}"` : ""
+  } datetime="${machine}">${human}</time>`;
 }
 
 function yyyy_mm_dd(date: Date): string {

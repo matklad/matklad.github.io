@@ -2,6 +2,7 @@ import * as async from "std/async/mod.ts";
 import * as fs from "std/fs/mod.ts";
 import * as templates from "./templates.ts";
 import * as djot from "./djot.ts";
+import * as blogroll from "./blogroll.ts";
 import { HtmlString } from "./templates.ts";
 
 async function main() {
@@ -118,6 +119,12 @@ async function build(params: {
       templates.post(post, params.spell).value,
     );
   }
+
+  const blogroll_posts = await blogroll.blogroll();
+  await update_file(
+    "out/res/blogroll.html",
+    templates.blogroll_list(blogroll_posts).value,
+  );
 
   const pages = ["about", "resume", "links", "style"];
   for (const page of pages) {
