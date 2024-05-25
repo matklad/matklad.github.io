@@ -39,9 +39,9 @@ async function blogroll_feed(entry: Feed): Promise<FeedEntry[]> {
   return feed.entries.map((it) => {
     return {
       title: it.title!.value!,
-      url: it.links.find((it) =>
-        it.type == "text/html" || it.href!.endsWith(".html")
-      )!.href!,
+      url: (it.links.find((it) => {
+        it.type == "text/html" || it.href!.endsWith(".html");
+      }) ?? it.links[0])!.href!,
       date: (it.published ?? it.updated)!,
     };
   }).slice(0, 3);
