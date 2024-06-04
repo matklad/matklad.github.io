@@ -1,0 +1,199 @@
+# Regular, Recursive, Restricted
+
+A post/question about formal grammars, wherein I search for a good formalism for describing infix
+expressions.
+
+Problem statement: it's hard to describe arithmetic expressions in a way that:
+
+* declaratively captures the overall shape of expression, and
+* has a clear precedence semantics
+
+Let's start with the following grammar for arithmetic expressions:
+
+```
+Expr =
+    'number'
+  | '(' Expr ')'
+  | Expr '+' Expr
+  | Expr '*' Expr
+```
+
+It is definitely declarative and obvious. But it is ambiguous --- it doesn't tell whether `*` or `+`
+binds tighter, and their associativity. You _can_ express those properties directly in the grammar:
+
+```
+Expr =
+    Factor
+  | Expr '+' Factor
+
+Factor =
+    Atom
+  | Factor '*' Atom
+
+Atom = 'number' | '(' Expr ')'
+```
+
+But at this point we lose decorativeness. The way my brain parses the above grammar is by pattern
+matching it as a grammar for infix expressions and folding it back to the initial compressed form,
+_not_ by reading the grammar rules as written.
+
+To go in another direction, you can define ambiguity away and get parsing expression grammars:
+
+```
+Exp =
+    Sum
+  / Product
+  / Atom
+
+Sum     = Expr (('+' / '-') Expr)+
+Product = Expr (('*' / '/') Expr)+
+
+Atom = 'number' | '(' Expr ')'
+```
+
+This captures precedence _mostly_ declaratively: we first match `Sum`, and, failing that, match
+`Product`. But the clarity of semantics is lost --- PEGs are never ambiguous by virtue of always
+picking the first alternative, so it's too easy to introduce an unintended ambiguity.
+
+Can we have both? Clarity with respect to tree shape and clarity with respect to ambiguity?
+
+Let me present a formalism that, I think, ticks both boxes for the toy example and pose a question
+of whether it generalizes.
+
+---
+
+Running example:
+
+```
+E =
+    'number'
+  | '(' E ')'
+  | E '+' E
+```
+
+As a grammar for strings, it is ambiguous. There are two parse trees for `1 + 2 + 3` --- the
+"correct" one `(1 + 2) + 3`, and the alternative: `1 + (2 + 3)`.
+
+Instead, lets see it as a grammar for trees instead. Specifically, trees where:
+
+* Leaves are labeled with `'number'`, `'+'`, or `'*'`.
+* Interior nodes are labeled with `E`.
+* For each interior node, the string formed by labels of its _direct_ children conforms to the
+  specified regular expression.
+
+For trees, this is a perfectly fine grammar! Given a labeled tree, its trivial to check whether it
+matches the grammar: for each node, you can directly match the regular expression. There's also no
+meaningful ambiguity --- while arbitrary regular expressions can be ambiguous (`aa | a*`), this
+doesn't really come up as harmful in practice all that often, and, in any case, it's easy to check
+that any two regular alternatives are disjoint (intersect the two automata, minimize the result,
+check if it is empty).
+
+As a grammar for trees, it has the following property: there are two distinct trees which
+nevertheless share the same sequence of leaves:
+
+```
+        E                  E
+        o                  o
+      / | \              / | \
+     E '+' E            E '+' E
+     o     |            |     o
+   / | \  '3'          '1'  / | \
+  E '+' E                  E '+' E
+  |     |                  |     |
+ '1'   '2'                '2'   '3'
+```
+
+So let's restrict the set of trees, in the most straightforward manner, by adding some inequalities:
+
+```
+E =
+    'number'
+  | '(' E ')'
+  | E '+' E
+
+E !=
+    E '+' [E '+' E]
+```
+
+Here, square brackets denote a child. `E '+' [E '+' E]` is a plus node whose right child is also a
+plus node. Checking whether a tree conform to this modified set of rules is easy as negative rules
+are also just regular expressions. Well, I think you need some fiddling here, as, as written, a
+negative rule matches two different levels of the tree, but you can flatten both the rule and the
+actual tree to the grandchildren level by enclosing children in parenthesis. Let me show an example:
+
+We want to match this node:
+
+```
+    E
+    o
+  / | \
+ E '+' E
+ |     o
+'1'  / | \
+    E '+' E
+```
+
+against this rule concerning children and grand children:
+
+```
+E '+' [E '+' E]
+```
+
+We write the list of children and grandchidren of the node, while adding extra `[]`, to get this
+string:
+
+```
+['1'] '+' [E '+' E]
+```
+
+And in the rule we replace top-level non-terminals with `[.*]`, to get this regular expression:
+
+```
+[.*] '+' [E '+' E]
+```
+
+Now we can match the string against a regex, get a mach, and rule out the tree (remember, this is
+`!=`).
+
+So here it is, a perfectly functional mathematical animal: recursive restricted regular expression:
+
+* A set of non-terminals `N` (denoted with `TitleCase` names)
+* A set of terminals `T` (denoted with `'quoted'` names)
+* A generating mapping from non-terminals `N` to regular expressions over `N ∪ T` alphabet
+* A restricting mapping from non-terminals `N` to regular expressions over `N ∪ T ∪ {], [}` (that is
+  regular expressions with square brackets to denote children)
+
+This construction denotes a set of labeled trees, where interior nodes are labeled with `N`, leaves
+are labeled with `T` and for each interior node
+
+* its children match the corresponding generating regular expression
+* its grandchildren do not match the corresponding restricting regular expression
+
+And the main question one would have, if confronted with a specimen, is "is it ambiguous?" That is,
+are there two trees in the set which have the same sequence of leaves?
+
+Let's look at an example:
+
+```
+Expr =
+    'number'
+  | '(' Expr ')'
+  | Expr '+' Expr
+  | Expr '*' Expr
+
+Expr !=
+             Expr '+' [Expr '+' Expr]
+|            Expr '*' [Expr '*' Expr]
+|            Expr '*' [Expr '+' Expr]
+| [Expr '+' Expr] '*' Expr
+```
+
+It looks unambiguous to me! And I am pretty sure that I can prove, by hand, that it is in fact
+unambiguous (well, I might discover that I miss a couple of restrictions in process, but it feels
+like it should work in principle). The question is, can a computer take an arbitrary recursive
+restricted regular expression and tell me that its unambiguous, or, failing that, provide a
+counter-example?
+
+In the general case, the answer is no --- this is at least as expressive as CFG, and ambiguity of
+arbitrary CFG is undecidable. But perhaps there's some reasonable set of restrictions under which it
+is in fact possible to prove the absence of ambiguity?
