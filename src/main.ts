@@ -7,6 +7,7 @@ import { HtmlString } from "./templates.ts";
 
 async function main() {
   const params = {
+    blogroll: false,
     update: false,
     spell: false,
     profile: false,
@@ -41,6 +42,7 @@ async function main() {
   }
 
   if (subcommand === "build") {
+    params.blogroll = true;
     await build(params);
   } else if (subcommand === "watch") {
     await watch(params);
@@ -63,6 +65,7 @@ async function watch(params: { filter: string }) {
       console.log(`rebuild #${build_id}`);
       build_id += 1;
       await build({
+        blogroll: build_id == 1,
         update: true,
         spell: false,
         profile: false,
@@ -96,6 +99,7 @@ class Ctx {
 }
 
 async function build(params: {
+  blogroll: boolean;
   update: boolean;
   spell: boolean;
   profile: boolean;
@@ -120,11 +124,13 @@ async function build(params: {
     );
   }
 
-  const blogroll_posts = await blogroll.blogroll();
-  await update_file(
-    "out/res/blogroll.html",
-    templates.blogroll_list(blogroll_posts).value,
-  );
+  if (params.blogroll) {
+    const blogroll_posts = await blogroll.blogroll();
+    await update_file(
+      "out/res/blogroll.html",
+      templates.blogroll_list(blogroll_posts).value,
+    );
+  }
 
   const pages = ["about", "resume", "links", "style"];
   for (const page of pages) {

@@ -87,7 +87,6 @@ export const base = (
     <nav>
       <a class="title" href="/">matklad</a>
       <a href="/about.html">About</a>
-      <a href="/resume.html">Resume</a>
       <a href="/links.html">Links</a>
       <a href="/blogroll.html">Blogroll</a>
     </nav>

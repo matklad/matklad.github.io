@@ -1,28 +1,12 @@
 // deno-lint-ignore-file
-import * as xml from "https://deno.land/x/xml@2.0.4/mod.ts";
 import { parseFeed } from "jsr:@mikaelporttila/rss@1.0.3";
 
 export async function blogroll(): Promise<FeedEntry[]> {
-  const entries = await blogroll_entries("content/blogroll.opml");
-  const all_entries = (await Promise.all(entries.map(blogroll_feed))).flat();
+  const urls = (await Deno.readTextFile("content/blogroll.txt"))
+    .split("\n").filter((line) => line.trim().length > 0);
+  const all_entries = (await Promise.all(urls.map(blogroll_feed))).flat();
   all_entries.sort((a, b) => b.date.getTime() - a.date.getTime());
   return all_entries;
-}
-
-interface Feed {
-  title: string;
-  url: string;
-}
-
-async function blogroll_entries(opml_file: string): Promise<Feed[]> {
-  const opml = await Deno.readTextFile(opml_file);
-  const raw = xml.parse(opml) as any;
-  return raw.opml.body.outline.map((it: any) => {
-    return {
-      title: it["@text"],
-      url: it["@xmlUrl"],
-    };
-  });
 }
 
 export interface FeedEntry {
@@ -31,18 +15,18 @@ export interface FeedEntry {
   date: Date;
 }
 
-async function blogroll_feed(entry: Feed): Promise<FeedEntry[]> {
-  const response = await fetch(entry.url);
+async function blogroll_feed(url: string): Promise<FeedEntry[]> {
+  const response = await fetch(url);
   const xml = await response.text();
   const feed = await parseFeed(xml);
 
-  return feed.entries.map((it) => {
+  return feed.entries.map((entry) => {
     return {
-      title: it.title!.value!,
-      url: (it.links.find((it) => {
+      title: entry.title!.value!,
+      url: (entry.links.find((it) => {
         it.type == "text/html" || it.href!.endsWith(".html");
-      }) ?? it.links[0])!.href!,
-      date: (it.published ?? it.updated)!,
+      }) ?? entry.links[0])!.href!,
+      date: (entry.published ?? entry.updated)!,
     };
   }).slice(0, 3);
 }
