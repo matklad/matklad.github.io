@@ -1,0 +1,1675 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<link href="https://matklad.github.io/feed.xml" rel="self" type="application/atom+xml"/>
+<link href="https://matklad.github.io" rel="alternate" type="text/html"/>
+<updated>2024-07-02T00:25:01.251Z</updated>
+<id>https://matklad.github.io/feed.xml</id>
+<title type="html">matklad</title>
+<subtitle>Yet another programming blog by Alex Kladov aka matklad.</subtitle>
+<author><name>Alex Kladov</name></author>
+
+<entry>
+<title type="text">Regular, Recursive, Restricted</title>
+<link href="https://matklad.github.io/2024/06/04/regular-recursive-restricted.html" rel="alternate" type="text/html" title="Regular, Recursive, Restricted" />
+<published>2024-06-04T00:00:00+00:00</published>
+<updated>2024-06-04T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/06/04/regular-recursive-restricted</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[A post/question about formal grammars, wherein I search for a good formalism for describing infix
+expressions.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/06/04/regular-recursive-restricted.html"><![CDATA[
+<h1><span>Regular, Recursive, Restricted</span> <time class="meta" datetime="2024-06-04">Jun 4, 2024</time></h1>
+<p><span>A post/question about formal grammars, wherein I search for a good formalism for describing infix</span>
+<span>expressions.</span></p>
+<p><span>Problem statement: it</span>&rsquo;<span>s hard to describe arithmetic expressions in a way that:</span></p>
+<ul>
+<li>
+<span>declaratively captures the overall shape of expression, and</span>
+</li>
+<li>
+<span>has a clear precedence semantics</span>
+</li>
+</ul>
+<p><span>Let</span>&rsquo;<span>s start with the following grammar for arithmetic expressions:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Expr =</span>
+<span class="line">    'number'</span>
+<span class="line">  | '(' Expr ')'</span>
+<span class="line">  | Expr '+' Expr</span>
+<span class="line">  | Expr '*' Expr</span></code></pre>
+
+</figure>
+<p><span>It is definitely declarative and obvious. But it is ambiguous </span>&mdash;<span> it doesn</span>&rsquo;<span>t tell whether </span><code>*</code><span> or </span><code>+</code>
+<span>binds tighter, and their associativity. You </span><em><span>can</span></em><span> express those properties directly in the grammar:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Expr =</span>
+<span class="line">    Factor</span>
+<span class="line">  | Expr '+' Factor</span>
+<span class="line"></span>
+<span class="line">Factor =</span>
+<span class="line">    Atom</span>
+<span class="line">  | Factor '*' Atom</span>
+<span class="line"></span>
+<span class="line">Atom = 'number' | '(' Expr ')'</span></code></pre>
+
+</figure>
+<p><span>But at this point we lose decorativeness. The way my brain parses the above grammar is by pattern</span>
+<span>matching it as a grammar for infix expressions and folding it back to the initial compressed form,</span>
+<em><span>not</span></em><span> by reading the grammar rules as written.</span></p>
+<p><span>To go in another direction, you can define ambiguity away and get parsing expression grammars:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Exp =</span>
+<span class="line">    Sum</span>
+<span class="line">  / Product</span>
+<span class="line">  / Atom</span>
+<span class="line"></span>
+<span class="line">Sum     = Expr (('+' / '-') Expr)+</span>
+<span class="line">Product = Expr (('*' / '/') Expr)+</span>
+<span class="line"></span>
+<span class="line">Atom = 'number' | '(' Expr ')'</span></code></pre>
+
+</figure>
+<p><span>This captures precedence </span><em><span>mostly</span></em><span> declaratively: we first match </span><code>Sum</code><span>, and, failing that, match</span>
+<code>Product</code><span>. But the clarity of semantics is lost </span>&mdash;<span> PEGs are never ambiguous by virtue of always</span>
+<span>picking the first alternative, so it</span>&rsquo;<span>s too easy to introduce an unintended ambiguity.</span></p>
+<p><span>Can we have both? Clarity with respect to tree shape and clarity with respect to ambiguity?</span></p>
+<p><span>Let me present a formalism that, I think, ticks both boxes for the toy example and pose a question</span>
+<span>of whether it generalizes.</span></p>
+<hr>
+<p><span>Running example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">E =</span>
+<span class="line">    'number'</span>
+<span class="line">  | '(' E ')'</span>
+<span class="line">  | E '+' E</span></code></pre>
+
+</figure>
+<p><span>As a grammar for strings, it is ambiguous. There are two parse trees for </span><code>1 + 2 + 3</code><span> </span>&mdash;<span> the</span>
+&ldquo;<span>correct</span>&rdquo;<span> one </span><code>(1 + 2) + 3</code><span>, and the alternative: </span><code>1 + (2 + 3)</code><span>.</span></p>
+<p><span>Instead, lets see it as a grammar for trees instead. Specifically, trees where:</span></p>
+<ul>
+<li>
+<span>Leaves are labeled with </span><code>'number'</code><span>, </span><code>'+'</code><span>, or </span><code>'*'</code><span>.</span>
+</li>
+<li>
+<span>Interior nodes are labeled with </span><code>E</code><span>.</span>
+</li>
+<li>
+<span>For each interior node, the string formed by labels of its </span><em><span>direct</span></em><span> children conforms to the</span>
+<span>specified regular expression.</span>
+</li>
+</ul>
+<p><span>For trees, this is a perfectly fine grammar! Given a labeled tree, its trivial to check whether it</span>
+<span>matches the grammar: for each node, you can directly match the regular expression. There</span>&rsquo;<span>s also no</span>
+<span>meaningful ambiguity </span>&mdash;<span> while arbitrary regular expressions can be ambiguous (</span><code>aa | a*</code><span>), this</span>
+<span>doesn</span>&rsquo;<span>t really come up as harmful in practice all that often, and, in any case, it</span>&rsquo;<span>s easy to check</span>
+<span>that any two regular alternatives are disjoint (intersect the two automata, minimize the result,</span>
+<span>check if it is empty).</span></p>
+<p><span>As a grammar for trees, it has the following property: there are two distinct trees which</span>
+<span>nevertheless share the same sequence of leaves:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">        E                  E</span>
+<span class="line">        o                  o</span>
+<span class="line">      / | \              / | \</span>
+<span class="line">     E '+' E            E '+' E</span>
+<span class="line">     o     |            |     o</span>
+<span class="line">   / | \  '3'          '1'  / | \</span>
+<span class="line">  E '+' E                  E '+' E</span>
+<span class="line">  |     |                  |     |</span>
+<span class="line"> '1'   '2'                '2'   '3'</span></code></pre>
+
+</figure>
+<p><span>So let</span>&rsquo;<span>s restrict the set of trees, in the most straightforward manner, by adding some inequalities:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">E =</span>
+<span class="line">    'number'</span>
+<span class="line">  | '(' E ')'</span>
+<span class="line">  | E '+' E</span>
+<span class="line"></span>
+<span class="line">E !=</span>
+<span class="line">    E '+' [E '+' E]</span></code></pre>
+
+</figure>
+<p><span>Here, square brackets denote a child. </span><code>E '+' [E '+' E]</code><span> is a plus node whose right child is also a</span>
+<span>plus node. Checking whether a tree conform to this modified set of rules is easy as negative rules</span>
+<span>are also just regular expressions. Well, I think you need some fiddling here, as, as written, a</span>
+<span>negative rule matches two different levels of the tree, but you can flatten both the rule and the</span>
+<span>actual tree to the grandchildren level by enclosing children in parenthesis. Let me show an example:</span></p>
+<p><span>We want to match this node:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">    E</span>
+<span class="line">    o</span>
+<span class="line">  / | \</span>
+<span class="line"> E '+' E</span>
+<span class="line"> |     o</span>
+<span class="line">'1'  / | \</span>
+<span class="line">    E '+' E</span></code></pre>
+
+</figure>
+<p><span>against this rule concerning children and grand children:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">E '+' [E '+' E]</span></code></pre>
+
+</figure>
+<p><span>We write the list of children and grandchidren of the node, while adding extra </span><code>[]</code><span>, to get this</span>
+<span>string:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">['1'] '+' [E '+' E]</span></code></pre>
+
+</figure>
+<p><span>And in the rule we replace top-level non-terminals with </span><code>[.*]</code><span>, to get this regular expression:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">[.*] '+' [E '+' E]</span></code></pre>
+
+</figure>
+<p><span>Now we can match the string against a regex, get a mach, and rule out the tree (remember, this is</span>
+<code>!=</code><span>).</span></p>
+<p><span>So here it is, a perfectly functional mathematical animal: recursive restricted regular expression:</span></p>
+<ul>
+<li>
+<span>A set of non-terminals </span><code>N</code><span> (denoted with </span><code>TitleCase</code><span> names)</span>
+</li>
+<li>
+<span>A set of terminals </span><code>T</code><span> (denoted with </span><code>'quoted'</code><span> names)</span>
+</li>
+<li>
+<span>A generating mapping from non-terminals </span><code>N</code><span> to regular expressions over </span><code>N ∪ T</code><span> alphabet</span>
+</li>
+<li>
+<span>A restricting mapping from non-terminals </span><code>N</code><span> to regular expressions over </span><code>N ∪ T ∪ {], [}</code><span> (that is</span>
+<span>regular expressions with square brackets to denote children)</span>
+</li>
+</ul>
+<p><span>This construction denotes a set of labeled trees, where interior nodes are labeled with </span><code>N</code><span>, leaves</span>
+<span>are labeled with </span><code>T</code><span> and for each interior node</span></p>
+<ul>
+<li>
+<span>its children match the corresponding generating regular expression</span>
+</li>
+<li>
+<span>its grandchildren do not match the corresponding restricting regular expression</span>
+</li>
+</ul>
+<p><span>And the main question one would have, if confronted with a specimen, is </span>&ldquo;<span>is it ambiguous?</span>&rdquo;<span> That is,</span>
+<span>are there two trees in the set which have the same sequence of leaves?</span></p>
+<p><span>Let</span>&rsquo;<span>s look at an example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Expr =</span>
+<span class="line">    'number'</span>
+<span class="line">  | '(' Expr ')'</span>
+<span class="line">  | Expr '+' Expr</span>
+<span class="line">  | Expr '*' Expr</span>
+<span class="line"></span>
+<span class="line">Expr !=</span>
+<span class="line">             Expr '+' [Expr '+' Expr]</span>
+<span class="line">|            Expr '*' [Expr '*' Expr]</span>
+<span class="line">|            Expr '*' [Expr '+' Expr]</span>
+<span class="line">| [Expr '+' Expr] '*' Expr</span></code></pre>
+
+</figure>
+<p><span>It looks unambiguous to me! And I am pretty sure that I can prove, by hand, that it is in fact</span>
+<span>unambiguous (well, I might discover that I miss a couple of restrictions in process, but it feels</span>
+<span>like it should work in principle). The question is, can a computer take an arbitrary recursive</span>
+<span>restricted regular expression and tell me that its unambiguous, or, failing that, provide a</span>
+<span>counter-example?</span></p>
+<p><span>In the general case, the answer is no </span>&mdash;<span> this is at least as expressive as CFG, and ambiguity of</span>
+<span>arbitrary CFG is undecidable. But perhaps there</span>&rsquo;<span>s some reasonable set of restrictions under which it</span>
+<span>is in fact possible to prove the absence of ambiguity?</span></p>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Basic Things</title>
+<link href="https://matklad.github.io/2024/03/22/basic-things.html" rel="alternate" type="text/html" title="Basic Things" />
+<published>2024-03-22T00:00:00+00:00</published>
+<updated>2024-03-22T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/03/22/basic-things</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[After working on the initial stages of several largish projects, I accumulated a list of things that
+share the following three properties:]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/03/22/basic-things.html"><![CDATA[
+<h1><span>Basic Things</span> <time class="meta" datetime="2024-03-22">Mar 22, 2024</time></h1>
+<p><span>After working on the initial stages of several largish projects, I accumulated a list of things that</span>
+<span>share the following three properties:</span></p>
+<ul>
+<li>
+<span>they are irrelevant while the project is small,</span>
+</li>
+<li>
+<span>they are a productivity multiplier when the project is large,</span>
+</li>
+<li>
+<span>they are much harder to introduce down the line.</span>
+</li>
+</ul>
+<p><span>Here</span>&rsquo;<span>s the list:</span></p>
+<section id="READMEs">
+
+    <h2>
+    <a href="#READMEs"><span>READMEs</span> </a>
+    </h2>
+<p><span>A project should have a </span><em><span>short</span></em><span> one-page readme that is mostly links to more topical documentation.</span>
+<span>The two most important links are the user docs and the dev docs.</span></p>
+<p><span>A common failure is a readme growing haphazardly by accretion, such that it is neither a good</span>
+<span>landing page, nor a source of comprehensive docs on any particular topic. It is hard to refactor</span>
+<span>such an unstructured readme later. The information is valuable, if disorganized, but there</span>
+<span>isn</span>&rsquo;<span>t any better place to move it to.</span></p>
+</section>
+<section id="Developer-Docs">
+
+    <h2>
+    <a href="#Developer-Docs"><span>Developer Docs</span> </a>
+    </h2>
+<p><span>For developers, you generally want to have a docs folder in the repository. The docs folder should</span>
+<em><span>also</span></em><span> contain a short landing page describing the structure of the documentation. This structure</span>
+<span>should allow for both a small number of high quality curated documents, and a large number of ad-hoc</span>
+<span>append-only notes on any particular topic. For example, </span><code>docs/README.md</code><span> could point to carefully</span>
+<span>crafted</span>
+<a href="https://matklad.github.io/2021/02/06/ARCHITECTURE.md.html"><code>ARCHITECTURE.md</code></a>
+<span>and </span><code>CONTRIBUTING.md</code><span>, which describe high level code and social</span>
+<span>architectures, and explicitly say that everything else in the </span><code>docs/</code><span> folder is a set of unorganized</span>
+<span>topical guides.</span></p>
+<p><span>Common failure modes here:</span></p>
+<ol type="a">
+<li>
+<p><span>There</span>&rsquo;<span>s no place where to put new developer documentation at all. As a result, no docs are</span>
+<span>getting written, and, by the time you do need docs, the knowledge is lost.</span></p>
+</li>
+<li>
+<p><span>There</span>&rsquo;<span>s only highly  structured, carefully reviewed developer documentation. Contributing docs</span>
+<span>requires a lot of efforts, and many small things go undocumented.</span></p>
+</li>
+<li>
+<p><span>There</span>&rsquo;<span>s only unstructured append-only pile of isolated documents. Things are </span><em><span>mostly</span></em><span> documented,</span>
+<span>often two or there times, but any new team member has to do the wheat from the chaff thing anew.</span></p>
+</li>
+</ol>
+</section>
+<section id="Users-Website">
+
+    <h2>
+    <a href="#Users-Website"><span>Users Website</span> </a>
+    </h2>
+<p><span>Most project can benefit from a dedicated website targeted at the users. You want to have website</span>
+<span>ready when there are few-to-no users: usage compounds over time, so, if you find yourself with a</span>
+<span>significant number of users and no web </span>&ldquo;<span>face</span>&rdquo;<span>, you</span>&rsquo;<span>ve lost quite a bit of value already!</span></p>
+<p><span>Some other failure modes here:</span></p>
+<ol type="a">
+<li>
+<p><span>A different team manages the website. This prevents project developers from directly contributing</span>
+<span>improvements, and may lead to divergence between the docs and the shipped product.</span></p>
+</li>
+<li>
+<p><span>Today</span>&rsquo;<span>s web stacks gravitate towards infinite complexity. It</span>&rsquo;<span>s all too natural to pick an </span>&ldquo;<span>easy</span>&rdquo;
+<span>heavy framework at the start, and then get yourself into npm</span>&rsquo;<span>s bog. Website is about content, and</span>
+<span>content has gravity. Whatever markup language dialect you choose at the beginning is going to</span>
+<span>stay with for some time. Do carefully consider the choice of your web stack.</span></p>
+</li>
+<li>
+<p><span>Saying that which isn</span>&rsquo;<span>t quite done yet. Don</span>&rsquo;<span>t overpromise, it</span>&rsquo;<span>s much easier to say more later</span>
+<span>than to take back your words, and humbleness might be a good marketing. Consider if you are in a</span>
+<span>domain where engineering credibility travel faster than buzz words. But this is situational. More</span>
+<span>general advice would be that marketing also compounds over time, so it pays off to be deliberate</span>
+<span>about your image from the start.</span></p>
+</li>
+</ol>
+</section>
+<section id="Internal-Website">
+
+    <h2>
+    <a href="#Internal-Website"><span>Internal Website</span> </a>
+    </h2>
+<p><span>This is more situational, but consider if, in addition to public-facing website, you also need an</span>
+<span>internal, engineering-facing one. At some point you</span>&rsquo;<span>ll probably need a bit more interactivity than</span>
+<span>what</span>&rsquo;<span>s available in a </span><code>README.md</code><span> </span>&mdash;<span> perhaps you need a place to display code-related metrics like</span>
+<span>coverage or some javascript to compute release rotation. Having a place on the web where a</span>
+<span>contributor can place something they need right now without much red tape is nice!</span></p>
+<p><span>This is a recurring theme </span>&mdash;<span> you should be organized, you should not be organized. </span><em><span>Some</span></em><span> things</span>
+<span>have large fan-out and should be guarded with careful review. </span><em><span>Other</span></em><span> things benefit from just being</span>
+<span>there and a lightweight process. You need to create places for both kinds of things, and a clear</span>
+<span>decision rule about what goes where.</span></p>
+<p><span>For internal website, you</span>&rsquo;<span>ll probably need some kind of data store as well. If you want to track</span>
+<span>binary size across commits, </span><em><span>something</span></em><span> needs to map commit hashes to (lets be optimistic)</span>
+<span>kilobytes! I don</span>&rsquo;<span>t know a good solution here. I use a JSON file in a github repository for similar</span>
+<span>purposes.</span></p>
+</section>
+<section id="Process-Docs">
+
+    <h2>
+    <a href="#Process-Docs"><span>Process Docs</span> </a>
+    </h2>
+<p><span>There are many possible ways to get some code into the main branch. Pick one, and spell it out in</span>
+<span>an </span><code>.md</code><span> file explicitly:</span></p>
+<ul>
+<li>
+<p><span>Are feature branches pushed to the central repository, or is anyone works off their fork? I find</span>
+<span>forks work better in general as they automatically namespace everyone</span>&rsquo;<span>s branches, and put team</span>
+<span>members and external contributors on equal footing.</span></p>
+</li>
+<li>
+<p><span>If the repository is shared, what is the naming convention for branches? I prefix mine with</span>
+<code>matklad/</code><span>.</span></p>
+</li>
+<li>
+<p><span>You use </span><a href="https://graydon2.dreamwidth.org/1597.html"><span>not rocket-science rule</span></a><span> (more on this later :).</span></p>
+</li>
+<li>
+<p><span>Who should do code review of a particular PR? A single person, to avoid bystander effect and to</span>
+<span>reduce notification fatigue. The reviewer is picked by the author of PR, as that</span>&rsquo;<span>s a stable</span>
+<span>equilibrium in a high-trust team and cuts red tape.</span></p>
+</li>
+<li>
+<p><span>How the reviewer knows that they need to review code? On GitHub, you want to </span><em><span>assign</span></em><span> rather than</span>
+<em><span>request</span></em><span> a review. Assign is level-triggered </span>&mdash;<span> it won</span>&rsquo;<span>t go away until the PR is merged, and it</span>
+<span>becomes the responsibility of the reviewer to help the PR along until it is merged (</span><em><span>request</span>
+<span>review</span></em><span> is still useful to poke the assignee after a round of feedback&amp;changes). More generally,</span>
+<span>code review is the highest priority task </span>&mdash;<span> there</span>&rsquo;<span>s no reason to work on new code</span>
+<span>if there</span>&rsquo;<span>s already some finished code which is just blocked on your review.</span></p>
+</li>
+<li>
+<p><span>What is the purpose of review? Reviewing for correctness, for single voice, for idioms, for</span>
+<span>knowledge sharing, for high-level architecture are choices! Explicitly spell out what makes most</span>
+<span>sense in the context of your project.</span></p>
+</li>
+<li>
+<p><span>Meta process docs: positively encourage contributing process documentation itself.</span></p>
+</li>
+</ul>
+</section>
+<section id="Style">
+
+    <h2>
+    <a href="#Style"><span>Style</span> </a>
+    </h2>
+<p><span>Speaking about meta process, style guide is where it is most practically valuable. Make sure that</span>
+<span>most stylistic comments during code reviews are immediately codified in the project-specific style</span>
+<span>document. New contributors should learn project</span>&rsquo;<span>s voice not through a hundred repetitive comments on</span>
+<span>PRs, but through a dozen links to specific items of the style guide.</span></p>
+<p><span>Do you even need a project-specific style guide? I think you do </span>&mdash;<span> cutting down mental energy for</span>
+<span>trivial decisions is helpful. If you need a result variable, and half of the functions call it </span><code>res</code>
+<span>and another half of the functions call it </span><code>result</code><span>, making this choice is just distracting.</span></p>
+<p><span>Project-specific naming conventions is one of the more useful thing to place in the style guide.</span></p>
+<p><span>Optimize style guide for extensibility. Uplifting a comment from a code review to the style guide</span>
+<span>should not require much work.</span></p>
+<p><span>Ensure that there</span>&rsquo;<span>s a style tzar </span>&mdash;<span> building consensus around </span><em><span>specific</span></em><span> style choices is very</span>
+<span>hard, better to delegate the entire responsibility to one person who can make good enough choices.</span>
+<span>Style usually is not about what</span>&rsquo;<span>s better, it</span>&rsquo;<span>s about removing needless options in a semi-arbitrary</span>
+<span>ways.</span></p>
+</section>
+<section id="Git">
+
+    <h2>
+    <a href="#Git"><span>Git</span> </a>
+    </h2>
+<p><span>Document stylistic details pertaining to git. If project uses </span><code>area:</code><span> prefixes for commits, spell</span>
+<span>out an explicit list of such prefixes.</span></p>
+<p><span>Consider documenting acceptable line length for the summary line. Git man page boldly declares that</span>
+<span>a summary should be under 50 characters, but that is just plain false. Even in the kernel, most</span>
+<span>summaries are somewhere between 50 and 80 characters.</span></p>
+<p><span>Definitely explicitly forbid adding large files to git. Repository size increases monotonically,</span>
+<code>git clone</code><span> time is important.</span></p>
+<p><span>Document merge-vs-rebase thing. My preferred answer is:</span></p>
+<ul>
+<li>
+<span>A unit of change is a pull request, which might contain several commits</span>
+</li>
+<li>
+<span>Merge commit for the pull request is what is being tested</span>
+</li>
+<li>
+<span>The main branch contains only merge commits</span>
+</li>
+<li>
+<span>Conversely, </span><em><span>only</span></em><span> the main branch contains merge commits, pull requests themselves are always</span>
+<span>rebased.</span>
+</li>
+</ul>
+<p><span>Forbidding large files in the repo is a good policy, but it</span>&rsquo;<span>s hard to follow. Over the lifetime of</span>
+<span>the project, someone somewhere will sneakily add and revert a megabyte of generated protobufs, and</span>
+<span>that will fly under code review radar.</span></p>
+<p><span>This brings us to the most basic thing of them all:</span></p>
+</section>
+<section id="Not-Rocket-Science-Rule">
+
+    <h2>
+    <a href="#Not-Rocket-Science-Rule"><span>Not Rocket Science Rule</span> </a>
+    </h2>
+<p><span>Maintain a well-defined set of automated checks that pass on the main branch at all times. If you</span>
+<span>don</span>&rsquo;<span>t want large blobs in git repository, write a test rejecting large git objects and run that</span>
+<span>right before updating the main branch. No merge commits on feature branches? Write a test which</span>
+<span>fails with a pageful of Git self-help if one is detected. Want to wrap </span><code>.md</code><span> at 80 columns? Write a</span>
+<span>test :)</span></p>
+<p><span>It is perhaps worth you while to re-read the original post:</span>
+<a href="https://graydon2.dreamwidth.org/1597.html" class="display url">https://graydon2.dreamwidth.org/1597.html</a></p>
+<p><a href="https://matklad.github.io/2024/01/03/of-rats-and-ratchets.html"><span>This mindset of monotonically growing set of properties</span></a>
+<span>that are true about the codebase is </span><em><span>incredibly</span></em><span> powerful. You start seeing code as temporary, fluid</span>
+<span>thing that can always be changed relatively cheaply, and the accumulated set of automated tests as</span>
+<span>the real value of the project.</span></p>
+<p><span>Another second order effect is that NRSR puts a pressure to optimize your build and test</span>
+<span>infrastructure. If you don</span>&rsquo;<span>t have an option to merge the code when an unrelated flaky test fails,</span>
+<span>you won</span>&rsquo;<span>t have flaky tests.</span></p>
+<p><span>A common anti-pattern here is that a project grows a set of semi-checks </span>&mdash;<span> tests that exists, but</span>
+<span>are not 100% reliable, and thus are not exercised by the CI routinely. And that creates ambiguity</span>
+&mdash;<span> are tests failing due to a regression which should be fixed, or were they never reliable, and</span>
+<span>just test a property that isn</span>&rsquo;<span>t actually essential for functioning of the project? This fuzziness</span>
+<span>compounds over time. If a check isn</span>&rsquo;<span>t reliable enough to be part of NRSR CI gate, it isn</span>&rsquo;<span>t actually</span>
+<span>a check you care about, and should be removed.</span></p>
+<p><span>But to do NRSR, you need to build &amp; CI your code first:</span></p>
+</section>
+<section id="Build-CI">
+
+    <h2>
+    <a href="#Build-CI"><span>Build &amp; CI</span> </a>
+    </h2>
+<p><span>This is a complex topic. Let</span>&rsquo;<span>s start with the basics: what is a build system? I would love to</span>
+<span>highlight a couple of slightly unconventional answers here.</span></p>
+<p><em><span>First</span></em><span>, a build system is a bootstrap process: it is how you get from </span><code>git clone</code><span> to a working</span>
+<span>binary. The two aspects of this boostrapping process are important:</span></p>
+<ul>
+<li>
+<span>It should be simple. No</span>
+<span class="display"><code>sudo apt-get install bazzilion packages</code><span>,</span></span>
+<span>the single binary of your build system should be able to bring everything else that</span>&rsquo;<span>s needed,</span>
+<span>automatically.</span>
+</li>
+<li>
+<span>It should be repeatable. Your laptop and your CI should end up with exactly identical set of</span>
+<span>dependencies. The end result should be a function of commit hash, and not your local shell</span>
+<span>history, otherwise NRSR doesn</span>&rsquo;<span>t work.</span>
+</li>
+</ul>
+<p><em><span>Second</span></em><span>, a build system is developer UI. To do almost anything, you need to type some sort of build</span>
+<span>system invocation into your shell. There should be a single, clearly documented command for building</span>
+<span>and testing the project. If it is not a single </span><code>makebelieve test</code><span>, something</span>&rsquo;<span>s wrong.</span></p>
+<p><span>One anti-pattern here is when the build system spills over to CI. When, to figure out what the set</span>
+<span>of checks even is, you need to read </span><code>.github/workflows/*.yml</code><span> to compile a list of commands. That</span>&rsquo;<span>s</span>
+<span>accidental complexity! Sprawling yamls are a bad entry point. Put all the logic into the build</span>
+<span>system and let the CI drive that, and not vice verse.</span></p>
+<p><a href="https://matklad.github.io/2023/12/31/O(1)-build-file.html"><span>There is a stronger version of the</span>
+<span>advice</span></a><span>. No matter the size of the</span>
+<span>project, there</span>&rsquo;<span>s probably only a handful of workflows that make sense for it: testing, running,</span>
+<span>releasing, etc. This small set of workflows should be nailed from the start, and specific commands</span>
+<span>should be documented. When the project subsequently grows in volumes, this set of build-system entry</span>
+<span>points should </span><em><span>not</span></em><span> grow.</span></p>
+<p><span>If you add a Frobnicator, </span><code>makebelieve test</code><span> invocation </span><em><span>should</span></em><span> test that Frobnicator works. If</span>
+<span>instead you need a dedicated </span><code>makebelieve test-frobnicator</code><span> and the corresponding line in some CI</span>
+<span>yaml, you are on a perilous path.</span></p>
+<p><em><span>Finally</span></em><span>, a build system is a collection of commands to make stuff happen. In larger projects,</span>
+<span>you</span>&rsquo;<span>ll inevitably need some non-trivial amount of glue automation. Even if the entry point is just</span>
+<code>makebelive release</code><span>, internally that might require any number of different tools to build, sign,</span>
+<span>tag, upload, validate, and generate a changelog for a new release.</span></p>
+<p><span>A common anti-pattern is to write these sorts of automations in bash and Python, but that</span>&rsquo;<span>s almost</span>
+<span>pure technical debt. These ecosystems are extremely finnicky in and off themselves, and, crucially</span>
+<span>(unless your project itself is written in bash or Python), they are a second ecosystem to what you</span>
+<span>already have in your project for </span>&ldquo;<span>normal</span>&rdquo;<span> code.</span></p>
+<p><span>But releasing software is also just code, which you can write in your primarly language.</span>
+<a href="https://twitter.com/id_aa_carmack/status/989951283900514304"><span>The right tool for the job is often the tool you are already using</span></a><span>.</span>
+<span>It pays off to explicitly attack the problem of glue from the start, and to pick/write a library</span>
+<span>that makes writing subprocess wrangling logic easy.</span></p>
+<p><span>Summing the build and CI story up:</span></p>
+<p><span>Build system is self-contained, reproducible and takes on the task of downloading all external</span>
+<span>dependencies. Irrespective of size of the project, it contains O(1) different entry points. One of</span>
+<span>those entry points is triggered by the not rocket science rule CI infra to run the set of canonical</span>
+<span>checks. There</span>&rsquo;<span>s an explicit support for free-form automation, which is implemented in the same</span>
+<span>language as the bulk of the project.</span></p>
+<p><span>Integration with NRSR is the most important aspect of the build process, as it determines how the</span>
+<span>project evolves over time. Let</span>&rsquo;<span>s zoom in.</span></p>
+</section>
+<section id="Testing">
+
+    <h2>
+    <a href="#Testing"><span>Testing</span> </a>
+    </h2>
+<p><span>Testing is a primary architectural concern. When the first line of code is written, you already</span>
+<span>should understand the big picture testing story. It is empathically </span><em><span>not</span></em><span> </span>&ldquo;<span>every class and module</span>
+<span>has unit-test</span>&rdquo;<span>. Testing should be data oriented </span>&mdash;<span> the job of a particular software is to take some</span>
+<span>data in, transform it, and spit different data out. Overall testing strategy requires:</span></p>
+<ul>
+<li>
+<span>some way to specify/generate input data,</span>
+</li>
+<li>
+<span>some way to assert desired properties of output data, and</span>
+</li>
+<li>
+<span>a way to run many individual checks very fast.</span>
+</li>
+</ul>
+<p><span>If time is a meaningful part of the input data, it should be modeled explicitly. Not getting the</span>
+<span>testing architecture right usually results in:</span></p>
+<ul>
+<li>
+<span>Software that is hard to change because thousands of test nail existing internal APIs.</span>
+</li>
+<li>
+<span>Software that is hard to change because there are no test to confidently verify absence of</span>
+<span>unintended breakages.</span>
+</li>
+<li>
+<span>Software that is hard to change because each change requires hours of testing time to verify.</span>
+</li>
+</ul>
+<p><span>How to architect a test suite goes beyond the scope of this article, but please read</span>
+<a href="https://matklad.github.io/2022/07/04/unit-and-integration-tests.html"><span>Unit and Integration Tests</span></a>
+<span>and</span>
+<a href="https://matklad.github.io/2021/05/31/how-to-test.html"><span>How To Test</span></a><span>.</span></p>
+<p><span>Some specific things that are in scope for this article:</span></p>
+<p><span>Zero tolerance for flaky tests. Strict not rocket science rules gives this by construction </span>&mdash;<span> if</span>
+<span>you can</span>&rsquo;<span>t merge </span><em><span>your</span></em><span> pull request because someone elses test is flaky, that flaky test immediately</span>
+<span>becomes your problem.</span></p>
+<p><span>Fast tests. Again, NRSR already provides a natural pressure for this, but it also helps to make</span>
+<span>testing time more salient otherwise. Just by default printing the total test time and five slowest</span>
+<span>tests in a run goes a long way.</span></p>
+<p><span>Not all tests could be fast. Continuing the ying-yang theme of embracing order and chaos</span>
+<span>simultaneously, it helps to introduce the concept of slow tests early on. CI always runs the full</span>
+<span>suite of tests, fast and slow. But the local </span><code>makebelive test</code><span> by default runs only fast test, with</span>
+<span>an opt-in for slow tests. Opt in can be as simple as an </span><code>SLOW_TESTS=1</code><span> environmental variable.</span></p>
+<p><span>Introduce a </span><a href="https://ianthehenry.com/posts/my-kind-of-repl/"><span>snapshot testing</span></a><span> library early.</span>
+<span>Although the bulk of tests should probably use project-specific testing harness, for everything else</span>
+<span>inline repl-driven snapshot testing is a good default approach, and is something costly to introduce</span>
+<span>once you</span>&rsquo;<span>ve accumulated a body of non-snapshot-based tests.</span></p>
+<p><span>Alongside the tests, come the benchmarks.</span></p>
+</section>
+<section id="Benchmarking">
+
+    <h2>
+    <a href="#Benchmarking"><span>Benchmarking</span> </a>
+    </h2>
+<p><span>I don</span>&rsquo;<span>t have a grand vison about how to make benchmark work in a large, living project, it always</span>
+<span>feels like a struggle to me. I do have a couple of tactical tips though.</span></p>
+<p><em><span>Firstly</span></em><span>, any code that is </span><em><span>not</span></em><span> running during NRSR is effectively dead. It is exceedingly common</span>
+<span>for benchmarks to be added alongside a performance improvement, and then </span><em><span>not</span></em><span> getting hooked up</span>
+<span>with CI. So, two month down the line, the benchmark either stops compiling outright, or maybe just</span>
+<span>panics at a startup due to some unrelated change.</span></p>
+<p><span>This fix here is to make sure that every benchmark is </span><em><span>also</span></em><span> a test. Parametrize every benchmark by</span>
+<span>input size, such that with a small input it finishes in milliseconds. Then write a test that</span>
+<span>literally just calls the benchmarking code with this small input. And remember that your build</span>
+<span>system should have O(1) entry points. Plug this into a </span><span class="display"><code>makebelieve test</code><span>,</span></span><span> not into a</span>
+<span>dedicated </span><span class="display"><code>makebelieve benchmark --small-size</code><span>.</span></span></p>
+<p><em><span>Secondly</span></em><span>, any large project has a certain amount of very important macro metrics.</span></p>
+<ul>
+<li>
+<span>How long does it take to build?</span>
+</li>
+<li>
+<span>How long does it take to test?</span>
+</li>
+<li>
+<span>How large is the resulting artifact shipping to users?</span>
+</li>
+</ul>
+<p><span>These are some of the questions that always matter. You need infrastructure to track these numbers,</span>
+<span>and to see them regularly. This where the internal website and its data store come in. During CI,</span>
+<span>note those number. After CI run, upload a record with commit hash, metric name, metric value</span>
+<em><span>somewhere</span></em><span>. Don</span>&rsquo;<span>t worry if the results are noisy </span>&mdash;<span> you target the baseline here, ability to</span>
+<span>notice large changes over time.</span></p>
+<p><span>Two options for the </span>&ldquo;<span>upload</span>&rdquo;<span> part:</span></p>
+<ul>
+<li>
+<p><span>Just put them into some </span><code>.json</code><span> file in a git repo, and LLM a bit of javascript to display a nice</span>
+<span>graph from these data.</span></p>
+</li>
+<li>
+<p><a href="https://nyrkio.com" class="url">https://nyrkio.com</a><span> is a surprisingly good SaaS offering that I can recommend.</span></p>
+</li>
+</ul>
+</section>
+<section id="Fuzz-Testing">
+
+    <h2>
+    <a href="#Fuzz-Testing"><span>Fuzz Testing</span> </a>
+    </h2>
+<p><span>Serious fuzz testing curiously shares characteristics of tests and benchmarks. Like a normal test, a</span>
+<span>fuzz test informs you about a correctness issue in your application, and is reproducible. Like a</span>
+<span>benchmark, it is (infinitely) long running and infeasible to do as a part of NRSR.</span></p>
+<p><span>I don</span>&rsquo;<span>t yet have a good hang on how to most effectively integrate continuous fuzzing into</span>
+<span>development process. I don</span>&rsquo;<span>t know what is the not rocket science rule of fuzzing. But two things</span>
+<span>help:</span></p>
+<p><em><span>First</span></em><span>, even if you can</span>&rsquo;<span>t run fuzzing loop during CI, you can run isolated seeds. To help ensure</span>
+<span>that the fuzing code doesn</span>&rsquo;<span>t get broken, do the same thing as with benchmark </span>&mdash;<span> add a test that</span>
+<span>runs fuzzing logic with a fixed seed and small, fast parameters. One variation here is that you can</span>
+<span>use commit sha as random a seed </span>&mdash;<span> that way the code is still reproducible, but there is enough</span>
+<span>variation to avoid dynamically dead code.</span></p>
+<p><em><span>Second</span></em><span>, it is helpful to think about fuzzing in terms of level triggering. With tests, when you</span>
+<span>make an erroneous commit, you immediately know that it breaks stuff. With fuzzing, you generally</span>
+<span>discover this later, and a broken seed generally persists for several commits. So, as an output of</span>
+<span>the fuzzer, I think what you want is </span><em><span>not</span></em><span> a set of GitHub issues, but rather a dashboard of sorts</span>
+<span>which shows a table of recent commits and failing seeds for those commits.</span></p>
+<p><span>With not rocket science rule firmly in place, it makes sense to think about releases.</span></p>
+</section>
+<section id="Releases">
+
+    <h2>
+    <a href="#Releases"><span>Releases</span> </a>
+    </h2>
+<p><span>Two core insights here:</span></p>
+<p><em><span>First</span></em><span> release </span><em><span>process</span></em><span> is orthogonal from software being </span><em><span>production ready</span></em><span>. You can release</span>
+<span>stuff before it is ready (provided that you add a short disclaimer to the readme). So, it pays off</span>
+<span>to add proper release process early on, such that, when the time comes to actually release</span>
+<span>software, it comes down to removing disclaimers and writing the announcement post, as all technical</span>
+<span>work has been done ages ago.</span></p>
+<p><em><span>Second</span></em><span>, software engineering in general observes reverse triangle inequality: to get from A to C,</span>
+<span>it is faster to go from A to B and then from B to C, then moving from A to C atomically. If you make</span>
+<span>a pull request, it helps to split it up into smaller parts. If you refactor something, it is faster</span>
+<span>to first introduce a new working copy and then separately retire the old code, rather than changing</span>
+<span>the thing in place.</span></p>
+<p><span>Releases are no different: faster, more frequent releases are easier and less risky. Weekly cadence</span>
+<span>works great, provided that you have a solid set of checks in your NRSR.</span></p>
+<p><span>It is much easier to start with a state where almost nothing works, but there</span>&rsquo;<span>s a solid release</span>
+<span>(with an empty set of features), and ramp up from there, than to hack with reckless abandon</span>
+<em><span>without</span></em><span> thinking much about eventual release, and then scramble to decide which is ready and</span>
+<span>releasable, a what should be cut.</span></p>
+</section>
+<section id="Summary">
+
+    <h2>
+    <a href="#Summary"><span>Summary</span> </a>
+    </h2>
+<p><span>I think that</span>&rsquo;<span>s it for today? That</span>&rsquo;<span>s a lot of small points! Here</span>&rsquo;<span>s a bullet list for convenient</span>
+<span>reference:</span></p>
+<ul>
+<li>
+<span>README as a landing page.</span>
+</li>
+<li>
+<span>Dev docs.</span>
+</li>
+<li>
+<span>User docs.</span>
+</li>
+<li>
+<span>Structured dev docs (architecture and processes).</span>
+</li>
+<li>
+<span>Unstructured ingest-optimized dev docs (code style, topical guides).</span>
+</li>
+<li>
+<span>User website, beware of content gravity.</span>
+</li>
+<li>
+<span>Ingest-optimized internal web site.</span>
+</li>
+<li>
+<span>Meta documentation process </span>&mdash;<span> its everyone job to append to code style and process docs.</span>
+</li>
+<li>
+<span>Clear code review protocol (in whose court is the ball currently?).</span>
+</li>
+<li>
+<span>Automated check for no large blobs in a git repo.</span>
+</li>
+<li>
+<span>Not rocket science rule.</span>
+</li>
+<li>
+<span>Let</span>&rsquo;<span>s repeat: at </span><strong><span>all</span></strong><span> times, the main branch points at a commit hash which is known to pass a</span>
+<span>set of well-defined checks.</span>
+</li>
+<li>
+<span>No semi tests: if the code is not good enough to add to NRSR, it is deleted.</span>
+</li>
+<li>
+<span>No flaky tests (mostly by construction from NRSR).</span>
+</li>
+<li>
+<span>Single command build.</span>
+</li>
+<li>
+<span>Reproducible build.</span>
+</li>
+<li>
+<span>Fixed number of build system entry points. No separate lint step, a lint is a kind of a test.</span>
+</li>
+<li>
+<span>CI delegates to the build system.</span>
+</li>
+<li>
+<span>Space for ad-hoc automation in the main language.</span>
+</li>
+<li>
+<span>Overarching testing infrastructure, grand unified theory of project</span>&rsquo;<span>s testing.</span>
+</li>
+<li>
+<span>Fast/Slow test split (fast=seconds per test suite, slow=low digit minutes per test suite).</span>
+</li>
+<li>
+<span>Snapshot testing.</span>
+</li>
+<li>
+<span>Benchmarks are tests.</span>
+</li>
+<li>
+<span>Macro metrics tracking (time to build, time to test).</span>
+</li>
+<li>
+<span>Fuzz tests are tests.</span>
+</li>
+<li>
+<span>Level-triggered display of continuous fuzzing results.</span>
+</li>
+<li>
+<span>Inverse triangle inequality.</span>
+</li>
+<li>
+<span>Weekly releases.</span>
+</li>
+</ul>
+</section>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Zig defer Patterns</title>
+<link href="https://matklad.github.io/2024/03/21/defer-patterns.html" rel="alternate" type="text/html" title="Zig defer Patterns" />
+<published>2024-03-21T00:00:00+00:00</published>
+<updated>2024-03-21T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/03/21/defer-patterns</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[A short note about some unexpected usages of Zig's defer statement.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/03/21/defer-patterns.html"><![CDATA[
+<h1><span>Zig defer Patterns</span> <time class="meta" datetime="2024-03-21">Mar 21, 2024</time></h1>
+<p><span>A short note about some unexpected usages of Zig</span>&rsquo;<span>s </span><code>defer</code><span> statement.</span></p>
+<p><span>This post assumes that you already know the basics about RAII, </span><code>defer</code><span> and </span><code>errdefer</code><span>. While</span>
+<span>discussing the differences between them is not the point, I will allow myself one high level</span>
+<span>comment. I don</span>&rsquo;<span>t like </span><code>defer</code><span> as a replacement for RAII: after writing Zig for some time, I am</span>
+<span>relatively confident that humans are just not good at not forgetting defers, especially when</span>
+&ldquo;<span>optional</span>&rdquo;<span> ownership transfer is at play (i.e, this function takes ownership of an argument, unless</span>
+<span>an error is returned). But defer is good at discouraging RAII oriented programming. RAII encourages</span>
+<span>binding lifetime of resources (such as memory) with lifetimes of individual domain objects (such as</span>
+<span>a </span><code>String</code><span>). But often, in pursuit of performance and small code size, you want to separate the two</span>
+<span>concerns, and let many domain objects to share the single pool of resources. Instead of each</span>
+<span>individual string managing its own allocation, you might want to store the contents of all related</span>
+<span>strings into a single continuously allocated buffer. Because RAII with defer is painful, Zig</span>
+<span>naturally pushes you towards batching your resource acquisition and release calls, such that you have</span>
+<span>far fewer resources than objects in your program.</span></p>
+<p><span>But, as I</span>&rsquo;<span>ve said, this post isn</span>&rsquo;<span>t about all that. This post is about non-resource-oriented usages</span>
+<span>of </span><code>defer</code><span>. There</span>&rsquo;<span>s more to defer than just RAII, it</span>&rsquo;<span>s a nice little powerful construct! This is way</span>
+<span>to much ado already, so here come the patterns:</span></p>
+<section id="Asserting-Post-Conditions">
+
+    <h2>
+    <a href="#Asserting-Post-Conditions"><span>Asserting Post Conditions</span> </a>
+    </h2>
+<p><code>defer</code><span> gives you poor man</span>&rsquo;<span>s contract programming in the form of</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">assert(precondition)</span>
+<span class="line"><span class="hl-keyword">defer</span> assert(postcondition)</span></code></pre>
+
+</figure>
+<p><span>Real life </span><a href="https://github.com/tigerbeetle/tigerbeetle/blob/73bbc1a32ba2513e369764680350c099fe302285/src/vsr/grid.zig#L298-L309"><span>example</span></a><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">{</span>
+<span class="line">  assert(<span class="hl-operator">!</span>grid.free_set.opened);</span>
+<span class="line">  <span class="hl-keyword">defer</span> assert(grid.free_set.opened);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// Code to open the free set</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Statically-Enforcing-Absence-of-Errors">
+
+    <h2>
+    <a href="#Statically-Enforcing-Absence-of-Errors"><span>Statically Enforcing Absence of Errors</span> </a>
+    </h2>
+<p><span>This is basically peak Zig:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">errdefer</span> <span class="hl-keyword">comptime</span> <span class="hl-keyword">unreachable</span></span></code></pre>
+
+</figure>
+<p><code>errdefer</code><span> runs when a function returns an error (e.g., when a </span><code>try</code><span> fails). </span><code>unreachable</code>
+<span>crashes the program (in </span><code>ReleaseSafe</code><span>). But </span><code>comptime unreachable</code><span> straight up fails compilation</span>
+<span>if the compiler tries to generate the corresponding runtime code. The three together ensure the</span>
+<span>absence of error-returning paths.</span></p>
+<p><span>Here</span>&rsquo;<span>s </span><a href="https://github.com/ziglang/zig/blob/1d82d7987acf7f020bcc6a976f9887a3556ef79c/lib/std/hash_map.zig#L1561-L1584"><span>an example</span></a>
+<span>from the standard library, the function to grow a hash map:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment">// The function as a whole can fail...</span></span>
+<span class="line"><span class="hl-keyword">fn</span><span class="hl-function"> grow</span>(</span>
+<span class="line">  self: <span class="hl-operator">*</span>Self,</span>
+<span class="line">  allocator: Allocator,</span>
+<span class="line">  new_capacity: Size,</span>
+<span class="line">) Allocator.Error<span class="hl-operator">!</span><span class="hl-type">void</span> {</span>
+<span class="line">  <span class="hl-built_in">@setCold</span>(<span class="hl-literal">true</span>);</span>
+<span class="line">  <span class="hl-keyword">var</span> map: Self = .{};</span>
+<span class="line">  <span class="hl-keyword">try</span> map.allocate(allocator, new_capacity);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// ...but from this point on, failure is impossible</span></span>
+<span class="line">  <span class="hl-keyword">errdefer</span> <span class="hl-keyword">comptime</span> <span class="hl-keyword">unreachable</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-comment">// Code to rehash&amp;copy self to map</span></span>
+<span class="line">  std.mem.swap(Self, self, <span class="hl-operator">&amp;</span>map);</span>
+<span class="line">  map.deinit(allocator);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Logging-Errors">
+
+    <h2>
+    <a href="#Logging-Errors"><span>Logging Errors</span> </a>
+    </h2>
+<p><span>Zig</span>&rsquo;<span>s error handling mechanism provides only error code (a number) and an error trace. This is</span>
+<span>usually plenty to programmatically handle the error in an application and for the operator to</span>
+<span>debug a failure, but this is decidedly not enough to provide a nice report for the end user.</span>
+<span>However, if you are in a business of reporting errors to users, you are likely writing an</span>
+<span>application, and application might get away without propagating extra information about the error</span>
+<span>to the caller. Often, there</span>&rsquo;<span>s enough context at the point where the error originates in the first</span>
+<span>place to produce a user-facing report right there.</span></p>
+<p><a href="https://github.com/tigerbeetle/tigerbeetle/blob/73bbc1a32ba2513e369764680350c099fe302285/src/tigerbeetle/benchmark_driver.zig#L158-L163"><span>Example:</span></a></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">const</span> port = port: {</span>
+<span class="line">  <span class="hl-keyword">errdefer</span> <span class="hl-operator">|</span>err<span class="hl-operator">|</span> log.err(<span class="hl-string">&quot;failed to read the port number: {}&quot;</span>, .{err});</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">var</span> buf: [fmt.count(<span class="hl-string">&quot;{}<span class="hl-string">\n</span>&quot;</span>, .{maxInt(<span class="hl-type">u16</span>)})]<span class="hl-type">u8</span> = <span class="hl-literal">undefined</span>;</span>
+<span class="line">  <span class="hl-keyword">const</span> len = <span class="hl-keyword">try</span> process.stdout.?.readAll(<span class="hl-operator">&amp;</span>buf);</span>
+<span class="line">  <span class="hl-keyword">break</span> :port <span class="hl-keyword">try</span> fmt.parseInt(<span class="hl-type">u16</span>, buf[<span class="hl-numbers">0</span> .. len <span class="hl-operator">-</span><span class="hl-operator">|</span> <span class="hl-numbers">1</span>], <span class="hl-numbers">10</span>);</span>
+<span class="line">};</span></code></pre>
+
+</figure>
+</section>
+<section id="Post-Increment">
+
+    <h2>
+    <a href="#Post-Increment"><span>Post Increment</span> </a>
+    </h2>
+<p><span>Finally, </span><code>defer</code><span> can be used as an </span><code>i++</code><span> of sorts. </span><a href="https://github.com/tigerbeetle/tigerbeetle/blob/0.15.3/src/lsm/scan_buffer.zig#L97-L102"><span>For</span>
+<span>example</span></a><span>,</span>
+<span>here</span>&rsquo;<span>s how you can pop an item off a free list:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span><span class="hl-function"> acquire</span>(self: <span class="hl-operator">*</span>ScanBufferPool) Error<span class="hl-operator">!</span><span class="hl-operator">*</span><span class="hl-keyword">const</span> ScanBuffer {</span>
+<span class="line">  <span class="hl-keyword">if</span> (self.scan_buffer_used <span class="hl-operator">==</span> constants.lsm_scans_max) {</span>
+<span class="line">    <span class="hl-keyword">return</span> Error.ScansMaxExceeded;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">defer</span> self.scan_buffer_used <span class="hl-operator">+=</span> <span class="hl-numbers">1</span>;</span>
+<span class="line">  <span class="hl-keyword">return</span> <span class="hl-operator">&amp;</span>self.scan_buffers[self.scan_buffer_used];</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Kafka versus Nabokov</title>
+<link href="https://matklad.github.io/2024/03/02/Kafka-vs-Nabokov.html" rel="alternate" type="text/html" title="Kafka versus Nabokov" />
+<published>2024-03-02T00:00:00+00:00</published>
+<updated>2024-03-02T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/03/02/Kafka-vs-Nabokov</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[Uplifting a lobste.rs comment to a stand-alone post.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/03/02/Kafka-vs-Nabokov.html"><![CDATA[
+<h1><span>Kafka versus Nabokov</span> <time class="meta" datetime="2024-03-02">Mar 2, 2024</time></h1>
+<p><span>Uplifting a lobste.rs comment to a stand-alone post.</span></p>
+<p><code>objectif_lune</code><span> </span><a href="https://lobste.rs/s/9xtcun/complex_systems_bridging_between_spec"><span>asks</span></a><span>:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>I am on the cusp (hopefully) of kicking off development of a fairly large and complex system</span>
+<span>(multiple integrated services, kafkas involved, background processes, multiple client frontends,</span>
+<span>etc…). It’s predominantly going to be built in rust (but that’s only trivially relevant; i.e. not</span>
+<span>following standard OOP).</span></p>
+<p><span>Here’s where i’m at:</span></p>
+<ol>
+<li>
+<span>I have defined all the components, services, data stores to use / or develop</span>
+</li>
+<li>
+<span>I have a a fairly concrete conceptualisation of how to structure and manage data on the storage</span>
+<span>end of the system which i’m formalizing into a specification</span>
+</li>
+<li>
+<span>I have a deployment model for the various parts of the system to go into production</span>
+</li>
+</ol>
+<p><span>The problem is, I have a gap, from these specs of the individual components and services that need</span>
+<span>to be built out, to the actual implementation of those services. I’ve scaffolded the code-base</span>
+<span>around what “feels” like sensible semantics, but bridging from the scope, through the high-level</span>
+<span>code organisation through to implementation is where I start to get a bit queasy.</span></p>
+<p><span>In the past, i’ve more or less dove head-first into just starting to implement, but the problem has</span>
+<span>been that I will very easily end up going in circles, or I end up with a lot of duplicated code</span>
+<span>across areas and just generally feel like it’s not working out the way I had hoped (obviously</span>
+<span>because i’ve just gone ahead and implemented).</span></p>
+<p><span>What are some tools, processes, design concepts, thinking patterns that you can use to sort of fill</span>
+<span>in that “last mile” from high-level spec to implementing to try and ensure that things stay on track</span>
+<span>and limit abandonment or going down dead-ends?</span></p>
+<p><span>I’m interested in advice, articles, books, or anything else that makes sense in the rough context</span>
+<span>above. Not specifically around for instance design patterns themselves, i’m more than familiar with</span>
+<span>the tools in that arsenal, but how do you bridge the gap between the concept and the implementation</span>
+<span>without going too deep down the rabbit-hole of modelling out actual code and everything else in UML</span>
+<span>for instance? How do you basically minimize getting mired in massive refactors once you get to</span>
+<span>implementation phase?</span></p>
+</blockquote>
+
+</figure>
+<p><span>My answer:</span></p>
+<hr>
+<p><span>I don’t have much experience building these kind of systems (I like Kafka, but I must say I prefer</span>
+<span>Nabokov’s rendition of similar ideas in “Invitation to a Beheading” and “Pale Fire” more), but</span>
+<span>here’s a couple of things that come to mind.</span></p>
+<p><span>First, </span><a href="https://en.wikipedia.org/wiki/John_Gall_(author)#Gall's_law"><span>every complex system that works started out as a simple system that worked</span></a><span>. Write code top</span>
+<span>down: </span><a href="https://www.teamten.com/lawrence/programming/write-code-top-down.html" class="display url">https://www.teamten.com/lawrence/programming/write-code-top-down.html</a></p>
+<p><span>Even if it is a gigantic complex system with many moving parts, start with spiking and end-to-end</span>
+<span>solution which can handle one particular variation of a happy path. Build skeleton first, flesh can</span>
+<span>be added incrementally.</span></p>
+<p><span>To do this, you’ll need some way to actually run the entire system while it isn’t deployed yet,</span>
+<span>which is something you need to solve before you start writing pages of code.</span></p>
+<p><span>Similarly, include testing strategy in the specification, and start with one single simple</span>
+<span>end-to-end test. I think that TDD as a way to design a class or a function is mostly snake oil</span>
+<span>(because </span><a href="https://matklad.github.io/2021/05/31/how-to-test.html"><span>“unit” tests are mostly snake</span>
+<span>oil</span></a><span>), but the overall large scale design of</span>
+<span>the system should absolutely be driven by the way the system will be tested.</span></p>
+<p><span>It is helpful to dwell on these two laws:</span></p>
+<p><a href="https://martinfowler.com/articles/distributed-objects-microservices.html"><strong><strong><span>First Law of Distributed Object Design:</span></strong></strong></a></p>
+
+<figure class="blockquote">
+<blockquote><p><span>Don’t distribute your objects.</span></p>
+</blockquote>
+
+</figure>
+<p><a href="https://en.wikipedia.org/wiki/Conway%27s_law"><strong><strong><span>Conway’s law:</span></strong></strong></a></p>
+
+<figure class="blockquote">
+<blockquote><p><span>Organizations which design systems are constrained to produce designs which are copies of the</span>
+<span>communication structures of these organizations.</span></p>
+</blockquote>
+
+</figure>
+<p><span>The code architecture of your solution is going to be isomorphic to your org chart, not to your</span>
+<span>deployment topology. Let’s say you want to deploy three different services: </span><code>foo</code><span>, </span><code>bar</code><span>, and </span><code>baz</code><span>.</span>
+<span>Just put all three into a single binary, which can be invoked as </span><code>app foo</code><span>, </span><code>app bar</code><span>, and </span><code>app
+baz</code><span>. This mostly solves any code duplication issues — if there’s shared code, just call it!</span></p>
+<p><span>Finally, system boundaries are the focus of the design:</span>
+<a href="https://www.tedinski.com/2018/02/06/system-boundaries.html" class="display url">https://www.tedinski.com/2018/02/06/system-boundaries.html</a></p>
+<p><span>Figure out hard system boundaries between “your system” and “not your system”, and do design those</span>
+<span>carefully. Anything else that looks like a boundary isn’t. It is useful to spend some effort</span>
+<span>designing those things as well, but it’s more important to make sure that you can easily change</span>
+<span>them. Solid upgrade strategy for deployment trumps any design which seems perfect at a given moment</span>
+<span>in time.</span></p>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Window: Live, Constant Time Grep</title>
+<link href="https://matklad.github.io/2024/02/10/window-live-constant-time-grep.html" rel="alternate" type="text/html" title="Window: Live, Constant Time Grep" />
+<published>2024-02-10T00:00:00+00:00</published>
+<updated>2024-02-10T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/02/10/window-live-constant-time-grep</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[In this post, I describe the design of window --- a small
+grep-like utility I implemented in 500 lines of Rust. The utility itself is likely not that
+interesting --- I bet some greybeared can implement an equivalent in 5 lines of bash. But the
+design principles behind it might be interesting --- this small utility manages to combine core
+ideas of rust-analyzer and TigerBeetle!]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/02/10/window-live-constant-time-grep.html"><![CDATA[
+<h1><span>Window: Live, Constant Time Grep</span> <time class="meta" datetime="2024-02-10">Feb 10, 2024</time></h1>
+<p><span>In this post, I describe the design of </span><a href="https://github.com/matklad/window/"><span>window</span></a><span> </span>&mdash;<span> a small</span>
+<span>grep-like utility I implemented in 500 lines of Rust. The utility itself is likely not that</span>
+<span>interesting </span>&mdash;<span> I bet some greybeared can implement an equivalent in 5 lines of bash. But the</span>
+<span>design principles behind it might be interesting </span>&mdash;<span> this small utility manages to combine core</span>
+<span>ideas of rust-analyzer and TigerBeetle!</span></p>
+<section id="Problem-Statement">
+
+    <h2>
+    <a href="#Problem-Statement"><span>Problem Statement</span> </a>
+    </h2>
+<p><span>TigerBeetle is tested primarily through a deterministic simulator: a cluster of replicas runs in a</span>
+<span>single process (in a single thread even), replicas are connected to a virtual network and a virtual</span>
+<span>hard drive. Both the net and the disk are extra nasty, and regularly drop, reorder, and corrupt IO</span>
+<span>requests. The cluster has to correctly process randomly generated load in spite of this radioactive</span>
+<span>environment. You can play with visualization of the simulator here:</span>
+<a href="https://sim.tigerbeetle.com" class="display url">https://sim.tigerbeetle.com</a></p>
+<p><span>Of course, sometimes we have bugs, and need to debug crashes found by the simulator. Because</span>
+<span>everything is perfectly deterministic, a crash is a pair of commit hash and a seed for a random</span>
+<span>number generator. We don</span>&rsquo;<span>t yet have any minimization infrastructure, so some crashes tend to be</span>
+<span>rather large: a debug log from a crash can easily reach 50 gigabytes!</span></p>
+<p><span>So that</span>&rsquo;<span>s my problem: given multi-gigabyte log of a crash, find a dozen or so of log-lines which</span>
+<span>explain the crash.</span></p>
+<p><span>I think you are supposed to use </span><code>coreutils</code><span> to solve this problem, but I am not good enough with</span>
+<span>grep to make that efficient: my experience that grepping anything in this large file takes seconds,</span>
+<span>and still produces gigabytes of output which is hard to make heads or tails of.</span></p>
+<p><span>I had relatively more success with </span><a href="https://lnav.org"><span>lnav.org</span></a><span>, but:</span></p>
+<ul>
+<li>
+<span>it is still slower than I would like,</span>
+</li>
+<li>
+<span>it comes with its own unique TUI interface, shortcuts, and workflow, which is at odds with my</span>
+<span>standard editing environment.</span>
+</li>
+</ul>
+</section>
+<section id="Window">
+
+    <h2>
+    <a href="#Window"><span>Window</span> </a>
+    </h2>
+<p><span>So, I made </span><code>window</code><span>. You run it as</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> window huge-file.log &amp;</span></code></pre>
+
+</figure>
+<p><span>It then creates two files:</span></p>
+<ul>
+<li>
+<code>window.toml</code><span> </span>&mdash;<span> the file with the input query,</span>
+</li>
+<li>
+<code>huge-file.log.window</code><span> </span>&mdash;<span> the result of the query.</span>
+</li>
+</ul>
+<p><span>You open both files side-by-side in your editor of choice. Edits to the query file are immediately</span>
+<span>reflected in the results file (assuming the editor has auto-save and automatically reloads files</span>
+<span>changed on disk):</span></p>
+<p><span>Here</span>&rsquo;<span>s a demo in Emacs (you might want to full-screen that video):</span></p>
+<script async id="asciicast-637434" src="https://asciinema.org/a/637434.js"></script>
+<p><span>In the demo, I have to manually save the </span><code>window.toml</code><span> file with </span><code>C-x C-s</code><span>, but in my</span>
+<span>actual usage in VS Code the file is saved automatically after 100ms.</span></p>
+<p><span>As you can see, </span><code>window</code><span> is pretty much instant. How is this possible?</span></p>
+</section>
+<section id="When-Best-Ideas-of-rust-analyzer-and-TigerBeetle-are-Combined-in-a-Tool-of-Questionable-Usefulness">
+
+    <h2>
+    <a href="#When-Best-Ideas-of-rust-analyzer-and-TigerBeetle-are-Combined-in-a-Tool-of-Questionable-Usefulness"><span>When Best Ideas of rust-analyzer and TigerBeetle are Combined in a Tool of Questionable</span>
+<span>Usefulness</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s take a closer look at that query string:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-attr">reverse</span> = <span class="hl-literal">false</span></span>
+<span class="line"><span class="hl-attr">position</span> = <span class="hl-string">&quot;0%&quot;</span></span>
+<span class="line"><span class="hl-attr">anchor</span> = <span class="hl-string">&quot;&quot;</span></span>
+<span class="line"><span class="hl-attr">source_bytes_max</span> = <span class="hl-number">104857600</span></span>
+<span class="line"><span class="hl-attr">target_bytes_max</span> = <span class="hl-number">102400</span></span>
+<span class="line"><span class="hl-attr">target_lines_max</span> = <span class="hl-number">50</span></span>
+<span class="line"><span class="hl-attr">filter_in</span> = [</span>
+<span class="line">      [<span class="hl-string">&quot;(replica): 0&quot;</span>, <span class="hl-string">&quot;view=74&quot;</span>],</span>
+<span class="line">      [<span class="hl-string">&quot;(replica): 1&quot;</span>, <span class="hl-string">&quot;view=74&quot;</span>]</span>
+<span class="line">]</span>
+<span class="line"><span class="hl-attr">filter_out</span> = [</span>
+<span class="line">       <span class="hl-string">&quot;ping&quot;</span>, <span class="hl-string">&quot;pong&quot;</span></span>
+<span class="line">]</span></code></pre>
+
+</figure>
+<p><span>The secret sauce are </span><code>source_bytes_max</code><span> and </span><code>target_bytes_max</code><span> parameters.</span></p>
+<p><span>Let</span>&rsquo;<span>s start with </span><code>target_bytes_max</code><span>. This is a lesson from </span><code>rust-analyzer</code><span>. For dev tools, the user</span>
+<span>of software is a human. Humans are slow, and can</span>&rsquo;<span>t process a lot of information. That means it is</span>
+<span>generally useless to produce more than a hundred lines of output </span>&mdash;<span> a human won</span>&rsquo;<span>t be able to make</span>
+<span>use of a larger result set </span>&mdash;<span> they</span>&rsquo;<span>d rather refine the query than manually sift through pages of</span>
+<span>results.</span></p>
+<p><span>So, when designing software to execute a user-supplied query, the inner loop should have some idea</span>
+<span>about the amount of results produced so far, and a short-circuiting logic. It is more valuable to</span>
+<span>produce some result quickly and to inform the user that the query is not specific, than to spend a</span>
+<span>second computing the full result set.</span></p>
+<p><span>A similar assumption underpins the architecture of a lot of language servers. No matter the size of</span>
+<span>the codebase, the amount of information displayed on the screen in user</span>&rsquo;<span>s IDE at a given point in</span>
+<span>time is O(1). A typical successful language server tries hard to do the absolute minimal amount of</span>
+<span>work to compute the relevant information, and nothing more.</span></p>
+<p><span>So, the </span><code>window</code><span>, by default, limits the output size to the minimum of 100 kilobytes / 50 lines, and</span>
+<span>never tries to compute more than that. If the first 50 lines of the output don</span>&rsquo;<span>t contain the result,</span>
+<span>the user can make the query more specific by adding more AND terms to </span><code>filter_in</code><span> causes, or adding</span>
+<span>OR terms to </span><code>filter_out</code><span>.</span></p>
+<p><span>TigerBeetle gives </span><code>window</code><span> the second magic parameter </span>&mdash;<span> </span><code>source_bytes_max</code><span>. The big insight of</span>
+<span>TigerBeetle is that all software always has limits. Sometimes the limit is a  hard wall: if a server</span>
+<span>runs out of file descriptors, it just crashes. The limit can also be a soft, sloughy bog as well: if</span>
+<span>the server runs out of memory, it might start paging memory in and out, slowing to a crawl. Even if</span>
+<span>some requests are, functionally speaking, fulfilled, the results are useless, as they arrive too</span>
+<span>late. Or, in other words, every request has a (potentially quite large) latency window.</span></p>
+<p><span>It might be a good idea to make the limits explicit, and design software around them. That gives</span>
+<span>predictable performance, and allows the user to manually chunk larger requests in manageable pieces.</span></p>
+<p><span>That is exactly what </span><code>window</code><span> does. Grepping 100 megabytes is pretty fast. Grepping more might be</span>
+<span>slow. So </span><code>window</code><span> just doesn</span>&rsquo;<span>t do it. Here</span>&rsquo;<span>s a rough rundown of the algorithm:</span></p>
+<ol>
+<li>
+<code>mmap</code><span> the entire input file to a </span><code>&amp;[u8]</code><span>.</span>
+</li>
+<li>
+<span>Wait until the control file (</span><code>window.toml</code><span>) changes and contains a valid query.</span>
+</li>
+<li>
+<span>Convert the </span><code>position</code><span> field (which might be absolute or a percentage) to an absolute offset.</span>
+</li>
+<li>
+<span>Select slice of </span><code>source_bytes_max</code><span> starting at that offset.</span>
+</li>
+<li>
+<span>Adjust boundaries of the slice to be on </span><code>\n</code><span>.</span>
+</li>
+<li>
+<span>Iterate lines.</span>
+</li>
+<li>
+<span>If a line matches any of </span><code>filter_out</code><span> conditions, skip over it.</span>
+</li>
+<li>
+<span>If a line matches any of </span><code>filter_in</code><span> conditions, add it to the result.</span>
+</li>
+<li>
+<span>Break when reaching the end of </span><code>source_bytes_max</code><span> window, or when the size of output exceeds</span>
+<code>target_bytes_max</code><span>.</span>
+</li>
+</ol>
+<p><span>The deal is:</span></p>
+<ul>
+<li>
+<span>It</span>&rsquo;<span>s on the user to position a limited window over the interesting part of the input.</span>
+</li>
+<li>
+<span>In exchange, the </span><code>window</code><span> tool guarantees constant-time performance.</span>
+</li>
+</ul>
+</section>
+<section id="Limits-of-Applicability">
+
+    <h2>
+    <a href="#Limits-of-Applicability"><span>Limits of Applicability</span> </a>
+    </h2>
+<p><span>Important pre-requisites to make the </span>&ldquo;<span>limit the size of the output</span>&rdquo;<span> work are:</span></p>
+<ul>
+<li>
+<span>The user can refine the query.</span>
+</li>
+<li>
+<span>The results are computed instantly.</span>
+</li>
+</ul>
+<p><span>If these assumptions are violated, it might be best to return the full list of results.</span></p>
+<p><span>Here</span>&rsquo;<span>s one counterexample! I love reading blogs. When I find a great post, I often try to read all</span>
+<span>other posts by the same author </span>&mdash;<span> older posts which are still relevant usually are much more</span>
+<span>valuable then the news of the day. I love when blogs have a simple chronological list of all</span>
+<span>articles, a-la: </span><a href="https://matklad.github.io" class="display url">https://matklad.github.io</a></p>
+<p><span>Two blogging platforms mess up this feature:</span></p>
+<p><span>WordPress blogs love to have </span>&ldquo;<span>archives</span>&rdquo;<span> organized by month, where a month</span>&rsquo;<span>s page typically has 1 to</span>
+<span>3 entries. What</span>&rsquo;<span>s more, WordPress loves to display a couple of pages of content for each entry. This</span>
+<span>is just comically unusable </span>&mdash;<span> the amount of </span><em><span>entries</span></em><span> on a page is too few to effectively search</span>
+<span>them, but the actual amount of content on a page is overwhelming.</span></p>
+<p><span>Substack</span>&rsquo;<span>s archive is an infinite scroll that fetches 12 entries at a time. 12 entries is a joke!</span>
+<span>It</span>&rsquo;<span>s only 1kb compressed, and is clearly bellow human processing limit. There </span><em><span>might</span></em><span> be some</span>
+<span>argument for client-side pagination to postpone loading of posts</span>&rsquo;<span> images, but feeding the posts</span>
+<span>themselves over the network one tiny droplet at a time seems excessive.</span></p>
+<hr>
+<p><span>To recap:</span></p>
+<ul>
+<li>
+<p><span>Limiting </span><em><span>output</span></em><span> size might be a good idea, because, with a human on the other side of display,</span>
+<span>any additional line of output has a diminishing return (and might even be a net-negative). On the</span>
+<span>other hand, constant-time output allows reducing latency, and can even push a batch workflow into</span>
+<span>an interactive one</span></p>
+</li>
+<li>
+<p><span>Limiting </span><em><span>input</span></em><span> size might be a good idea, because the input is </span><em><span>always</span></em><span> limited anyway. The</span>
+<span>question is whether you know the limit, and whether the clients know how to cut their queries into</span>
+<span>reasonably-sized batches.</span></p>
+</li>
+<li>
+<p><span>If you have exactly the same 20 GB log file problems as me, you might install </span><code>window</code><span> with</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cargo install --git https://github.com/matklad/window</span></code></pre>
+
+</figure>
+</li>
+</ul>
+</section>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Write Less</title>
+<link href="https://matklad.github.io/2024/01/12/write-less.html" rel="alternate" type="text/html" title="Write Less" />
+<published>2024-01-12T00:00:00+00:00</published>
+<updated>2024-01-12T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/01/12/write-less</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[If we wish to count lines of code, we should not regard them as lines produced but as lines spent]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/01/12/write-less.html"><![CDATA[
+<h1><span>Write Less</span> <time class="meta" datetime="2024-01-12">Jan 12, 2024</time></h1>
+
+<figure class="blockquote">
+<blockquote><p><span>If we wish to count lines of code, we should not regard them as </span>&ldquo;<span>lines produced</span>&rdquo;<span> but as </span>&ldquo;<span>lines spent</span>&rdquo;</p>
+</blockquote>
+<figcaption><cite><a href="https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html"><span>Dijkstra</span></a></cite></figcaption>
+</figure>
+<p><span>The same applies to technical writing. There</span>&rsquo;<span>s a tendency to think that the more is written, the</span>
+<span>better. It is wrong: given the same information content, a shorter piece of prose is easier to</span>
+<span>understand, up to a reasonable limit.</span></p>
+<p><span>To communicate effectively, write a bullet-point list of ideas that you need to get across. Then,</span>
+<span>write a short paragraph in simple language that communicates these ideas precisely.</span></p>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Of Rats and Ratchets</title>
+<link href="https://matklad.github.io/2024/01/03/of-rats-and-ratchets.html" rel="alternate" type="text/html" title="Of Rats and Ratchets" />
+<published>2024-01-03T00:00:00+00:00</published>
+<updated>2024-01-03T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2024/01/03/of-rats-and-ratchets</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[This is going to be related to software engineering, pinky promise!]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2024/01/03/of-rats-and-ratchets.html"><![CDATA[
+<h1><span>Of Rats and Ratchets</span> <time class="meta" datetime="2024-01-03">Jan 3, 2024</time></h1>
+<p><span>This is going to be related to software engineering, pinky promise!</span></p>
+<p><span>I was re-reading Doctor Zhivago by Boris Pasternak recently. It is a beautiful novel set in Russia</span>
+<span>during the revolutionary years before World War II. It focuses on the life of Yuri Zhivago, a doctor</span>
+<span>and a poet, while the Russian revolutions roar in the background. It is a poignant and topical tale</span>
+<span>of a country descending into blood-thirsty madness.</span></p>
+<p><span>Being a doctor, a literati, and a descendant of once wealthy family, Zhivago is not exactly welcomed</span>
+<span>in the new Russia. That</span>&rsquo;<span>s why a significant part of the novel takes place far away from Moscow and</span>
+<span>St. Petersburg, in Siberia, where it is easier for undesirables to exist in a fragile truce with the</span>
+<span>state.</span></p>
+<p><span>What</span>&rsquo;<span>s your first problem, if you are going to live in someone else</span>&rsquo;<span>s abandoned house in Siberia,</span>
+<span>eking out a living off whatever supplies had been left? The rats, who are also very keen on the said</span>
+<span>supplies. Clearly, rats are a big problem, and require immediate attention.</span></p>
+<p><span>It</span>&rsquo;<span>s easy to exert effort and get rid of the rats </span>&mdash;<span> take a broom, some light source, and just</span>
+<span>chase away the rascals from the house. However observably effective the method is, it is not a</span>
+<span>solution </span>&mdash;<span> the rats will come back as soon as you are asleep. The proper solution starts with</span>
+<span>identifying all the holes through which the pest gets in, and thoroughly plugging those! Only then</span>
+<span>can you hope that the house </span><em><span>stays</span></em><span> rat free.</span></p>
+<p><span>I feel the dynamics plays out in software projects. There</span>&rsquo;<span>s lots of rats, everything</span>&rsquo;<span>s broken and in</span>
+<span>need of fixing, all the time. And there</span>&rsquo;<span>s usually plenty of desire and energy to fix things. The</span>
+<span>problem is, often times the fixes are not durable </span>&mdash;<span> an immediate problem is resolved promptly, but</span>
+<span>then it returns back two years down the line. This is most apparent in benchmarks </span>&mdash;<span> everyone loves</span>
+<span>adding a microbenchmark to motivate a particular change, and then the benchmark bitrots with no one</span>
+<span>to run it.</span></p>
+<p><span>It</span>&rsquo;<span>s important not only to fix things, but to fix them in a durable way; to seal up the holes, not</span>
+<span>just to wave the broom vigorously.</span></p>
+<p><span>The best way to do this is to setup a not rocket science rule, and then to use it as a ratchet to</span>
+<span>monotonically increase the set of properties the codebase possesses, one small check at a time.</span>
+<span>Crucially, the ratchet should be set up up front, </span><em><span>before</span></em><span> any of the problems are actually fixed,</span>
+<span>and it must allow for incremental steps.</span></p>
+<p><span>Let</span>&rsquo;<span>s say you lack documentation, and want to ensure that every file in the code-base has a</span>
+<span>top-level comment explaining  the relevant context. A good way to approach this problem is to write</span>
+<span>a test that reads every file in the project, computes the set of poorly documented files, and xors</span>
+<span>that against the hard-coded naughty list. This test is then committed to the project with the</span>
+<span>naughty list encompassing all the existing files. Although no new docs are added, the ratchet is in</span>
+<span>place </span>&mdash;<span> all new files are guaranteed to be documented. And its easier to move a notch up the</span>
+<span>ratchet by documenting a single file and crossing it out from the naughty list.</span></p>
+<p><span>More generally, widen your view of tests </span>&mdash;<span> a test is a program that checks a property of a</span>
+<span>repository of code at a particular commit. Any property </span>&mdash;<span> code style, absence of warnings,</span>
+<span>licenses of dependencies, the maximum size of any binary file committed into the repository,</span>
+<span>presence of unwanted merge commits, average assertion density.</span></p>
+<p><span>Not everything can be automated though. For things which can</span>&rsquo;<span>t be, the best trick I</span>&rsquo;<span>ve found is</span>
+<span>writing them down. </span><em><span>Just</span></em><span> agreeing that </span><em><span>X</span></em><span> is a team practice is not enough, even if it </span><em><span>might</span></em>
+<span>work for the first six months. Only when </span><em><span>X</span></em><span> is written down in a markdown document inside a</span>
+<span>repository it might becomes a durable practice. But beware </span>&mdash;<span> document what </span><em><span>is</span></em><span>, rather than what</span>
+<em><span>should</span></em><span> be. If there</span>&rsquo;<span>s a clear disagreement between what the docs say the world is, and the actual</span>
+<span>world, the ratcheting effect of the written word disappears. If there</span>&rsquo;<span>s a large diff between reality</span>
+<span>and documentation, don</span>&rsquo;<span>t hesitate to remove conflicting parts of the documentation. Having a ratchet</span>
+<span>that enforces a tiny set of properties is much more valuable than aspirations to enforce everything.</span></p>
+<p><span>Coming back to Doctor Zhivago, it is worth noting that the novel is arranged into a myriad of</span>
+<span>self-contained small chapters </span>&mdash;<span> a blessing for a modern attention-deprived world, as it creates a</span>
+<span>clear sense of progression even when you don</span>&rsquo;<span>t have enough focus to get lost in a book for hours.</span></p>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">Git Things</title>
+<link href="https://matklad.github.io/2023/12/31/git-things.html" rel="alternate" type="text/html" title="Git Things" />
+<published>2023-12-31T00:00:00+00:00</published>
+<updated>2023-12-31T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2023/12/31/git-things</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[A grab bag of less frequently talked about git adjacent points.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2023/12/31/git-things.html"><![CDATA[
+<h1><span>Git Things</span> <time class="meta" datetime="2023-12-31">Dec 31, 2023</time></h1>
+<p><span>A grab bag of less frequently talked about git adjacent points.</span></p>
+<section id="Not-Rocket-Science-Rule-Applies-To-Merge-Commits">
+
+    <h2>
+    <a href="#Not-Rocket-Science-Rule-Applies-To-Merge-Commits"><span>Not Rocket Science Rule Applies To Merge Commits</span> </a>
+    </h2>
+<p><span>Should every commit pass the tests? If it should, then your </span><a href="https://graydon2.dreamwidth.org/1597.html"><span>not rocket science</span>
+<span>rule</span></a><span> implementation must be verifying this property. It</span>
+<span>probably doesn</span>&rsquo;<span>t, and only tests the final result of merging the feature branch into the main</span>
+<span>branch.</span></p>
+<p><span>That</span>&rsquo;<span>s why for typical project it is useful to </span><em><span>merge</span></em><span> pull requests into the main branch </span>&mdash;<span> the</span>
+<span>linear sequence of merge commits is a record of successful CI runs, and is a set of commits you want</span>
+<span>to </span><code>git bisect</code><span> over.</span></p>
+<p><span>Within a feature branch, not every commit necessary passes the tests (or even builds), and that is a</span>
+<span>useful property! Here</span>&rsquo;<span>s some ways this can be exploited:</span></p>
+<ul>
+<li>
+<p><span>When fixing a bug, add a failing test first, as a separate commit.</span>
+<span>That way it becomes easy to verify for anyone that the test indeed fails without the follow up</span>
+<span>fix.</span></p>
+<p><span>Related advice: often I see people commenting out tests that currently fail, or tests that are yet</span>
+<span>to be fixed in the future. That</span>&rsquo;<span>s bad, because commented-out code rots faster than the JavaScript</span>
+<span>framework of the day. Instead, adjust the asserts such that they lock down the current (wrong)</span>
+<span>behavior, and add a clear </span><code>// TODO:</code><span> comment explaining what would be the correct result. This</span>
+<span>prevents such tests from rotting and also catches cases where the behavior is fixed by an</span>
+<span>unrelated change.</span></p>
+</li>
+<li>
+<p><span>To refactor an API which has a lot of usages, split the work in two commits. In the first commit,</span>
+<span>change the API itself, but don</span>&rsquo;<span>t touch the usages. In the second commit, mechanically adjust all</span>
+<span>call sites.</span></p>
+<p><span>That way during review it is trivial to separate meaningful changes from a large, but trivial</span>
+<span>diff.</span></p>
+</li>
+<li>
+<p><code>git mv</code><span> is fake. For a long time, I believed that </span><code>git mv</code><span> adds some special bit of git metadata</span>
+<span>which tells it that the file was moved, such that it can be understood by </span><code>diff</code><span> or </span><code>blame</code><span>.</span>
+<span>That</span>&rsquo;<span>s not the case: </span><code>git mv</code><span> is essentially </span><code>mv</code><span> followed by </span><code>git add</code><span>. There</span>&rsquo;<span>s nothing in git to</span>
+<span>track that a file was moved specifically, the </span>&ldquo;<span>moved</span>&rdquo;<span> illusion is created by the diff tool when it</span>
+<span>heuristically compares repository state at two points in time.</span></p>
+<p><span>For this reason, if you want to reliably record file moves during refactors in git, you should do</span>
+<span>two commits: the first commit </span><em><span>just</span></em><span> moves the file without any changes, the second commit applies</span>
+<span>all the required fixups.</span></p>
+<p><span>Speaking of moves, consider adding this to your </span><code>gitconfig</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">[diff]</span>
+<span class="line">  colormoved = "default"</span>
+<span class="line">  colormovedws = "allow-indentation-change"</span></code></pre>
+
+</figure>
+<p><span>This way, moved lines will be colored differently in </span><code>diff</code><span>, so that code motions not confused</span>
+<span>with additions and deletions, and are easier to review. It is unclear to me why this isn</span>&rsquo;<span>t the</span>
+<span>default, and why this isn</span>&rsquo;<span>t an option in GitHub</span>&rsquo;<span>s UI.</span></p>
+</li>
+</ul>
+<p>&ldquo;<span>Merge into main, but rebase feature branches</span>&rdquo;<span> might be a hard rule to wrap your head around if you</span>
+<span>are new to git. Luckily, it</span>&rsquo;<span>s easy to use not-rocket-science rule to enforce this property. The</span>
+<span>history is as much a part of your project as is the source code. You can write a test that shells</span>
+<span>out to git and checks that the only merge commits in the history are those from the merge bot. While</span>
+<span>you are at it, it would be a good idea to test that no large large files are present in the</span>
+<span>repository </span>&mdash;<span> the size of a repository only grows, and you can</span>&rsquo;<span>t easily remove large blobs from the</span>
+<span>repo later on!</span></p>
+</section>
+<section id="Commit-Messages">
+
+    <h2>
+    <a href="#Commit-Messages"><span>Commit Messages</span> </a>
+    </h2>
+<p><span>Let me phrase this in the most inflammatory way possible :)</span></p>
+<p><span>If your project has great commit messages, with short and precise summary lines and long and</span>
+<span>detailed bodies, this probably means that your CI and code review process suck.</span></p>
+<p><span>Not all changes are equal. In a typical project, most of the changes that </span><em><span>should</span></em><span> be made are small</span>
+<span>and trivial </span>&mdash;<span> some renames, visibility tightening, </span>&ldquo;<span>attention to details</span>&rdquo;<span> polish in user-visible</span>
+<span>features.</span></p>
+<p><span>However, in a typical project, landing a trivial change is slow. How long would it take you to fix</span>
+<code>it's/its</code><span> typo in a comment? Probably 30 seconds to push the actual change, 30 minutes to get the</span>
+<span>CI results, and 3 hours for a review roundtrip.</span></p>
+<p><span>The fixed costs to making a change are tremendous. Main branch gatekeeping strongly incentivizes</span>
+<span>against trivial changes. As a result, such changes either are not being made, or are tacked onto</span>
+<span>larger changes as a drive by bonus. In any case, the total number of commits and PRs goes down. And</span>
+<span>you are crafting a novel of a commit message because you have to wait for your previous PR to land</span>
+<span>anyway.</span></p>
+<p><span>What can be done better?</span></p>
+<p><em><span>First</span></em><span>, make changes smaller and more frequent.</span>
+<span>Most likely, this is possible for you.</span>
+<span>At least, I tend to out-commit most colleagues (</span><a href="https://github.com/intellij-rust/intellij-rust/graphs/contributors"><span>example</span></a><span>).</span>
+<span>That</span>&rsquo;<span>s not because I am more productive </span>&mdash;<span> I just do work in smaller batches.</span></p>
+<p><em><span>Second</span></em><span>, make CI asynchronous.</span>
+<span>At no point in your workflow you should be waiting for CI to pass.</span>
+<span>You should flag a change for merging, move on to the next thing, and only get back if CI fails.</span>
+<span>This is something bors-ng does right </span>&mdash;<span> it</span>&rsquo;<span>s possible to </span><code>r+</code><span> a commit immediately on submission.</span>
+<span>This is something GitHub merge queue does wrong </span>&mdash;<span> it</span>&rsquo;<span>s impossible to add a PR to queue until checks on the PR itself are green.</span></p>
+<p><em><span>Third</span></em><span>, our review process is backwards. Review is done </span><em><span>before</span></em><span> code gets into main, but that</span>&rsquo;<span>s</span>
+<span>inefficient for most of the non-mission critical projects out there. A better approach is to</span>
+<span>optimistically merge most changes as soon as not-rocket-science allows it, and then later review the</span>
+<span>code in situ,  in the main branch. And instead of adding comments in web ui, just changing the code</span>
+<span>in-place, sending a new PR ccing the original author.</span></p>
+
+<figure class="blockquote">
+<blockquote><ol start="14">
+<li>
+<span>Maintainers SHALL NOT make value judgments on correct patches.</span>
+</li>
+<li>
+<span>Maintainers SHALL merge correct patches from other Contributors rapidly.</span>
+</li>
+</ol>
+<p>&hellip;</p>
+<ol start="18">
+<li>
+<span>Any Contributor who has value judgments on a patch SHOULD express these via their own patches.</span>
+</li>
+</ol>
+</blockquote>
+<figcaption><cite><a href="https://rfc.zeromq.org/spec/42/"><span>Collective Code Construction Contract</span></a></cite></figcaption>
+</figure>
+<p><span>I am skeptical that this exact workflow would</span>
+<span>ever fly, but I am cautiously optimistic about </span><a href="https://zed.dev"><span>Zed</span>&rsquo;<span>s</span></a><span> idea about just allowing</span>
+<span>two people to code in the same editor at the same time. I think that achieves a similar effect, and</span>
+<span>nicely dodges unease about allowing temporarily unreviewed code.</span></p>
+<p><span>Ok, back to git!</span></p>
+<p><em><span>First</span></em><span>, not every project needs a clean history. Have you ever looked at the git history of your</span>
+<span>personal blog or dotfiles? If you haven</span>&rsquo;<span>t, feel free to use a </span><code>.</code><span> as a commit message. I do that for</span>
+<span class="display"><a href="https://github.com/matklad/matklad.github.io" class="url">https://github.com/matklad/matklad.github.io</a><span>,</span></span>
+<span>it works fine so far.</span></p>
+<p><em><span>Second</span></em><span>, not every change needs a great commit message. If a change is really minor, I would say</span>
+<code>minor</code><span> is an okay commit message!</span></p>
+<p><em><span>Third</span></em><span>, some changes absolutely do require very detailed commit messages. If there </span><em><span>is</span></em><span> a context,</span>
+<span>by all means, include all of it into the commit message (and spill some as comments in the source</span>
+<span>code). And here</span>&rsquo;<span>s a tip for this case: </span><em><span>write the commit message first!</span></em></p>
+<p><span>When I work on a larger feature, I start with</span>
+<code class="display">git commit --allow-empty</code>
+<span>to type out what I set to do. Most of the time, by the third paragraph of the commit message I</span>
+<span>realize that there</span>&rsquo;<span>s a flaw in my plan and refine it. So, by the time I get to actually writing the</span>
+<span>code, I am already on the second iteration. And, when I am done, I just amend the commit with the</span>
+<span>actual changes, and the commit message is already there, needing only minor adjustments.</span></p>
+<p><span>And the last thing I want to touch about commit messages: </span><code>man git-commit</code><span> tells me that the summary</span>
+<span>line should be shorter than 50 characters. This feels obviously wrong, that</span>&rsquo;<span>s much too short!</span>
+<a href="https://www.kernel.org/doc/html/v4.10/process/submitting-patches.html"><span>Kernel docs</span></a><span> suggest a much</span>
+<span>more reasonable 70-75 limit! And indeed, looking at a some recent kernel commits, 50 is clearly not</span>
+<span>enough!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">&lt;---               50 characters              ---&gt;</span>
+<span class="line"></span>
+<span class="line">get_maintainer: remove stray punctuation when cleaning file emails</span>
+<span class="line">get_maintainer: correctly parse UTF-8 encoded names in files</span>
+<span class="line">locking/osq_lock: Clarify osq_wait_next()</span>
+<span class="line">locking/osq_lock: Clarify osq_wait_next() calling convention</span>
+<span class="line">locking/osq_lock: Move the definition of optimistic_spin_node into osq_lock.c</span>
+<span class="line">ftrace: Fix modification of direct_function hash while in use</span>
+<span class="line">tracing: Fix blocked reader of snapshot buffer</span>
+<span class="line">ring-buffer: Fix wake ups when buffer_percent is set to 100</span>
+<span class="line">platform/x86/intel/pmc: Move GBE LTR ignore to suspend callback</span>
+<span class="line">platform/x86/intel/pmc: Allow reenabling LTRs</span>
+<span class="line">platform/x86/intel/pmc: Add suspend callback</span>
+<span class="line">platform/x86: p2sb: Allow p2sb_bar() calls during PCI device probe</span>
+<span class="line"></span>
+<span class="line">&lt;---               50 characters              ---&gt;</span></code></pre>
+
+</figure>
+<p><span>Happy new year, dear reader!</span></p>
+</section>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">O(1) Build File</title>
+<link href="https://matklad.github.io/2023/12/31/O(1)-build-file.html" rel="alternate" type="text/html" title="O(1) Build File" />
+<published>2023-12-31T00:00:00+00:00</published>
+<updated>2023-12-31T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2023/12/31/O(1)-build-file</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[Rule of thumb: the size of build or CI configuration should be mostly independent of the project size.
+In other words, adding, say, a new test should not require adding a new line to the build file to build the test, and a new line to .yml to run it on CI.]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2023/12/31/O(1)-build-file.html"><![CDATA[
+<h1><span>O(1) Build File</span> <time class="meta" datetime="2023-12-31">Dec 31, 2023</time></h1>
+<p><span>Rule of thumb: the size of build or CI configuration should be mostly independent of the project size.</span>
+<span>In other words, adding, say, a new test should not require adding a new line to the build file to build the test, and a new line to </span><code>.yml</code><span> to run it on CI.</span></p>
+<p><span>Lines in CI config are costly </span>&mdash;<span> each line is typically a new entry point,</span>
+<span>and a bit of required knowledge to be able to run the project locally.</span>
+<span>That is, every time </span><em><span>you</span></em><span> add something to CI, you need to explain that to your colleagues,</span>
+<span>so that they know that they need to run more things locally.</span></p>
+<p><span>Lines in build config are usually a little cheaper, but are still far from free.</span>
+<span>Often a new build config also implies a new entry point.</span>
+<span>At other times, it</span>&rsquo;<span>s just a new build artifact tied to an existing entry point, for example, a new integration test binary.</span>
+<span>Build artifacts are costly in terms of compile time </span>&mdash;<span> as your project is linked with every build artifact, the total linking time is quadratic.</span></p>
+<p><span>What to do instead?</span></p>
+<p><em><span>Minimize</span></em><span> the number of entry points and artifacts.</span>
+<span>Enumerate </span><code>O(1)</code><span> of project entry points explicitly.</span>
+<span>You probably need:</span></p>
+<ul>
+<li>
+<code>run</code><span>, to get the local built-from-source copy of software running,</span>
+</li>
+<li>
+<code>test</code><span>, to run bounded-in-time automated checks that the current version of software is</span>
+<span>self-consistent,</span>
+</li>
+<li>
+<code>fuzz</code><span>, to run unbounded-in-time checks,</span>
+</li>
+<li>
+<code>deploy</code><span> to publish a given version of software for wider use</span>
+</li>
+</ul>
+<p><span>This is a point of contention, but consider if you can avoid separate </span><code>lint</code><span> and </span><code>fmt</code><span> entry points, as those are a form of automated tests.</span></p>
+<p><span>Of course, an entry point can allow filters to run a subset of things: </span><span class="display"><code>run --test-filter=tidy</code><span>.</span></span>
+<span>It</span>&rsquo;<span>s much easier to discover how to filter out things you don</span>&rsquo;<span>t need,</span>
+<span>than to realize that there</span>&rsquo;<span>s something you need to opt into.</span></p>
+<p><em><span>Minimize</span></em><span> the number of build artifacts, </span><a href="https://matklad.github.io/2021/02/27/delete-cargo-integration-tests.html"><em><span>Delete Cargo Integration Tests</span></em></a><span>.</span>
+<span>You probably need separate production and test builds, to avoid linking in test code with the production binaries.</span>
+<span>But chances are, these two binaries are all you need.</span>
+<span>Avoid building a set of related binaries, use subcommands or BusyBox-style multicall binaries instead.</span>
+<span>Not only does this improve compile times, it also helps with putting out fires in the field, as the binary you have in production also contains all the debug tools.</span></p>
+<hr>
+<p><span>On rules of thumb in general: for me, the term </span><em><span>doesn</span>&rsquo;<span>t</span></em><span> mean that what follows is the correct way to do things, better than alternatives.</span>
+<span>Rather:</span></p>
+<ul>
+<li>
+<span>First and foremost, a rule focuses attention, it makes me </span><em><span>notice</span></em><span> things I</span>&rsquo;<span>d otherwise autopilot through.</span>
+<span>The main value of today</span>&rsquo;<span>s rule is to make me pause whenever I add to </span><code>build.zig</code><span> and think for a second.</span>
+</li>
+<li>
+<span>Second, a rule is a concise summary of the arguments that motivate the rule.</span>
+<span>The bad thing is slow builds and multiple entry points.</span>
+<span>But that</span>&rsquo;<span>s a fuzzy concept that is hard to keep at the forefront of the mind.</span>
+<span>I am not going to ask myself constantly </span>&ldquo;<span>Hey, am I adding a new entry point here?</span>&rdquo;<span>.</span>
+<span>In contrast, </span>&ldquo;<span>don</span>&rsquo;<span>t change .yml</span>&rdquo;<span> is simple and mechanical, and it reliably triggers the cluster of ideas about entry points.</span>
+</li>
+</ul>
+]]></content>
+</entry>
+
+<entry>
+<title type="text">CI Dream</title>
+<link href="https://matklad.github.io/2023/12/24/ci-dream.html" rel="alternate" type="text/html" title="CI Dream" />
+<published>2023-12-24T00:00:00+00:00</published>
+<updated>2023-12-24T00:00:00+00:00</updated>
+<id>https://matklad.github.io/2023/12/24/ci-dream</id>
+<author><name>Alex Kladov</name></author>
+<summary type="html"><![CDATA[This is more of an android dream (that one with a unicorn) than a coherent post, but please indulge me.
+It's a short one at least!]]></summary>
+<content type="html" xml:base="https://matklad.github.io/2023/12/24/ci-dream.html"><![CDATA[
+<h1><span>CI Dream</span> <time class="meta" datetime="2023-12-24">Dec 24, 2023</time></h1>
+<p><span>This is more of an android dream (that one with a unicorn) than a coherent post, but please indulge me.</span>
+<span>It</span>&rsquo;<span>s a short one at least!</span></p>
+<p><span>Several years ago, it made sense for things like Travis CI or GitHub Actions to exist as technical products as well as businesses.</span>
+<span>Back in the day, maintaining a fleet of machines was hard.</span>
+<span>So you could take that shepherd job onto yourself, and provide your users and customers with an API to run their tests.</span></p>
+<p><span>Is it true today though?</span>
+<span>I am not well-versed in cloud things, but my impression is that today one can rent machines as a commodity.</span>
+<span>Cloud providers give you a distributed computer which you pay for as you go.</span></p>
+<p><span>In this world, CI as a SaaS feels like accidental complexity of </span><a href="https://lwn.net/Articles/336262/"><span>midlayer mistake</span></a><span> variety.</span>
+<span>Can we make it simpler?</span>
+<span>Can we say that CI is just a </span>&ldquo;<span>program</span>&rdquo;<span> for a distributed computer?</span>
+<span>So, in your project</span>&rsquo;<span>s repo, there</span>&rsquo;<span>s a </span><code>./ci</code><span> folder with a such program </span>&mdash;
+<span>a bunch of Docker files, or .yamls, or whatever is the </span>&ldquo;<span>programming language of the cloud</span>&rdquo;<span>.</span>
+<span>You then point, say, AWS to it, tell it </span>&ldquo;<span>run this, here are my credentials</span>&rdquo;<span>, and you get your entire CI infra,</span>
+<span>with not rocket science rule, continuous fuzzing, releases, and what not.</span>
+<span>And, crucially, whatever project specific logic you need </span>&mdash;<span> AWS doesn</span>&rsquo;<span>t care what it runs, everything is under your control.</span></p>
+<p><span>Of course, there</span>&rsquo;<span>s a hefty amount of logic required </span>&mdash;
+<span>interacting with your forge webhooks,</span>
+<span>UI through @magic comments and maybe a web server with an HTML GUI,</span>
+<span>the management of storage to ensure that cross-build caches stay close,</span>
+<span>the management of compute and idempotence, to allow running on cheap spot instances,</span>
+<span>and perhaps a thousands of other CI concerns.</span></p>
+<p><span>But it feels like all that could conceivably be a library (an ecosystem of competing projects even)?</span></p>
+<p><span>If I want to have a merge queue, why are these my choices?:</span></p>
+<ul>
+<li>
+<span>GitHub Merge Queue, which is </span><a href="https://matklad.github.io/2023/06/18/GitHub-merge-queue.html"><span>not good</span></a><span>.</span>
+</li>
+<li>
+<a href="https://mergify.com"><span>Mergify</span></a><span>, which I am reluctant even to try due to strength of </span>&ldquo;<span>this is a product</span>&rdquo;<span> vibes.</span>
+</li>
+<li>
+<span>Self-hosting </span><a href="https://github.com/bors-ng/bors-ng"><span>bors-ng</span></a><span>, managing an individual server as a pet.</span>
+</li>
+</ul>
+<p><span>Why this isn</span>&rsquo;<span>t the world we live in?:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cd ci</span>
+<span class="line"><span class="hl-title function_">$</span> cargo add protection-agency</span></code></pre>
+
+</figure>
+<p><strong><strong><span>Update(2024-01-01):</span></strong></strong><span> If you like this post, please also read</span>
+<a href="https://gregoryszorc.com/blog/2021/04/07/modern-ci-is-too-complex-and-misdirected/" class="display url">https://gregoryszorc.com/blog/2021/04/07/modern-ci-is-too-complex-and-misdirected/</a></p>
+<p><span>Although that post contains much fewer references to</span>
+<a href="https://open.spotify.com/track/7DklRKMUGf8D9anitG68kj"><span>Philip K. Dick</span></a><span>,</span>
+<span>it is much better in every other respect.</span></p>
+]]></content>
+</entry>
+
+</feed>
