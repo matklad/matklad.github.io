@@ -249,12 +249,13 @@ let t1 = managed_thread::spawn({
 But as these are managed threads, and we want to control them from our tests, lets actually go all
 the way there and give the controlling thread an ability to change the code running in a managed
 thread. That is, we'll start managed threads without a "main" function, and provide an API to
-execute arbitrary closures in the context of this by-default inert thread:
+execute arbitrary closures in the context of this by-default inert thread ([universal
+server](https://joearms.github.io/published/2013-11-21-My-favorite-erlang-program.html) anyone?):
 
 ```rust
 let counter = Counter::default();
 
-// We pass the state, &counter, in, but otherwise, the thread is inert.
+// We pass the state, &counter, in, but otherwise the thread is inert.
 let t = managed_thread::spawn(&counter);
 
 // But we can manually poke it:
