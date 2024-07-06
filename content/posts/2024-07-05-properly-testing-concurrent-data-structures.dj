@@ -16,8 +16,8 @@ Behold, a humble (and broken) concurrent counter:
 
 ```rust
 use std::sync::atomic::{
-    AtomicU32,
-    Ordering::SeqCst,
+  AtomicU32,
+  Ordering::SeqCst,
 };
 
 #[derive(Default)]
@@ -103,7 +103,8 @@ fn state_machine_test() {
     let step_count: usize = rng.int_in_range(0..=100)?;
 
     for _ in 0..step_count {
-      // At each step, we flip a coin and either increment or decrement.
+      // At each step, we flip a coin and
+      // either increment or decrement.
       match *rng.choose(&["inc", "dec"])? {
         "inc" => state += 1,
         "dec" => state -= 1,
@@ -199,16 +200,16 @@ Now, we want to step through the threads:
 
 ```rust
 while !rng.is_empty() {
-    let coin_flip: bool = rng.arbitrary()?;
-    if t1.is_paused() {
-        if coin_flip {
-            t1.unpause();
-        }
-    } else if t2.is_paused() {
-        if coin_flip {
-            t2.unpause();
-        }
+  let coin_flip: bool = rng.arbitrary()?;
+  if t1.is_paused() {
+    if coin_flip {
+      t1.unpause();
     }
+  } else if t2.is_paused() {
+    if coin_flip {
+      t2.unpause();
+    }
+  }
 }
 ```
 
@@ -221,11 +222,11 @@ let t2 = managed_thread::spawn(&counter);
 let threads = [t1, t2];
 
 while !rng.is_empty() {
-    for t in &mut threads {
-        if t.is_paused() && rng.arbitrary()? {
-            t.unpause()
-        }
+  for t in &mut threads {
+    if t.is_paused() && rng.arbitrary()? {
+      t.unpause()
     }
+  }
 }
 ```
 
@@ -237,12 +238,12 @@ counter. One idea is to mirror the `std::spawn` API and pass a closure in:
 
 ```rust
 let t1 = managed_thread::spawn({
-    let counter = &counter;
-    move || {
-        for _ in 0..100 {
-            counter.increment();
-        }
+  let counter = &counter;
+  move || {
+    for _ in 0..100 {
+      counter.increment();
     }
+  }
 });
 ```
 
@@ -313,7 +314,7 @@ fn test_counter() {
     }
 
     for t in threads {
-        t.join();
+      t.join();
     }
 
     assert_eq!(counter_model, counter.get());
@@ -994,6 +995,7 @@ begin trace
 1: unpause
 0: unpause
 seed 0x4fd7ddff00000020, seed size 32, search time 106.00ns
+
 begin trace
 0: increment
 1: increment
@@ -1007,6 +1009,7 @@ begin trace
 1: unpause
 1: increment
 seed 0x540c0c1c00000010, seed size 16, search time 282.16µs
+
 begin trace
 0: increment
 1: increment
@@ -1015,27 +1018,30 @@ begin trace
 1: unpause
 1: unpause
 seed 0x084ca71200000008, seed size 8, search time 805.74µs
+
 begin trace
 0: increment
 1: increment
 0: unpause
 1: unpause
 seed 0x5699b19400000004, seed size 4, search time 1.44ms
+
 begin trace
 0: increment
 1: increment
 0: unpause
 1: unpause
 seed 0x4bb0ea5c00000002, seed size 2, search time 4.03ms
+
 begin trace
 0: increment
 1: increment
 0: unpause
 1: unpause
 seed 0x9c2a13a600000001, seed size 1, search time 4.31ms
+
 minimized
 seed 0x9c2a13a600000001, seed size 1, search time 100.03ms
-   Doc-tests properly_concurrent
 ```
 
 That is, we ended up with this tiny, minimal example:
@@ -1216,6 +1222,9 @@ thread 'test_counter' panicked at src/lib.rs:57:7:
 assertion `left == right` failed
   left: 2
  right: 1
+
+arbtest failed!
+    Seed: 0x9c2a13a600000001
 ```
 
 But we never implemented shrinking! How is this possible? Well, strictly speaking, this is out of
@@ -1230,9 +1239,9 @@ familiar interface of a PRNG:
 
 ```rust
 arbtest::arbtest(|rng| {
-    let random_int: usize = rng.int_in_range(0..=100)?;
-    let random_bool: bool = rng.arbitrary()?;
-    Ok(())
+  let random_int: usize = rng.int_in_range(0..=100)?;
+  let random_bool: bool = rng.arbitrary()?;
+  Ok(())
 });
 ```
 
