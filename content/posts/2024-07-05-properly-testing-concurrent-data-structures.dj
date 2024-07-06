@@ -405,7 +405,7 @@ impl SharedContext {
 
 Ok, what to do next? We somehow need to coordinate the control thread and the managed thread. And we
 need some sort of notification mechanism, so that the managed thread knows when it can continue. The
-most brute force solution here is a part of a mutex protecting some state and a condition variable.
+most brute force solution here is a pair of a mutex protecting some state and a condition variable.
 Mutex guards the state that can be manipulated by either of the threads. Condition variable can be
 used to signal about the changes.
 
@@ -445,7 +445,7 @@ impl SharedContext {
     assert_eq!(*guard, State::Running);
     *guard = State::Paused;
     self.cv.notify_all();
-    while *guard == State::Paused{
+    while *guard == State::Paused {
       guard = self.cv.wait(guard).unwrap();
     }
     assert_eq!(*guard, State::Running);
@@ -589,7 +589,7 @@ impl ManagedHandle<'_> {
 }
 ```
 
-At this point we can spawn a manage thread, pause it and resume. But right now it doesn't do
+At this point we can spawn a managed thread, pause it and resume. But right now it doesn't do
 anything. Next step is implementing that idea where the controlling thread can directly send an
 arbitrary closure to the managed one to make it do something:
 
@@ -618,7 +618,7 @@ completes `f`). And we'll also need a new state, `Ready`, because now there are 
 reasons why a managed thread might be blocked --- it might wait for an `unpause` event, or it might
 wait for the next `f` to execute. This is the new code:
 
-{highlight="3-4,9,12,27-34,42-50"}
+{highlight="3-4,9,12,20-21,27-34,42-50"}
 ```rust
 #[derive(Default)]
 enum State {
@@ -743,7 +743,8 @@ enum State {
 }
 
 thread_local! {
-  static INSTANCE: RefCell<Option<Arc<SharedContext>>> = RefCell::new(None);
+  static INSTANCE: RefCell<Option<Arc<SharedContext>>> =
+    RefCell::new(None);
 }
 
 impl SharedContext {
@@ -1066,7 +1067,7 @@ And _this_ is how you properly test concurrent data structures.
 
 Of course, this is just a toy. But you can see some ways to extend it. For example, right now our
 `AtomicU32` just delegates to the real one. But what you _could_ do instead is, for each atomic, to
-main a set of values written and, on read, return an _arbitrary_ written value consistent with a
+maintain a set of values written and, on read, return an _arbitrary_ written value consistent with a
 weak memory model.
 
 You could also be smarter with exploring interleavings. Instead of interleaving threads at random,
@@ -1217,7 +1218,7 @@ assertion `left == right` failed
  right: 1
 ```
 
-But we never implemented minimization! How is this possible? Well, strictly speaking, this is out of
+But we never implemented shrinking! How is this possible? Well, strictly speaking, this is out of
 scope for this post. And I've already described this
 [elsewhere](https://tigerbeetle.com/blog/2023-03-28-random-fuzzy-thoughts). And, at 32k, this is the
 third-longest post on this blog. And it's 3AM here in Lisbon right now. But of course I'll explain!
@@ -1246,9 +1247,10 @@ In other words, as soon as the test runs out of entropy, it short-circuits and c
 means that by reducing the amount of entropy available the test becomes shorter, and this works
 irrespective of how complex is the logic inside the test!
 
-And "entropy" is a big scary word here, what actually happens is that the rng is just `&mut &[u8]`.
-That is, a slice of random bytes, which is shortened every time you ask for a random number. And the
-shorter the initial slice, the simpler the test gets. Minimization can be this simple!
+And "entropy" is a big scary word here, what actually happens is that the PRNG is just an `&mut
+&[u8]` inside. That is, a slice of random bytes, which is shortened every time you ask for a random
+number. And the shorter the initial slice, the simpler the test gets. Minimization can be this
+simple!
 
 You can find source code for this article at
 <https://github.com/matklad/properly-concurrent>{.display}
