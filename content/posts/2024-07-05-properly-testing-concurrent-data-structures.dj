@@ -205,7 +205,8 @@ while !rng.is_empty() {
     if coin_flip {
       t1.unpause();
     }
-  } else if t2.is_paused() {
+  }
+  if t2.is_paused() {
     if coin_flip {
       t2.unpause();
     }
@@ -1234,7 +1235,7 @@ third-longest post on this blog. And it's 3AM here in Lisbon right now. But of c
 
 The trick is the simplified [hypothesis
 approach](https://hypothesis.works/articles/compositional-shrinking/). The
-[arbtest](https://docs.rs/arbtest/latest/arbtest/) PBT library we in this post is based on a
+[arbtest](https://docs.rs/arbtest/latest/arbtest/) PBT library we use in this post is based on a
 familiar interface of a PRNG:
 
 ```rust
