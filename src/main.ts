@@ -65,7 +65,7 @@ async function watch(params: { filter: string }) {
       console.log(`rebuild #${build_id}`);
       build_id += 1;
       await build({
-        blogroll: build_id == 1,
+        blogroll: false,
         update: true,
         spell: false,
         profile: false,
