@@ -499,10 +499,10 @@ succ(succ(succ(zero))) = 3
 ```
 
 We aren't going to get allowed to use general recursion (because it can trivially non-terminate),
-but we do get to use a restricted form of C-style loop. It is a bit fiddly to defile formally! The
+but we do get to use a restricted form of C-style loop. It is a bit fiddly to define formally! The
 overall shape is [`LOOP(init, f, n)`.]{.display}
 
-Here, `init` and `n` are numbers --- initial value of accumulator and the total number of
+Here, `init` and `n` are numbers --- the initial value of the accumulator and the total number of
 iterations. The `f` is an unary function that specifies the loop body -- it takes the current value
 of the accumulator and returns the new value. So
 
@@ -562,7 +562,7 @@ mul(x, y) = LOOP(0, add x, y)
 ```
 
 Ok, so that's progress --- we made something as complicated as multiplication, and we still are in
-the guaranteed-to-terminate land. Because each loop has a fixed number of iteration, everything
+the guaranteed-to-terminate land. Because each loop has a fixed number of iterations, everything
 eventually finishes.
 
 We can go on and define x^y^:
@@ -1105,7 +1105,7 @@ practical matters. We have learned that:
 * Turing machines don't necessary terminate.
 * While other computational devices, like FSMs and PRFs, can be made to always terminate, there's no
   guarantee that they'll terminate fast. PRFs in particular, can compute quite large functions!
-* And non-Turing complete devices can be quiet expressive. For example, any real-world algorithm
+* And non-Turing complete devices can be quite expressive. For example, any real-world algorithm
   that works on a TM can be adapted to run as a PRF.
 * Moreover, you don't even have to contort the algorithm much to make it fit. There's a universal
   recipe for how to take something Turing complete, and make it a primitive recursive function
@@ -1118,7 +1118,7 @@ first problem, you need to solve the second problem as well. And making your pro
 non-Turing complete doesn't really help this.
 
 And yet, there are a lot of configuration languages out there, that use non-Turing completeness as
-one of the key design goal. Why is that?
+one of key design goals. Why is that?
 
 I would say that we are never interested in Turing-completeness per-se. We usually want some _much_
 stronger properties. And yet, there's no convenient, catchy name for that bag of features of a good
@@ -1133,7 +1133,7 @@ So what _are_ the properties of a good configuration language?
 
 _First_, we need the language to be deterministic. If you launch Python and type `id([])`, you'll
 see some number. If you hit `^C`, and than do this again, you'll see a different number. This is OK
-for "normal" programming, but is usually anathema for configuration. Configuration is often use as a
+for "normal" programming, but is usually anathema for configuration. Configuration is often used as a
 key in some incremental, caching system, and letting in non-determinism there wrecks absolute chaos!
 
 _Second_, you need the language to be well-defined. You can compile Python with ASLR disabled, and
@@ -1141,7 +1141,7 @@ use some specific allocator, such that `id([])` always returns the same result. 
 would be hard to predict! And if someone tries to do an alternative implementation, even if they
 disable ASLR as well, they are likely to get a different deterministic number! Or the same could
 happen if you just update the version of Python. So, the semantics of the language should be clearly
-pinned-down by some sort of the reference, such that it is possible to guarantee not only
+pinned-down by some sort of a reference, such that it is possible to guarantee not only
 deterministic behavior, but fully identical behavior across different implementations.
 
 _Third_, you need the language to be pure. If your configuration can access environment variables or
