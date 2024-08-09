@@ -1,0 +1,1471 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Properly Testing Concurrent Data Structures</title>
+  <meta name="description" content="There's a fascinating Rust library, loom, which can be used to
+thoroughly test lock-free data structures. I always wanted to learn how it works. I still do! But
+recently I accidentally implemented a small toy which, I think, contains some of the loom's ideas,
+and it seems worthwhile to write about that. The goal here isn't to teach you what you should be
+using in practice (if you need that, go read loom's docs), but rather to derive a couple of neat
+ideas from first principles.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/07/05/properly-testing-concurrent-data-structures.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Properly Testing Concurrent Data Structures</span> <time class="meta" datetime="2024-07-05">Jul 5, 2024</time></h1>
+<p><span>There</span>&rsquo;<span>s a fascinating Rust library, </span><a href="https://github.com/tokio-rs/loom"><span>loom</span></a><span>, which can be used to</span>
+<span>thoroughly test lock-free data structures. I always wanted to learn how it works. I still do! But</span>
+<span>recently I accidentally implemented a small toy which, I think, contains some of the loom</span>&rsquo;<span>s ideas,</span>
+<span>and it seems worthwhile to write about that. The goal here isn</span>&rsquo;<span>t to teach you what you should be</span>
+<span>using in practice (if you need that, go read loom</span>&rsquo;<span>s docs), but rather to derive a couple of neat</span>
+<span>ideas from first principles.</span></p>
+<section id="One-Two-Three-Two">
+
+    <h2>
+    <a href="#One-Two-Three-Two"><span>One, Two, Three, Two</span> </a>
+    </h2>
+<p><span>As usual, we need the simplest possible model program to mess with. The example we use comes from</span>
+<a href="https://stevana.github.io/the_sad_state_of_property-based_testing_libraries.html"><span>this excellent article</span></a><span>.</span>
+<span>Behold, a humble (and broken) concurrent counter:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::sync::atomic::{</span>
+<span class="line">  AtomicU32,</span>
+<span class="line">  Ordering::SeqCst,</span>
+<span class="line">};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Counter</span> {</span>
+<span class="line">  value: AtomicU32,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Counter</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">increment</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">value</span> = <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">load</span>(SeqCst);</span>
+<span class="line">    <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">store</span>(value + <span class="hl-number">1</span>, SeqCst);</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">get</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">load</span>(SeqCst)</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The bug is obvious here </span>&mdash;<span> the increment is not atomic. But what is the best test we can write to</span>
+<span>expose it?</span></p>
+</section>
+<section id="Trivial-Test">
+
+    <h2>
+    <a href="#Trivial-Test"><span>Trivial Test</span> </a>
+    </h2>
+<p><span>The simplest idea that comes to mind is to just hammer the same counter from multiple threads and</span>
+<span>check the result at the end;</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">threaded_test</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">counter</span> = Counter::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">thread_count</span> = <span class="hl-number">100</span>;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">increment_count</span> = <span class="hl-number">100</span>;</span>
+<span class="line"></span>
+<span class="line">  std::thread::<span class="hl-title function_ invoke__">scope</span>(|scope| {</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..thread_count {</span>
+<span class="line">      scope.<span class="hl-title function_ invoke__">spawn</span>(|| {</span>
+<span class="line">        <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..increment_count {</span>
+<span class="line">          counter.<span class="hl-title function_ invoke__">increment</span>()</span>
+<span class="line">        }</span>
+<span class="line">      });</span>
+<span class="line">    }</span>
+<span class="line">  });</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-built_in">assert_eq!</span>(counter.<span class="hl-title function_ invoke__">get</span>(), thread_count * increment_count);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This fails successfully:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">thread 'counter::trivial' panicked:</span>
+<span class="line">assertion `left == right` failed</span>
+<span class="line">  left: 9598</span>
+<span class="line"> right: 10000</span></code></pre>
+
+</figure>
+<p><span>But I wouldn</span>&rsquo;<span>t call this test satisfactory </span>&mdash;<span> it very much depends on the timing, so you can</span>&rsquo;<span>t</span>
+<span>reproduce it deterministically and you can</span>&rsquo;<span>t debug it. You also can</span>&rsquo;<span>t minimize it </span>&mdash;<span> if you reduce</span>
+<span>the number of threads and increments, chances are the test passes by luck!</span></p>
+</section>
+<section id="PBT">
+
+    <h2>
+    <a href="#PBT"><span>PBT</span> </a>
+    </h2>
+<p><span>Of course the temptation is to apply property based testing here! The problem </span><em><span>almost</span></em><span> fits: we have</span>
+<span>easy-to-generate input (the sequence of increments spread over several threads), a good property to</span>
+<span>check (result of concurrent increments is identical to that of sequential execution) and the desire</span>
+<span>to minimize the test.</span></p>
+<p><span>But just how can we plug threads into a property-based test?</span></p>
+<p><span>PBTs are great for testing state machines. You can run your state machine through a series of steps</span>
+<span>where at each step a PBT selects an arbitrary next action to apply to the state:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">state_machine_test</span>() {</span>
+<span class="line">  arbtest::<span class="hl-title function_ invoke__">arbtest</span>(|rng| {</span>
+<span class="line">    <span class="hl-comment">// This is our state machine!</span></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">state</span>: <span class="hl-type">i32</span> = <span class="hl-number">0</span>;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// We&#x27;ll run it for up to 100 steps.</span></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">step_count</span>: <span class="hl-type">usize</span> = rng.<span class="hl-title function_ invoke__">int_in_range</span>(<span class="hl-number">0</span>..=<span class="hl-number">100</span>)?;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..step_count {</span>
+<span class="line">      <span class="hl-comment">// At each step, we flip a coin and</span></span>
+<span class="line">      <span class="hl-comment">// either increment or decrement.</span></span>
+<span class="line">      <span class="hl-keyword">match</span> *rng.<span class="hl-title function_ invoke__">choose</span>(&amp;[<span class="hl-string">&quot;inc&quot;</span>, <span class="hl-string">&quot;dec&quot;</span>])? {</span>
+<span class="line">        <span class="hl-string">&quot;inc&quot;</span> =&gt; state += <span class="hl-number">1</span>,</span>
+<span class="line">        <span class="hl-string">&quot;dec&quot;</span> =&gt; state -= <span class="hl-number">1</span>,</span>
+<span class="line">        _ =&gt; <span class="hl-built_in">unreachable!</span>(),</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-title function_ invoke__">Ok</span>(())</span>
+<span class="line">  });</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And it </span><em><span>feels</span></em><span> like we should be able to apply the same technique here. At every iteration, pick a</span>
+<span>random thread and make it do a single step. If you can step the threads manually, it should be easy</span>
+<span>to maneuver one thread in between load&amp;store of a different thread.</span></p>
+<p><span>But we can</span>&rsquo;<span>t step through threads! Or can we?</span></p>
+</section>
+<section id="Simple-Instrumentation">
+
+    <h2>
+    <a href="#Simple-Instrumentation"><span>Simple Instrumentation</span> </a>
+    </h2>
+<p><span>Ok, let</span>&rsquo;<span>s fake it until we make it! Let</span>&rsquo;<span>s take a look at the buggy increment method:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">increment</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">value</span> = <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">load</span>(SeqCst);</span>
+<span class="line">  <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">store</span>(value + <span class="hl-number">1</span>, SeqCst);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Ideally, we</span>&rsquo;<span>d love to be able to somehow </span>&ldquo;<span>pause</span>&rdquo;<span> the thread in-between atomic operations. Something</span>
+<span>like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">increment</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">  <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">value</span> = <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">load</span>(SeqCst);</span>
+<span class="line">  <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">  <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">store</span>(value + <span class="hl-number">1</span>, SeqCst);</span>
+<span class="line">  <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">pause</span>() {</span>
+<span class="line">    <span class="hl-comment">// ¯\_(ツ)_/¯</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>So let</span>&rsquo;<span>s start with implementing our own wrapper for </span><code>AtomicU32</code><span> which includes calls to pause.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::sync::atomic::Ordering;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">AtomicU32</span> {</span>
+<span class="line">  inner: std::sync::atomic::AtomicU32,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">AtomicU32</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">load</span>(&amp;<span class="hl-keyword">self</span>, ordering: Ordering) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">result</span> = <span class="hl-keyword">self</span>.inner.<span class="hl-title function_ invoke__">load</span>(ordering);</span>
+<span class="line">    <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">    result</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">store</span>(&amp;<span class="hl-keyword">self</span>, value: <span class="hl-type">u32</span>, ordering: Ordering) {</span>
+<span class="line">    <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">    <span class="hl-keyword">self</span>.inner.<span class="hl-title function_ invoke__">store</span>(value, ordering);</span>
+<span class="line">    <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">pause</span>() {</span>
+<span class="line">  <span class="hl-comment">// still no idea :(</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+</section>
+<section id="Managed-Threads-API">
+
+    <h2>
+    <a href="#Managed-Threads-API"><span>Managed Threads API</span> </a>
+    </h2>
+<p><span>One rule of a great API design is that you start by implement a single </span><em><span>user</span></em><span> of an API, to</span>
+<span>understand how the API should </span><em><span>feel</span></em><span>, and only then proceed to the actual implementation.</span></p>
+<p><span>So, in the spirit of faking, let</span>&rsquo;<span>s just write a PBT using these pausable, managed threads, even if</span>
+<span>we still have no idea how to actually implement pausing.</span></p>
+<p><span>We start with creating a counter and two managed threads. And we probably want to pass a reference</span>
+<span>to the counter to each of the threads:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">counter</span> = Counter::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">t1</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(&amp;counter);</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">t2</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(&amp;counter);</span></code></pre>
+
+</figure>
+<p><span>Now, we want to step through the threads:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">while</span> !rng.<span class="hl-title function_ invoke__">is_empty</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">coin_flip</span>: <span class="hl-type">bool</span> = rng.<span class="hl-title function_ invoke__">arbitrary</span>()?;</span>
+<span class="line">  <span class="hl-keyword">if</span> t1.<span class="hl-title function_ invoke__">is_paused</span>() {</span>
+<span class="line">    <span class="hl-keyword">if</span> coin_flip {</span>
+<span class="line">      t1.<span class="hl-title function_ invoke__">unpause</span>();</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">  <span class="hl-keyword">if</span> t2.<span class="hl-title function_ invoke__">is_paused</span>() {</span>
+<span class="line">    <span class="hl-keyword">if</span> coin_flip {</span>
+<span class="line">      t2.<span class="hl-title function_ invoke__">unpause</span>();</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Or, refactoring this a bit to semantically compress:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">counter</span> = Counter::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">t1</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(&amp;counter);</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">t2</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(&amp;counter);</span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">threads</span> = [t1, t2];</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">while</span> !rng.<span class="hl-title function_ invoke__">is_empty</span>() {</span>
+<span class="line">  <span class="hl-keyword">for</span> <span class="hl-variable">t</span> <span class="hl-keyword">in</span> &amp;<span class="hl-keyword">mut</span> threads {</span>
+<span class="line">    <span class="hl-keyword">if</span> t.<span class="hl-title function_ invoke__">is_paused</span>() &amp;&amp; rng.<span class="hl-title function_ invoke__">arbitrary</span>()? {</span>
+<span class="line">      t.<span class="hl-title function_ invoke__">unpause</span>()</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>That is, on each step of our state machine, we loop through all threads and unpause a random subset</span>
+<span>of them.</span></p>
+<p><span>But besides pausing and unpausing, we need our threads to actually </span><em><span>do</span></em><span> something, to increment the</span>
+<span>counter. One idea is to mirror the </span><code>std::spawn</code><span> API and pass a closure in:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">t1</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>({</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">counter</span> = &amp;counter;</span>
+<span class="line">  <span class="hl-keyword">move</span> || {</span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">_</span> <span class="hl-keyword">in</span> <span class="hl-number">0</span>..<span class="hl-number">100</span> {</span>
+<span class="line">      counter.<span class="hl-title function_ invoke__">increment</span>();</span>
+<span class="line">    }</span>
+<span class="line">  }</span>
+<span class="line">});</span></code></pre>
+
+</figure>
+<p><span>But as these are managed threads, and we want to control them from our tests, lets actually go all</span>
+<span>the way there and give the controlling thread an ability to change the code running in a managed</span>
+<span>thread. That is, we</span>&rsquo;<span>ll start managed threads without a </span>&ldquo;<span>main</span>&rdquo;<span> function, and provide an API to</span>
+<span>execute arbitrary closures in the context of this by-default inert thread (</span><a href="https://joearms.github.io/published/2013-11-21-My-favorite-erlang-program.html"><span>universal</span>
+<span>server</span></a><span> anyone?):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">counter</span> = Counter::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// We pass the state, &amp;counter, in, but otherwise the thread is inert.</span></span>
+<span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">t</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(&amp;counter);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-comment">// But we can manually poke it:</span></span>
+<span class="line">t.<span class="hl-title function_ invoke__">submit</span>(|thread_state: &amp;Counter| thread_state.<span class="hl-title function_ invoke__">increment</span>());</span>
+<span class="line">t.<span class="hl-title function_ invoke__">submit</span>(|thread_state: &amp;Counter| thread_state.<span class="hl-title function_ invoke__">increment</span>());</span></code></pre>
+
+</figure>
+<p><span>Putting everything together, we get a nice-looking property test:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[cfg(test)]</span></span>
+<span class="line"><span class="hl-keyword">use</span> managed_thread::AtomicU32;</span>
+<span class="line"><span class="hl-meta">#[cfg(not(test))]</span></span>
+<span class="line"><span class="hl-keyword">use</span> std::sync::atomic::AtomicU32;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Counter</span> {</span>
+<span class="line">  value: AtomicU32,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Counter</span> {</span>
+<span class="line">  <span class="hl-comment">// ...</span></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">test_counter</span>() {</span>
+<span class="line">  arbtest::<span class="hl-title function_ invoke__">arbtest</span>(|rng| {</span>
+<span class="line">    <span class="hl-comment">// Our &quot;Concurrent System Under Test&quot;.</span></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">counter</span> = Counter::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// The sequential model we&#x27;ll compare the result against.</span></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">counter_model</span>: <span class="hl-type">u32</span> = <span class="hl-number">0</span>;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// Two managed threads which we will be stepping through</span></span>
+<span class="line">    <span class="hl-comment">// manually.</span></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">t1</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(&amp;counter);</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">t2</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(&amp;counter);</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">threads</span> = [t1, t2];</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-comment">// Bulk of the test: in a loop, flip a coin and advance</span></span>
+<span class="line">    <span class="hl-comment">// one of the threads.</span></span>
+<span class="line">    <span class="hl-keyword">while</span> !rng.<span class="hl-title function_ invoke__">is_empty</span>() {</span>
+<span class="line">      <span class="hl-keyword">for</span> <span class="hl-variable">t</span> <span class="hl-keyword">in</span> &amp;<span class="hl-keyword">mut</span> [t1, t2] {</span>
+<span class="line">        <span class="hl-keyword">if</span> rng.<span class="hl-title function_ invoke__">arbitrary</span>() {</span>
+<span class="line">          <span class="hl-keyword">if</span> t.<span class="hl-title function_ invoke__">is_paused</span>() {</span>
+<span class="line">            t.<span class="hl-title function_ invoke__">unpause</span>()</span>
+<span class="line">          } <span class="hl-keyword">else</span> {</span>
+<span class="line">            <span class="hl-comment">// Standard &quot;model equivalence&quot; property: apply</span></span>
+<span class="line">            <span class="hl-comment">// isomorphic actions to the system and its model.</span></span>
+<span class="line">            t.<span class="hl-title function_ invoke__">submit</span>(|c| c.<span class="hl-title function_ invoke__">increment</span>());</span>
+<span class="line">            counter_model += <span class="hl-number">1</span>;</span>
+<span class="line">          }</span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">for</span> <span class="hl-variable">t</span> <span class="hl-keyword">in</span> threads {</span>
+<span class="line">      t.<span class="hl-title function_ invoke__">join</span>();</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(counter_model, counter.<span class="hl-title function_ invoke__">get</span>());</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-title function_ invoke__">Ok</span>(())</span>
+<span class="line">  });</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Now, if only we could make this API work</span>&hellip;<span> Remember, our </span><code>pause</code><span> implementation is a shrug emoji!</span></p>
+<p><span>At this point, you might be mightily annoyed at me for this rhetorical device where I pretend that I</span>
+<span>don</span>&rsquo;<span>t know the answer. No need for annoyance </span>&mdash;<span> when writing this code for the first time, I traced</span>
+<span>exactly these steps </span>&mdash;<span> I realized that I need a </span>&ldquo;<span>pausing </span><code>AtomicU32</code>&rdquo;<span> so I did that (with dummy</span>
+<span>pause calls), then I played with the API I </span><em><span>wanted</span></em><span> to have, ending at roughly this spot, without</span>
+<span>yet knowing how I would make it work or, indeed, if it is possible at all.</span></p>
+<p><span>Well, if I am being honest, there is a bit of up-front knowledge here. I don</span>&rsquo;<span>t think we can avoid</span>
+<span>spawning real threads here, unless we do something really cursed with inline assembly. When</span>
+<em><span>something</span></em><span> calls that </span><code>pause()</code><span> function, and we want it to stay paused until further notice, that</span>
+<span>just has to happen in a thread which maintains a stack separate from the stack of our test. And, if</span>
+<span>we are going to spawn threads, we might as well spawn scoped threads, so that we can freely borrow</span>
+<span>stack-local data. And to spawn a scope thread, you need a</span>
+<a href="https://doc.rust-lang.org/stable/std/thread/struct.Scope.html"><code>Scope</code></a><span> parameter. So in reality</span>
+<span>we</span>&rsquo;<span>ll need one more level of indentation here:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">    std::thread::<span class="hl-title function_ invoke__">scope</span>(|scope| {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">t1</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(scope, &amp;counter);</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">t2</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(scope, &amp;counter);</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">threads</span> = [t1, t2];</span>
+<span class="line">      <span class="hl-keyword">while</span> !rng.<span class="hl-title function_ invoke__">is_empty</span>() {</span>
+<span class="line">        <span class="hl-keyword">for</span> <span class="hl-variable">t</span> <span class="hl-keyword">in</span> &amp;<span class="hl-keyword">mut</span> [t1, t2] {</span>
+<span class="line">          <span class="hl-comment">// ...</span></span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line">    });</span></code></pre>
+
+</figure>
+</section>
+<section id="Managed-Threads-Implementation">
+
+    <h2>
+    <a href="#Managed-Threads-Implementation"><span>Managed Threads Implementation</span> </a>
+    </h2>
+<p><span>Now, the fun part: how the heck are we going to make pausing and unpausing work? For starters, there</span>
+<span>clearly needs to be some communication between the main thread (</span><code>t.unpause()</code><span>) and the managed</span>
+<span>thread (</span><code>pause()</code><span>). And, because we don</span>&rsquo;<span>t want to change </span><code>Counter</code><span> API to thread some kind of</span>
+<span>test-only context, the context needs to be smuggled. So </span><code>thread_local!</code><span> it is. And this context</span>
+<span>is going to be shared between two threads, so it must be wrapped in an </span><code>Arc</code><span>.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">SharedContext</span> {</span>
+<span class="line">  <span class="hl-comment">// 🤷</span></span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">thread_local! {</span>
+<span class="line">  <span class="hl-keyword">static</span> INSTANCE: RefCell&lt;<span class="hl-type">Option</span>&lt;Arc&lt;SharedContext&gt;&gt;&gt; =</span>
+<span class="line">    RefCell::<span class="hl-title function_ invoke__">new</span>(<span class="hl-literal">None</span>);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">SharedContext</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">set</span>(ctx: Arc&lt;SharedContext&gt;) {</span>
+<span class="line">    INSTANCE.<span class="hl-title function_ invoke__">with</span>(|it| *it.<span class="hl-title function_ invoke__">borrow_mut</span>() = <span class="hl-title function_ invoke__">Some</span>(ctx));</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">get</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;Arc&lt;SharedContext&gt;&gt; {</span>
+<span class="line">    INSTANCE.<span class="hl-title function_ invoke__">with</span>(|it| it.<span class="hl-title function_ invoke__">borrow</span>().<span class="hl-title function_ invoke__">clone</span>())</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>As usual when using </span><code>thread_local!</code><span> or </span><code>lazy_static!</code><span>, it is convenient to immediately wrap it into</span>
+<span>better typed accessor functions. And, given that we are using an </span><code>Arc</code><span> here anyway, we can</span>
+<span>conveniently escape </span><code>thread_local</code>&rsquo;<span>s </span><code>with</code><span> by cloning the </span><code>Arc</code><span>.</span></p>
+<p><span>So now we finally can implement the global </span><code>pause</code><span> function (or at least can kick the proverbial can</span>
+<span>a little bit farther):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">pause</span>() {</span>
+<span class="line">  <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(ctx) = SharedContext::<span class="hl-title function_ invoke__">get</span>() {</span>
+<span class="line">    ctx.<span class="hl-title function_ invoke__">pause</span>()</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">SharedContext</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">pause</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-comment">// 😕</span></span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Ok, what to do next? We somehow need to coordinate the control thread and the managed thread. And we</span>
+<span>need some sort of notification mechanism, so that the managed thread knows when it can continue. The</span>
+<span>most brute force solution here is a pair of a mutex protecting some state and a condition variable.</span>
+<span>Mutex guards the state that can be manipulated by either of the threads. Condition variable can be</span>
+<span>used to signal about the changes.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">SharedContext</span> {</span>
+<span class="line">  state: Mutex&lt;State&gt;,</span>
+<span class="line">  cv: Condvar,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">State</span> {</span>
+<span class="line">  <span class="hl-comment">// 🤡</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Okay, it looks like I am running out of emojies here. There</span>&rsquo;<span>s no more layers of indirection or</span>
+<span>infrastructure left, we need to write some real code that actually does do that pausing thing. So</span>
+<span>let</span>&rsquo;<span>s say that the state is tracking, well, the state of our managed thread, which can be either</span>
+<span>running or paused:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(PartialEq, Eq, Default)]</span></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">State</span> {</span>
+<span class="line">  <span class="hl-meta">#[default]</span></span>
+<span class="line">  Running,</span>
+<span class="line">  Paused,</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And then the logic of the pause function </span>&mdash;<span> flip the state from </span><code>Running</code><span> to </span><code>Paused</code><span>, notify the</span>
+<span>controlling thread that we are </span><code>Paused</code><span>, and wait until the controlling thread flips our state back</span>
+<span>to </span><code>Running</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">SharedContext</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">pause</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span> = <span class="hl-keyword">self</span>.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Running);</span>
+<span class="line">    *guard = State::Paused;</span>
+<span class="line">    <span class="hl-keyword">self</span>.cv.<span class="hl-title function_ invoke__">notify_all</span>();</span>
+<span class="line">    <span class="hl-keyword">while</span> *guard == State::Paused {</span>
+<span class="line">      guard = <span class="hl-keyword">self</span>.cv.<span class="hl-title function_ invoke__">wait</span>(guard).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Running);</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Aside: Rust</span>&rsquo;<span>s API for condition variables is beautiful. Condvars are tricky, and I didn</span>&rsquo;<span>t really</span>
+<span>understood them until seeing the signatures of Rust functions. Notice how the </span><code>wait</code><span> function</span>
+<em><span>takes</span></em><span> a mutex guard as an argument, and returns a mutex guard. This protects you from the logical</span>
+<span>races and guides you towards the standard pattern of using condvars:</span></p>
+<p><span>First, you lock the mutex around the shared state. Then, you inspect whether the state is what you</span>
+<span>need. If that</span>&rsquo;<span>s the case, great, you do what you wanted to do and unlock the mutex. If not, then,</span>
+<em><span>while still holding the mutex</span></em><span>, you </span><em><span>wait</span></em><span> on the condition variable. Which means that the</span>
+<span>mutex gets unlocked, and other threads get the chance to change the shared state. When they do</span>
+<span>change it, and notify the condvar, your thread wakes up, and it gets the locked mutex back (but the</span>
+<span>state now is different). Due to the possibility of spurious wake-ups, you need to double check the</span>
+<span>state and be ready to loop back again to waiting.</span></p>
+<p><span>Naturally, there</span>&rsquo;<span>s a helper that encapsulates this whole pattern:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">SharedContext</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">pause</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span> = <span class="hl-keyword">self</span>.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Running);</span>
+<span class="line">    *guard = State::Paused;</span>
+<span class="line">    <span class="hl-keyword">self</span>.cv.<span class="hl-title function_ invoke__">notify_all</span>();</span>
+<span class="line">    guard = <span class="hl-keyword">self</span></span>
+<span class="line">      .cv</span>
+<span class="line">      .<span class="hl-title function_ invoke__">wait_while</span>(guard, |state| *state == State::Paused)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Running)</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Ok, this actually does look like a reasonable implementation of </span><code>pause</code><span>. Let</span>&rsquo;<span>s move on to</span>
+<code>managed_thread::spawn</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;<span class="hl-symbol">&#x27;scope</span>, T: <span class="hl-symbol">&#x27;scope</span> + <span class="hl-built_in">Send</span>&gt;(</span>
+<span class="line">  scope: &amp;Scope&lt;<span class="hl-symbol">&#x27;scope</span>, <span class="hl-symbol">&#x27;_</span>&gt;,</span>
+<span class="line">  state: T,</span>
+<span class="line">) {</span>
+<span class="line">  <span class="hl-comment">// ? ? ?? ??? ?????</span></span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>There</span>&rsquo;<span>s a bunch of stuff that needs to happen here:</span></p>
+<ul>
+<li>
+<span>As we have established, we are going to spawn a (scoped) thread, so we need the </span><code>scope</code><span> parameter</span>
+<span>with its three lifetimes. I don</span>&rsquo;<span>t know how it works, so I am just going by the docs here!</span>
+</li>
+<li>
+<span>We are going to return some kind of handle, which we can use to pause and unpause our managed</span>
+<span>thread. And that handle is going to be parametrized over the same </span><code>'scope</code><span> lifetime, because it</span>&rsquo;<span>ll</span>
+<span>hold onto the actual join handle.</span>
+</li>
+<li>
+<span>We are going to pass the generic state to our new thread, and that state needs to be </span><code>Send</code><span>, and</span>
+<span>bounded by the same lifetime as our scoped thread.</span>
+</li>
+<li>
+<span>Inside, we are going to spawn a thread for sure, and we</span>&rsquo;<span>ll need to setup the </span><code>INSTANCE</code><span> thread</span>
+<span>local on that thread.</span>
+</li>
+<li>
+<span>And it would actually be a good idea to stuff a reference to that </span><code>SharedContext</code><span> into the handle</span>
+<span>we return.</span>
+</li>
+</ul>
+<p><span>A bunch of stuff, in other words. Let</span>&rsquo;<span>s do it:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">ManagedHandle</span>&lt;<span class="hl-symbol">&#x27;scope</span>&gt; {</span>
+<span class="line">  inner: std::thread::ScopedJoinHandle&lt;<span class="hl-symbol">&#x27;scope</span>, ()&gt;,</span>
+<span class="line">  ctx: Arc&lt;SharedContext&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;<span class="hl-symbol">&#x27;scope</span>, T: <span class="hl-symbol">&#x27;scope</span> + <span class="hl-built_in">Send</span>&gt;(</span>
+<span class="line">  scope: &amp;<span class="hl-symbol">&#x27;scope</span> Scope&lt;<span class="hl-symbol">&#x27;scope</span>, <span class="hl-symbol">&#x27;_</span>&gt;,</span>
+<span class="line">  state: T,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> ManagedHandle&lt;<span class="hl-symbol">&#x27;scope</span>&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">ctx</span>: Arc&lt;SharedContext&gt; = <span class="hl-built_in">Default</span>::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">inner</span> = scope.<span class="hl-title function_ invoke__">spawn</span>({</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">ctx</span> = Arc::<span class="hl-title function_ invoke__">clone</span>(&amp;ctx);</span>
+<span class="line">    <span class="hl-keyword">move</span> || {</span>
+<span class="line">      SharedContext::<span class="hl-title function_ invoke__">set</span>(ctx);</span>
+<span class="line">      <span class="hl-title function_ invoke__">drop</span>(state); <span class="hl-comment">// <span class="hl-doctag">TODO:</span> ¿</span></span>
+<span class="line">    }</span>
+<span class="line">  });</span>
+<span class="line">  ManagedHandle { inner, ctx }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The essentially no-op function we spawn looks sus. We</span>&rsquo;<span>ll fix later! Let</span>&rsquo;<span>s try to implement</span>
+<code>is_paused</code><span> and </span><code>unpause</code><span> first! They should be relatively straightforward. For </span><code>is_paused</code><span>, we just</span>
+<span>need to lock the mutex and check the state:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">ManagedHandle</span>&lt;<span class="hl-symbol">&#x27;_</span>&gt; {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">is_paused</span>(&amp;<span class="hl-keyword">self</span>,) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">bool</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">guard</span> = <span class="hl-keyword">self</span>.ctx.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    *guard == State::Paused</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>For </span><code>unpause</code><span>, we should additionally flip the state back to </span><code>Running</code><span> and notify the other thread:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">ManagedHandle</span>&lt;<span class="hl-symbol">&#x27;_</span>&gt; {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">unpause</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span> = <span class="hl-keyword">self</span>.ctx.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Paused);</span>
+<span class="line">    *guard = State::Running;</span>
+<span class="line">    <span class="hl-keyword">self</span>.ctx.cv.<span class="hl-title function_ invoke__">notify_all</span>();</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>But I think that</span>&rsquo;<span>s not quite correct. Can you see why?</span></p>
+<p><span>With this implementation, after </span><code>unpause</code><span>, the controlling and the managed threads will be running</span>
+<span>concurrently. And that can lead to non-determinism, the very problem we are trying to avoid here! In</span>
+<span>particular, if you call </span><code>is_paused</code><span> </span><em><span>right</span></em><span> after you </span><code>unpause</code><span> the thread, you</span>&rsquo;<span>ll most likely get</span>
+<code>false</code><span> back, as the other thread will still be running. But it might also hit the </span><em><span>next</span></em><span> </span><code>pause</code>
+<span>call, so, depending on timing, you might also get </span><code>true</code><span>.</span></p>
+<p><span>What we want is actually completely eliminating all unmanaged concurrency. That means that at any</span>
+<span>given point in time, only one thread (controlling or managed) should be running. So the right</span>
+<span>semantics for </span><code>unpause</code><span> is to unblock the managed thread, and then block the controlling thread</span>
+<span>until the managed one hits the next pause!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">ManagedHandle</span>&lt;<span class="hl-symbol">&#x27;_</span>&gt; {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">unpause</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span> = <span class="hl-keyword">self</span>.ctx.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Paused);</span>
+<span class="line">    *guard = State::Running;</span>
+<span class="line">    <span class="hl-keyword">self</span>.ctx.cv.<span class="hl-title function_ invoke__">notify_all</span>();</span>
+<span class="line">    guard = <span class="hl-keyword">self</span></span>
+<span class="line">      .ctx</span>
+<span class="line">      .cv</span>
+<span class="line">      .<span class="hl-title function_ invoke__">wait_while</span>(guard, |state| *state == State::Running)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>At this point we can spawn a managed thread, pause it and resume. But right now it doesn</span>&rsquo;<span>t do</span>
+<span>anything. Next step is implementing that idea where the controlling thread can directly send an</span>
+<span>arbitrary closure to the managed one to make it do something:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span>&lt;<span class="hl-symbol">&#x27;scope</span>&gt; ManagedHandle&lt;<span class="hl-symbol">&#x27;scope</span>&gt; {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">submit</span>&lt;F: FnSomething&gt;(&amp;<span class="hl-keyword">self</span>, f: F)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Let</span>&rsquo;<span>s figure this </span><code>FnSomething</code><span> bound! We are going to yeet this </span><code>f</code><span> over to the managed thread and</span>
+<span>run it there once, so it is </span><code>FnOnce</code><span>. It is crossing thread-boundary, so it needs to be </span><code>+ Send</code><span>.</span>
+<span>And, because we are using scoped threads, it </span><em><span>doesn</span>&rsquo;<span>t</span></em><span> have to be </span><code>'static</code><span>, just </span><code>'scope</code><span> is</span>
+<span>enough. Moreover, in that managed thread the </span><code>f</code><span> will have exclusive access to thread</span>&rsquo;<span>s state, </span><code>T</code><span>.</span>
+<span>So we have:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span>&lt;<span class="hl-symbol">&#x27;scope</span>&gt; ManagedHandle&lt;<span class="hl-symbol">&#x27;scope</span>&gt; {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">submit</span>&lt;F: <span class="hl-title function_ invoke__">FnOnce</span>(&amp;<span class="hl-keyword">mut</span> T) + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;scope</span>&gt;(<span class="hl-keyword">self</span>, f: F)</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Implementing this is a bit tricky. First, we</span>&rsquo;<span>ll need some sort of the channel to actually move the</span>
+<span>function. Then, similarly to the </span><code>unpause</code><span> logic, we</span>&rsquo;<span>ll need synchronization to make sure that the</span>
+<span>control thread doesn</span>&rsquo;<span>t resume until the managed thread starts running </span><code>f</code><span> and hits a pause (or maybe</span>
+<span>completes </span><code>f</code><span>). And we</span>&rsquo;<span>ll also need a new state, </span><code>Ready</code><span>, because now there are two different</span>
+<span>reasons why a managed thread might be blocked </span>&mdash;<span> it might wait for an </span><code>unpause</code><span> event, or it might</span>
+<span>wait for the next </span><code>f</code><span> to execute. This is the new code:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">State</span> {</span>
+<span class="line hl-line">  <span class="hl-meta">#[default]</span></span>
+<span class="line hl-line">  Ready,</span>
+<span class="line">  Running,</span>
+<span class="line">  Paused,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line hl-line"><span class="hl-keyword">struct</span> <span class="hl-title class_">ManagedHandle</span>&lt;<span class="hl-symbol">&#x27;scope</span>, T&gt; {</span>
+<span class="line">  inner: std::thread::ScopedJoinHandle&lt;<span class="hl-symbol">&#x27;scope</span>, ()&gt;,</span>
+<span class="line">  ctx: Arc&lt;SharedContext&gt;,</span>
+<span class="line hl-line">  sender: mpsc::Sender&lt;<span class="hl-type">Box</span>&lt;<span class="hl-keyword">dyn</span> <span class="hl-title function_ invoke__">FnOnce</span>(&amp;<span class="hl-keyword">mut</span> T) + <span class="hl-symbol">&#x27;scope</span> + <span class="hl-built_in">Send</span>&gt;&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;<span class="hl-symbol">&#x27;scope</span>, T: <span class="hl-symbol">&#x27;scope</span> + <span class="hl-built_in">Send</span>&gt;(</span>
+<span class="line">  scope: &amp;<span class="hl-symbol">&#x27;scope</span> Scope&lt;<span class="hl-symbol">&#x27;scope</span>, <span class="hl-symbol">&#x27;_</span>&gt;,</span>
+<span class="line">  <span class="hl-keyword">mut</span> state: T,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> ManagedHandle&lt;<span class="hl-symbol">&#x27;scope</span>, T&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">ctx</span>: Arc&lt;SharedContext&gt; = <span class="hl-built_in">Default</span>::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line hl-line">  <span class="hl-keyword">let</span> (sender, receiver) =</span>
+<span class="line hl-line">    mpsc::channel::&lt;<span class="hl-type">Box</span>&lt;<span class="hl-keyword">dyn</span> <span class="hl-title function_ invoke__">FnOnce</span>(&amp;<span class="hl-keyword">mut</span> T) + <span class="hl-symbol">&#x27;scope</span> + <span class="hl-built_in">Send</span>&gt;&gt;();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">inner</span> = scope.<span class="hl-title function_ invoke__">spawn</span>({</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">ctx</span> = Arc::<span class="hl-title function_ invoke__">clone</span>(&amp;ctx);</span>
+<span class="line">    <span class="hl-keyword">move</span> || {</span>
+<span class="line">      SharedContext::<span class="hl-title function_ invoke__">set</span>(Arc::<span class="hl-title function_ invoke__">clone</span>(&amp;ctx));</span>
+<span class="line"></span>
+<span class="line hl-line">      <span class="hl-keyword">for</span> <span class="hl-variable">f</span> <span class="hl-keyword">in</span> receiver {</span>
+<span class="line hl-line">        <span class="hl-title function_ invoke__">f</span>(&amp;<span class="hl-keyword">mut</span> state);</span>
+<span class="line hl-line"></span>
+<span class="line hl-line">        <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span> = ctx.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line hl-line">        <span class="hl-built_in">assert_eq!</span>(*guard, State::Running);</span>
+<span class="line hl-line">        *guard = State::Ready;</span>
+<span class="line hl-line">        ctx.cv.<span class="hl-title function_ invoke__">notify_all</span>()</span>
+<span class="line hl-line">      }</span>
+<span class="line">    }</span>
+<span class="line">  });</span>
+<span class="line">  ManagedHandle { inner, ctx, sender }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span>&lt;<span class="hl-symbol">&#x27;scope</span>, T&gt; ManagedHandle&lt;<span class="hl-symbol">&#x27;scope</span>, T&gt; {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">submit</span>&lt;F: <span class="hl-title function_ invoke__">FnOnce</span>(&amp;<span class="hl-keyword">mut</span> T) + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;scope</span>&gt;(&amp;<span class="hl-keyword">self</span>, f: F) {</span>
+<span class="line hl-line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span> = <span class="hl-keyword">self</span>.ctx.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line hl-line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Ready);</span>
+<span class="line hl-line">    *guard = State::Running;</span>
+<span class="line hl-line">    <span class="hl-keyword">self</span>.sender.<span class="hl-title function_ invoke__">send</span>(<span class="hl-type">Box</span>::<span class="hl-title function_ invoke__">new</span>(f)).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line hl-line">    guard = <span class="hl-keyword">self</span></span>
+<span class="line hl-line">      .ctx</span>
+<span class="line hl-line">      .cv</span>
+<span class="line hl-line">      .<span class="hl-title function_ invoke__">wait_while</span>(guard, |state| *state == State::Running)</span>
+<span class="line hl-line">      .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The last small piece of the puzzle is the </span><code>join</code><span> function. It</span>&rsquo;<span>s </span><em><span>almost</span></em><span> standard! First we close</span>
+<span>our side of the channel. This serves as a natural stop signal for the other thread, so it exits.</span>
+<span>Which in turn allows us to join it. The small wrinkle here is that the thread might be paused when</span>
+<span>we try to join it, so we need to unpause it beforehand:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span>&lt;<span class="hl-symbol">&#x27;scope</span>, T&gt; ManagedHandle&lt;<span class="hl-symbol">&#x27;scope</span>, T&gt; {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">join</span>(<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">while</span> <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">is_paused</span>() {</span>
+<span class="line">      <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">unpause</span>();</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-title function_ invoke__">drop</span>(<span class="hl-keyword">self</span>.sender);</span>
+<span class="line">    <span class="hl-keyword">self</span>.inner.<span class="hl-title function_ invoke__">join</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>That</span>&rsquo;<span>s it! Let</span>&rsquo;<span>s put everything together!</span></p>
+<p><span>Helper library, </span><code>managed_thread.rs</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::{</span>
+<span class="line">  cell::RefCell,</span>
+<span class="line">  sync::{atomic::Ordering, mpsc, Arc, Condvar, Mutex},</span>
+<span class="line">  thread::Scope,</span>
+<span class="line">};</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">AtomicU32</span> {</span>
+<span class="line">  inner: std::sync::atomic::AtomicU32,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">AtomicU32</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">load</span>(&amp;<span class="hl-keyword">self</span>, ordering: Ordering) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">result</span> = <span class="hl-keyword">self</span>.inner.<span class="hl-title function_ invoke__">load</span>(ordering);</span>
+<span class="line">    <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">    result</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">store</span>(&amp;<span class="hl-keyword">self</span>, value: <span class="hl-type">u32</span>, ordering: Ordering) {</span>
+<span class="line">    <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">    <span class="hl-keyword">self</span>.inner.<span class="hl-title function_ invoke__">store</span>(value, ordering);</span>
+<span class="line">    <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">pause</span>() {</span>
+<span class="line">  <span class="hl-keyword">if</span> <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(ctx) = SharedContext::<span class="hl-title function_ invoke__">get</span>() {</span>
+<span class="line">    ctx.<span class="hl-title function_ invoke__">pause</span>()</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">struct</span> <span class="hl-title class_">SharedContext</span> {</span>
+<span class="line">  state: Mutex&lt;State&gt;,</span>
+<span class="line">  cv: Condvar,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(Default, PartialEq, Eq, Debug)]</span></span>
+<span class="line"><span class="hl-keyword">enum</span> <span class="hl-title class_">State</span> {</span>
+<span class="line">  <span class="hl-meta">#[default]</span></span>
+<span class="line">  Ready,</span>
+<span class="line">  Running,</span>
+<span class="line">  Paused,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">thread_local! {</span>
+<span class="line">  <span class="hl-keyword">static</span> INSTANCE: RefCell&lt;<span class="hl-type">Option</span>&lt;Arc&lt;SharedContext&gt;&gt;&gt; =</span>
+<span class="line">    RefCell::<span class="hl-title function_ invoke__">new</span>(<span class="hl-literal">None</span>);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">SharedContext</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">set</span>(ctx: Arc&lt;SharedContext&gt;) {</span>
+<span class="line">    INSTANCE.<span class="hl-title function_ invoke__">with</span>(|it| *it.<span class="hl-title function_ invoke__">borrow_mut</span>() = <span class="hl-title function_ invoke__">Some</span>(ctx));</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">get</span>() <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Option</span>&lt;Arc&lt;SharedContext&gt;&gt; {</span>
+<span class="line">    INSTANCE.<span class="hl-title function_ invoke__">with</span>(|it| it.<span class="hl-title function_ invoke__">borrow</span>().<span class="hl-title function_ invoke__">clone</span>())</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">pause</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span> = <span class="hl-keyword">self</span>.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Running);</span>
+<span class="line">    *guard = State::Paused;</span>
+<span class="line">    <span class="hl-keyword">self</span>.cv.<span class="hl-title function_ invoke__">notify_all</span>();</span>
+<span class="line">    guard = <span class="hl-keyword">self</span></span>
+<span class="line">      .cv</span>
+<span class="line">      .<span class="hl-title function_ invoke__">wait_while</span>(guard, |state| *state == State::Paused)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Running)</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">ManagedHandle</span>&lt;<span class="hl-symbol">&#x27;scope</span>, T&gt; {</span>
+<span class="line">  inner: std::thread::ScopedJoinHandle&lt;<span class="hl-symbol">&#x27;scope</span>, ()&gt;,</span>
+<span class="line">  sender: mpsc::Sender&lt;<span class="hl-type">Box</span>&lt;<span class="hl-keyword">dyn</span> <span class="hl-title function_ invoke__">FnOnce</span>(&amp;<span class="hl-keyword">mut</span> T) + <span class="hl-symbol">&#x27;scope</span> + <span class="hl-built_in">Send</span>&gt;&gt;,</span>
+<span class="line">  ctx: Arc&lt;SharedContext&gt;,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;<span class="hl-symbol">&#x27;scope</span>, T: <span class="hl-symbol">&#x27;scope</span> + <span class="hl-built_in">Send</span>&gt;(</span>
+<span class="line">  scope: &amp;<span class="hl-symbol">&#x27;scope</span> Scope&lt;<span class="hl-symbol">&#x27;scope</span>, <span class="hl-symbol">&#x27;_</span>&gt;,</span>
+<span class="line">  <span class="hl-keyword">mut</span> state: T,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> ManagedHandle&lt;<span class="hl-symbol">&#x27;scope</span>, T&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">ctx</span>: Arc&lt;SharedContext&gt; = <span class="hl-built_in">Default</span>::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> (sender, receiver) =</span>
+<span class="line">    mpsc::channel::&lt;<span class="hl-type">Box</span>&lt;<span class="hl-keyword">dyn</span> <span class="hl-title function_ invoke__">FnOnce</span>(&amp;<span class="hl-keyword">mut</span> T) + <span class="hl-symbol">&#x27;scope</span> + <span class="hl-built_in">Send</span>&gt;&gt;();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">inner</span> = scope.<span class="hl-title function_ invoke__">spawn</span>({</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">ctx</span> = Arc::<span class="hl-title function_ invoke__">clone</span>(&amp;ctx);</span>
+<span class="line">    <span class="hl-keyword">move</span> || {</span>
+<span class="line">      SharedContext::<span class="hl-title function_ invoke__">set</span>(Arc::<span class="hl-title function_ invoke__">clone</span>(&amp;ctx));</span>
+<span class="line">      <span class="hl-keyword">for</span> <span class="hl-variable">f</span> <span class="hl-keyword">in</span> receiver {</span>
+<span class="line">        <span class="hl-title function_ invoke__">f</span>(&amp;<span class="hl-keyword">mut</span> state);</span>
+<span class="line">        <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span> = ctx.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">        <span class="hl-built_in">assert_eq!</span>(*guard, State::Running);</span>
+<span class="line">        *guard = State::Ready;</span>
+<span class="line">        ctx.cv.<span class="hl-title function_ invoke__">notify_all</span>()</span>
+<span class="line">      }</span>
+<span class="line">    }</span>
+<span class="line">  });</span>
+<span class="line">  ManagedHandle { inner, ctx, sender }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span>&lt;<span class="hl-symbol">&#x27;scope</span>, T&gt; ManagedHandle&lt;<span class="hl-symbol">&#x27;scope</span>, T&gt; {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">is_paused</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">bool</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">guard</span> = <span class="hl-keyword">self</span>.ctx.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    *guard == State::Paused</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">unpause</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span> = <span class="hl-keyword">self</span>.ctx.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Paused);</span>
+<span class="line">    *guard = State::Running;</span>
+<span class="line">    <span class="hl-keyword">self</span>.ctx.cv.<span class="hl-title function_ invoke__">notify_all</span>();</span>
+<span class="line">    guard = <span class="hl-keyword">self</span></span>
+<span class="line">      .ctx</span>
+<span class="line">      .cv</span>
+<span class="line">      .<span class="hl-title function_ invoke__">wait_while</span>(guard, |state| *state == State::Running)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">submit</span>&lt;F: <span class="hl-title function_ invoke__">FnOnce</span>(&amp;<span class="hl-keyword">mut</span> T) + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;scope</span>&gt;(&amp;<span class="hl-keyword">self</span>, f: F) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">guard</span> = <span class="hl-keyword">self</span>.ctx.state.<span class="hl-title function_ invoke__">lock</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    <span class="hl-built_in">assert_eq!</span>(*guard, State::Ready);</span>
+<span class="line">    *guard = State::Running;</span>
+<span class="line">    <span class="hl-keyword">self</span>.sender.<span class="hl-title function_ invoke__">send</span>(<span class="hl-type">Box</span>::<span class="hl-title function_ invoke__">new</span>(f)).<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">    guard = <span class="hl-keyword">self</span></span>
+<span class="line">      .ctx</span>
+<span class="line">      .cv</span>
+<span class="line">      .<span class="hl-title function_ invoke__">wait_while</span>(guard, |state| *state == State::Running)</span>
+<span class="line">      .<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">join</span>(<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">while</span> <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">is_paused</span>() {</span>
+<span class="line">      <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">unpause</span>();</span>
+<span class="line">    }</span>
+<span class="line">    <span class="hl-title function_ invoke__">drop</span>(<span class="hl-keyword">self</span>.sender);</span>
+<span class="line">    <span class="hl-keyword">self</span>.inner.<span class="hl-title function_ invoke__">join</span>().<span class="hl-title function_ invoke__">unwrap</span>();</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>System under test, not-exactly-atomic counter:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">use</span> std::sync::atomic::Ordering::SeqCst;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[cfg(test)]</span></span>
+<span class="line"><span class="hl-keyword">use</span> managed_thread::AtomicU32;</span>
+<span class="line"><span class="hl-meta">#[cfg(not(test))]</span></span>
+<span class="line"><span class="hl-keyword">use</span> std::sync::atomic::AtomicU32;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-meta">#[derive(Default)]</span></span>
+<span class="line"><span class="hl-keyword">pub</span> <span class="hl-keyword">struct</span> <span class="hl-title class_">Counter</span> {</span>
+<span class="line">  value: AtomicU32,</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Counter</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">increment</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">value</span> = <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">load</span>(SeqCst);</span>
+<span class="line">    <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">store</span>(value + <span class="hl-number">1</span>, SeqCst);</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">get</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">load</span>(SeqCst)</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And the test itself:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">test_counter</span>() {</span>
+<span class="line">  arbtest::<span class="hl-title function_ invoke__">arbtest</span>(|rng| {</span>
+<span class="line">    eprintln!(<span class="hl-string">&quot;begin trace&quot;</span>);</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">counter</span> = Counter::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">counter_model</span>: <span class="hl-type">u32</span> = <span class="hl-number">0</span>;</span>
+<span class="line"></span>
+<span class="line">    std::thread::<span class="hl-title function_ invoke__">scope</span>(|scope| {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">t1</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(scope, &amp;counter);</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">t2</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(scope, &amp;counter);</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">threads</span> = [t1, t2];</span>
+<span class="line"></span>
+<span class="line">      <span class="hl-keyword">while</span> !rng.<span class="hl-title function_ invoke__">is_empty</span>() {</span>
+<span class="line">        <span class="hl-title function_ invoke__">for</span> (tid, t) <span class="hl-keyword">in</span> threads.<span class="hl-title function_ invoke__">iter_mut</span>().<span class="hl-title function_ invoke__">enumerate</span>() {</span>
+<span class="line">          <span class="hl-keyword">if</span> rng.<span class="hl-title function_ invoke__">arbitrary</span>()? {</span>
+<span class="line">            <span class="hl-keyword">if</span> t.<span class="hl-title function_ invoke__">is_paused</span>() {</span>
+<span class="line">              eprintln!(<span class="hl-string">&quot;{tid}: unpause&quot;</span>);</span>
+<span class="line">              t.<span class="hl-title function_ invoke__">unpause</span>()</span>
+<span class="line">            } <span class="hl-keyword">else</span> {</span>
+<span class="line">              eprintln!(<span class="hl-string">&quot;{tid}: increment&quot;</span>);</span>
+<span class="line">              t.<span class="hl-title function_ invoke__">submit</span>(|c| c.<span class="hl-title function_ invoke__">increment</span>());</span>
+<span class="line">              counter_model += <span class="hl-number">1</span>;</span>
+<span class="line">            }</span>
+<span class="line">          }</span>
+<span class="line">        }</span>
+<span class="line">      }</span>
+<span class="line"></span>
+<span class="line">      <span class="hl-keyword">for</span> <span class="hl-variable">t</span> <span class="hl-keyword">in</span> threads {</span>
+<span class="line">        t.<span class="hl-title function_ invoke__">join</span>();</span>
+<span class="line">      }</span>
+<span class="line">      <span class="hl-built_in">assert_eq!</span>(counter_model, counter.<span class="hl-title function_ invoke__">get</span>());</span>
+<span class="line"></span>
+<span class="line">      <span class="hl-title function_ invoke__">Ok</span>(())</span>
+<span class="line">    })</span>
+<span class="line">  });</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Running it identifies a failure:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">---- test_counter stdout ----</span>
+<span class="line">begin trace</span>
+<span class="line">0: increment</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">0: increment</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">thread 'test_counter' panicked at src/lib.rs:56:7:</span>
+<span class="line">assertion `left == right` failed</span>
+<span class="line">  left: 4</span>
+<span class="line"> right: 3</span>
+<span class="line"></span>
+<span class="line">arbtest failed!</span>
+<span class="line">    Seed: 0x4fd7ddff00000020</span></code></pre>
+
+</figure>
+<p><span>Which </span>&hellip;<span> is something we got like 5% into this article already, with normal threads! But there</span>&rsquo;<span>s</span>
+<span>more to this failure. First, it is reproducible. If I specify the same seed, I get the </span><em><span>exact</span></em><span> same</span>
+<span>interleaving:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">test_counter</span>() {</span>
+<span class="line">  arbtest::<span class="hl-title function_ invoke__">arbtest</span>(|rng| {</span>
+<span class="line">    eprintln!(<span class="hl-string">&quot;begin trace&quot;</span>);</span>
+<span class="line">    ...</span>
+<span class="line">  })</span>
+<span class="line hl-line">    .<span class="hl-title function_ invoke__">seed</span>(<span class="hl-number">0x71aafcd900000020</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>And this is completely machine independent! If </span><em><span>you</span></em><span> specify this seed, you</span>&rsquo;<span>ll get exact same</span>
+<span>interleaving. So, if I am having trouble debugging this, I can DM you this hex in Zulip, and</span>
+<span>you</span>&rsquo;<span>ll be able to help out!</span></p>
+<p><span>But there</span>&rsquo;<span>s more </span>&mdash;<span> we don</span>&rsquo;<span>t need to debug this failure, we can minimize it!</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">test_counter</span>() {</span>
+<span class="line">  arbtest::<span class="hl-title function_ invoke__">arbtest</span>(|rng| {</span>
+<span class="line">    eprintln!(<span class="hl-string">&quot;begin trace&quot;</span>);</span>
+<span class="line">    ...</span>
+<span class="line">  })</span>
+<span class="line">    .<span class="hl-title function_ invoke__">seed</span>(<span class="hl-number">0x71aafcd900000020</span>)</span>
+<span class="line hl-line">    .<span class="hl-title function_ invoke__">minimize</span>();</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>This gives me the following minimization trace:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">begin trace</span>
+<span class="line">0: increment</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">0: increment</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">seed 0x4fd7ddff00000020, seed size 32, search time 106.00ns</span>
+<span class="line"></span>
+<span class="line">begin trace</span>
+<span class="line">0: increment</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">1: increment</span>
+<span class="line">seed 0x540c0c1c00000010, seed size 16, search time 282.16µs</span>
+<span class="line"></span>
+<span class="line">begin trace</span>
+<span class="line">0: increment</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">seed 0x084ca71200000008, seed size 8, search time 805.74µs</span>
+<span class="line"></span>
+<span class="line">begin trace</span>
+<span class="line">0: increment</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">seed 0x5699b19400000004, seed size 4, search time 1.44ms</span>
+<span class="line"></span>
+<span class="line">begin trace</span>
+<span class="line">0: increment</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">seed 0x4bb0ea5c00000002, seed size 2, search time 4.03ms</span>
+<span class="line"></span>
+<span class="line">begin trace</span>
+<span class="line">0: increment</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">seed 0x9c2a13a600000001, seed size 1, search time 4.31ms</span>
+<span class="line"></span>
+<span class="line">minimized</span>
+<span class="line">seed 0x9c2a13a600000001, seed size 1, search time 100.03ms</span></code></pre>
+
+</figure>
+<p><span>That is, we ended up with this tiny, minimal example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">test_counter</span>() {</span>
+<span class="line">  arbtest::<span class="hl-title function_ invoke__">arbtest</span>(|rng| {</span>
+<span class="line">    eprintln!(<span class="hl-string">&quot;begin trace&quot;</span>);</span>
+<span class="line">    ...</span>
+<span class="line">  })</span>
+<span class="line hl-line">    .<span class="hl-title function_ invoke__">seed</span>(<span class="hl-number">0x9c2a13a600000001</span>);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">begin trace</span>
+<span class="line">0: increment</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span></code></pre>
+
+</figure>
+<p><span>And </span><em><span>this</span></em><span> is how you properly test concurrent data structures.</span></p>
+</section>
+<section id="Postscript">
+
+    <h2>
+    <a href="#Postscript"><span>Postscript</span> </a>
+    </h2>
+<p><span>Of course, this is just a toy. But you can see some ways to extend it. For example, right now our</span>
+<code>AtomicU32</code><span> just delegates to the real one. But what you </span><em><span>could</span></em><span> do instead is, for each atomic, to</span>
+<span>maintain a set of values written and, on read, return an </span><em><span>arbitrary</span></em><span> written value consistent with a</span>
+<span>weak memory model.</span></p>
+<p><span>You could also be smarter with exploring interleavings. Instead of interleaving threads at random,</span>
+<span>like we do here, you can try to apply model checking approaches and prove that you have considered</span>
+<span>all meaningfully different interleavings.</span></p>
+<p><span>Or you can apply the approach from </span><a href="https://matklad.github.io/2021/11/07/generate-all-the-things.html"><em><span>Generate All The</span>
+<span>Things</span></em></a><span> and exhaustively</span>
+<span>enumerate </span><em><span>all</span></em><span> interleavings for up to, say, five increments. In fact, why don</span>&rsquo;<span>t we just do this?</span></p>
+<p><code class="display">$ cargo add exhaustigen</code></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-meta">#[test]</span></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">exhaustytest</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">g</span> = exhaustigen::Gen::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">interleavings_count</span> = <span class="hl-number">0</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">while</span> !g.<span class="hl-title function_ invoke__">done</span>() {</span>
+<span class="line">    interleavings_count += <span class="hl-number">1</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">counter</span> = Counter::<span class="hl-title function_ invoke__">default</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-keyword">mut </span><span class="hl-variable">counter_model</span>: <span class="hl-type">u32</span> = <span class="hl-number">0</span>;</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">increment_count</span> = g.<span class="hl-title function_ invoke__">gen</span>(<span class="hl-number">5</span>) <span class="hl-keyword">as</span> <span class="hl-type">u32</span>;</span>
+<span class="line">    std::thread::<span class="hl-title function_ invoke__">scope</span>(|scope| {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">t1</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(scope, &amp;counter);</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">t2</span> = managed_thread::<span class="hl-title function_ invoke__">spawn</span>(scope, &amp;counter);</span>
+<span class="line"></span>
+<span class="line">      <span class="hl-symbol">&#x27;outer</span>: <span class="hl-keyword">while</span> t1.<span class="hl-title function_ invoke__">is_paused</span>()</span>
+<span class="line">        || t2.<span class="hl-title function_ invoke__">is_paused</span>()</span>
+<span class="line">        || counter_model &lt; increment_count</span>
+<span class="line">      {</span>
+<span class="line">        <span class="hl-keyword">for</span> <span class="hl-variable">t</span> <span class="hl-keyword">in</span> [&amp;t1, &amp;t2] {</span>
+<span class="line">          <span class="hl-keyword">if</span> g.<span class="hl-title function_ invoke__">flip</span>() {</span>
+<span class="line">            <span class="hl-keyword">if</span> t.<span class="hl-title function_ invoke__">is_paused</span>() {</span>
+<span class="line">              t.<span class="hl-title function_ invoke__">unpause</span>();</span>
+<span class="line">              <span class="hl-keyword">continue</span> <span class="hl-symbol">&#x27;outer</span>;</span>
+<span class="line">            }</span>
+<span class="line">            <span class="hl-keyword">if</span> counter_model &lt; increment_count {</span>
+<span class="line">              t.<span class="hl-title function_ invoke__">submit</span>(|c| c.<span class="hl-title function_ invoke__">increment</span>());</span>
+<span class="line">              counter_model += <span class="hl-number">1</span>;</span>
+<span class="line">              <span class="hl-keyword">continue</span> <span class="hl-symbol">&#x27;outer</span>;</span>
+<span class="line">            }</span>
+<span class="line">          }</span>
+<span class="line">        }</span>
+<span class="line">        <span class="hl-keyword">return</span> <span class="hl-keyword">for</span> <span class="hl-variable">t</span> <span class="hl-keyword">in</span> [t1, t2] {</span>
+<span class="line">          t.<span class="hl-title function_ invoke__">join</span>()</span>
+<span class="line">        };</span>
+<span class="line">      }</span>
+<span class="line"></span>
+<span class="line">      <span class="hl-built_in">assert_eq!</span>(counter_model, counter.<span class="hl-title function_ invoke__">get</span>());</span>
+<span class="line">    });</span>
+<span class="line">  }</span>
+<span class="line">  eprintln!(<span class="hl-string">&quot;interleavings_count = {:?}&quot;</span>, interleavings_count);</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>The shape of the test is more or less the same, except that we need to make sure that there are no</span>
+&ldquo;<span>dummy</span>&rdquo;<span> iterations, and that we always either unpause a thread or submit an increment.</span></p>
+<p><span>It finds the same bug, naturally:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">thread 'exhaustytest' panicked at src/lib.rs:103:7:</span>
+<span class="line">assertion `left == right` failed</span>
+<span class="line">  left: 2</span>
+<span class="line"> right: 1</span></code></pre>
+
+</figure>
+<p><span>But the cool thing is, if we fix the issue by using atomic increment, </span>&hellip;</p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">AtomicU32</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">fetch_add</span>(</span>
+<span class="line">    &amp;<span class="hl-keyword">self</span>,</span>
+<span class="line">    value: <span class="hl-type">u32</span>,</span>
+<span class="line">    ordering: Ordering,</span>
+<span class="line">  ) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">u32</span> {</span>
+<span class="line">    <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">result</span> = <span class="hl-keyword">self</span>.inner.<span class="hl-title function_ invoke__">fetch_add</span>(value, ordering);</span>
+<span class="line">    <span class="hl-title function_ invoke__">pause</span>();</span>
+<span class="line">    result</span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">Counter</span> {</span>
+<span class="line">  <span class="hl-keyword">pub</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">increment</span>(&amp;<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">self</span>.value.<span class="hl-title function_ invoke__">fetch_add</span>(<span class="hl-number">1</span>, SeqCst);</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p>&hellip;<span> we can get a rather specific correctness statements out of our test, that </span><em><span>any</span></em><span> sequence of at</span>
+<span>most five increments is correct:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> t cargo t -r -- exhaustytest --nocapture</span>
+<span class="line"><span class="hl-output">running 1 test</span></span>
+<span class="line"><span class="hl-output">all 81133 interleavings are fine!</span></span>
+<span class="line"><span class="hl-output">test exhaustytest ... ok</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-output">real 8.65s</span></span>
+<span class="line"><span class="hl-output">cpu  8.16s (2.22s user + 5.94s sys)</span></span>
+<span class="line"><span class="hl-output">rss  63.91mb</span></span></code></pre>
+
+</figure>
+<p><span>And the last small thing. Recall that our PBT minimized the first sequence it found </span>&hellip;<span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">begin trace</span>
+<span class="line">0: increment</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">0: increment</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">0: unpause</span>
+<span class="line">thread 'test_counter' panicked at src/lib.rs:56:7:</span>
+<span class="line">assertion `left == right` failed</span>
+<span class="line">  left: 4</span>
+<span class="line"> right: 3</span>
+<span class="line"></span>
+<span class="line">arbtest failed!</span>
+<span class="line">    Seed: 0x4fd7ddff00000020</span></code></pre>
+
+</figure>
+<p>&hellip;<span> down to just</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">begin trace</span>
+<span class="line">0: increment</span>
+<span class="line">1: increment</span>
+<span class="line">0: unpause</span>
+<span class="line">1: unpause</span>
+<span class="line">thread 'test_counter' panicked at src/lib.rs:57:7:</span>
+<span class="line">assertion `left == right` failed</span>
+<span class="line">  left: 2</span>
+<span class="line"> right: 1</span>
+<span class="line"></span>
+<span class="line">arbtest failed!</span>
+<span class="line">    Seed: 0x9c2a13a600000001</span></code></pre>
+
+</figure>
+<p><span>But we never implemented shrinking! How is this possible? Well, strictly speaking, this is out of</span>
+<span>scope for this post. And I</span>&rsquo;<span>ve already described this</span>
+<a href="https://tigerbeetle.com/blog/2023-03-28-random-fuzzy-thoughts"><span>elsewhere</span></a><span>. And, at 32k, this is the</span>
+<span>third-longest post on this blog. And it</span>&rsquo;<span>s 3AM here in Lisbon right now. But of course I</span>&rsquo;<span>ll explain!</span></p>
+<p><span>The trick is the simplified </span><a href="https://hypothesis.works/articles/compositional-shrinking/"><span>hypothesis</span>
+<span>approach</span></a><span>. The</span>
+<a href="https://docs.rs/arbtest/latest/arbtest/"><span>arbtest</span></a><span> PBT library we use in this post is based on a</span>
+<span>familiar interface of a PRNG:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">arbtest::<span class="hl-title function_ invoke__">arbtest</span>(|rng| {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">random_int</span>: <span class="hl-type">usize</span> = rng.<span class="hl-title function_ invoke__">int_in_range</span>(<span class="hl-number">0</span>..=<span class="hl-number">100</span>)?;</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">random_bool</span>: <span class="hl-type">bool</span> = rng.<span class="hl-title function_ invoke__">arbitrary</span>()?;</span>
+<span class="line">  <span class="hl-title function_ invoke__">Ok</span>(())</span>
+<span class="line">});</span></code></pre>
+
+</figure>
+<p><span>But there</span>&rsquo;<span>s a twist! This is a </span><em><span>finite</span></em><span> PRNG. So, if you ask it to flip a coin it can give you</span>
+<span>heads. And next time it might give you tails. But if you continue asking it for more, at some point</span>
+<span>it</span>&rsquo;<span>ll give you </span><span class="display"><code>Err(OutOfEntropy)</code><span>.</span></span></p>
+<p><span>That</span>&rsquo;<span>s why all these </span><code>?</code><span> and the outer loop of</span>
+<span class="display"><code>while !rng.is_empty() {</code><span>.</span></span></p>
+<p><span>In other words, as soon as the test runs out of entropy, it short-circuits and completes. And that</span>
+<span>means that by reducing the amount of entropy available the test becomes shorter, and this works</span>
+<span>irrespective of how complex is the logic inside the test!</span></p>
+<p><span>And </span>&ldquo;<span>entropy</span>&rdquo;<span> is a big scary word here, what actually happens is that the PRNG is just an </span><code>&amp;mut
+&amp;[u8]</code><span> inside. That is, a slice of random bytes, which is shortened every time you ask for a random</span>
+<span>number. And the shorter the initial slice, the simpler the test gets. Minimization can be this</span>
+<span>simple!</span></p>
+<p><span>You can find source code for this article at</span>
+<a href="https://github.com/matklad/properly-concurrent" class="display url">https://github.com/matklad/properly-concurrent</a></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-07-05-properly-testing-concurrent-data-structures.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

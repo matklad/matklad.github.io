@@ -1,0 +1,483 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>matklad</title>
+  <meta name="description" content="Yet another programming blog by Alex Kladov aka matklad.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <ul class="post-list">
+<li>
+  <h2><time class="meta" datetime="2024-08-01">Aug 1, 2024</time> <a href="/2024/08/01/primitive-recursive-functions.html">Primitive Recursive Functions For A Working Programmer</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2024-07-25">Jul 25, 2024</time> <a href="/2024/07/25/git-worktrees.html">How I Use Git Worktrees</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2024-07-05">Jul 5, 2024</time> <a href="/2024/07/05/properly-testing-concurrent-data-structures.html">Properly Testing Concurrent Data Structures</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2024-06-04">Jun 4, 2024</time> <a href="/2024/06/04/regular-recursive-restricted.html">Regular, Recursive, Restricted</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2024-03-22">Mar 22, 2024</time> <a href="/2024/03/22/basic-things.html">Basic Things</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2024-03-21">Mar 21, 2024</time> <a href="/2024/03/21/defer-patterns.html">Zig defer Patterns</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2024-03-02">Mar 2, 2024</time> <a href="/2024/03/02/Kafka-vs-Nabokov.html">Kafka versus Nabokov</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2024-02-10">Feb 10, 2024</time> <a href="/2024/02/10/window-live-constant-time-grep.html">Window: Live, Constant Time Grep</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2024-01-12">Jan 12, 2024</time> <a href="/2024/01/12/write-less.html">Write Less</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2024-01-03">Jan 3, 2024</time> <a href="/2024/01/03/of-rats-and-ratchets.html">Of Rats and Ratchets</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-12-31">Dec 31, 2023</time> <a href="/2023/12/31/git-things.html">Git Things</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-12-31">Dec 31, 2023</time> <a href="/2023/12/31/O(1)-build-file.html">O(1) Build File</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-12-24">Dec 24, 2023</time> <a href="/2023/12/24/ci-dream.html">CI Dream</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-12-21">Dec 21, 2023</time> <a href="/2023/12/21/retry-loop.html">Retry Loop</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-12-10">Dec 10, 2023</time> <a href="/2023/12/10/nsfw.html">Non-Send Futures When?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-11-16">Nov 16, 2023</time> <a href="/2023/11/16/IronBeetle.html">IronBeetle</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-11-15">Nov 15, 2023</time> <a href="/2023/11/15/push-ifs-up-and-fors-down.html">Push Ifs Up And Fors Down</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-11-07">Nov 7, 2023</time> <a href="/2023/11/07/dta-oriented-blogging.html">Data Oriented Blogging</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-10-23">Oct 23, 2023</time> <a href="/2023/10/23/unified-vs-split-diff.html">Unified Versus Split Diff</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-10-18">Oct 18, 2023</time> <a href="/2023/10/18/obligations.html">Unless Explicitly Specified Otherwise, Open Source Software With Users Carries Moral Obligations</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-10-12">Oct 12, 2023</time> <a href="/2023/10/12/lsp-could-have-been-better.html">LSP could have been better</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-10-11">Oct 11, 2023</time> <a href="/2023/10/11/unix-structured-concurrency.html">UNIX Structured Concurrency</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-10-06">Oct 6, 2023</time> <a href="/2023/10/06/what-is-an-invariant.html">What is an Invariant?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-09-13">Sep 13, 2023</time> <a href="/2023/09/13/comparative-analysis.html">Comparative Analysis</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-08-17">Aug 17, 2023</time> <a href="/2023/08/17/typescript-is-surprisingly-ok-for-compilers.html">TypeScript is Surprisingly OK for Compilers</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-08-13">Aug 13, 2023</time> <a href="/2023/08/13/role-of-algorithms.html">Role Of Algorithms</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-08-09">Aug 9, 2023</time> <a href="/2023/08/09/types-and-zig.html">Types and the Zig Programming Language</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-08-06">Aug 6, 2023</time> <a href="/2023/08/06/fantastic-learning-resources.html">Fantastic Learning Resources</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-08-01">Aug 1, 2023</time> <a href="/2023/08/01/on-modularity-of-lexical-analysis.html">On Modularity of Lexical Analysis</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-07-16">Jul 16, 2023</time> <a href="/2023/07/16/three-different-cuts.html">Three Different Cuts</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-06-18">Jun 18, 2023</time> <a href="/2023/06/18/GitHub-merge-queue.html">GitHub Merge Queue</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-06-02">Jun 2, 2023</time> <a href="/2023/06/02/the-worst-zig-version-manager.html">The Worst Zig Version Manager</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-05-21">May 21, 2023</time> <a href="/2023/05/21/resilient-ll-parsing-tutorial.html">Resilient LL Parsing Tutorial</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-05-06">May 6, 2023</time> <a href="/2023/05/06/zig-language-server-and-cancellation.html">Zig Language Server And Cancellation</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-05-02">May 2, 2023</time> <a href="/2023/05/02/implicits-for-mvs.html">Value Oriented Programming Needs Implicits?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-04-23">Apr 23, 2023</time> <a href="/2023/04/23/data-oriented-parallel-value-interner.html">Data Oriented Parallel Value Interner</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-04-13">Apr 13, 2023</time> <a href="/2023/04/13/reasonable-bootstrap.html">Reasonable Bootstrap</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-04-09">Apr 9, 2023</time> <a href="/2023/04/09/can-you-trust-a-compiler-to-optimize-your-code.html">Can You Trust a Compiler to Optimize Your Code?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-04-02">Apr 2, 2023</time> <a href="/2023/04/02/ub-might-be-the-wrong-term-for-newer-languages.html">UB Might Be a Wrong Term for Newer Languages</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-03-28">Mar 28, 2023</time> <a href="/2023/03/28/rust-is-a-scalable-language.html">Rust Is a Scalable Language</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-03-26">Mar 26, 2023</time> <a href="/2023/03/26/zig-and-rust.html">Zig And Rust</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-03-08">Mar 8, 2023</time> <a href="/2023/03/08/an-engine-for-an-editor.html">An Engine For An Editor</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-02-21">Feb 21, 2023</time> <a href="/2023/02/21/why-SAT-is-hard.html">Why SAT Is Hard</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-02-16">Feb 16, 2023</time> <a href="/2023/02/16/three-state-stability.html">Three-State Stability</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-02-12">Feb 12, 2023</time> <a href="/2023/02/12/a-love-letter-to-deno.html">&lt;3 Deno</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-02-10">Feb 10, 2023</time> <a href="/2023/02/10/how-a-zig-ide-could-work.html">How a Zig IDE Could Work</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-01-26">Jan 26, 2023</time> <a href="/2023/01/26/rusts-ugly-syntax.html">Rust's Ugly Syntax</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-01-25">Jan 25, 2023</time> <a href="/2023/01/25/next-rust-compiler.html">Next Rust Compiler</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2023-01-04">Jan 4, 2023</time> <a href="/2023/01/04/on-random-numbers.html">On Random Numbers</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-12-31">Dec 31, 2022</time> <a href="/2022/12/31/raytracer-construction-kit.html">Ray Tracer Construction Kit</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-11-18">Nov 18, 2022</time> <a href="/2022/11/18/if-a-tree-falls-in-a-forest-does-it-overflow-the-stack.html">If a Tree Falls in a Forest, Does It Overflow the Stack?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-11-05">Nov 5, 2022</time> <a href="/2022/11/05/accessibility-px-or-rem.html">Accessibility: px or rem?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-10-28">Oct 28, 2022</time> <a href="/2022/10/28/elements-of-a-great-markup-language.html">Elements Of a Great Markup Language</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-10-24">Oct 24, 2022</time> <a href="/2022/10/24/actions-permissions.html">GitHub Actions Permissions</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-10-19">Oct 19, 2022</time> <a href="/2022/10/19/why-linux-troubleshooting-advice-sucks.html">Why Linux Troubleshooting Advice Sucks</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-10-06">Oct 6, 2022</time> <a href="/2022/10/06/hard-mode-rust.html">Hard Mode Rust</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-10-03">Oct 3, 2022</time> <a href="/2022/10/03/from-paxos-to-bft.html">From Paxos to BFT</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-07-10">Jul 10, 2022</time> <a href="/2022/07/10/almost-rules.html">Almost Rules</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-07-04">Jul 4, 2022</time> <a href="/2022/07/04/unit-and-integration-tests.html">Unit and Integration Tests</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-06-29">Jun 29, 2022</time> <a href="/2022/06/29/notes-on-gats.html">Notes on GATs</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-06-11">Jun 11, 2022</time> <a href="/2022/06/11/caches-in-rust.html">Caches In Rust</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-05-29">May 29, 2022</time> <a href="/2022/05/29/builder-lite.html">Builder Lite</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-05-29">May 29, 2022</time> <a href="/2022/05/29/binary-privacy.html">Binary Privacy</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-04-25">Apr 25, 2022</time> <a href="/2022/04/25/why-lsp.html">Why LSP?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-03-26">Mar 26, 2022</time> <a href="/2022/03/26/self-modifying-code.html">Self Modifying Code</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2022-03-14">Mar 14, 2022</time> <a href="/2022/03/14/rpath-or-why-lld-doesnt-work-on-nixos.html">RPATH, or why lld doesn't work on NixOS</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-11-27">Nov 27, 2021</time> <a href="/2021/11/27/notes-on-module-system.html">Notes On Module System</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-11-07">Nov 7, 2021</time> <a href="/2021/11/07/generate-all-the-things.html">Generate All the Things</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-09-05">Sep 5, 2021</time> <a href="/2021/09/05/Rust100k.html">One Hundred Thousand Lines of Rust</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-09-04">Sep 4, 2021</time> <a href="/2021/09/04/fast-rust-builds.html">Fast Rust Builds</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-08-22">Aug 22, 2021</time> <a href="/2021/08/22/large-rust-workspaces.html">Large Rust Workspaces</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-07-30">Jul 30, 2021</time> <a href="/2021/07/30/shell-injection.html">; echo Shell Injection</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-07-10">Jul 10, 2021</time> <a href="/2021/07/10/its-not-always-icache.html">It's Not Always ICache</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-07-09">Jul 9, 2021</time> <a href="/2021/07/09/inline-in-rust.html">Inline In Rust</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-05-31">May 31, 2021</time> <a href="/2021/05/31/how-to-test.html">How to Test</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-05-12">May 12, 2021</time> <a href="/2021/05/12/design-pattern-dumping-ground.html">Design Pattern: Kitchen Sink</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-04-26">Apr 26, 2021</time> <a href="/2021/04/26/concurrent-expression-problem.html">Concurrent Expression Problem</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-03-22">Mar 22, 2021</time> <a href="/2021/03/22/async-benchmarks-index.html">Async Benchmarks Index</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-03-12">Mar 12, 2021</time> <a href="/2021/03/12/goroutines-are-not-significantly-smaller-than-threads.html">Goroutines Are Not Significantly Smaller Than Threads</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-02-27">Feb 27, 2021</time> <a href="/2021/02/27/delete-cargo-integration-tests.html">Delete Cargo Integration Tests</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-02-24">Feb 24, 2021</time> <a href="/2021/02/24/another-generic-dilemma.html">Another Generic Dilemma</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-02-15">Feb 15, 2021</time> <a href="/2021/02/15/NEAR.html">matklad @ NEAR</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-02-14">Feb 14, 2021</time> <a href="/2021/02/14/for-the-love-of-macros.html">For the Love of Macros</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-02-10">Feb 10, 2021</time> <a href="/2021/02/10/a-better-profiler.html">A Better Rust Profiler</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-02-06">Feb 6, 2021</time> <a href="/2021/02/06/ARCHITECTURE.md.html">ARCHITECTURE.md</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2021-01-03">Jan 3, 2021</time> <a href="/2021/01/03/two-kinds-of-code-review.html">Two Kinds of Code Review</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-12-28">Dec 28, 2020</time> <a href="/2020/12/28/csdi.html">Call Site Dependency Injection</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-12-12">Dec 12, 2020</time> <a href="/2020/12/12/notes-on-lock-poisoning.html">Notes On Lock Poisoning</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-11-11">Nov 11, 2020</time> <a href="/2020/11/11/yde.html">Why an IDE?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-11-01">Nov 1, 2020</time> <a href="/2020/11/01/notes-on-paxos.html">Notes on Paxos</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-10-15">Oct 15, 2020</time> <a href="/2020/10/15/study-of-std-io-error.html">Study of std::io::Error</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-10-03">Oct 3, 2020</time> <a href="/2020/10/03/fast-thread-locals-in-rust.html">Fast Thread Locals In Rust</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-09-20">Sep 20, 2020</time> <a href="/2020/09/20/why-not-rust.html">Why Not Rust?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-09-13">Sep 13, 2020</time> <a href="/2020/09/13/your-language-sucks.html">Your Language Sucks, It Doesn't Matter</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-09-12">Sep 12, 2020</time> <a href="/2020/09/12/rust-in-2021.html">Rust in 2021</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-08-15">Aug 15, 2020</time> <a href="/2020/08/15/concrete-abstraction.html">Code Smell: Concrete Abstraction</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-08-12">Aug 12, 2020</time> <a href="/2020/08/12/who-builds-the-builder.html">Who Builds the Builder?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-08-11">Aug 11, 2020</time> <a href="/2020/08/11/things-I-have-learned-about-life.html">Things I Have Learned About Life</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-07-15">Jul 15, 2020</time> <a href="/2020/07/15/two-beautiful-programs.html">Two Beautiful Rust Programs</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-04-15">Apr 15, 2020</time> <a href="/2020/04/15/from-pratt-to-dijkstra.html">From Pratt to Dijkstra</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-04-13">Apr 13, 2020</time> <a href="/2020/04/13/simple-but-powerful-pratt-parsing.html">Simple but Powerful Pratt Parsing</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-03-22">Mar 22, 2020</time> <a href="/2020/03/22/fast-simple-rust-interner.html">Fast and Simple Rust Interner</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-02-14">Feb 14, 2020</time> <a href="/2020/02/14/why-rust-is-loved.html">Why is Rust the Most Loved Programming Language?</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-01-04">Jan 4, 2020</time> <a href="/2020/01/04/mutexes-are-faster-than-spinlocks.html">Mutexes Are Faster Than Spinlocks</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2020-01-02">Jan 2, 2020</time> <a href="/2020/01/02/spinlocks-considered-harmful.html">Spinlocks Considered Harmful</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2019-11-16">Nov 16, 2019</time> <a href="/2019/11/16/a-better-shell.html">A Better Shell</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2019-11-13">Nov 13, 2019</time> <a href="/2019/11/13/rust-analyzer-blog.html">rust-analyzer Blog</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2019-08-23">Aug 23, 2019</time> <a href="/2019/08/23/join-your-threads.html">Join Your Threads</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2019-07-25">Jul 25, 2019</time> <a href="/2019/07/25/unsafe-as-a-type-system.html">Unsafe as a Human-Assisted Type System</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2019-07-16">Jul 16, 2019</time> <a href="/2019/07/16/perils-of-constructors.html">Perils of Constructors</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2019-06-20">Jun 20, 2019</time> <a href="/2019/06/20/linux-desktop-tips.html">Linux Desktop Tips</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2019-05-19">May 19, 2019</time> <a href="/2019/05/19/rust-course-retrospective.html">Rust Course Retrospective</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2019-05-19">May 19, 2019</time> <a href="/2019/05/19/consider-using-asciidoctor-for-your-next-presentation.html">Consider Using Asciidoctor for Your Next Presentation</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2018-07-24">Jul 24, 2018</time> <a href="/2018/07/24/exceptions-in-structured-concurrency.html">Exceptions vs Structured Concurrency</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2018-06-18">Jun 18, 2018</time> <a href="/2018/06/18/a-trick-for-test-maintenance.html">A Trick For Test Maintenance</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2018-06-06">Jun 6, 2018</time> <a href="/2018/06/06/modern-parser-generator.html">Modern Parser Generator</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2018-06-04">Jun 4, 2018</time> <a href="/2018/06/04/newtype-index-pattern.html">Newtype Index Pattern</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2018-05-24">May 24, 2018</time> <a href="/2018/05/24/typed-key-pattern.html">Typed Key Pattern</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2018-05-04">May 4, 2018</time> <a href="/2018/05/04/encapsulating-lifetime-of-the-field.html">Encapsulating Lifetime of the Field</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2018-05-03">May 3, 2018</time> <a href="/2018/05/03/effective-pull-requests.html">Effective Pull Requests</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2018-03-03">Mar 3, 2018</time> <a href="/2018/03/03/stopping-a-rust-worker.html">Stopping a Rust Worker</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2018-01-03">Jan 3, 2018</time> <a href="/2018/01/03/make-your-own-make.html">Make your own make</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2017-10-21">Oct 21, 2017</time> <a href="/2017/10/21/lldb-dynamic-type.html">Dynamic types in LLDB</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2017-03-25">Mar 25, 2017</time> <a href="/2017/03/25/nixos-notes.html">NixOS Notes</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2017-03-18">Mar 18, 2017</time> <a href="/2017/03/18/min-of-three-part-2.html">Min of Three Part 2</a></h2>
+</li>
+<li>
+  <h2><time class="meta" datetime="2017-03-12">Mar 12, 2017</time> <a href="/2017/03/12/min-of-three.html">Min of Three</a></h2>
+</li></ul>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/src/templates.ts">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
