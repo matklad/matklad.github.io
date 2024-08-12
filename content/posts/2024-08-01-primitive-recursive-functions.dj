@@ -35,12 +35,12 @@ That is, two to the power of two to the power of N, a very large number. In this
 implement this algorithm in a non-Turing complete language.
 
 Most practical problems fall into this "faster than two to the two to the power of two" space.
-Hence it follows that you don't need full power of a Turing Machine to tackle them. Hence, a
-language not being Turing complete doesn't in any way restrict you in practice, or gives you extra
+Hence it follows that you don't need the full power of a Turing Machine to tackle them. Hence, a
+language not being Turing complete doesn't in any way restrict you in practice, or give you extra
 powers to control the computation.
 
 Or, to restate this: in practice, a program which doesn't terminate, and a program that needs a
-billion billions steps to terminate are equivalent. Making something non-Turing complete by itself
+billion billion steps to terminate are equivalent. Making something non-Turing complete by itself
 doesn't help with the second problem in any way. And there's a trivial approach that solves the
 first problem for any existing Turing-complete language --- in the implementation, count the steps
 and bail with an error after a billion.
@@ -123,7 +123,7 @@ zeros. And let's observe our FSM eating this particular string.
 
 First of all, because the string is in fact a one surrounded by the equal number of zeros on both
 sides, the FSM ends up in a "yes" state. Moreover, because the length of the string is much greater
-than the number of states in the state machine, the state machine necessary visits some state twice.
+than the number of states in the state machine, the state machine necessarily visits some state twice.
 There is a cycle, where the machine goes from A to B to C to D and back to A. This cycle might be
 pretty long, but it's definitely shorter than the total number of states we have.
 
@@ -143,7 +143,7 @@ the proof.
 ## Turing Machine: Definition
 
 A [Turing Machine]{.dfn} is only slightly more complex than an FSM. Like an FSM, a TM has a bunch of states
-and a single-step transition function. While an FSM has an immutable input which is being feed to it
+and a single-step transition function. While an FSM has an immutable input which is being fed to it
 symbol by symbol, a TM operates with a mutable tape. The input gets written to the tape at the
 start. At each step, a TM looks at the current symbol on the tape, changes its state according to a
 transition function and, additionally:
@@ -153,7 +153,7 @@ transition function and, additionally:
 
 When a machine reaches a designated halt state, it stops, and whatever is written on the tape at
 that moment is the result. That is, while FSMs are binary recognizers, TMs are functions. Keep in
-mind that a TM does not necessary stop. It might be the case that a TM goes back and forth over the
+mind that a TM does not necessarily stop. It might be the case that a TM goes back and forth over the
 tape, overwrites it, changes its internal state, but never quite gets to the final state.
 
 Here's an example Turing Machine:
@@ -191,7 +191,7 @@ Then we are in the `s A 0 = (B, 1, Right)` case, so we should change the state t
 
 ## Turing Machine: Programming
 
-There is a bunch of fiddly details to Turing Machines!
+There are a bunch of fiddly details to Turing Machines!
 
 The tape is conceptually infinite, so beyond the input, everything is just zeros. This creates a
 problem: it might be hard to say where the input (or the output) ends! There are a couple of
@@ -218,40 +218,40 @@ be handy to the next observation:
 
 You can't actually program a Turing Machine. What I mean is that, counter-intuitively, there isn't
 some user-supplied program that a Turing Machine executes. Rather, the program is hard-wired into
-the machine. Transition function _is_ the program.
+the machine. The transition function _is_ the program.
 
 But with some ingenuity we can regain our ability to write programs. Recall that we've just learned
 to feed arbitrary files to a TM. So what we could do is to write a text file that specifies a TM and
 its input, and then feed that entire file as an input to an "interpreter" Turing Machine which would
-read the file, and act as if the machine specified there. Turing Machine can have an `eval`
+read the file, and act as the machine specified there. A Turing Machine can have an `eval`
 function.
 
-Is such "interpreter" Turing Machine possible? Yes! And it is not hard: if you spend couple of hours
+Is such an "interpreter" Turing Machine possible? Yes! And it is not hard: if you spend a couple of hours
 programming Turing Machines by hand, you'll see that you pretty much can do anything --- you can do
-numbers, arithmetics, loops, control flow. It's just very very tedious.
+numbers, arithmetic, loops, control flow. It's just very very tedious.
 
 So let's just declare that we've actually coded up this Universal Turing Machine which simulates a
 TM given to it as an input in a particular encoding.
 
-This sort of construct also gives rise to Church-Turing thesis. We have a TM which can run other
+This sort of construct also gives rise to the Church-Turing thesis. We have a TM which can run other
 TMs. And you can implement a TM interpreter in something like Python. And, with a bit of legwork,
 you could _also_ implement a Python interpreter as a TM (you likely want to avoid doing that
 directly, and instead do a simpler interpreter for WASM, and then use a Python interpreter compiled
-to WASM). This sort of bidirectional interpretation shows that Python and TM have equivalent
+to WASM). This sort of bidirectional interpretation shows that Python and TMs have equivalent
 computing power. Moreover, it's quite hard to come up with a reasonable computational device which
 is more powerful than a Turing Machine.
 
-There are computational devices that are strictly weaker than TMs though. Recall FSM. By this point,
+There are computational devices that are strictly weaker than TMs though. Recall FSMs. By this point,
 it should be obvious that a TM can simulate an FSM. Everything a Finite State Machine can do, a
-Turing Machine can do as well. And it should be intuitively clear that TM is more powerful than an
-FSM. FSM gets to use only a finite number of states. A TM has these same states, but it also posses
+Turing Machine can do as well. And it should be intuitively clear that a TM is more powerful than an
+FSM. An FSM gets to use only a finite number of states. A TM has these same states, but it also posses
 a tape which serves like an infinitely sized external memory.
 
 Directly proving that you _can't_ encode a Universal Turing Machine as an FSM sounds complicated,
 so let's prove something simpler. Recall that we have established that there's no FSM that accepts
-only ones surrounded by the equal number of zeros on both sides (because a sufficiently large word
+only ones surrounded by an equal number of zeros on both sides (because a sufficiently large word
 of this form would necessary enter a cycle in a state machine, which could then be further pumped).
-But it's actaully easy to write a Turing Machine that does this:
+But it's actually easy to write a Turing Machine that does this:
 
 * Erase zero (at the left side of the tape)
 * Go to the right end of the tape
@@ -261,7 +261,7 @@ But it's actaully easy to write a Turing Machine that does this:
 * If what's left is a single `1` the answer is "yes", otherwise it is a "no"
 
 We found a specific problem that can be solved by a TM, but is out of reach of any FSM. So it
-necessary follows that there isn't an FSM that can simulate an arbitrary TM.
+necessarily follows that there isn't an FSM that can simulate an arbitrary TM.
 
 It is also useful to take a closer look at the tape. It is a convenient skeuomorphic abstraction
 which makes the behavior of the machine intuitive, but it is inconvenient to implement in a normal
@@ -285,7 +285,7 @@ That is, everything to the left of the head is one stack, everything to the righ
 other.  Here, moving the reading head left or right corresponds to popping a value off one stack and
 pushing it onto another.
 
-So, an equivalent-in-power definition would be to say that an TM is an FSM endowed with two
+So, an equivalent-in-power definition would be to say that a TM is an FSM endowed with two
 stacks.
 
 This of course creates an obvious question: is an FSM with just one stack a thing? Yes! It would be
@@ -297,19 +297,19 @@ There's yet another way to look at the tape, or the pair of stacks, if the set o
 `[1, 0, 1, 1]`{.display}
 will be
 [`1 + 2 + 8 = 11`.]{.display}
-Looking at the top of the stack is `stack % 2`, removing item from the stack is `stack / 2` and
+Looking at the top of the stack is `stack % 2`, removing an item from the stack is `stack / 2` and
 pushing x onto the stack is `stack * 2 + x`. We won't need this _right_ now, so just hold onto this
 for a brief moment.
 
 ## Turing Machine: Limits
 
-Ok, so we have some idea about the lower bound for a power of a Turing Machine --- FSMs are strictly
+Ok, so we have some idea about the lower bound for the power of a Turing Machine --- FSMs are strictly
 less expressive. What about the opposite direction? Is there some computation that a Turing Machine
 is incapable of doing?
 
 Yes! Let's construct a function which maps natural numbers to natural numbers, which can't be
 implemented by a Turing Machine. Recall that we can encode an arbitrary Turing Machine as text. That
-means that we can actually enumerate all possible Turing Machines, and write then in a giant line,
+means that we can actually enumerate all possible Turing Machines, and write them in a giant line,
 from the most simple Turing Machine to more complex ones:
 
 ```
@@ -377,7 +377,7 @@ raw_input = input()
 print("Yes" if halts(program_source_code, program_input) else "No")
 ```
 
-Now, I will do a weird thing and start asking whether a program termintates, if it is fed its own
+Now, I will do a weird thing and start asking whether a program terminates, if it is fed its own
 source code, in a reverse-quine of sorts:
 
 ```python
@@ -412,10 +412,10 @@ loop and don't actually terminate.
 
 Hence, it must be the case that `weird` does not terminate when self-applied. But then
 `halts_on_self` returns `False`, and it should terminate. So we get a contradiction both ways. Which
-necessary means that either our `halts` sometimes returns a straight-up incorrect answer, or that it
+necessarily means that either our `halts` sometimes returns a straight-up incorrect answer, or that it
 sometimes does not terminate.
 
-So this is the flip side of Turing Machine's power --- it is so powerful that it becomes impossible
+So this is the flip side of a Turing Machine's power --- it is so powerful that it becomes impossible
 to tell whether it'll terminate or not!
 
 It actually gets much worse, because this result can be generalized to an unreasonable degree!
@@ -440,11 +440,11 @@ Suppose we have some magic TM, called P, which checks such a property. Let's sho
 solve the problem we know we can not solve --- the halting problem.
 
 Consider a Turing Machine that is just an infinite loop and never terminates, M1. P might or might
-not hold for it. But, because P is not-trivial (it holds for some machines and doesn't hold for some
+not hold for it. But, because P is non-trivial (it holds for some machines and doesn't hold for some
 machines), there's some different machine M2 which differs from M1 with respect to P. That is,
 `P(M1) xor P(M2)` holds.
 
-Let's use these M1 and M2 to figure out where a given machine M halts on input I. Using Universal
+Let's use these M1 and M2 to figure out whether a given machine M halts on input I. Using Universal
 Turing Machine (interpreter), we can construct a new machine, M12 that just runs M on input I, then
 erases the contents of the tape and runs M2. Now, if M halts on I, then the resulting machine M12 is
 behaviorally-equivalent to M2. If M doesn't halt on I, then the result is equivalent to the infinite
@@ -470,18 +470,18 @@ def halts(M, I):
     return P(M12) == P(M2)
 ```
 
-This is pretty bad and depressing --- can't learn anything meaningful about an arbitrary Turing
+This is pretty bad and depressing --- we can't learn anything meaningful about an arbitrary Turing
 Machine! So let's finally get to the actual topic of today's post:
 
 ## Primitive Recursive Functions
 
-This is going to be another computational device, like FSMs and TMs. Like FSM, it's going to be a
-nice, always terminating, non-Turing complete device. But it would turn out to have quite a bit of
-power of a full Turing Machine!
+This is going to be another computational device, like FSMs and TMs. Like an FSM, it's going to be a
+nice, always terminating, non-Turing complete device. But it will turn out to have quite a bit of
+the power of a full Turing Machine!
 
 However, unlike both TMs and FSMs, [Primitive Recursive Functions]{.dfn} are defined directly as
 functions which take a tuple of natural numbers and return a natural number. The two simplest ones
-are `zero` (that is, zero-arity function that returns `0`) and `succ` --- an unary function that
+are `zero` (that is, zero-arity function that returns `0`) and `succ` --- a unary function that
 just adds 1. Everything else is going to get constructed out of these two:
 
 ```
@@ -490,7 +490,7 @@ succ(x) = x + 1
 ```
 
 One way we are allowed to combine these functions is by composition. So we can get all the constants
-right of the bat:
+right off the bat:
 
 ```
 succ(zero) = 1
@@ -498,12 +498,12 @@ succ(succ(zero)) = 2
 succ(succ(succ(zero))) = 3
 ```
 
-We aren't going to get allowed to use general recursion (because it can trivially non-terminate),
+We aren't going to be allowed to use general recursion (because it can trivially non-terminate),
 but we do get to use a restricted form of C-style loop. It is a bit fiddly to define formally! The
 overall shape is [`LOOP(init, f, n)`.]{.display}
 
 Here, `init` and `n` are numbers --- the initial value of the accumulator and the total number of
-iterations. The `f` is an unary function that specifies the loop body -- it takes the current value
+iterations. The `f` is a unary function that specifies the loop body -- it takes the current value
 of the accumulator and returns the new value. So
 
 ```
@@ -523,7 +523,7 @@ add(x, y) = LOOP(x, succ, y)
 ```
 
 Multiplication is trickier. Conceptually, to multiply `x` and `y`, we want to `LOOP` from zero, and
-repeat "add `x`" `y` times. The problem here is that we can't write "add `x`" function yet
+repeat "add `x`" `y` times. The problem here is that we can't write an "add `x`" function yet
 
 ```
 # Doesn't work, add is a binary function!
@@ -536,7 +536,7 @@ add_x v = add(x, v)
 mul(x, y) = LOOP(0, add_x, y)
 ```
 
-One way around this is to defile `LOOP` as a family of operators, which can pass extra arguments to
+One way around this is to define `LOOP` as a family of operators, which can pass extra arguments to
 the iteration function:
 
 ```
@@ -545,15 +545,15 @@ LOOP1(c1, init, f, 2) = f(c1, f(c1, init))
 LOOP2(c1, c2, init, f, 2) = f(c1, c2, f(c1, c2, init))
 ```
 
-That is, `LOOP_N` takes extra `n` arguments, and passes them through to any invocation of the body
+That is, `LOOP_N` takes an extra `n` arguments, and passes them through to any invocation of the body
 function. To express this idea a little bit more succinctly, let's just allow to partially  apply
 the second argument of `LOOP`. That is:
 
 * All our functions are going to be first order. All arguments are numbers, the result is a number.
-  There aren't high order functions, there aren't closures.
-* The `LOOP` is not a function in our language --- its a builtin operator, a keyword. So, for
-  convenience, we allow to pass partially applied functions to it. But semantically this is
-  equivalent to just passing in extra argumennts on each iteration.
+  There aren't higher order functions, there aren't closures.
+* The `LOOP` is not a function in our language --- it's a builtin operator, a keyword. So, for
+  convenience, we allow passing partially applied functions to it. But semantically this is
+  equivalent to just passing in extra arguments on each iteration.
 
 Which finally allows us to write
 
@@ -571,7 +571,7 @@ We can go on and define x^y^:
 pow(x, y) = LOOP(1, mul x, y)
 ```
 
-And this in turn allows to define a couple of concerning fast growing functions:
+And this in turn allows us to define a couple of concerning fast growing functions:
 
 ```
 pow_2(n) = pow(2, n)
@@ -601,7 +601,7 @@ subtraction to saturate.
 
 The second problem is more severe --- I think we actually can't express subtraction given the set of
 allowable operations so far. That is because all our operations are monotonic --- the result is
-never less than the arguments. One way to solve this problem is to defile the LOOP in such a way
+never less than the arguments. One way to solve this problem is to define the LOOP in such a way
 that the body function also gets passed a second argument --- the current iteration. So, if you
 iterate up to `n`, the last iteration will observe `n - 1`, and that would be the non-monotonic
 operation that creates subtraction. But that seems somewhat inelegant to me, so instead I will just
@@ -683,7 +683,7 @@ That's a curious structure --- rather than computing the modulo directly, we ess
 it using trial and error, and relying on the fact that the search has a clear upper bound.
 
 Division can be done similarly: to divide x by y, start with 0, and then repeatedly add one to the
-accumulator until the product of accumulator and y exceeds x:
+accumulator until the product of the accumulator and y exceeds x:
 
 ```
 div_iter x y acc = if(
@@ -694,7 +694,7 @@ div_iter x y acc = if(
 div(x, y) = LOOP(0, div_iter x y, x)
 ```
 
-This really starts looking like programming! One thing we are currently missing are data structures.
+This really starts to look like programming! One thing we are currently missing are data structures.
 While our functions take multiple arguments, they only return one number. But it's easy enough to
 pack two numbers into one: to represent an `(a, b)` pair, we'll use 2^a^ 3^b^ number:
 
@@ -739,18 +739,18 @@ f acc = mk_pair(
 
 Ok, so we have achieved something remarkable: while we are writing terminating-by-construction
 programs, which are definitely not Turing complete, we have constructed basic programming staples,
-like boolean logic and data structures, and we have also build some rather complicated mathematical
+like boolean logic and data structures, and we have also built some rather complicated mathematical
 functions, like [2{^2{^N^}^}.]{.display}
 
 We could try to further enrich our little primitive recursive kingdom by adding more and more
-functions on the ad hoc basis, but let's try to be really ambitious and go for the main prize ---
+functions on an ad hoc basis, but let's try to be really ambitious and go for the main prize ---
 simulating Turing Machines.
 
-We know that we will fail: Turing machine can enter the infinite loop, but PRF necessary terminates.
-That means, that, if PRF were able to simulate an arbitrary TM, it would have to say after certain
+We know that we will fail: Turing machines can enter an infinite loop, but PRFs necessarily terminate.
+That means, that, if a PRF were able to simulate an arbitrary TM, it would have to say after a certain
 finite amount of steps that "this TM doesn't terminate".  And, while we didn't do this, it's easy to
 see that you _could_ simulate the other way around and implement PRFs in a TM. But that would give
-us an TM algorithm to decide if an arbitrary TM halts, which we know doesn't exist.
+us a TM algorithm to decide if an arbitrary TM halts, which we know doesn't exist.
 
 So, this is hopeless! But we might still be able to learn something from failing.
 
@@ -762,7 +762,7 @@ zeros and ones as a number in binary form, where push and pop operations are imp
 `*`, and `/` --- exactly the operations we already can do. So, our configuration is just three
 numbers: [`(S, stack1, stack2)`.]{.display}
 
-And, using 2^a^3^b^5^c^ trick, we can pack this triple just into a single number. But that means we
+And, using the 2^a^3^b^5^c^ trick, we can pack this triple into just a single number. But that means we
 could directly encode a single step of a Turing Machine:
 
 ```
@@ -786,14 +786,14 @@ single_step(config) = if(
 )
 ```
 
-And now we could plug that into our `LOOP` to simulate Turing Machine running for N steps:
+And now we could plug that into our `LOOP` to simulate a Turing Machine running for N steps:
 
 ```
 n_steps initial_config n =
   LOOP(initial_config, single_step, n)
 ```
 
-The catch of course that we can't know the `N` that's going to be enough. But we can have a very
+The catch of course is that we can't know the `N` that's going to be enough. But we can have a very
 good guess! We could do something like this:
 
 ```
@@ -822,11 +822,11 @@ computed by some machine, that machine has a specific finite size) and TMs (diag
 
 So, suppose we have some function `f` that can't be computed by a PRF. How would we go about proving
 that? Well, we'd start with "suppose that we have a PRF P that computes `f`". And then we could
-notice that P would save some finite size. If you look at it abstractly, the P is its syntax tree,
-with lots of `LOOP` construct, but it always boils down to some `succ`s and `zero`s at the leaves.
+notice that P would have some finite size. If you look at it abstractly, the P is its syntax tree,
+with lots of `LOOP` constructs, but it always boils down to some `succ`s and `zero`s at the leaves.
 Let's say that the depth of P is `d`.
 
-And, actually, if you look at it, there are only finite number of PRFs with depth at most `d`. Some
+And, actually, if you look at it, there are only a finite number of PRFs with depth at most `d`. Some
 of them describe pretty fast growing functions. But probably there's a limit to how fast a function
 can grow, given that it is computed by a PRF of size `d`. Or, to use a concrete example: we have
 constructed a PRF of depth 5 that computes two to the power of two to the power of N. Probably if we
@@ -836,7 +836,7 @@ _any_ PRF of depth `5`. And that this generalizes --- for any fixed depth, there
 tower of exponents that grows faster than any PRF with that depth.
 
 So we could conceivably build an `f` that defeats our `d`-deep P. But that's not quite a victory
-yet: maybe that `f` is feasible for `d+2`-deep PRF! So here we'll additionally apply
+yet: maybe that `f` is feasible for `d+2`-deep PRFs! So here we'll additionally apply
 diagonalization: for each depth, we'll build it's own depth-specific nemesis `f_d`. And then we'll
 define our overall function as
 
@@ -849,7 +849,7 @@ So, for `n` large enough it'll grow faster than a PRF with any fixed depth.
 So that's the general plan, the rest of the own is basically just calculating the upper bound on the
 growth of a PRF of depth `d`.
 
-One technical difficulty here is that PRFs tend to have different artities:
+One technical difficulty here is that PRFs tend to have different arities:
 
 ```
 f(x, y)
@@ -877,7 +877,7 @@ so we could say that
 A_1(x) = x + 1
 ```
 
-Now, let's handle arbitrary other depth `d + 1`. In that case, our function is non-primitive, so at
+Now, let's handle an arbitrary other depth `d + 1`. In that case, our function is non-primitive, so at
 the root of the syntax tree we have either a composition or a `LOOP`.
 
 Composition would look like this:
@@ -890,7 +890,7 @@ f(x, y, z, ...) = g(
 )
 ```
 
-where `g` and `h_n` are `d` deep and the resulting `f` is `d+1` deeep. We can immediately estimate
+where `g` and `h_n` are `d` deep and the resulting `f` is `d+1` deep. We can immediately estimate
 the `h_n` then:
 
 ```
@@ -911,7 +911,7 @@ And then we could use the same estimate for `g`:
 f(args...) <= A_d(A_d(maxarg))
 ```
 
-This is super high-order, so let's do a concrete example for depth-2 two-argument function which
+This is super high-order, so let's do a concrete example for a depth-2 two-argument function which
 starts with a composition:
 
 ```
@@ -1012,7 +1012,7 @@ f(args...) <= max(
 ```
 
 That `max` there is significant --- although it seems like the second line, with `maxarg`
-applications, is, always going to be longer, `maxarg`, in fact, could be as small as zero. But we
+applications, is always going to be longer, `maxarg`, in fact, could be as small as zero. But we
 can take `maxarg + 2` repetitions to fix this:
 
 
@@ -1089,39 +1089,39 @@ def A(d, x):
 ```
 
 It's easy to see that computing `A` on a Turing Machine using this definition terminates --- this
-is a function with two arguments, and every recursive call uses lexicographically smaller pair of
+is a function with two arguments, and every recursive call uses a lexicographically smaller pair of
 arguments. And we constructed A in such a way that `A(d, x)` as a function of `x` is larger than any
 PRF with a single argument of depth d. But that means that the following function with one argument
 `a(x) = A(x, x) `{.display}
 
-grows faster than _any_ PRF. And that's an example of a function which a Turing Machine have no
-trouble computing (given sufficient time), but which is beyond the capabilities of PRF.
+grows faster than _any_ PRF. And that's an example of a function which a Turing Machine has no
+trouble computing (given sufficient time), but which is beyond the capabilities of PRFs.
 
 ## Part III, Descent From the Ivory Tower
 
 Remember, this is a three-part post! And are finally at the part 3! So let's circle back to the
 practical matters. We have learned that:
 
-* Turing machines don't necessary terminate.
+* Turing machines don't necessarily terminate.
 * While other computational devices, like FSMs and PRFs, can be made to always terminate, there's no
-  guarantee that they'll terminate fast. PRFs in particular, can compute quite large functions!
+  guarantee that they'll terminate fast. PRFs in particular can compute quite large functions!
 * And non-Turing complete devices can be quite expressive. For example, any real-world algorithm
   that works on a TM can be adapted to run as a PRF.
 * Moreover, you don't even have to contort the algorithm much to make it fit. There's a universal
-  recipe for how to take something Turing complete, and make it a primitive recursive function
+  recipe for how to take something Turing complete and make it a primitive recursive function
   instead --- just add an iteration counter to the device, and forcibly halt it if the counter grows
   too large.
 
 Or, more succinctly: there's no practical difference between a program that doesn't terminate, and
 the one that terminates after a billion years. As a practitioner, if you think you need to solve the
 first problem, you need to solve the second problem as well. And making your programming language
-non-Turing complete doesn't really help this.
+non-Turing complete doesn't really help with this.
 
-And yet, there are a lot of configuration languages out there, that use non-Turing completeness as
-one of key design goals. Why is that?
+And yet, there are a lot of configuration languages out there that use non-Turing completeness as
+one of their key design goals. Why is that?
 
 I would say that we are never interested in Turing-completeness per-se. We usually want some _much_
-stronger properties. And yet, there's no convenient, catchy name for that bag of features of a good
+stronger properties. And yet there's no convenient catchy name for that bag of features of a good
 configuration language. So, "non-Turing-complete" gets used as a sort of rallying cry to signal that
 something is a good configuration language, and maybe sometimes even to justify to others inventing
 a new language instead of taking something like Lua. That is, the _real_ reason why you want at
@@ -1134,7 +1134,7 @@ So what _are_ the properties of a good configuration language?
 _First_, we need the language to be deterministic. If you launch Python and type `id([])`, you'll
 see some number. If you hit `^C`, and than do this again, you'll see a different number. This is OK
 for "normal" programming, but is usually anathema for configuration. Configuration is often used as a
-key in some incremental, caching system, and letting in non-determinism there wrecks absolute chaos!
+key in some incremental, caching system, and letting in non-determinism there wreaks absolute chaos!
 
 _Second_, you need the language to be well-defined. You can compile Python with ASLR disabled, and
 use some specific allocator, such that `id([])` always returns the same result. But that result
@@ -1150,18 +1150,18 @@ configuration is evaluated, and you again don't want that, to make caching work.
 
 _Fourth_, a thing that is closely related to purity is security and sandboxing. The _mechanism_ to
 achieve both purity and security is the same --- you don't expose general IO to your language. But
-the purpose is different: purity is about not letting the results being non-deterministic, while
+the purpose is different: purity is about not letting the results be non-deterministic, while
 security is about not exposing access tokens to the attacker.
 
 And now this gets tricky. One particular possible attack is a denial of service --- sending some bad
-config which makes our system to just spin there burning the CPU. Even if you control all IO, you
+config which makes our system just spin there burning the CPU. Even if you control all IO, you
 are generally still open to these kinds of attacks. It might be OK to say this is outside of the
 threat model --- that no one would find it valuable enough to just burn your CPU, if they can't also
-do IO, and that, even in the event this happens, there's going to be some easy mitigation in the
-form of higher-level timeout.
+do IO, and that, even in the event that this happens, there's going to be some easy mitigation in the
+form of a higher-level timeout.
 
 But you also might choose to provide some sort of guarantees about execution time, and that's really
-hard. The two approaches work. One is to make sure that processing is _obviously linear_. Not just
+hard. Two approaches work. One is to make sure that processing is _obviously linear_. Not just
 terminates, but is actually proportional to the size of inputs, and in a very direct way. If the
 correspondence is not direct, than it's highly likely that it is in fact non linear. The second
 approach is to ensure _metered execution_ --- during processing, decrement a counter for every
