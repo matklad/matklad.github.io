@@ -1,0 +1,58 @@
+# STD Doesn't Have to Abstract OS IO
+
+A short note on what goes into a language's standard library, and what's left for third party
+libraries to implement!
+
+Usually, the main underlying driving factor here is cardinality. If it is important that there's
+only one of a thing, it goes into std. If having many of a thing is a requirement, it is better
+handled by a third-party library. That is, the usual physical constraint is that there's only a
+_single_ standard library, and everyone uses the same standard library. In contrast, there are many
+different third-party libraries, and they all can be used at the same time.
+
+So, until very recently, my set of rules of thumb for what goes into stdlib looked roughly like
+this:
+
+1. If this is a vocabulary type, which will be used by APIs of different libraries, it should be in
+   the stdlib.
+2. If this is a cross platform abstraction around an IO facility provided by an OS, and this IO
+   facility has a reasonable common subset across most OSes, it should be in the stdlib.
+3. If there's one obvious way to implement it, it might go to stdlib.
+
+So for example something like [`Vec`](https://doc.rust-lang.org/stable/std/vec/struct.Vec.html) goes
+into a standard library, because all _other_ libraries are going to use vectors at the interfaces.
+
+Something like [`lazy_static`](https://docs.rs/lazy_static/1.5.0/lazy_static/macro.lazy_static.html)
+doesn't: while it is often needed, it is _not_ a vocabulary interface type.
+
+But it is acceptable for something like
+[`OnceCell`](https://docs.rs/once_cell/1.19.0/once_cell/sync/struct.OnceCell.html) to be in `std`
+--- it is still not a vocabulary type, but, unlike `lazy_static`, it is clear that the API is more
+or less optimal, and that there aren't that many good options to do this differently.
+
+But I've changed my mind about the second bullet point, about facilities like file IO or TCP
+sockets. I was _always_ under the impression that these things are are must for a standard library.
+But now I think that's not necessaryly true!
+
+Consider randomness. Not the PRNG kind of randomness you'd use to make a game fun, but a
+cryptographically secure randomness that you'd use to generate an SSH key pair. This sort of
+randomness ultimately bottoms out in hardware, and fundamentally requires talking to the OS and
+doing IO. This is squarely the bullet point number 2. And Rust is an interesting case study here: it
+failed to provide this abstraction in std, even though std itself actually needs it! But this turned
+out to be mostly a non-issue in practice --- a third party crate, `getrandom`, took the job of
+writing all the relevant bindings to various platform-specific API and using a bunch of conditional
+compilation to abstract that all away and provide a nice cross-platform API.
+
+So, no, it is not a _requirement_ that std has to wrap any wrappable IOing API. This _could_ be
+handled by the library ecosystem, _if_ the language allows first-class bindings to raw OS APIs
+outside of compiler-privileged code (and Rust certainly allows for that).
+
+So perhaps it won't be too unreasonable to leave even things like files and sockets to community
+experimentation? In a sense, that is happening in the async land anyway.
+
+---
+
+To clarify, I still believe that Rust _should_ provide bindings to OS-sourced crypto randomness, and
+I am extremely happy to see recent motion in that area. But the reason for this belief changed. I no
+longer feel the mere fact that OS-specific APIs are involved to be particularly salient. However, it
+is still true that there's more or less [one correct way to do
+this](https://fuchsia.dev/reference/syscalls/cprng_draw).
