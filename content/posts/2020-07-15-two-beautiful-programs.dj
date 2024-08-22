@@ -40,24 +40,24 @@ Rust doesn't allow doing stupid things.
 ## Second Program
 
 ```rust
-use crossbeam::scope;
-use parking_lot::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard};
 
 fn main() {
   let mut counter = Mutex::new(0);
 
-  scope(|s| {
+  std::thread::scope(|s| {
     for _ in 0..10 {
-      s.spawn(|_| {
+      s.spawn(|| {
         for _ in 0..10 {
-          let mut guard: MutexGuard<i32> = counter.lock();
+          let mut guard: MutexGuard<i32> =
+            counter.lock().unwrap();
           *guard += 1;
         }
       });
     }
-  }).unwrap();
+  });
 
-  let total: &mut i32 = counter.get_mut();
+  let total: &mut i32 = counter.get_mut().unwrap();
   println!("total = {}", *total)
 }
 ```
