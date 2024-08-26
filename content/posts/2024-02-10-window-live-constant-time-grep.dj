@@ -2,7 +2,7 @@
 
 In this post, I describe the design of [window](https://github.com/matklad/window/) --- a small
 grep-like utility I implemented in 500 lines of Rust. The utility itself is likely not that
-interesting --- I bet some greybeared can implement an equivalent in 5 lines of bash. But the
+interesting --- I bet some greybeard can implement an equivalent in 5 lines of bash. But the
 design principles behind it might be interesting --- this small utility manages to combine core
 ideas of rust-analyzer and TigerBeetle!
 
@@ -12,7 +12,7 @@ TigerBeetle is tested primarily through a deterministic simulator: a cluster of 
 single process (in a single thread even), replicas are connected to a virtual network and a virtual
 hard drive. Both the net and the disk are extra nasty, and regularly drop, reorder, and corrupt IO
 requests. The cluster has to correctly process randomly generated load in spite of this radioactive
-environment. You can play with visualization of the simulator here:
+environment. You can play with a visualization of the simulator here:
 <https://sim.tigerbeetle.com>{.display}
 
 Of course, sometimes we have bugs, and need to debug crashes found by the simulator. Because
@@ -107,7 +107,7 @@ the user can make the query more specific by adding more AND terms to `filter_in
 OR terms to `filter_out`.
 
 TigerBeetle gives `window` the second magic parameter --- `source_bytes_max`. The big insight of
-TigerBeetle is that all software always has limits. Sometimes the limit is a  hard wall: if a server
+TigerBeetle is that all software always has limits. Sometimes the limit is a hard wall: if a server
 runs out of file descriptors, it just crashes. The limit can also be a soft, sloughy bog as well: if
 the server runs out of memory, it might start paging memory in and out, slowing to a crawl. Even if
 some requests are, functionally speaking, fulfilled, the results are useless, as they arrive too
