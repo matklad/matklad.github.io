@@ -1,0 +1,44 @@
+# The Fundamental Law Of Software Dependencies
+
+> Canonical source code for software should include checksums of the content of _all_ its
+> dependencies.
+
+Several examples of the law:
+
+Software obviously depends on its source code. The law says that _something_ should hold the hash of
+the entire source, and thus mandates the use of a content-addressed version control system such as
+git.
+
+Software often depends on 3rd party libraries. These libraries could in turn depend on _other_
+libraries. It is imperative to include a lockfile that covers this entire set and comes with
+checksums. Curiously, the lockfile itself is a part of source code, and gets mixed into the VCS
+root hash.
+
+Software needs a compiler. The _hash_ of the required compiler should be included in the lockfile.
+Typically, this is not done --- only the version is specified. I think that is a mistake. Specifying
+a version and a hash is not much more trouble than just the version, but that gives you a superpower
+--- you no longer need to trust the party that distributes your compiler. You could take a shady
+blob of bytes you've found laying on the street, as long as its checksum checks out.
+
+Note that you can compress hashes by mixing them. For compiler use-case, there's a separate hash per
+platform, because the Linux and the Windows versions of the compiler differ. This doesn't mean that
+your project should include one compiler's hash per platform, one hash is enough. Compiler
+distribution should include a manifest -- a small text file which lists all platform and their
+platform specific hashes. The single hash of _that_ file is what is to be included by downstream
+consumers. To verify a specific binary, the consumer first downloads a manifest and checks that it
+has the correct hash, and then extracts the hash for the specific platform.
+
+---
+
+The law is an instrumental goal. By itself, hashes are not _that_ useful. But to get to the point
+where you actually _know_ the hashes requires:
+
+* Actually learning _what_ are you dependencies (this is _not_ trivial! If you have a single
+  Makefile or an `.sh`, you most likely don't know the set of your dependencies).
+* Coming up with some automated way to download those dependencies.
+* Fixing dependencies's build process to become reproducible, so as to have a meaningful hash at
+  all.
+* Learning to isolate dependencies per project, as hashed dependencies can't be installed into a
+  global shared namespace.
+
+_These_ things are what actually makes developing software easier.
