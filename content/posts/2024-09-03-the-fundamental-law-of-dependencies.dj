@@ -25,7 +25,7 @@ platform, because the Linux and the Windows versions of the compiler differ. Thi
 your project should include one compiler's hash per platform, one hash is enough. Compiler
 distribution should include a manifest -- a small text file which lists all platform and their
 platform specific hashes. The single hash of _that_ file is what is to be included by downstream
-consumers. To verify a specific binary, the consumer first downloads a manifest and checks that it
+consumers. To verify a specific binary, the consumer first downloads a manifest, checks that it
 has the correct hash, and then extracts the hash for the specific platform.
 
 ---
@@ -33,7 +33,7 @@ has the correct hash, and then extracts the hash for the specific platform.
 The law is an instrumental goal. By itself, hashes are not _that_ useful. But to get to the point
 where you actually _know_ the hashes requires:
 
-* Actually learning _what_ are you dependencies (this is _not_ trivial! If you have a single
+* Actually learning _what_ are your dependencies (this is _not_ trivial! If you have a single
   Makefile or an `.sh`, you most likely don't know the set of your dependencies).
 * Coming up with some automated way to download those dependencies.
 * Fixing dependencies's build process to become reproducible, so as to have a meaningful hash at
@@ -41,4 +41,4 @@ where you actually _know_ the hashes requires:
 * Learning to isolate dependencies per project, as hashed dependencies can't be installed into a
   global shared namespace.
 
-_These_ things are what actually makes developing software easier.
+_These_ things are what actually make developing software easier.
