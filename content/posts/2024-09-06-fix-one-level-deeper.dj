@@ -1,0 +1,51 @@
+# Try to Fix It One Level Deeper
+
+I had a productive day today! I did many different and unrelated things, but they all had the same
+unifying theme:
+
+There's a bug! And it is sort-of obvious how to fix it. But if you don't laser-focus on that, and
+try to perceive the surrounding context, it turns out that the bug is valuable, and it is pointing
+in the direction of a bigger related problem. So, instead of fixing the bug directly, a detour is
+warranted to close off the avenue for a class of bugs.
+
+Here are the examples!
+
+In the morning, my colleague pointed out that we are giving substandard error message for a pretty
+stressful situation when the database runs out of disk space. I went ahead and added appropriate log
+messages to make it clearer. But then I stopped for a moment and noticed that the problem is bigger
+--- we are missing an infrastructure for fatal errors, and `NoSpaceLeft` is just one of a kind. So I
+went ahead and added that along the way:
+[#2289](https://github.com/tigerbeetle/tigerbeetle/pull/2289).
+
+Then, I was reviewing a PR by `@martinconic` which was fixing some typos, and noticed that it was
+also changing the formatting of our Go code. The latter is by far the biggest problem, as it is the
+sign that we somehow are not running `gofmt` during our CI, which I fixed in
+[#2287](https://github.com/tigerbeetle/tigerbeetle/pull/2287).
+
+Then, there was a PR from yesterday, where we again had a not quite right log message. The cause was
+a confusion between two compile-time configuration parameters, which were close, but not quite
+identical. So, instead of fixing the error message I went ahead and made the two parameters
+_exactly_ the same. But then my colleague noticed that I actually failed to fix it one level deeper
+in this case! Turns out, it is possible to remove this compile-time parametrization altogether,
+which I did in [#2292](https://github.com/tigerbeetle/tigerbeetle/pull/2292).
+
+But these all were randomly-generated side quests. My intended story line for today was to refactor
+the piece of code I had trouble explaining (and understanding!) on [yesterday's
+episode](https://www.youtube.com/watch?v=C3XAteN_lYk&list=PL9eL-xg48OM3pnVqFSRyBFleHtBBw-nmZ&index=41)
+of Iron Beetle. To get into the groove, I decided to first refactor the code that _calls_ the
+problematic piece of logic, as I noticed a couple of minor stylistic problems there. Of course, when
+doing that, I discovered that we have a bit of dead code, which luckily doesn't affect correctness,
+but does obscure the logic. While fixing that, I used one of my favorite Zig patterns:
+[`defer assert(postcondition);`]{.display}
+
+It of course failed in the simulator in a way postcondition checks tend to fail --- there was an
+unintended reentrancy in the code. So I slacked my colleague something like
+
+> I thought myself to be so clever adding this assert, but now it fails and I have to fix it TT
+> I think I'll just go and `.next_tick` the prefetch path. It feels like there should be a more
+> elegant solution here, but I am not seeing it.
+
+But of course I can't just "go and `.next_tick` it", so here I am, trying to figure out how to
+encode a [Duff's device](https://en.wikipedia.org/wiki/Duff%27s_device) in Zig
+pre-[#8220](https://github.com/ziglang/zig/issues/8220), so as to make this class of issues much
+less likely.
