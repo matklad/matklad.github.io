@@ -204,6 +204,20 @@ function yyyy_mm_dd(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+export const redirect = (path: string): HtmlString => {
+  return html`<!DOCTYPE html>
+<html lang="en-US">
+  <meta charset="utf-8">
+  <title>Redirecting&hellip;</title>
+  <link rel="canonical" href="${path}">
+  <script>location="${path}"</script>
+  <meta http-equiv="refresh" content="0; url=${path}">
+  <meta name="robots" content="noindex">
+  <h1>Redirecting&hellip;</h1>
+  <a href="${path}">Click here if you are not redirected.</a>
+</html>`;
+}
+
 export const feed = (posts: Post[]): HtmlString => {
   const entries = posts.slice(0, 10).map(feed_entry);
 

@@ -36,13 +36,16 @@ async function main() {
         i++;
         break;
       }
+      case "--blogroll": {
+        params.blogroll = true;
+        break;
+      }
       default:
         fatal(`unexpected argument: ${Deno.args[i]}`);
     }
   }
 
   if (subcommand === "build") {
-    params.blogroll = true;
     await build(params);
   } else if (subcommand === "watch") {
     await watch(params);
@@ -138,6 +141,14 @@ async function build(params: {
     const ast = await djot.parse(text);
     const html = djot.render(ast, {});
     await update_file(`out/res/${page}.html`, templates.page(page, html).value);
+  }
+
+  const redirects = [
+    ["/2024/09/32/-what-is-io-uring.html", "/2024/09/23/what-is-io-uring.html"]
+  ];
+
+  for (const [from, to] of redirects) {
+    await update_file(`out/res/${from}`, templates.redirect(to).value);
   }
 
   const paths = [
