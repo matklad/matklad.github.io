@@ -18,7 +18,7 @@ Notably, writes to the cache and to the database can proceed concurrently. So, s
 
 ```rust
 async fn process(
-  db: DataBase,
+  db: Database,
   cache: Cache,
   request: Request,
 ) -> Response {
@@ -28,7 +28,7 @@ async fn process(
   response
 }
 
-async fn update_db(db: DataBase, response: Response);
+async fn update_db(db: Database, response: Response);
 async fn update_cache(cache: Cache, response: Response);
 
 fn spawn<T>(f: impl Future<Output = T>) -> JoinHandle<T>;
@@ -39,7 +39,7 @@ cache. Here's the same snippet in intra-task style, where we use join function o
 
 ```rust
 async fn process(
-  db: DataBase,
+  db: Database,
   cache: Cache,
   request: Request,
 ) -> Response {
@@ -51,7 +51,7 @@ async fn process(
   response
 }
 
-async fn update_db(db: DataBase, response: Response) { ... }
+async fn update_db(db: Database, response: Response) { ... }
 async fn update_cache(cache: Cache, response: Response) { ... }
 
 async fn join<U, V>(
@@ -114,7 +114,7 @@ To confuse matters further, let's rewrite our example in TypeScript:
 
 ```ts
 async function process(
-  db: DataBase,
+  db: Database,
   cache: Cache,
   request: Request,
 ): Response {
@@ -130,7 +130,7 @@ and using Rust's rayon library:
 
 ```rust
 fn process(
-  db: DataBase,
+  db: Database,
   cache: Cache,
   request: Request,
 ) -> Response {
@@ -156,7 +156,7 @@ Let's zoom in onto the JS and the join examples:
 
 ```ts
 async function process(
-  db: DataBase,
+  db: Database,
   cache: Cache,
   request: Request
 ): Response {
@@ -173,7 +173,7 @@ async function process(
 
 ```rust
 async fn process(
-  db: DataBase,
+  db: Database,
   cache: Cache,
   request: Request,
 ) -> Response {
