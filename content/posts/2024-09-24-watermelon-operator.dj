@@ -194,7 +194,7 @@ a promise is created. In contrast, Rust futures are lazy --- they do nothing unt
 _this_ I think is the fundamental difference, it is lazy vs. eager "futures" (`thread::spawn` is an
 eager "future" while `rayon::join` a lazy one).
 
-And it seems that lazy semantics is quiet a bit more elegant! The beauty of
+And it seems that lazy semantics is quite a bit more elegant! The beauty of
 
 ```rust
 join(
@@ -325,7 +325,7 @@ concurrently let Some(socket) = listener.accept().await in {
 ```
 
 This runs accept in a loop, and, for each accepted socket, runs `handle_connection` concurrently.
-There are as many concurrent `handle_connection`s calls as there are ready sockets in our listener!
+There are as many concurrent `handle_connection` calls as there are ready sockets in our listener!
 
 Let's limit the maximum number of concurrent connections, to provide back pressure:
 
@@ -346,7 +346,7 @@ in {
 
 You get the idea (hopefully):
 
-- In the "head" of our concurrent loop (cooloop?) construct, we first aquire a semaphore permit
+- In the "head" of our concurrent loop (cooloop?) construct, we first acquire a semaphore permit
   and then fetch a socket.
 - Both the socket and the permit are passed to the body.
 - The body releases the permit at the end.
