@@ -1,0 +1,67 @@
+# On Ousterhout's Dichotomy
+
+Why are there so many programming languages? One of the driving reasons for this is that some
+languages tend to produce fast code, but are a bit of a pain to use (C++), while others are a breeze
+to write, but run somewhat slow (Python). Depending on the ratio of CPUs to programmers, one or the
+other might be relatively more important.
+
+But can't we just, like, implement a universal language that is convenient but slowish by default,
+but allows an expert programmer to drop to a lower, more performant but harder register? I think
+there were many attempts at this, and they didn't quite work out.
+
+The _natural_ way to go about this is to start from the high-level side. Build a high-level
+featureful language with large runtime, and then provide granular opt outs of specific runtime
+facilities. Two great examples here are C# and D. And the most famous example of this paradigm is
+Python, with "rewrite slow parts in C" mantra.
+
+It seems to me that such an approach can indeed solve the "easy to use" part of the dichotomy, but
+doesn't quite work as promised for "runs fast" one. And here's the reason. For performance, what
+matters is not so much the code that's executed, but rather the layout of objects in memory. And the
+high-level dialect locks-in pointer-heavy GC object model! Even if you write your code in assembly,
+the performance ceiling will be determined by all those pointers GC needs. To actually get full
+"low-level" performance, you need to effectively "mirror" the data across the dialects across a
+quasi-FFI boundary.
+
+And that's what kills "write most of the code in Python, rewrite hot spots in C" approach --- the
+overhead for transitioning between the native C data structures and the Python ones tends to eat any
+performance benefits that C brings to the table. There are some very real, very important
+exceptions, where it is possible to batch sufficiently large packages of work to minimize the
+overhead: [<http://venge.net/graydon/talks/VectorizedInterpretersTalk-2023-05-12.pdf>.]{.display}
+But it seems that the average case looks more like this:
+[<https://code.visualstudio.com/blogs/2018/03/23/text-buffer-reimplementation>.]{.display}
+
+And this brings me to Rust. It feels like it _accidentally_ blundered into the space of universal
+languages through the floor. There are no heavy runtime-features to opt out of in Rust. The object
+model is universal throughout the language. There isn't a value-semantics/reference-semantics
+dichotomy, references are first-class values. And yet:
+
+* There's memory safety, which removes most of the fun aspects of low-level programming.
+* The language didn't sleep on basic PL niceties like sum-types, generics and
+  "everything-is-expression".
+* And a healthy minority of rubyists in the community worked tirelessly to ensure that [systems
+  programmers can have nice
+  things](https://robert.ocallahan.org/2016/08/random-thoughts-on-rust-cratesio-and.html).
+
+As a result, there is a certain spectrum of Rust:
+
+- Sloppy Rust, which allocates and clones left-and-right.
+- Normal Rust, which opportunistically uses pretzels and avoids gratuitous allocations but otherwise
+  doesn't try to optimize anything specifically.
+- DoD Rust, which thinks a bit about cache-lines, packs things into arenas, uses indexes instead of
+  pointers with an occasional SoA and SIMD.
+- Crazy here-be-dragons Rust with untagged unions, unsafe, inline assembly and other wizardry.
+
+While the bottom end here sits pretty comfortably next to C, the upper tip doesn't quite reach the
+usability level of Python. But this is mostly compensated through these three effects:
+
+- Unified object model ensures that there's no performance tax and little ceremony when going up and,
+  down performance sloppiness spectrum.
+- [Unsafe abstractions](https://smallcultfollowing.com/babysteps/blog/2016/05/23/unsafe-abstractions/)
+  not only allow an expert programmer to write optimal code, but, crucially, they allow wrapping it
+  into misuse-resistance interface, which a non-expert programmer can easily use from a high-level
+  Rust dialect.
+- Performance _option_ is quite an unfair advantage. When you start writing something, you don't
+  necessary know how fast the thing would have to be. It often depends on the uncertain future. But,
+  if you can sacrifice just a tiny bit of developer experience to get an insurance that, if push
+  comes to shove, you could incrementally arrive at the optimal performance without whole-system
+  rewrites, that is often a hard-to-refuse offer.
