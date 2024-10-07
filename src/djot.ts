@@ -191,7 +191,7 @@ ${pre}
         const children = get_string_content(node)
           .split("+")
           .map((it) => `<kbd>${it}</kbd>`)
-          .join(" + ");
+          .join("+");
         return `<kbd>${children}</kbd>`;
       }
       if (has_class(node, "menu")) {

@@ -1,0 +1,130 @@
+# A Missing IDE Feature
+
+Slightly unusual genre --- with this article, I want to try to enact a change in the world. I
+believe that there is a "missing" IDE feature which is:
+
+* very easy to implement (these days),
+* is a large force multiplier for experienced users,
+* is conspicuously missing from almost every editor.
+
+The target audience here is anyone who can land a PR in Zed, VS Code, Helix, Neovim, Emacs, Kakoune,
+or any other editor or any language server. The blog post would be a success if one of you feels
+sufficiently inspired to do the thing!
+
+## The Feature
+
+Suppose you are casually reading the source code of rust-analyzer, and are curious about handling of
+method bodies. There's a `Body` struct in the code base, and you want to understand how it is used.
+
+Would you rather look at this?
+
+![](https://github.com/user-attachments/assets/4c794726-1b56-4c32-b51e-e0b671b73bab)
+
+Or this?
+
+![](https://github.com/user-attachments/assets/e0d9adf5-15a1-48e1-a1b8-3762104a031e)
+
+(The screenshots are from IntelliJ/RustRover, because of course it gets this right)
+
+The second option is clearly superior --- it conveys significantly more useful information in the
+same amount of pixels. Function names, argument lists and return types are so much more valuable
+than a body of any particular function. Especially if the function is a page-full of boilerplate
+code!
+
+And this is the feature I am asking for --- make the code look like the second image. Or,
+specifically, [*Fold Method Bodies by Default*.]{.display}
+
+There are two components here. _First_, only method bodies are folded. This is a syntactic check ---
+we are _not_ folding the second level. For code like
+
+```rust
+fn f() { ... }
+
+impl S {
+    fn g(&self) { ... }
+}
+```
+
+Both `f` and `g` are folded, but `impl S` is not. Similarly, function parameters and function body
+are actually on the same level of folding hierarchy, but it is imperative that parameters are _not_
+folded. This is the part that was hard ten years ago but is easy today. "what is function body" is a
+non-trivial question, which requires proper parsing of the code. These days, either an LSP server or
+Tree-sitter can answer this question quickly and reliably.
+
+_The second_ component of the feature is that folded is a default state. It is not a "fold method
+bodies" _action_. It is a setting that ensures that, whenever you visit a new file, bodies are
+folded by default. To make this work, the editor should be smart to seamlessly unfold specific
+function when appropriate. For example, if you "go to definition" to a function, that function
+should get unfolded, while the surrounding code should remail folded.
+
+Now that I have explained how the feature works, I will _not_ try to motivate it. I think it is
+pretty obvious how awesome this actually is. Code is read more often than written, and this is one
+of the best multipliers for readability. _Most_ of the code is in method bodies, but most important
+code is in function signatures. Folding bodies auto-magically hide the 80% of boring code, leaving
+the most important 20%. It was in 2018 when I last the IDE (IntelliJ) which has this implemented
+properly, and I've been missing this function ever since!
+
+You might also be wondering whether it is the same feature as the Outline, that special UI which
+shows a graphical, hierarchical table of contents of the file. It is true that outline and
+fold-bodies-by-default attack the same issue. But I'd argue that folding solves it better. This is
+an instance of a common pattern. In a smart editor, it is often possible to implement any given
+feature either by "lowering" it to plain text, or by creating a dedicated GUI. And the lowering
+approach almost always wins, because it gets to re-use all existing functionality for free. For
+example, the folding approach trivially gives you an ability to move a bunch of functions from one
+impl block to the other by selecting them with [Shift + Down]{.kbd}, cutting with [Ctrl + X]{.kbd}
+and pasting with [Ctrl + V]{.kbd}.
+
+## Call to Action
+
+So, if you are a committer to one of the editors, please consider adding a "fold function bodies by
+default" mode. It probably should be off by default, as it can easily scare new users away, but it
+should be there for power users to enable, and it should be prominently documented, so that people
+can learn that they want it. After the checkbox is in place, see if you can implement the actual
+logic! If your editor uses Tree-sitter, this should be relatively easy --- its syntax tree contains
+all the information you need. Just make sure that:
+
+* bodies are folded when the new file is opened,
+* the editor unfolds them when appropriate (generally, when navigated to a function from elsewhere).
+
+If your editor is _not_ based on Tree-sitter, you'll have a harder time. In theory, the information
+should be readily available from the language server, but LSP currently doesn't expose it. Here's
+the problem:
+
+<https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#foldingRangeKind>
+
+There's no `body` kind there! Adding it should be trivially technically, but it always is a pain to
+get something into the protocol if you are not VS Code.
+
+## My Role
+
+What is my job here, besides sitting there and writing blog posts? I actually think that writing
+this down is quite valuable!
+
+I suppose the feature is still commonly missing due to a two-sided market failure --- the feature
+doesn't exist, so prospective users don't realize that it is possible, and don't ask editor's
+authors to implement it. Without users asking, editor authors themselves don't realize this feature
+could exist, and don't rush implementing it. This is exacerbated by the fact that it _was_ a hard
+feature to implement ten years ago, when we didn't have Tree-sitter/LSP, so there are poor
+workarounds in place --- actions to fold a certain _level_. These workarounds the prevent the proper
+feature from gaining momentum.
+
+So here I hope to maybe tip the equilibrium's scale a bit, and start a feedback loop where more
+people realize that they _want_ this feature, such that it is implemented in some of the more
+experimental editors, which hopefully would expose the feature to more users, popularizing it until
+it gets implemented everywhere!
+
+Still, just talking _isn't_ everything I did here! Six years ago, I implemented the language-server
+side of this in rust-analyzer:
+
+<https://github.com/rust-lang/rust-analyzer/commit/23b040962ff299feeef1f967bc2d5ba92b01c2bc>
+
+This currently _isn't_ exposed to LSP, because it doesn't allow flagging a folding range as method
+body. To fix _that_ I opened this VS Code issue (LSP generally avoids doing something before VS
+Code):
+
+<https://github.com/microsoft/vscode/issues/128912>
+
+And since then I have been quietly waiting for some editor (not necessary VS Code) to pick this up.
+This hasn't happened yet, hence this article!
+
+Thanks for reading!

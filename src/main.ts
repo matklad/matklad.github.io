@@ -15,6 +15,14 @@ async function main() {
   };
 
   const subcommand = Deno.args[0];
+  if (subcommand === "touch") {
+    const slug = Deno.args[1];
+    const date = new Date().toISOString().split("T")[0];
+    const path = `./content/posts/${date}-${slug}.dj`;
+    console.log(`touching ${path}`);
+    await Deno.writeTextFile(path, "#\n");
+    return;
+  }
 
   let i = 1;
   for (; i < Deno.args.length; i++) {
@@ -144,7 +152,7 @@ async function build(params: {
   }
 
   const redirects = [
-    ["/2024/09/32/-what-is-io-uring.html", "/2024/09/23/what-is-io-uring.html"]
+    ["/2024/09/32/-what-is-io-uring.html", "/2024/09/23/what-is-io-uring.html"],
   ];
 
   for (const [from, to] of redirects) {
