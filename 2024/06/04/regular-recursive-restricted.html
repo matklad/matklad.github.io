@@ -1,0 +1,338 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Regular, Recursive, Restricted</title>
+  <meta name="description" content="A post/question about formal grammars, wherein I search for a good formalism for describing infix
+expressions.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/06/04/regular-recursive-restricted.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Regular, Recursive, Restricted</span> <time class="meta" datetime="2024-06-04">Jun 4, 2024</time></h1>
+<p><span>A post/question about formal grammars, wherein I search for a good formalism for describing infix</span>
+<span>expressions.</span></p>
+<p><span>Problem statement: it</span>&rsquo;<span>s hard to describe arithmetic expressions in a way that:</span></p>
+<ul>
+<li>
+<span>declaratively captures the overall shape of expression, and</span>
+</li>
+<li>
+<span>has a clear precedence semantics</span>
+</li>
+</ul>
+<p><span>Let</span>&rsquo;<span>s start with the following grammar for arithmetic expressions:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Expr =</span>
+<span class="line">    'number'</span>
+<span class="line">  | '(' Expr ')'</span>
+<span class="line">  | Expr '+' Expr</span>
+<span class="line">  | Expr '*' Expr</span></code></pre>
+
+</figure>
+<p><span>It is definitely declarative and obvious. But it is ambiguous </span>&mdash;<span> it doesn</span>&rsquo;<span>t tell whether </span><code>*</code><span> or </span><code>+</code>
+<span>binds tighter, and their associativity. You </span><em><span>can</span></em><span> express those properties directly in the grammar:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Expr =</span>
+<span class="line">    Factor</span>
+<span class="line">  | Expr '+' Factor</span>
+<span class="line"></span>
+<span class="line">Factor =</span>
+<span class="line">    Atom</span>
+<span class="line">  | Factor '*' Atom</span>
+<span class="line"></span>
+<span class="line">Atom = 'number' | '(' Expr ')'</span></code></pre>
+
+</figure>
+<p><span>But at this point we lose decorativeness. The way my brain parses the above grammar is by pattern</span>
+<span>matching it as a grammar for infix expressions and folding it back to the initial compressed form,</span>
+<em><span>not</span></em><span> by reading the grammar rules as written.</span></p>
+<p><span>To go in another direction, you can define ambiguity away and get parsing expression grammars:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Exp =</span>
+<span class="line">    Sum</span>
+<span class="line">  / Product</span>
+<span class="line">  / Atom</span>
+<span class="line"></span>
+<span class="line">Sum     = Expr (('+' / '-') Expr)+</span>
+<span class="line">Product = Expr (('*' / '/') Expr)+</span>
+<span class="line"></span>
+<span class="line">Atom = 'number' | '(' Expr ')'</span></code></pre>
+
+</figure>
+<p><span>This captures precedence </span><em><span>mostly</span></em><span> declaratively: we first match </span><code>Sum</code><span>, and, failing that, match</span>
+<code>Product</code><span>. But the clarity of semantics is lost </span>&mdash;<span> PEGs are never ambiguous by virtue of always</span>
+<span>picking the first alternative, so it</span>&rsquo;<span>s too easy to introduce an unintended ambiguity.</span></p>
+<p><span>Can we have both? Clarity with respect to tree shape and clarity with respect to ambiguity?</span></p>
+<p><span>Let me present a formalism that, I think, ticks both boxes for the toy example and pose a question</span>
+<span>of whether it generalizes.</span></p>
+<hr>
+<p><span>Running example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">E =</span>
+<span class="line">    'number'</span>
+<span class="line">  | '(' E ')'</span>
+<span class="line">  | E '+' E</span></code></pre>
+
+</figure>
+<p><span>As a grammar for strings, it is ambiguous. There are two parse trees for </span><code>1 + 2 + 3</code><span> </span>&mdash;<span> the</span>
+&ldquo;<span>correct</span>&rdquo;<span> one </span><code>(1 + 2) + 3</code><span>, and the alternative: </span><code>1 + (2 + 3)</code><span>.</span></p>
+<p><span>Instead, lets see it as a grammar for trees instead. Specifically, trees where:</span></p>
+<ul>
+<li>
+<span>Leaves are labeled with </span><code>'number'</code><span>, </span><code>'+'</code><span>, or </span><code>'*'</code><span>.</span>
+</li>
+<li>
+<span>Interior nodes are labeled with </span><code>E</code><span>.</span>
+</li>
+<li>
+<span>For each interior node, the string formed by labels of its </span><em><span>direct</span></em><span> children conforms to the</span>
+<span>specified regular expression.</span>
+</li>
+</ul>
+<p><span>For trees, this is a perfectly fine grammar! Given a labeled tree, its trivial to check whether it</span>
+<span>matches the grammar: for each node, you can directly match the regular expression. There</span>&rsquo;<span>s also no</span>
+<span>meaningful ambiguity </span>&mdash;<span> while arbitrary regular expressions can be ambiguous (</span><code>aa | a*</code><span>), this</span>
+<span>doesn</span>&rsquo;<span>t really come up as harmful in practice all that often, and, in any case, it</span>&rsquo;<span>s easy to check</span>
+<span>that any two regular alternatives are disjoint (intersect the two automata, minimize the result,</span>
+<span>check if it is empty).</span></p>
+<p><span>As a grammar for trees, it has the following property: there are two distinct trees which</span>
+<span>nevertheless share the same sequence of leaves:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">        E                  E</span>
+<span class="line">        o                  o</span>
+<span class="line">      / | \              / | \</span>
+<span class="line">     E '+' E            E '+' E</span>
+<span class="line">     o     |            |     o</span>
+<span class="line">   / | \  '3'          '1'  / | \</span>
+<span class="line">  E '+' E                  E '+' E</span>
+<span class="line">  |     |                  |     |</span>
+<span class="line"> '1'   '2'                '2'   '3'</span></code></pre>
+
+</figure>
+<p><span>So let</span>&rsquo;<span>s restrict the set of trees, in the most straightforward manner, by adding some inequalities:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">E =</span>
+<span class="line">    'number'</span>
+<span class="line">  | '(' E ')'</span>
+<span class="line">  | E '+' E</span>
+<span class="line"></span>
+<span class="line">E !=</span>
+<span class="line">    E '+' [E '+' E]</span></code></pre>
+
+</figure>
+<p><span>Here, square brackets denote a child. </span><code>E '+' [E '+' E]</code><span> is a plus node whose right child is also a</span>
+<span>plus node. Checking whether a tree conform to this modified set of rules is easy as negative rules</span>
+<span>are also just regular expressions. Well, I think you need some fiddling here, as, as written, a</span>
+<span>negative rule matches two different levels of the tree, but you can flatten both the rule and the</span>
+<span>actual tree to the grandchildren level by enclosing children in parenthesis. Let me show an example:</span></p>
+<p><span>We want to match this node:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">    E</span>
+<span class="line">    o</span>
+<span class="line">  / | \</span>
+<span class="line"> E '+' E</span>
+<span class="line"> |     o</span>
+<span class="line">'1'  / | \</span>
+<span class="line">    E '+' E</span></code></pre>
+
+</figure>
+<p><span>against this rule concerning children and grand children:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">E '+' [E '+' E]</span></code></pre>
+
+</figure>
+<p><span>We write the list of children and grandchidren of the node, while adding extra </span><code>[]</code><span>, to get this</span>
+<span>string:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">['1'] '+' [E '+' E]</span></code></pre>
+
+</figure>
+<p><span>And in the rule we replace top-level non-terminals with </span><code>[.*]</code><span>, to get this regular expression:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">[.*] '+' [E '+' E]</span></code></pre>
+
+</figure>
+<p><span>Now we can match the string against a regex, get a mach, and rule out the tree (remember, this is</span>
+<code>!=</code><span>).</span></p>
+<p><span>So here it is, a perfectly functional mathematical animal: recursive restricted regular expression:</span></p>
+<ul>
+<li>
+<span>A set of non-terminals </span><code>N</code><span> (denoted with </span><code>TitleCase</code><span> names)</span>
+</li>
+<li>
+<span>A set of terminals </span><code>T</code><span> (denoted with </span><code>'quoted'</code><span> names)</span>
+</li>
+<li>
+<span>A generating mapping from non-terminals </span><code>N</code><span> to regular expressions over </span><code>N ∪ T</code><span> alphabet</span>
+</li>
+<li>
+<span>A restricting mapping from non-terminals </span><code>N</code><span> to regular expressions over </span><code>N ∪ T ∪ {], [}</code><span> (that is</span>
+<span>regular expressions with square brackets to denote children)</span>
+</li>
+</ul>
+<p><span>This construction denotes a set of labeled trees, where interior nodes are labeled with </span><code>N</code><span>, leaves</span>
+<span>are labeled with </span><code>T</code><span> and for each interior node</span></p>
+<ul>
+<li>
+<span>its children match the corresponding generating regular expression</span>
+</li>
+<li>
+<span>its grandchildren do not match the corresponding restricting regular expression</span>
+</li>
+</ul>
+<p><span>And the main question one would have, if confronted with a specimen, is </span>&ldquo;<span>is it ambiguous?</span>&rdquo;<span> That is,</span>
+<span>are there two trees in the set which have the same sequence of leaves?</span></p>
+<p><span>Let</span>&rsquo;<span>s look at an example:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Expr =</span>
+<span class="line">    'number'</span>
+<span class="line">  | '(' Expr ')'</span>
+<span class="line">  | Expr '+' Expr</span>
+<span class="line">  | Expr '*' Expr</span>
+<span class="line"></span>
+<span class="line">Expr !=</span>
+<span class="line">             Expr '+' [Expr '+' Expr]</span>
+<span class="line">|            Expr '*' [Expr '*' Expr]</span>
+<span class="line">|            Expr '*' [Expr '+' Expr]</span>
+<span class="line">| [Expr '+' Expr] '*' Expr</span></code></pre>
+
+</figure>
+<p><span>It looks unambiguous to me! And I am pretty sure that I can prove, by hand, that it is in fact</span>
+<span>unambiguous (well, I might discover that I miss a couple of restrictions in process, but it feels</span>
+<span>like it should work in principle). The question is, can a computer take an arbitrary recursive</span>
+<span>restricted regular expression and tell me that its unambiguous, or, failing that, provide a</span>
+<span>counter-example?</span></p>
+<p><span>In the general case, the answer is no </span>&mdash;<span> this is at least as expressive as CFG, and ambiguity of</span>
+<span>arbitrary CFG is undecidable. But perhaps there</span>&rsquo;<span>s some reasonable set of restrictions under which it</span>
+<span>is in fact possible to prove the absence of ambiguity?</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-06-04-regular-recursive-restricted.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,161 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>STD Doesn't Have to Abstract OS IO</title>
+  <meta name="description" content="A short note on what goes into a language's standard library, and what's left for third party
+libraries to implement!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/08/12/std-io.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>STD Doesn</span>&rsquo;<span>t Have to Abstract OS IO</span> <time class="meta" datetime="2024-08-12">Aug 12, 2024</time></h1>
+<p><span>A short note on what goes into a language</span>&rsquo;<span>s standard library, and what</span>&rsquo;<span>s left for third party</span>
+<span>libraries to implement!</span></p>
+<p><span>Usually, the main underlying driving factor here is cardinality. If it is important that there</span>&rsquo;<span>s</span>
+<span>only one of a thing, it goes into std. If having many of a thing is a requirement, it is better</span>
+<span>handled by a third-party library. That is, the usual physical constraint is that there</span>&rsquo;<span>s only a</span>
+<em><span>single</span></em><span> standard library, and everyone uses the same standard library. In contrast, there are many</span>
+<span>different third-party libraries, and they all can be used at the same time.</span></p>
+<p><span>So, until very recently, my set of rules of thumb for what goes into stdlib looked roughly like</span>
+<span>this:</span></p>
+<ol>
+<li>
+<span>If this is a vocabulary type, which will be used by APIs of different libraries, it should be in</span>
+<span>the stdlib.</span>
+</li>
+<li>
+<span>If this is a cross platform abstraction around an IO facility provided by an OS, and this IO</span>
+<span>facility has a reasonable common subset across most OSes, it should be in the stdlib.</span>
+</li>
+<li>
+<span>If there</span>&rsquo;<span>s one obvious way to implement it, it might go to stdlib.</span>
+</li>
+</ol>
+<p><span>So for example something like </span><a href="https://doc.rust-lang.org/stable/std/vec/struct.Vec.html"><code>Vec</code></a><span> goes</span>
+<span>into a standard library, because all </span><em><span>other</span></em><span> libraries are going to use vectors at the interfaces.</span></p>
+<p><span>Something like </span><a href="https://docs.rs/lazy_static/1.5.0/lazy_static/macro.lazy_static.html"><code>lazy_static</code></a>
+<span>doesn</span>&rsquo;<span>t: while it is often needed, it is </span><em><span>not</span></em><span> a vocabulary interface type.</span></p>
+<p><span>But it is acceptable for something like</span>
+<a href="https://docs.rs/once_cell/1.19.0/once_cell/sync/struct.OnceCell.html"><code>OnceCell</code></a><span> to be in </span><code>std</code>
+&mdash;<span> it is still not a vocabulary type, but, unlike </span><code>lazy_static</code><span>, it is clear that the API is more</span>
+<span>or less optimal, and that there aren</span>&rsquo;<span>t that many good options to do this differently.</span></p>
+<p><span>But I</span>&rsquo;<span>ve changed my mind about the second bullet point, about facilities like file IO or TCP</span>
+<span>sockets. I was </span><em><span>always</span></em><span> under the impression that these things are a must for a standard library.</span>
+<span>But now I think that</span>&rsquo;<span>s not necessarily true!</span></p>
+<p><span>Consider randomness. Not the PRNG kind of randomness you</span>&rsquo;<span>d use to make a game fun, but a</span>
+<span>cryptographically secure randomness that you</span>&rsquo;<span>d use to generate an SSH key pair. This sort of</span>
+<span>randomness ultimately bottoms out in hardware, and fundamentally requires talking to the OS and</span>
+<span>doing IO. This is squarely the bullet point number 2. And Rust is an interesting case study here: it</span>
+<span>failed to provide this abstraction in std, even though std itself actually needs it! But this turned</span>
+<span>out to be mostly a non-issue in practice </span>&mdash;<span> a third party crate, </span><code>getrandom</code><span>, took the job of</span>
+<span>writing all the relevant bindings to various platform-specific API and using a bunch of conditional</span>
+<span>compilation to abstract that all away and provide a nice cross-platform API.</span></p>
+<p><span>So, no, it is not a </span><em><span>requirement</span></em><span> that std has to wrap any wrappable IOing API. This </span><em><span>could</span></em><span> be</span>
+<span>handled by the library ecosystem, </span><em><span>if</span></em><span> the language allows first-class bindings to raw OS APIs</span>
+<span>outside of compiler-privileged code (and Rust certainly allows for that).</span></p>
+<p><span>So perhaps it won</span>&rsquo;<span>t be too unreasonable to leave even things like files and sockets to community</span>
+<span>experimentation? In a sense, that is happening in the async land anyway.</span></p>
+<hr>
+<p><span>To clarify, I still believe that Rust </span><em><span>should</span></em><span> provide bindings to OS-sourced crypto randomness, and</span>
+<span>I am extremely happy to see recent motion in that area. But the reason for this belief changed. I no</span>
+<span>longer feel the mere fact that OS-specific APIs are involved to be particularly salient. However, it</span>
+<span>is still true that there</span>&rsquo;<span>s more or less </span><a href="https://fuchsia.dev/reference/syscalls/cprng_draw"><span>one correct way to do</span>
+<span>this</span></a><span>.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-08-12-std-io.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
