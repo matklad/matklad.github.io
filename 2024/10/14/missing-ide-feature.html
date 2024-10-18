@@ -1,0 +1,245 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A Missing IDE Feature</title>
+  <meta name="description" content="Slightly unusual genre --- with this article, I want to try to enact a change in the world. I
+believe that there is a missing IDE feature which is:">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/10/14/missing-ide-feature.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>A Missing IDE Feature</span> <time class="meta" datetime="2024-10-14">Oct 14, 2024</time></h1>
+<p><span>Slightly unusual genre </span>&mdash;<span> with this article, I want to try to enact a change in the world. I</span>
+<span>believe that there is a </span>&ldquo;<span>missing</span>&rdquo;<span> IDE feature which is:</span></p>
+<ul>
+<li>
+<span>very easy to implement (these days),</span>
+</li>
+<li>
+<span>is a large force multiplier for experienced users,</span>
+</li>
+<li>
+<span>is conspicuously missing from almost every editor.</span>
+</li>
+</ul>
+<p><span>The target audience here is anyone who can land a PR in Zed, VS Code, Helix, Neovim, Emacs, Kakoune,</span>
+<span>or any other editor or any language server. The blog post would be a success if one of you feels</span>
+<span>sufficiently inspired to do the thing!</span></p>
+<section id="The-Feature">
+
+    <h2>
+    <a href="#The-Feature"><span>The Feature</span> </a>
+    </h2>
+<p><span>Suppose you are casually reading the source code of rust-analyzer, and are curious about handling of</span>
+<span>method bodies. There</span>&rsquo;<span>s a </span><code>Body</code><span> struct in the code base, and you want to understand how it is used.</span></p>
+<p><span>Would you rather look at this?</span></p>
+
+<figure>
+
+<img alt="" src="https://github.com/user-attachments/assets/4c794726-1b56-4c32-b51e-e0b671b73bab">
+</figure>
+<p><span>Or this?</span></p>
+
+<figure>
+
+<img alt="" src="https://github.com/user-attachments/assets/e0d9adf5-15a1-48e1-a1b8-3762104a031e">
+</figure>
+<p><span>(The screenshots are from IntelliJ/RustRover, because of course it gets this right)</span></p>
+<p><span>The second option is clearly superior </span>&mdash;<span> it conveys significantly more useful information in the</span>
+<span>same amount of pixels. Function names, argument lists and return types are so much more valuable</span>
+<span>than a body of any particular function. Especially if the function is a page-full of boilerplate</span>
+<span>code!</span></p>
+<p><span>And this is the feature I am asking for </span>&mdash;<span> make the code look like the second image. Or,</span>
+<span>specifically, </span><span class="display"><strong><span>Fold Method Bodies by Default</span></strong><span>.</span></span></p>
+<p><span>There are two components here. </span><em><span>First</span></em><span>, only method bodies are folded. This is a syntactic check </span>&mdash;
+<span>we are </span><em><span>not</span></em><span> folding the second level. For code like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">f</span>() { ... }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">S</span> {</span>
+<span class="line">    <span class="hl-keyword">fn</span> <span class="hl-title function_">g</span>(&amp;<span class="hl-keyword">self</span>) { ... }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Both </span><code>f</code><span> and </span><code>g</code><span> are folded, but </span><code>impl S</code><span> is not. Similarly, function parameters and function body</span>
+<span>are actually on the same level of folding hierarchy, but it is imperative that parameters are </span><em><span>not</span></em>
+<span>folded. This is the part that was hard ten years ago but is easy today. </span>&ldquo;<span>what is function body</span>&rdquo;<span> is a</span>
+<span>non-trivial question, which requires proper parsing of the code. These days, either an LSP server or</span>
+<span>Tree-sitter can answer this question quickly and reliably.</span></p>
+<p><em><span>The second</span></em><span> component of the feature is that folded is a default state. It is not a </span>&ldquo;<span>fold method</span>
+<span>bodies</span>&rdquo;<span> </span><em><span>action</span></em><span>. It is a setting that ensures that, whenever you visit a new file, bodies are</span>
+<span>folded by default. To make this work, the editor should be smart to seamlessly unfold specific</span>
+<span>function when appropriate. For example, if you </span>&ldquo;<span>go to definition</span>&rdquo;<span> to a function, that function</span>
+<span>should get unfolded, while the surrounding code should remail folded.</span></p>
+<p><span>Now that I have explained how the feature works, I will </span><em><span>not</span></em><span> try to motivate it. I think it is</span>
+<span>pretty obvious how awesome this actually is. Code is read more often than written, and this is one</span>
+<span>of the best multipliers for readability. </span><em><span>Most</span></em><span> of the code is in method bodies, but most important</span>
+<span>code is in function signatures. Folding bodies auto-magically hide the 80% of boring code, leaving</span>
+<span>the most important 20%. It was in 2018 when I last used an IDE (IntelliJ) which has this implemented</span>
+<span>properly, and I</span>&rsquo;<span>ve been missing this function ever since!</span></p>
+<p><span>You might also be wondering whether it is the same feature as the Outline, that special UI which</span>
+<span>shows a graphical, hierarchical table of contents of the file. It is true that outline and</span>
+<span>fold-bodies-by-default attack the same issue. But I</span>&rsquo;<span>d argue that folding solves it better. This is</span>
+<span>an instance of a common pattern. In a smart editor, it is often possible to implement any given</span>
+<span>feature either by </span>&ldquo;<span>lowering</span>&rdquo;<span> it to plain text, or by creating a dedicated GUI. And the lowering</span>
+<span>approach almost always wins, because it gets to re-use all existing functionality for free. For</span>
+<span>example, the folding approach trivially gives you an ability to move a bunch of functions from one</span>
+<span>impl block to the other by selecting them with </span><kbd><kbd>Shift </kbd>+<kbd> Down</kbd></kbd><span>, cutting with </span><kbd><kbd>Ctrl </kbd>+<kbd> X</kbd></kbd>
+<span>and pasting with </span><kbd><kbd>Ctrl </kbd>+<kbd> V</kbd></kbd><span>.</span></p>
+</section>
+<section id="Call-to-Action">
+
+    <h2>
+    <a href="#Call-to-Action"><span>Call to Action</span> </a>
+    </h2>
+<p><span>So, if you are a committer to one of the editors, please consider adding a </span>&ldquo;<span>fold function bodies by</span>
+<span>default</span>&rdquo;<span> mode. It probably should be off by default, as it can easily scare new users away, but it</span>
+<span>should be there for power users to enable, and it should be prominently documented, so that people</span>
+<span>can learn that they want it. After the checkbox is in place, see if you can implement the actual</span>
+<span>logic! If your editor uses Tree-sitter, this should be relatively easy </span>&mdash;<span> its syntax tree contains</span>
+<span>all the information you need. Just make sure that:</span></p>
+<ul>
+<li>
+<span>bodies are folded when the new file is opened,</span>
+</li>
+<li>
+<span>the editor unfolds them when appropriate (generally, when navigated to a function from elsewhere).</span>
+</li>
+</ul>
+<p><span>If your editor is </span><em><span>not</span></em><span> based on Tree-sitter, you</span>&rsquo;<span>ll have a harder time. In theory, the information</span>
+<span>should be readily available from the language server, but LSP currently doesn</span>&rsquo;<span>t expose it. Here</span>&rsquo;<span>s</span>
+<span>the problem:</span></p>
+<p><a href="https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#foldingRangeKind" class="url">https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#foldingRangeKind</a></p>
+<p><span>There</span>&rsquo;<span>s no </span><code>body</code><span> kind there! Adding it should be trivially technically, but it always is a pain to</span>
+<span>get something into the protocol if you are not VS Code.</span></p>
+</section>
+<section id="My-Role">
+
+    <h2>
+    <a href="#My-Role"><span>My Role</span> </a>
+    </h2>
+<p><span>What is my job here, besides sitting there and writing blog posts? I actually think that writing</span>
+<span>this down is quite valuable!</span></p>
+<p><span>I suppose the feature is still commonly missing due to a two-sided market failure </span>&mdash;<span> the feature</span>
+<span>doesn</span>&rsquo;<span>t exist, so prospective users don</span>&rsquo;<span>t realize that it is possible, and don</span>&rsquo;<span>t ask editor</span>&rsquo;<span>s</span>
+<span>authors to implement it. Without users asking, editor authors themselves don</span>&rsquo;<span>t realize this feature</span>
+<span>could exist, and don</span>&rsquo;<span>t rush implementing it. This is exacerbated by the fact that it </span><em><span>was</span></em><span> a hard</span>
+<span>feature to implement ten years ago, when we didn</span>&rsquo;<span>t have Tree-sitter/LSP, so there are poor</span>
+<span>workarounds in place </span>&mdash;<span> actions to fold a certain </span><em><span>level</span></em><span>. These workarounds the prevent the proper</span>
+<span>feature from gaining momentum.</span></p>
+<p><span>So here I hope to maybe tip the equilibrium</span>&rsquo;<span>s scale a bit, and start a feedback loop where more</span>
+<span>people realize that they </span><em><span>want</span></em><span> this feature, such that it is implemented in some of the more</span>
+<span>experimental editors, which hopefully would expose the feature to more users, popularizing it until</span>
+<span>it gets implemented everywhere!</span></p>
+<p><span>Still, just talking </span><em><span>isn</span>&rsquo;<span>t</span></em><span> everything I did here! Six years ago, I implemented the language-server</span>
+<span>side of this in rust-analyzer:</span></p>
+<p><a href="https://github.com/rust-lang/rust-analyzer/commit/23b040962ff299feeef1f967bc2d5ba92b01c2bc" class="url">https://github.com/rust-lang/rust-analyzer/commit/23b040962ff299feeef1f967bc2d5ba92b01c2bc</a></p>
+<p><span>This currently </span><em><span>isn</span>&rsquo;<span>t</span></em><span> exposed to LSP, because it doesn</span>&rsquo;<span>t allow flagging a folding range as method</span>
+<span>body. To fix </span><em><span>that</span></em><span> I opened this VS Code issue (LSP generally avoids doing something before VS</span>
+<span>Code):</span></p>
+<p><a href="https://github.com/microsoft/vscode/issues/128912" class="url">https://github.com/microsoft/vscode/issues/128912</a></p>
+<p><span>And since then I have been quietly waiting for some editor (not necessary VS Code) to pick this up.</span>
+<span>This hasn</span>&rsquo;<span>t happened yet, hence this article!</span></p>
+<p><span>Thanks for reading!</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-10-14-missing-ide-feature.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

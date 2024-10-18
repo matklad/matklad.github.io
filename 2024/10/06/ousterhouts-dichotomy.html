@@ -1,0 +1,192 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>On Ousterhout's Dichotomy</title>
+  <meta name="description" content="Why are there so many programming languages? One of the driving reasons for this is that some
+languages tend to produce fast code, but are a bit of a pain to use (C++), while others are a breeze
+to write, but run somewhat slow (Python). Depending on the ratio of CPUs to programmers, one or the
+other might be relatively more important.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/10/06/ousterhouts-dichotomy.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>On Ousterhout</span>&rsquo;<span>s Dichotomy</span> <time class="meta" datetime="2024-10-06">Oct 6, 2024</time></h1>
+<p><span>Why are there so many programming languages? One of the driving reasons for this is that some</span>
+<span>languages tend to produce fast code, but are a bit of a pain to use (C++), while others are a breeze</span>
+<span>to write, but run somewhat slow (Python). Depending on the ratio of CPUs to programmers, one or the</span>
+<span>other might be relatively more important.</span></p>
+<p><span>But can</span>&rsquo;<span>t we just, like, implement a universal language that is convenient but slowish by default,</span>
+<span>but allows an expert programmer to drop to a lower, more performant but harder register? I think</span>
+<span>there were many attempts at this, and they didn</span>&rsquo;<span>t quite work out.</span></p>
+<p><span>The </span><em><span>natural</span></em><span> way to go about this is to start from the high-level side. Build a high-level</span>
+<span>featureful language with large runtime, and then provide granular opt outs of specific runtime</span>
+<span>facilities. Two great examples here are C# and D. And the most famous example of this paradigm is</span>
+<span>Python, with </span>&ldquo;<span>rewrite slow parts in C</span>&rdquo;<span> mantra.</span></p>
+<p><span>It seems to me that such an approach can indeed solve the </span>&ldquo;<span>easy to use</span>&rdquo;<span> part of the dichotomy, but</span>
+<span>doesn</span>&rsquo;<span>t quite work as promised for </span>&ldquo;<span>runs fast</span>&rdquo;<span> one. And here</span>&rsquo;<span>s the reason. For performance, what</span>
+<span>matters is not so much the code that</span>&rsquo;<span>s executed, but rather the layout of objects in memory. And the</span>
+<span>high-level dialect locks-in pointer-heavy GC object model! Even if you write your code in assembly,</span>
+<span>the performance ceiling will be determined by all those pointers GC needs. To actually get full</span>
+&ldquo;<span>low-level</span>&rdquo;<span> performance, you need to effectively </span>&ldquo;<span>mirror</span>&rdquo;<span> the data across the dialects across a</span>
+<span>quasi-FFI boundary.</span></p>
+<p><span>And that</span>&rsquo;<span>s what kills </span>&ldquo;<span>write most of the code in Python, rewrite hot spots in C</span>&rdquo;<span> approach </span>&mdash;<span> the</span>
+<span>overhead for transitioning between the native C data structures and the Python ones tends to eat any</span>
+<span>performance benefits that C brings to the table. There are some very real, very important</span>
+<span>exceptions, where it is possible to batch sufficiently large packages of work to minimize the</span>
+<span>overhead: </span><span class="display"><a href="http://venge.net/graydon/talks/VectorizedInterpretersTalk-2023-05-12.pdf" class="url">http://venge.net/graydon/talks/VectorizedInterpretersTalk-2023-05-12.pdf</a><span>.</span></span>
+<span>But it seems that the average case looks more like this:</span>
+<span class="display"><a href="https://code.visualstudio.com/blogs/2018/03/23/text-buffer-reimplementation" class="url">https://code.visualstudio.com/blogs/2018/03/23/text-buffer-reimplementation</a><span>.</span></span></p>
+<p><span>And this brings me to Rust. It feels like it </span><em><span>accidentally</span></em><span> blundered into the space of universal</span>
+<span>languages through the floor. There are no heavy runtime-features to opt out of in Rust. The object</span>
+<span>model is universal throughout the language. There isn</span>&rsquo;<span>t a value-semantics/reference-semantics</span>
+<span>dichotomy, references are first-class values. And yet:</span></p>
+<ul>
+<li>
+<span>There</span>&rsquo;<span>s memory safety, which removes most of the fun aspects of low-level programming.</span>
+</li>
+<li>
+<span>The language didn</span>&rsquo;<span>t sleep on basic PL niceties like sum-types, generics and</span>
+&ldquo;<span>everything-is-expression</span>&rdquo;<span>.</span>
+</li>
+<li>
+<span>And a healthy minority of rubyists in the community worked tirelessly to ensure that </span><a href="https://robert.ocallahan.org/2016/08/random-thoughts-on-rust-cratesio-and.html"><span>systems</span>
+<span>programmers can have nice</span>
+<span>things</span></a><span>.</span>
+</li>
+</ul>
+<p><span>As a result, there is a certain spectrum of Rust:</span></p>
+<ul>
+<li>
+<span>Sloppy Rust, which allocates and clones left-and-right.</span>
+</li>
+<li>
+<span>Normal Rust, which opportunistically uses pretzels and avoids gratuitous allocations but otherwise</span>
+<span>doesn</span>&rsquo;<span>t try to optimize anything specifically.</span>
+</li>
+<li>
+<span>DoD Rust, which thinks a bit about cache-lines, packs things into arenas, uses indexes instead of</span>
+<span>pointers with an occasional SoA and SIMD.</span>
+</li>
+<li>
+<span>Crazy here-be-dragons Rust with untagged unions, unsafe, inline assembly and other wizardry.</span>
+</li>
+</ul>
+<p><span>While the bottom end here sits pretty comfortably next to C, the upper tip doesn</span>&rsquo;<span>t quite reach the</span>
+<span>usability level of Python. But this is mostly compensated through these three effects:</span></p>
+<ul>
+<li>
+<span>Unified object model ensures that there</span>&rsquo;<span>s no performance tax and little ceremony when going up and,</span>
+<span>down performance sloppiness spectrum.</span>
+</li>
+<li>
+<a href="https://smallcultfollowing.com/babysteps/blog/2016/05/23/unsafe-abstractions/"><span>Unsafe abstractions</span></a>
+<span>not only allow an expert programmer to write optimal code, but, crucially, they allow wrapping it</span>
+<span>into misuse-resistance interface, which a non-expert programmer can easily use from a high-level</span>
+<span>Rust dialect.</span>
+</li>
+<li>
+<span>Performance </span><em><span>option</span></em><span> is quite an unfair advantage. When you start writing something, you don</span>&rsquo;<span>t</span>
+<span>necessary know how fast the thing would have to be. It often depends on the uncertain future. But,</span>
+<span>if you can sacrifice just a tiny bit of developer experience to get an insurance that, if push</span>
+<span>comes to shove, you could incrementally arrive at the optimal performance without whole-system</span>
+<span>rewrites, that is often a hard-to-refuse offer.</span>
+</li>
+</ul>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-10-06-ousterhouts-dichotomy.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

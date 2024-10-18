@@ -1,0 +1,862 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Watermelon Operator</title>
+  <meta name="description" content="In these two most excellent articles,
+https://without.boats/blog/let-futures-be-futures
+and
+https://without.boats/blog/futures-unordered, 
+withoutboats introduces the concepts of multi-task and intra-task concurrency.
+I want to revisit this distinction --- while I agree that there are different classes
+of patterns of concurrency here, I am not quite satisfied with this specific partitioning of the
+design space. I will use Rust-like syntax for most of the examples, but I am more interested in the
+language-agnostic patterns, rather than in Rust's specific implementation of async.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/09/24/watermelon-operator.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>The Watermelon Operator</span> <time class="meta" datetime="2024-09-24">Sep 24, 2024</time></h1>
+<p><span>In these two most excellent articles,</span>
+<a href="https://without.boats/blog/let-futures-be-futures" class="display url">https://without.boats/blog/let-futures-be-futures</a>
+<span>and</span>
+<span class="display"><a href="https://without.boats/blog/futures-unordered" class="url">https://without.boats/blog/futures-unordered</a><span>, </span></span>
+<span>withoutboats introduces the concepts of </span>&ldquo;<span>multi-task</span>&rdquo;<span> and </span>&ldquo;<span>intra-task</span>&rdquo;<span> concurrency.</span>
+<span>I want to revisit this distinction </span>&mdash;<span> while I agree that there are different classes</span>
+<span>of patterns of concurrency here, I am not quite satisfied with this specific partitioning of the</span>
+<span>design space. I will use Rust-like syntax for most of the examples, but I am more interested in the</span>
+<span>language-agnostic patterns, rather than in Rust</span>&rsquo;<span>s specific implementation of async.</span></p>
+<section id="The-Two-Examples">
+
+    <h2>
+    <a href="#The-Two-Examples"><span>The Two Examples</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s introduce the two kinds of concurrency using a somewhat abstract example. We want to handle a</span>
+<code>Request</code><span> by doing some computation and then persisting the results in the database and in the cache.</span>
+<span>Notably, writes to the cache and to the database can proceed concurrently. So, something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">process</span>(</span>
+<span class="line">  db: Database,</span>
+<span class="line">  cache: Cache,</span>
+<span class="line">  request: Request,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> Response {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">response</span> = <span class="hl-title function_ invoke__">compute_response</span>(db, cache, request).<span class="hl-keyword">await</span>;</span>
+<span class="line">  <span class="hl-title function_ invoke__">spawn</span>(<span class="hl-title function_ invoke__">update_db</span>(db, response));</span>
+<span class="line">  <span class="hl-title function_ invoke__">spawn</span>(<span class="hl-title function_ invoke__">update_cache</span>(cache, response));</span>
+<span class="line">  response</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">update_db</span>(db: Database, response: Response);</span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">update_cache</span>(cache: Cache, response: Response);</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;T&gt;(f: <span class="hl-keyword">impl</span> <span class="hl-title class_">Future</span>&lt;Output = T&gt;) <span class="hl-punctuation">-&gt;</span> JoinHandle&lt;T&gt;;</span></code></pre>
+
+</figure>
+<p><span>This is multi-task concurrency style </span>&mdash;<span> we fire off two tasks for updating the database and the</span>
+<span>cache. Here</span>&rsquo;<span>s the same snippet in intra-task style, where we use join function on futures:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">process</span>(</span>
+<span class="line">  db: Database,</span>
+<span class="line">  cache: Cache,</span>
+<span class="line">  request: Request,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> Response {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">response</span> = <span class="hl-title function_ invoke__">compute_response</span>(db, cache, request).<span class="hl-keyword">await</span>;</span>
+<span class="line">  <span class="hl-title function_ invoke__">join</span>(</span>
+<span class="line">    <span class="hl-title function_ invoke__">update_db</span>(db, response),</span>
+<span class="line">    <span class="hl-title function_ invoke__">update_cache</span>(cache, response),</span>
+<span class="line">  ).<span class="hl-keyword">await</span>;</span>
+<span class="line">  response</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">update_db</span>(db: Database, response: Response) { ... }</span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">update_cache</span>(cache: Cache, response: Response) { ... }</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">join</span>&lt;U, V&gt;(</span>
+<span class="line">  f: <span class="hl-keyword">impl</span> <span class="hl-title class_">Future</span>&lt;Output = U&gt;,</span>
+<span class="line">  g: <span class="hl-keyword">impl</span> <span class="hl-title class_">Future</span>&lt;Output = V&gt;,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> (U, V);</span></code></pre>
+
+</figure>
+<p><span>In other words:</span></p>
+<p><span>Multi-task concurrency uses </span><code>spawn</code><span> </span>&mdash;<span> an operation that takes a future and starts a tasks that</span>
+<span>executes independently of the parent task.</span></p>
+<p><span>Intra-task concurrency uses </span><code>join</code><span> </span>&mdash;<span> an operation that takes a pair of futures and executes them</span>
+<span>concurrently as a part of the current task.</span></p>
+<p><span>But what is the </span><em><span>actual</span></em><span> difference between the two?</span></p>
+</section>
+<section id="Parallelism-is-not">
+
+    <h2>
+    <a href="#Parallelism-is-not"><span>Parallelism is not</span> </a>
+    </h2>
+<p><span>One candidate is parallelism </span>&mdash;<span> with </span><code>spawn</code><span>, the tasks can run not only concurrently, but actually</span>
+<span>in parallel, on different CPU cores. </span><code>join</code><span> restricts them to the same thread that runs the main</span>
+<span>task. But I think this is not quite right, abstractly, and is more of a product of specific Rust</span>
+<span>APIs. There </span><em><span>are</span></em><span> executors which spawn on the current thread only. And, while in Rust it</span>&rsquo;<span>s not</span>
+<span>really possible to make </span><code>join</code><span> poll the futures in parallel, I </span><em><span>think</span></em><span> this is just an artifact of</span>
+<span>Rust existing API design (futures can</span>&rsquo;<span>t opt-out of synchronous cancellation). In other words, I</span>
+<span>think it is possible in theory to implement an async runtime which provides all of the following</span>
+<span>functions at the same time:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">spawn</span>&lt;F&gt;(fut: F) <span class="hl-punctuation">-&gt;</span> JoinHandle&lt;Output = F::Output&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  F: Future;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">pspawn</span>&lt;F&gt;(fut: F) <span class="hl-punctuation">-&gt;</span> PJoinHandle&lt;Output = F&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  F: Future + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line">  F::Output: <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">join</span>&lt;F1, F2&gt;(</span>
+<span class="line">  fut1: F1,</span>
+<span class="line">  fut2: F2,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> (F1::Output, F2::Output)</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  F1: Future,</span>
+<span class="line">  F2: Future;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">pjoin</span>&lt;F1, F2&gt;(</span>
+<span class="line">  fut1: F1,</span>
+<span class="line">  fut2: F2,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> (F1::Output, F2::Output)</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  F1: Future + <span class="hl-built_in">Send</span>, <span class="hl-comment">// NB: only Send, no &#x27;static</span></span>
+<span class="line">  F1::Output:  <span class="hl-built_in">Send</span>,</span>
+<span class="line">  F2: Future + <span class="hl-built_in">Send</span>,</span>
+<span class="line">  F2::Output:  <span class="hl-built_in">Send</span>;</span></code></pre>
+
+</figure>
+<p><span>To confuse matters further, let</span>&rsquo;<span>s rewrite our example in TypeScript:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">function</span> <span class="hl-title function_">process</span>(<span class="hl-params"></span></span>
+<span class="line"><span class="hl-params">  db: Database,</span></span>
+<span class="line"><span class="hl-params">  cache: Cache,</span></span>
+<span class="line"><span class="hl-params">  request: Request,</span></span>
+<span class="line"><span class="hl-params"></span>): <span class="hl-title class_">Response</span> {</span>
+<span class="line">  <span class="hl-keyword">const</span> response = <span class="hl-keyword">await</span> <span class="hl-title function_">compute_response</span>(db, cache, request);</span>
+<span class="line">  <span class="hl-keyword">const</span> db_update = <span class="hl-title function_">update_db</span>(db, response);</span>
+<span class="line">  <span class="hl-keyword">const</span> cache_update = <span class="hl-title function_">update_cache</span>(cache, response);</span>
+<span class="line">  <span class="hl-keyword">await</span> <span class="hl-title class_">Promise</span>.<span class="hl-title function_">all</span>([db_update, cache_update]);</span>
+<span class="line">  <span class="hl-keyword">return</span> response</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>and using Rust</span>&rsquo;<span>s rayon library:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">process</span>(</span>
+<span class="line">  db: Database,</span>
+<span class="line">  cache: Cache,</span>
+<span class="line">  request: Request,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> Response {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">response</span> = <span class="hl-title function_ invoke__">compute_response</span>(db, cache, request).<span class="hl-keyword">await</span>;</span>
+<span class="line">  rayon::<span class="hl-title function_ invoke__">join</span>(</span>
+<span class="line">    || <span class="hl-title function_ invoke__">update_db</span>(db, response),</span>
+<span class="line">    || <span class="hl-title function_ invoke__">update_cache</span>(cache, response),</span>
+<span class="line">  );</span>
+<span class="line">  response</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Are these examples multi-task or intra-task? To me, the TypeScript one feels multi-task </span>&mdash;<span> although</span>
+<span>it is syntactically close to </span><code>join().async</code><span>, the two update promises are running independently from</span>
+<span>the parent task. If we forget the call to </span><code>Promise.all</code><span>, the cache and the database would still get</span>
+<span>updated (but likely </span><em><span>after</span></em><span> we would have returned the response to the user)! In contrast, rayon</span>
+<span>feels intra-task </span>&mdash;<span> although the closures could get stolen and be run by a different thread, they</span>
+<span>won</span>&rsquo;<span>t </span>&ldquo;<span>escape</span>&rdquo;<span> dynamic extent of the encompassing </span><code>process</code><span> call.</span></p>
+</section>
+<section id="To-await-or-await-to">
+
+    <h2>
+    <a href="#To-await-or-await-to"><span>To await or await to?</span> </a>
+    </h2>
+<p><span>Let</span>&rsquo;<span>s zoom in onto the JS and the join examples:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">function</span> <span class="hl-title function_">process</span>(<span class="hl-params"></span></span>
+<span class="line"><span class="hl-params">  db: Database,</span></span>
+<span class="line"><span class="hl-params">  cache: Cache,</span></span>
+<span class="line"><span class="hl-params">  request: Request</span></span>
+<span class="line"><span class="hl-params"></span>): <span class="hl-title class_">Response</span> {</span>
+<span class="line">  <span class="hl-keyword">const</span> response = <span class="hl-keyword">await</span> <span class="hl-title function_">compute_response</span>(db, cache, request);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">await</span> <span class="hl-title class_">Promise</span>.<span class="hl-title function_">all</span>([</span>
+<span class="line">    <span class="hl-title function_">update_db</span>(db, response),</span>
+<span class="line">    <span class="hl-title function_">update_cache</span>(cache, response),</span>
+<span class="line">  ]);</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">return</span> response;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">process</span>(</span>
+<span class="line">  db: Database,</span>
+<span class="line">  cache: Cache,</span>
+<span class="line">  request: Request,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> Response {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">response</span> = <span class="hl-title function_ invoke__">compute_response</span>(db, cache, request).<span class="hl-keyword">await</span>;</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-title function_ invoke__">join</span>(</span>
+<span class="line">    <span class="hl-title function_ invoke__">update_db</span>(db, response),</span>
+<span class="line">    <span class="hl-title function_ invoke__">update_cache</span>(cache, response),</span>
+<span class="line">  ).<span class="hl-keyword">await</span>;</span>
+<span class="line"></span>
+<span class="line">  response</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>I</span>&rsquo;<span>ve re-written the JavaScript version to be syntactically isomorphic to the Rust one. The</span>
+<span>difference is on the semantic level: JavaScript promises are eager, they start executing as soon as</span>
+<span>a promise is created. In contrast, Rust futures are lazy </span>&mdash;<span> they do nothing until polled. And</span>
+<em><span>this</span></em><span> I think is the fundamental difference, it is lazy vs. eager </span>&ldquo;<span>futures</span>&rdquo;<span> (</span><code>thread::spawn</code><span> is an</span>
+<span>eager </span>&ldquo;<span>future</span>&rdquo;<span> while </span><code>rayon::join</code><span> a lazy one).</span></p>
+<p><span>And it seems that lazy semantics is quite a bit more elegant! The beauty of</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_ invoke__">join</span>(</span>
+<span class="line">  <span class="hl-title function_ invoke__">update_db</span>(db, response),</span>
+<span class="line">  <span class="hl-title function_ invoke__">update_cache</span>(cache, response),</span>
+<span class="line">).<span class="hl-keyword">await</span>;</span></code></pre>
+
+</figure>
+<p><span>is that it</span>&rsquo;<span>s Molière</span>&rsquo;<span>s prose </span>&mdash;<span> this is structured concurrency, but without bundles, nurseries,</span>
+<span>scopes, and other weird APIs.</span></p>
+<p><span>It makes runtime semantics nicer even in dynamically typed languages. In JavaScript, forgetting an</span>
+<span>await is a common, and very hard to spot problem </span>&mdash;<span> without await, code still works, but is</span>
+<em><span>sometimes</span></em><span> wrong (if the async operation doesn</span>&rsquo;<span>t finish quite as fast as usual). Imagine JS with</span>
+<span>lazy promises </span>&mdash;<span> there, forgetting an </span><code>await</code><span> would </span><em><span>always</span></em><span> consistently break. So, the need to</span>
+<span>statically lint missing awaits will be less pressing.</span></p>
+<p><span>Compare this with Erlang</span>&rsquo;<span>s take on nulls: while in typical dynamically typed languages partial</span>
+<span>functions can return a value </span><code>T</code><span> or a </span><code>None</code><span>, in Erlang the convention is to return either </span><code>{ok, T}</code>
+<span>or </span><code>none</code><span>. That is, even if the value is non-null, the call-site is </span><em><span>forced</span></em><span> to unpack it, you can</span>&rsquo;<span>t</span>
+<span>write code that happens to work as long as </span><code>T</code><span> is non-null.</span></p>
+<p><span>And of course, in Rust, the killer feature of lazy futures is that you can just borrow data from the</span>
+<span>enclosing scope.</span></p>
+<p><span>But it seems like there is one difference between multi-task and intra-task concurrency.</span></p>
+</section>
+<section id="One-Two-N-and-More">
+
+    <h2>
+    <a href="#One-Two-N-and-More"><span>One, Two, N, and More</span> </a>
+    </h2>
+<p><span>In the words of withoutboats:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>The first limitation is that it is only possible to achieve a static arity of concurrency with</span>
+<span>intra-task concurrency. That is, you cannot join (or select, etc) an arbitrary number of futures</span>
+<span>with intra-task concurrency: the number must be fixed at compile time.</span></p>
+</blockquote>
+
+</figure>
+<p><span>That is, you can do</span>
+<span class="display"><code>join(a, b).await</code><span>,</span></span>
+<span>and</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_ invoke__">join</span>(</span>
+<span class="line">  <span class="hl-title function_ invoke__">join</span>(a, b)</span>
+<span class="line">  c,</span>
+<span class="line">).<span class="hl-keyword">await</span></span></code></pre>
+
+</figure>
+<p><span>and, with some macros, even</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">join!(a, b, c, d, e, f).<span class="hl-keyword">await</span>;</span></code></pre>
+
+</figure>
+<p><span>but you can</span>&rsquo;<span>t do </span><span class="display"><code>join(xs...).await</code><span>.</span></span></p>
+<p><span>I think this is incorrect, in a trivial and in an interesting way.</span></p>
+<p><span>The trivial incorrectness is that there</span>&rsquo;<span>s </span><code>join_all</code><span>, that takes a slice of futures and is a direct</span>
+<span>generalization of </span><code>join</code><span> to a runtime-variable number of futures.</span></p>
+<p><span>But </span><code>join_all</code><span> still can</span>&rsquo;<span>t express the case where you don</span>&rsquo;<span>t know the number of futures up-front,</span>
+<span>where you spawn some work, and only later realize that you need to spawn some more.</span></p>
+<p><span>This is sort-of possible to express with </span><code>FuturesUnordered</code><span>, but that</span>&rsquo;<span>s a yuck API. I mean, even</span>
+<span>its name screams </span>&ldquo;<span>DO NOT USE ME!</span>&rdquo;<span>.</span></p>
+<p><span>But I do think that this is just an unfortunate API, and that the pattern actually can be expressed</span>
+<span>in intra-task concurrency style nicely.</span></p>
+<p><span>Let</span>&rsquo;<span>s take a closer look at the base case, </span><code>join</code><span>!</span></p>
+</section>
+<section id="Asynchronous-Semicolon">
+
+    <h2>
+    <a href="#Asynchronous-Semicolon"><span>Asynchronous Semicolon</span> </a>
+    </h2>
+<p><span>Section title is a bit of a giveaway. The </span><code>join</code><span> operator </span><em><span>is</span></em><span> </span><code>async ;</code><span>. The semicolon is an</span>
+<span>operator of sequential composition:</span>
+<code class="display">A; B</code></p>
+<p><span>runs </span><code>A</code><span> first and then </span><code>B</code><span>.</span></p>
+<p><span>In contrast, </span><code>join</code><span> is concurrent composition:</span>
+<code class="display">join(A, B)</code></p>
+<p><span>runs </span><code>A</code><span> and </span><code>B</code><span> concurrently.</span></p>
+<p><span>And both </span><code>join</code><span> and </span><code>;</code><span> share the same problem </span>&mdash;<span> they can compose only a finite number of things.</span></p>
+<p><span>But that</span>&rsquo;<span>s why we have other operators for sequential composition! If we know how many things we</span>
+<span>need to run, we can use a counted </span><code>for</code><span> loop. And </span><code>join_all</code><span> is an analogue of a counted for loop!</span></p>
+<p><span>In case where we </span><em><span>don</span>&rsquo;<span>t</span></em><span> know up-front when to stop, we use a </span><code>while</code><span>. And this is exactly what we</span>
+<span>miss </span>&mdash;<span> there</span>&rsquo;<span>s no concurrently-flavored </span><code>while</code><span> operator.</span></p>
+<p><span>Importantly, what we are looking for is </span><em><span>not</span></em><span> an async for:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">for</span> <span class="hl-variable">x</span> <span class="hl-keyword">in</span> iter {</span>
+<span class="line">  <span class="hl-title function_ invoke__">process</span>(x).<span class="hl-keyword">await</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Here, although there could be some concurrency inside a single loop iteration, the iterations</span>
+<span>themselves are run sequentially. The second iteration starts only when the first one finished.</span>
+<span>Pictorially, this looks like a spiral, or a loop if we look from the side:</span></p>
+
+<figure>
+
+<img alt="" src="https://github.com/user-attachments/assets/92a9c1dd-1f94-4fac-9e11-5f0c54e6e10e">
+</figure>
+<p><span>What we rather want is to run </span><em><span>many</span></em><span> copies of the body concurrently, something like this:</span></p>
+
+<figure>
+
+<img alt="" src="https://github.com/user-attachments/assets/7149b6e8-2d99-4837-911b-36fbee80134a">
+</figure>
+<p><span>A spindle-like shape with many concurrent strands, which looks like wheel</span>&rsquo;<span>s spokes from the side.</span>
+<span>Or, if you are </span><em><span>really</span></em><span> short on fitting metaphors:</span></p>
+</section>
+<section id="The-Watermelon-Operator-1">
+
+    <h2>
+    <a href="#The-Watermelon-Operator-1"><span>The Watermelon Operator</span> </a>
+    </h2>
+<p><span>Now, I understand that I</span>&rsquo;<span>ve already poked fun at unfortunate </span><code>FuturesUnordered</code><span> name, but I can</span>&rsquo;<span>t</span>
+<span>really find a fitting name for the construct we want here. So I am going to boringly use</span>
+<code>concurrently</code><span> keyword, which is way too long, but I</span>&rsquo;<span>ll refer to it as </span>&ldquo;<span>the watermelon operator</span>&rdquo;
+<span>The stripes on the watermelon resemble the independent strands of execution this operator creates:</span></p>
+
+<figure>
+
+<img alt="wikipedia watermelons" src="https://github.com/user-attachments/assets/f0760a4a-03ba-45a5-bc26-e9156e28c5c9">
+</figure>
+<p><span>So, if you are writing a TCP server, your accept loop could look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">concurrently <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>(socket) = listener.<span class="hl-title function_ invoke__">accept</span>().<span class="hl-keyword">await</span> <span class="hl-keyword">in</span> {</span>
+<span class="line">  <span class="hl-title function_ invoke__">handle_connection</span>(socket).<span class="hl-keyword">await</span>;</span>
+<span class="line">}.<span class="hl-keyword">await</span></span></code></pre>
+
+</figure>
+<p><span>This runs accept in a loop, and, for each accepted socket, runs </span><code>handle_connection</code><span> concurrently.</span>
+<span>There are as many concurrent </span><code>handle_connection</code><span> calls as there are ready sockets in our listener!</span></p>
+<p><span>Let</span>&rsquo;<span>s limit the maximum number of concurrent connections, to provide back pressure:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">let</span> <span class="hl-variable">semaphore</span> = Semaphore::<span class="hl-title function_ invoke__">new</span>(<span class="hl-number">16</span>);</span>
+<span class="line"></span>
+<span class="line">concurrently</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">Some</span>((socket, permit)) = <span class="hl-keyword">try</span> {</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">permit</span> = semaphore.<span class="hl-title function_ invoke__">acquire</span>().<span class="hl-keyword">await</span>;</span>
+<span class="line">    <span class="hl-keyword">let</span> <span class="hl-variable">socket</span> = listener.<span class="hl-title function_ invoke__">accept</span>().<span class="hl-keyword">await</span>?;</span>
+<span class="line">    (socket, permit)</span>
+<span class="line">  }</span>
+<span class="line"><span class="hl-keyword">in</span> {</span>
+<span class="line">  <span class="hl-title function_ invoke__">handle_connection</span>(socket).<span class="hl-keyword">await</span>;</span>
+<span class="line">  <span class="hl-title function_ invoke__">drop</span>(permit);</span>
+<span class="line">}.<span class="hl-keyword">await</span></span></code></pre>
+
+</figure>
+<p><span>You get the idea (hopefully):</span></p>
+<ul>
+<li>
+<span>In the </span>&ldquo;<span>head</span>&rdquo;<span> of our concurrent loop (cooloop?) construct, we first acquire a semaphore permit</span>
+<span>and then fetch a socket.</span>
+</li>
+<li>
+<span>Both the socket and the permit are passed to the body.</span>
+</li>
+<li>
+<span>The body releases the permit at the end.</span>
+</li>
+<li>
+<span>While the </span>&ldquo;<span>head</span>&rdquo;<span> construct runs in a loop concurrently to bodies, it is throttled by the minimum</span>
+<span>of the available permits and ready connections.</span>
+</li>
+</ul>
+<p><span>To make this more concrete, let</span>&rsquo;<span>s spell this out as a library</span>
+<span>function:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">join</span>&lt;F1, F2&gt;(</span>
+<span class="line">  fut1: F1,</span>
+<span class="line">  fut2: F2,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> (F1::Output, F2::Output)</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  F1: Future,</span>
+<span class="line">  F2: Future;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">join_all</span>&lt;F&gt;(futs: <span class="hl-type">Vec</span>&lt;F&gt;) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">Vec</span>&lt;F::Output&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  F: Future;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">concurrently</span>&lt;C, FC, B, FB, T&gt;(condition: C, body: B)</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  C: <span class="hl-title function_ invoke__">FnMut</span>() <span class="hl-punctuation">-&gt;</span> FC,</span>
+<span class="line">  FC: Future&lt;Output = <span class="hl-type">Option</span>&lt;T&gt;&gt;,</span>
+<span class="line">  B: <span class="hl-title function_ invoke__">FnMut</span>(T) <span class="hl-punctuation">-&gt;</span> FB,</span>
+<span class="line">  FB: Future&lt;Output = ()&gt;;</span></code></pre>
+
+</figure>
+<p><span>I claim that this is the full set of </span>&ldquo;<span>primitive</span>&rdquo;<span> operations needed to express</span>
+<span>more-or-less everything in intra-task concurrency style.</span></p>
+<p><span>In particular, we can implement multi-task concurrency this way! To do so, we</span>&rsquo;<span>ll write a universal</span>
+<span>watermelon operator, where the </span><code>T</code><span> which is passed to the body is an</span>
+<span class="display"><code>Box&lt;dyn Future&lt;Output=()&gt;&gt;</code><span>,</span></span>
+<span>and where the body just runs this future:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">multi_task_concurrency_main</span>(</span>
+<span class="line">  spawn: <span class="hl-keyword">impl</span> <span class="hl-title class_">Fn</span>(<span class="hl-keyword">impl</span> <span class="hl-title class_">Future</span>&lt;Output = ()&gt; + <span class="hl-symbol">&#x27;static</span>),</span>
+<span class="line">) {</span>
+<span class="line">    ...</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">type</span> <span class="hl-title class_">AnyFuture</span> = <span class="hl-type">Box</span>&lt;<span class="hl-keyword">dyn</span> Future&lt;Output = ()&gt; + <span class="hl-symbol">&#x27;static</span>&gt;;</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">universal_watermelon</span>() {</span>
+<span class="line">  <span class="hl-keyword">let</span> (sender, receiver) = channel::&lt;AnyFuture&gt;();</span>
+<span class="line">  <span class="hl-title function_ invoke__">join</span>(</span>
+<span class="line">    <span class="hl-title function_ invoke__">multi_task_concurrency_main</span>(<span class="hl-keyword">move</span> |fut| {</span>
+<span class="line">      sender.<span class="hl-title function_ invoke__">send</span>(<span class="hl-type">Box</span>::<span class="hl-title function_ invoke__">new</span>(fut))</span>
+<span class="line">    }),</span>
+<span class="line">    <span class="hl-title function_ invoke__">concurrently</span>(</span>
+<span class="line">      || <span class="hl-keyword">async</span> {</span>
+<span class="line">        receiver.<span class="hl-title function_ invoke__">recv</span>().<span class="hl-keyword">await</span>;</span>
+<span class="line">      },</span>
+<span class="line">      |fut| <span class="hl-keyword">async</span> {</span>
+<span class="line">        fut.<span class="hl-keyword">await</span>;</span>
+<span class="line">      },</span>
+<span class="line">    ),</span>
+<span class="line">  )</span>
+<span class="line">  .<span class="hl-keyword">await</span>;</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Note that the conversion in the opposite direction is not possible! With intra-task concurrency, we</span>
+<span>can borrow from the parent stack frame. So it is not a problem to </span><em><span>restrict</span></em><span> that to only allow</span>
+<code>'static</code><span> futures into the channel. In a sense, in the above example we return the future up the</span>
+<span>stack, which explains why it can</span>&rsquo;<span>t borrow locals from our stack frame.</span></p>
+<p><span>With multi-task concurrency though, we </span><em><span>start</span></em><span> with static futures. To let them borrow any stack data</span>
+<span>requires unsafe.</span></p>
+<p><span>Note also that the above set of operators, </span><code>join</code><span>, </span><code>join_all</code><span>, </span><code>concurrently</code><span> is </span><em><span>orthogonal</span></em><span> to</span>
+<span>parallelism. Alongside those operators, there could exist </span><code>pjoin</code><span>, </span><code>pjoin_all</code><span> and </span><code>pconcurrently</code>
+<span>with the </span><code>Send</code><span> bounds, such that you could mix and match parallel and single-core concurrency.</span></p>
+</section>
+<section id="If-a-Stack-is-a-Tree-Does-it-Make-Any-Difference">
+
+    <h2>
+    <a href="#If-a-Stack-is-a-Tree-Does-it-Make-Any-Difference"><span>If a Stack is a Tree, Does it Make Any Difference?</span> </a>
+    </h2>
+<p><span>One possible objection to the above framing of watermelon as a language-level operator is that it</span>
+<span>seemingly doesn</span>&rsquo;<span>t pass zero-cost abstraction test. It </span><em><span>can</span></em><span> start an unbounded number of futures,</span>
+<span>and those futures have to be stored </span><em><span>somewhere</span></em><span>. So we have a language operator which requires</span>
+<span>dynamic memory allocation, which is a big no-no for any systems programming language.</span></p>
+<p><span>I think there </span><em><span>is</span></em><span> some truth to it, and not an insignificant amount of it, but I think I can maybe</span>
+<span>weasel out of it.</span></p>
+<p><span>Consider recursion. Recursion </span><em><span>also</span></em><span> can allocate arbitrary amount of memory (on the stack), but</span>
+<span>that is considered fine (I would </span><em><span>also</span></em><span> agree that it is not in fact fine that unbounded recursion</span>
+<span>is considered fine, but, for the scope of this discussion, I will be a hypocrite and will ignore</span>
+<span>that opinion of mine).</span></p>
+<p><span>And here, we have essentially the same situation </span>&mdash;<span> we want to allocate arbitrary many (async)</span>
+<span>stack frames, arranged in a tree. Doing it </span>&ldquo;<span>on the heap</span>&rdquo;<span> is easy, but we don</span>&rsquo;<span>t like the heap here.</span>
+<span>Luckily, I believe there</span>&rsquo;<span>s a compilation scheme (hat tip to </span><a href="https://www.abubalay.com"><span>@rpjohnst</span></a>
+<span>for patiently explaining it to me five times in different words) that implements this more-or-less</span>
+<span>as efficiently as the normal call stack.</span></p>
+<p><span>The idea is that we will have </span><em><span>two</span></em><span> stacks </span>&mdash;<span> a sync one and an async one. Specifically:</span></p>
+<ul>
+<li>
+<span>Every sync function we compile normally, with a single stack.</span>
+</li>
+<li>
+<span>Async functions get </span><em><span>two</span></em><span> stack pointers. So, we burn </span><code>sp</code><span> and one other register</span>
+<span>(let</span>&rsquo;<span>s call it </span><code>asp</code><span>).</span>
+</li>
+<li>
+<span>If an async function calls a sync function, the callee</span>&rsquo;<span>s frame is pushed onto </span><code>sp</code><span>.</span>
+<span>Crucially, because sync functions can only call other </span><code>sync</code><span> functions, the callee doesn</span>&rsquo;<span>t need</span>
+<span>to know the value of </span><code>asp</code><span>.</span>
+</li>
+<li>
+<span>If an async function calls another async function, the frame (specifically, the </span>&ldquo;<span>variables live</span>
+<span>across await point</span>&rdquo;<span> part of it) is pushed onto </span><code>asp</code><span>.</span>
+</li>
+<li>
+<span>This async stack is segmented. So, for async function calls, we also do a check for </span>&ldquo;<span>do we have</span>
+<span>enough stack?</span>&rdquo;<span> and, if not, allocate a new segment, linking them via a frame pointer.</span>
+</li>
+<li>
+&ldquo;<span>Allocating a new segment</span>&rdquo;<span> doesn</span>&rsquo;<span>t mean that we actually go and call malloc. Rather, there</span>&rsquo;<span>s a</span>
+<span>fixed-sized contiguous slab of say, 8 megs, out of which all async frames are allocated.</span>
+</li>
+<li>
+<span>If we are out of async-stack, we crash in pretty much the same way as for the boring sync stack</span>
+<span>overflow.</span>
+</li>
+</ul>
+<p><span>While this </span><em><span>looks</span></em><span> just like Go-style segmented stacks, I think this scheme is quite a bit more</span>
+<span>efficient (warning: I in general have a tendency to confidently talk about things I know little</span>
+<span>about, and this one is the extreme case of that. If some Go compiler engineer disagrees with me, I</span>
+<span>am probably in the wrong!).</span></p>
+<p><span>The main difference is that the distinction between sync and async functions is maintained in the</span>
+<span>type system. There are </span><em><span>no</span></em><span> changes for sync functions at all, so the principle of don</span>&rsquo;<span>t pay for</span>
+<span>what you don</span>&rsquo;<span>t use is observed. This is in contrast to Go </span>&mdash;<span> I believe that Go, in general, can</span>&rsquo;<span>t</span>
+<span>know whether a particular function can yield (that  is, if any function it (indirectly) calls can</span>
+<span>yield), so it has to conservatively insert stack checks everywhere.</span></p>
+<p><span>Then, even the async stack frames don</span>&rsquo;<span>t have to store </span><em><span>everything</span></em><span>, but just the stuff live across</span>
+<span>await. Everything that happens between two awaits can go to the normal stack.</span></p>
+<p><span>On top of that, async functions can still do aggressive inlining. So, the async call (and the stack</span>
+<span>growth check) has to happen only for dynamically dispatched async calls!</span></p>
+<p><span>Furthermore, the future trait could have some kind of </span><code>size_hint</code><span> method, which returns the lower</span>
+<span>and the upper bound on the size of the stack. Fully concrete futures type-erased to </span><code>dyn Future</code>
+<span>would return the exact amount </span><code>(a, Some(a))</code><span>. The caller would be </span><em><span>required</span></em><span> to allocate at least</span>
+<code>a</code><span> bytes of the async stack. The callee uses that contract to elide stack checks. Unknown bound,</span>
+<code>(a, None)</code><span> would only be returned if type-erased concrete future </span><em><span>itself</span></em><span> calls something</span>
+<span>dynamically dispatched. So only dynamically dispatched calls would have to do stack grow checks, and</span>
+<span>that cost seems negligible in comparison to the cost of missing optimizations due to inability to</span>
+<span>inline.</span></p>
+<p><span>Altogether, it feels like this adds up to something sufficiently cheap to just call it </span>&ldquo;<span>async stack</span>
+<span>allocation</span>&rdquo;<span>.</span></p>
+<p><span>I guess that</span>&rsquo;<span>s all for today? Summarizing:</span></p>
+<ul>
+<li>
+<span>Inter-task vs intra-task distinction is mostly orthogonal to the question of parallelism.</span>
+</li>
+<li>
+<span>I claim that this is the same distinction as between </span><em><span>eager</span></em><span> and </span><em><span>lazy</span></em><span> futures.</span>
+</li>
+<li>
+<span>In particular, there</span>&rsquo;<span>s no principled obstacles for runtime-bounded intra-task concurrency.</span>
+</li>
+<li>
+<span>But we do miss </span><code>FuturesUnordered</code><span>, but nice. The </span><code>concurrently</code><span> operator/function feels like a</span>
+<span>sufficiently low-hanging watermelon here.</span>
+</li>
+<li>
+<span>One wrinkle is that watermelon requires dynamic allocation, but it looks like we could just</span>
+<span>completely upend the compilation strategy we use for futures, implement async segmented stacks</span>
+<span>which should be pretty fast, and </span><em><span>also</span></em><span> gain nice dynamically dispatched (and recursive) async</span>
+<span>functions for free?</span>
+</li>
+</ul>
+<hr>
+<p><span>Haha, just kidding! Bonus content! This really should be a separate blog post, but it is</span>
+<span>tangentially related, so here we go:</span></p>
+</section>
+<section id="Applied-Duality">
+
+    <h2>
+    <a href="#Applied-Duality"><span>Applied Duality</span> </a>
+    </h2>
+<p><span>So far, we</span>&rsquo;<span>ve focused on </span><code>join</code><span>, the operator that takes two futures, and </span>&ldquo;<span>runs</span>&rdquo;<span> them concurrently,</span>
+<span>returning both results as a pair. But there</span>&rsquo;<span>s a second, dual operator:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">race</span>&lt;F1, F2&gt;(</span>
+<span class="line">  fut1: F1,</span>
+<span class="line">  fut2: F2,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> Either&lt;F1::Output, F2::Output&gt;</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  F1: Future,</span>
+<span class="line">  F2: Future,</span></code></pre>
+
+</figure>
+<p><span>Like </span><code>join</code><span>, </span><code>race</code><span> runs two futures concurrently. Unlike </span><code>join</code><span>,  it returns only one result </span>&mdash;
+<span>that which came first. This operator is the basis for a more general </span><code>select</code><span> facility.</span></p>
+<p><span>Although </span><code>race</code><span> is dual to </span><code>join</code><span>, I don</span>&rsquo;<span>t think it is as fundamental. It is possible to have two</span>
+<span>dual things, where one of them is in the basis and the other is derived. For example, it is an axiom</span>
+<span>of the set theory that the union of two sets, </span><code>A ∪ B</code><span>, is a set. Although the intersection of sets,</span>
+<code>A ∩ B</code><span> is a dual for union, existence of intersection is </span><em><span>not</span></em><span> an axiom. Rather, the intersection</span>
+<span>is defined using axiom of specification:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">A ∩ B := {x ∈ A : x ∈ B}</span></code></pre>
+
+</figure>
+<p><span class="display"><span>Proposition 131.7.1: </span><code>race</code><span> can be defined in terms of </span><code>join</code></span></p>
+<p><span>The </span><code>race</code><span> operator is trickier than it seems. Yes, it returns the result of the future that</span>
+<span>finished first, but what happens with the other one? It gets cancelled. Rust implements this</span>
+<span>cancellation </span>&ldquo;<span>for free</span>&rdquo;<span>, by just dropping the future, but this is restrictive. This is precisely the</span>
+<span>issue that prevents </span><code>pjoin</code><span> from working.</span></p>
+<p><span>I postulate that fully general cancellation is an asynchronous protocol:</span></p>
+<ol>
+<li>
+<span>A </span><em><span>requests</span></em><span> that B is cancelled.</span>
+</li>
+<li>
+<span>B receives this cancellation request and starts winding down.</span>
+</li>
+<li>
+<span>A </span><em><span>waits</span></em><span> until B is cancelled.</span>
+</li>
+</ol>
+<p><span>That is, cancellation is not </span>&ldquo;<span>I cancel thou</span>&rdquo;<span>. Rather it is </span>&ldquo;<span>I ask you to stop, and then I</span>
+<span>cooperatively wait until you do so</span>&rdquo;<span>. This is very abstract, but the following three examples should</span>
+<span>help make this concrete.</span></p>
+<ol>
+<li>
+<p><span>A is some generic asynchronous task, which offloads some computation-heavy work to a CPU pool.</span>
+<span>That work (B) </span><em><span>doesn</span>&rsquo;<span>t</span></em><span> have checks for cancelled flags. So, if A is canceled, it can</span>&rsquo;<span>t really</span>
+<span>stop B, which means we are violating structured concurrency.</span></p>
+</li>
+<li>
+<p><span>A is doing async IO. Specifically, A uses </span><code>io_uring</code><span> to read data from a socket. A owns a buffer,</span>
+<span>and passes a pointer to it to the kernel via </span><code>io_uring</code><span> as the target buffer for a </span><code>read</code>
+<span>syscall. While A is being cancelled, the kernel writes data to this buffer. If A doesn</span>&rsquo;<span>t wait</span>
+<span>until the kernel is done, buffer</span>&rsquo;<span>s memory might get reused, and the kernel would corrupt some</span>
+<span>unrelated data.</span></p>
+</li>
+</ol>
+<p><span>These examples are somewhat unsatisfactory </span>&mdash;<span> A is philosophical (who needs structured</span>
+<span>concurrency?), while B is esoteric (who uses </span><code>io_uring</code><span> in 2024?). But the two can be combined into</span>
+<span>something rather pedestrianly bad:</span></p>
+<p><span>Like in the case A, an async task submits some work to a CPU pool. But this time the work is very</span>
+<span>specific </span>&mdash;<span> computing a cryptographic checksum of a message owned by A. </span><em><span>Because</span></em><span> this is</span>
+<span>cryptography, this is going to be some hyper-optimized SIMD loop which definitely won</span>&rsquo;<span>t have any</span>
+<span>affordance for checking some sort of a </span><code>cancelled</code><span> flag. The loop would have to run to completion,</span>
+<span>or at least to a safe point. And, because the loop checksums data owned by A, we can</span>&rsquo;<span>t destroy A</span>
+<span>before the loop exits, otherwise it</span>&rsquo;<span>ll be reading garbage memory!</span></p>
+<p><span>And </span><em><span>this</span></em><span> example is the reason why</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">pjoin</span>&lt;F1, F2&gt;(</span>
+<span class="line">  fut1: F1,</span>
+<span class="line">  fut2: F2,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> (F1::Output, F2::Output)</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  F1: Future + <span class="hl-built_in">Send</span>,</span>
+<span class="line">  F1::Output:  <span class="hl-built_in">Send</span>,</span>
+<span class="line">  F2: Future + <span class="hl-built_in">Send</span>,</span>
+<span class="line">  F2::Output:  <span class="hl-built_in">Send</span>,</span></code></pre>
+
+</figure>
+<p><span>can</span>&rsquo;<span>t be a thing in Rust </span>&mdash;<span> if </span><code>fut1</code><span> runs on a thread separate from the </span><code>pjon</code><span> future, then, if</span>
+<code>pjoin</code><span> ends up being cancelled, </span><code>fut1</code><span> would be pointing at garbage. You could have</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">pjoin</span>&lt;F1, F2&gt;(</span>
+<span class="line">  fut1: F1,</span>
+<span class="line">  fut2: F2,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> (F1::Output, F2::Output)</span>
+<span class="line"><span class="hl-keyword">where</span></span>
+<span class="line">  F1: Future + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line">  F1::Output:  <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line">  F2: Future + <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span>
+<span class="line">  F2::Output:  <span class="hl-built_in">Send</span> + <span class="hl-symbol">&#x27;static</span>,</span></code></pre>
+
+</figure>
+<p><span>but that removes one of the major benefits of intra-task style API </span>&mdash;<span> ability to just borrow data.</span></p>
+<p><span>So the fully general cancellation should be cooperative. Let</span>&rsquo;<span>s assume that it is driven by some sort</span>
+<span>of cancellation token API:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">CancellationSource</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">request_cancellation</span>(&amp;<span class="hl-keyword">self</span>) { ... }</span>
+<span class="line">  <span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">await_cancellation</span>(<span class="hl-keyword">self</span>) { ...  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">async</span> <span class="hl-keyword">fn</span> <span class="hl-title function_">cancel</span>(<span class="hl-keyword">self</span>) {</span>
+<span class="line">    <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">request_cancellation</span>();</span>
+<span class="line">    <span class="hl-keyword">self</span>.<span class="hl-title function_ invoke__">await_cancellation</span>().<span class="hl-keyword">await</span>;</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">new_token</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> CancellationToken { ... }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">impl</span> <span class="hl-title class_">CancellationToken</span> {</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">is_cancelled</span>(&amp;<span class="hl-keyword">self</span>) <span class="hl-punctuation">-&gt;</span> <span class="hl-type">bool</span> { ... }</span>
+<span class="line">  <span class="hl-keyword">fn</span> <span class="hl-title function_">on_cancelled</span>(&amp;<span class="hl-keyword">self</span>, callback: <span class="hl-keyword">impl</span> <span class="hl-title class_">FnOnce</span>()) { ... }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>Note that the question of cancellation being cooperative is </span><em><span>orthogonal</span></em><span> to the question of explicit</span>
+<span>threading of cancellation tokens! They can be threaded implicitly (cooperative, implicit</span>
+<span>cancellation is how Python</span>&rsquo;<span>s trio does this, though they don</span>&rsquo;<span>t really document the cooperative part</span>
+<span>(the shields stuff)).</span></p>
+<p><span>With this, we can write our own </span><code>race</code><span> </span>&mdash;<span> we</span>&rsquo;<span>ll create a cancellation scope and then </span><em><span>join</span></em>
+<span>modified futures, each of which would cancel the other upon completion:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">fn</span> <span class="hl-title function_">race</span>&lt;U, V&gt;(</span>
+<span class="line">  fut1: <span class="hl-keyword">impl</span> <span class="hl-title class_">async</span> <span class="hl-title function_ invoke__">FnOnce</span>(&amp;CancellationToken) <span class="hl-punctuation">-&gt;</span> U,</span>
+<span class="line">  fut2: <span class="hl-keyword">impl</span> <span class="hl-title class_">async</span> <span class="hl-title function_ invoke__">FnOnce</span>(&amp;CancellationToken) <span class="hl-punctuation">-&gt;</span> V,</span>
+<span class="line">) <span class="hl-punctuation">-&gt;</span> Either&lt;U, V&gt; {</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">source</span> = CancellationSource::<span class="hl-title function_ invoke__">new</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">token</span> = source.<span class="hl-title function_ invoke__">new_token</span>();</span>
+<span class="line">  <span class="hl-keyword">let</span> <span class="hl-variable">u_or_v</span> = <span class="hl-title function_ invoke__">join</span>(</span>
+<span class="line">    <span class="hl-keyword">async</span> {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">u</span> = <span class="hl-title function_ invoke__">fut1</span>(&amp;token).<span class="hl-keyword">await</span>;</span>
+<span class="line">      <span class="hl-keyword">if</span> token.<span class="hl-title function_ invoke__">is_cancelled</span>() {</span>
+<span class="line">        <span class="hl-keyword">return</span> <span class="hl-literal">None</span>;</span>
+<span class="line">      }</span>
+<span class="line">      source.<span class="hl-title function_ invoke__">cancel</span>();</span>
+<span class="line">      <span class="hl-title function_ invoke__">Some</span>(u)</span>
+<span class="line">    },</span>
+<span class="line">    <span class="hl-keyword">async</span> {</span>
+<span class="line">      <span class="hl-keyword">let</span> <span class="hl-variable">v</span> = <span class="hl-title function_ invoke__">fut2</span>(&amp;token).<span class="hl-keyword">await</span>;</span>
+<span class="line">      <span class="hl-keyword">if</span> token.<span class="hl-title function_ invoke__">is_cancelled</span>() {</span>
+<span class="line">        <span class="hl-keyword">return</span> <span class="hl-literal">None</span>;</span>
+<span class="line">      }</span>
+<span class="line">      source.<span class="hl-title function_ invoke__">cancel</span>();</span>
+<span class="line">      <span class="hl-title function_ invoke__">Some</span>(v)</span>
+<span class="line">    },</span>
+<span class="line">  )</span>
+<span class="line">  .<span class="hl-keyword">await</span>;</span>
+<span class="line">  <span class="hl-keyword">match</span> u_or_v {</span>
+<span class="line">    (<span class="hl-title function_ invoke__">Some</span>(u), <span class="hl-literal">None</span>) =&gt; <span class="hl-title function_ invoke__">Left</span>(u),</span>
+<span class="line">    (<span class="hl-literal">None</span>, <span class="hl-title function_ invoke__">Some</span>(v)) =&gt; <span class="hl-title function_ invoke__">Right</span>(v),</span>
+<span class="line">    _ =&gt; <span class="hl-built_in">unreachable!</span>(),</span>
+<span class="line">  }</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>In other words, </span><code>race</code><span> is but a cooperatively-cancelled </span><code>join</code><span>!</span></p>
+<p><span>That</span>&rsquo;<span>s all for real for today, viva la vida!</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-09-24-watermelon-operator.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
