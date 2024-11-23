@@ -1,0 +1,130 @@
+# SemVer Is Not About You
+
+A popular genre of articles for the past few year has been a "SemVer Critique", pointing out various
+things that are wrong with SemVer itself, or with the way SemVer is being applied, and, customary,
+suggesting an alternative versioning scheme. Usually, the focus is either on how SemVer ought to be
+used, by library authors (nitpicking the definition of a breaking change), or on how SemVer is (not)
+useful for a library consumer (nitpicking the definition of a breaking change).
+
+I think these are valid lenses to study SemVer through, but not the most useful. This article
+suggest an alternative framing: [SemVer is not about you.]{.display}
+
+Before we begin, I would like to carefully delineate the scope. Among other things, SemVer can be
+applied to, broadly speaking, applications and libraries. Applications are stand-alone software
+artifacts, usable as is. Libraries exist within the larger library ecosystem, and are building
+blocks for assembling applications. Libraries both depend on and are depended upon by  other
+libraries. In the present article, we will look _only_ at the library side.
+
+  * * *
+
+At the first glance, it appears that SemVer solves the problem of informing the user when to do the
+upgrade: upgrade patch for latest bugfixes, upgrade minor if you want new features, upgrade major if
+you want new features and are ready to clean-up your code. But this is not the primary value of this
+versioning scheme. The _real_ reason of semver is for managing transitive dependencies.
+
+Let's say you are using some version of `apples` library and some version of `oranges` library. And
+suppose they both depend on the `trees` library. Because `apples` and `oranges` were authored at
+different times, they do not necessary depend on the _same_ version of `trees`. There are two paths
+from here.
+
+The first is to include two different versions of `trees` library with your app. This is unfortunate
+for a trivial reason of code bloat, and for a more subtle reason of interface leaking: if for some
+reason your code needs to pass a `tree` originating in `apples` over to the `oranges`, you must use
+exactly the same `trees` library.
+
+The second path is to somehow unify transitive dependencies, and pick a single version of `trees`
+that's good for both `apples` and `oranges`. But perhaps there isn't a version that works for both?
+
+Who's the right person to choose the appropriate course of action? It _could_ be you, but that's
+unfortunate --- you are using libraries precisely because you want to avoid thinking too much about
+their internals. You don't know how `apples` is using `trees`. You _could_ learn that, but,
+arguably, that's not a good tradeoff (if it is, perhaps you shouldn't depend on `apples` and instead
+maintain your own). What's worse, for featurefull applications dependency trees run very deep,
+potential for conflicts scales at least linearly, and there's only a single you.
+
+Another candidate is the author of the `trees` library --- they don't know `apples` and `oranges`
+directly, but they should be thinking about how their library _could_ be used. _And_, because
+different libraries tend to have different authors, the work for resolving version conflicts get
+distributed across the set of people that also scales linearly!
+
+_This_ is the problem that SemVer solves --- it has nothing to do with your code or your direct
+dependencies, it's all about dependencies of your dependencies. SemVer _is_ library maintainer
+saying when two versions of their library can be unified:
+
+* If major version is bumped, no unification happens, the library will get duplicated.
+* If major is not bumped, the versions can be unified.
+
+That's it! That's the whole thing! All the talk about breaking changes is downstream of this actual
+behavior of version resolvers.
+
+  * * *
+
+Notably, if you are a library maintainer, SemVer isn't about you either. When deciding between major
+and minor, you shouldn't be thinking about your _direct_ dependents. They knowingly use your
+library, so they are capable of making informed decisions and will manage just fine. The problem are
+your transitive dependents. If you release a new major version, dependencies of some application up
+the stack could get wedged if somewhere in its dependencies tree there are both versions of your
+library which need interoperable types.
+
+Or, rather, if you release a new major version, it is guaranteed that some application would have
+two copies of your library. There's no such thing as atomic upgrade of dependencies across the
+ecosystem, propagating your new major will take time and there will be extended period where
+both majors are used, by different libraries, and both majors end up in applications'
+lockfiles. The question is rather would this be more harmful than just code bloat? If your library
+ends up in other's public API you will likely lock some upstream applications in a variant of the
+following problem:
+
+* We need to update `lemons` to new version to get access to this critical bug fix for the new MacOS
+  version
+* But `lemons` is an actively developed library, it upgraded to the new version of `trees` library
+  three months ago and MacOS bugfix sits on top of that version.
+* But we also use `limes`, which is a bit of a more niche product, and so hasn't seen upgrade for
+  about a year.
+* And we also use the same pool of `trees` for both, so our latest `limes` prevent upgrading
+  `lemons`.
+
+It's also worth thinking about virility of major versions --- if your library is someone elses
+public API, _your_ major bump implies _their_ major bump, which is of course bad because putting
+work on the plate of other maintainers is bad, but, what's worse, is that this virally amplifies the
+number of unsatisfiable graph of dependencies a-la the example above.
+
+## SemVer-\-
+
+I've seen two interesting extensions to the core SemVer. One is the observation that, to make
+tooling work, only two version numbers are sufficient. There's no _real_ difference between `patch`
+and `minor`, as far as the actual behavior of version resolution algorithm goes. I am sympathetic to
+this argument!
+
+The second one is an observation that many projects follow the "deprecate than remove cycle". I've
+learned this with the release of Ember 2.0. The big deal about Ember 2.0 is that the _only_ thing
+that it did was the removal of deprecation warnings. Code that didn't emit warnings on the latest
+Ember 1.x was compatible with 2.0.
+
+This feels like the fundamentally right way going about the larger, more important building blocks.
+And you sort-of can do this with semver today, if you declare that you are compatible with `"1.9,
+2.0"`. But, even today, many years after Ember 2.0, this still feels like a cute trick. This isn't
+yet a pattern with a catchy name (like release trains or not rocket science rule) that everyone is
+using because it is an obviously good idea
+
+## And Now To Something Completely Different
+
+Circling back to the introduction, the general pattern here is that there's a prescriptivist
+approach and a descriptivist one. Prescriptivist argues about the right and wrong ways to use a
+particular tool. Descriptivist avoids value judgement, and describes how the thing actually behaves.
+
+Another instance of this pattern playing out I've noticed are log levels. You can get very
+philosophical about the difference between `error`, `warn` and `info`. But what helps is looking at
+what they do:
+
+* `error` pages the operator immediately.
+* `warn` pages if it repeats frequently.
+* `info` is what you see in the prog logs when you actively look at them.
+* And `debug` is what your developers see when they enable extra logging.
+
+
+> давайте одевать одежду\
+> давайте звонит говорить\
+> а на прескриптивистов будем\
+> ложить
+>
+> [avva](https://avva.livejournal.com/2748021.html)
