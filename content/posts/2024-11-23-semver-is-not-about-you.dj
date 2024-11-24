@@ -1,7 +1,7 @@
 # SemVer Is Not About You
 
 A popular genre of articles for the past few year has been a "SemVer Critique", pointing out various
-things that are wrong with SemVer itself, or with the way SemVer is being applied, and, customary,
+things that are wrong with SemVer itself, or with the way SemVer is being applied, and, customarily,
 suggesting an alternative versioning scheme. Usually, the focus is either on how SemVer ought to be
 used, by library authors (nitpicking the definition of a breaking change), or on how SemVer is (not)
 useful for a library consumer (nitpicking the definition of a breaking change).
@@ -27,8 +27,8 @@ suppose they both depend on the `trees` library. Because `apples` and `oranges` 
 different times, they do not necessary depend on the _same_ version of `trees`. There are two paths
 from here.
 
-The first is to include two different versions of `trees` library with your app. This is unfortunate
-for a trivial reason of code bloat, and for a more subtle reason of interface leaking: if for some
+The first is to include two different versions of the `trees` library with your app. This is unfortunate
+for the trivial reason of code bloat, and for a more subtle reason of interface leaking: if for some
 reason your code needs to pass a `tree` originating in `apples` over to the `oranges`, you must use
 exactly the same `trees` library.
 
@@ -48,7 +48,7 @@ different libraries tend to have different authors, the work for resolving versi
 distributed across the set of people that also scales linearly!
 
 _This_ is the problem that SemVer solves --- it has nothing to do with your code or your direct
-dependencies, it's all about dependencies of your dependencies. SemVer _is_ library maintainer
+dependencies, it's all about dependencies of your dependencies. SemVer _is_ a library maintainer
 saying when two versions of their library can be unified:
 
 * If major version is bumped, no unification happens, the library will get duplicated.
@@ -61,24 +61,24 @@ behavior of version resolvers.
 
 Notably, if you are a library maintainer, SemVer isn't about you either. When deciding between major
 and minor, you shouldn't be thinking about your _direct_ dependents. They knowingly use your
-library, so they are capable of making informed decisions and will manage just fine. The problem are
+library, so they are capable of making informed decisions and will manage just fine. The problem is
 your transitive dependents. If you release a new major version, dependencies of some application up
 the stack could get wedged if somewhere in its dependencies tree there are both versions of your
 library which need interoperable types.
 
 Or, rather, if you release a new major version, it is guaranteed that some application would have
 two copies of your library. There's no such thing as atomic upgrade of dependencies across the
-ecosystem, propagating your new major will take time and there will be extended period where
+ecosystem, propagating your new major will take time and there will be an extended period where
 both majors are used, by different libraries, and both majors end up in applications'
 lockfiles. The question is rather would this be more harmful than just code bloat? If your library
-ends up in other's public API you will likely lock some upstream applications in a variant of the
+ends up in another's public API you will likely lock some upstream applications in a variant of the
 following problem:
 
-* We need to update `lemons` to new version to get access to this critical bug fix for the new MacOS
+* We need to update `lemons` to a new version to get access to this critical bug fix for the new MacOS
   version
-* But `lemons` is an actively developed library, it upgraded to the new version of `trees` library
-  three months ago and MacOS bugfix sits on top of that version.
-* But we also use `limes`, which is a bit of a more niche product, and so hasn't seen upgrade for
+* But `lemons` is an actively developed library; it upgraded to the new version of the `trees` library
+  three months ago and the MacOS bugfix sits on top of that version.
+* But we also use `limes`, which is a bit of a more niche product, and so hasn't seen an upgrade for
   about a year.
 * And we also use the same pool of `trees` for both, so our latest `limes` prevent upgrading
   `lemons`.
@@ -86,13 +86,13 @@ following problem:
 It's also worth thinking about virility of major versions --- if your library is someone elses
 public API, _your_ major bump implies _their_ major bump, which is of course bad because putting
 work on the plate of other maintainers is bad, but, what's worse, is that this virally amplifies the
-number of unsatisfiable graph of dependencies a-la the example above.
+number of unsatisfiable graph dependencies a-la the example above.
 
 ## SemVer-\-
 
 I've seen two interesting extensions to the core SemVer. One is the observation that, to make
 tooling work, only two version numbers are sufficient. There's no _real_ difference between `patch`
-and `minor`, as far as the actual behavior of version resolution algorithm goes. I am sympathetic to
+and `minor`, as far as the actual behavior of the version resolution algorithm goes. I am sympathetic to
 this argument!
 
 The second one is an observation that many projects follow the "deprecate than remove cycle". I've
@@ -100,7 +100,7 @@ learned this with the release of Ember 2.0. The big deal about Ember 2.0 is that
 that it did was the removal of deprecation warnings. Code that didn't emit warnings on the latest
 Ember 1.x was compatible with 2.0.
 
-This feels like the fundamentally right way going about the larger, more important building blocks.
+This feels like the fundamentally right way of going about the larger, more important building blocks.
 And you sort-of can do this with semver today, if you declare that you are compatible with `"1.9,
 2.0"`. But, even today, many years after Ember 2.0, this still feels like a cute trick. This isn't
 yet a pattern with a catchy name (like release trains or not rocket science rule) that everyone is
