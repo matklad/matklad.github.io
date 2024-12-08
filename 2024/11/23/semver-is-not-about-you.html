@@ -1,0 +1,252 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SemVer Is Not About You</title>
+  <meta name="description" content="A popular genre of articles for the past few year has been a SemVer Critique, pointing out various
+things that are wrong with SemVer itself, or with the way SemVer is being applied, and, customarily,
+suggesting an alternative versioning scheme. Usually, the focus is either on how SemVer ought to be
+used, by library authors (nitpicking the definition of a breaking change), or on how SemVer is (not)
+useful for a library consumer (nitpicking the definition of a breaking change).">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/11/23/semver-is-not-about-you.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>SemVer Is Not About You</span> <time class="meta" datetime="2024-11-23">Nov 23, 2024</time></h1>
+<p><span>A popular genre of articles for the past few year has been a </span>&ldquo;<span>SemVer Critique</span>&rdquo;<span>, pointing out various</span>
+<span>things that are wrong with SemVer itself, or with the way SemVer is being applied, and, customarily,</span>
+<span>suggesting an alternative versioning scheme. Usually, the focus is either on how SemVer ought to be</span>
+<span>used, by library authors (nitpicking the definition of a breaking change), or on how SemVer is (not)</span>
+<span>useful for a library consumer (nitpicking the definition of a breaking change).</span></p>
+<p><span>I think these are valid lenses to study SemVer through, but not the most useful. This article</span>
+<span>suggest an alternative framing: </span><span class="display"><span>SemVer is not about you.</span></span></p>
+<p><span>Before we begin, I would like to carefully delineate the scope. Among other things, SemVer can be</span>
+<span>applied to, broadly speaking, applications and libraries. Applications are stand-alone software</span>
+<span>artifacts, usable as is. Libraries exist within the larger library ecosystem, and are building</span>
+<span>blocks for assembling applications. Libraries both depend on and are depended upon by  other</span>
+<span>libraries. In the present article, we will look </span><em><span>only</span></em><span> at the library side.</span></p>
+<hr>
+<p><span>At the first glance, it appears that SemVer solves the problem of informing the user when to do the</span>
+<span>upgrade: upgrade patch for latest bugfixes, upgrade minor if you want new features, upgrade major if</span>
+<span>you want new features and are ready to clean-up your code. But this is not the primary value of this</span>
+<span>versioning scheme. The </span><em><span>real</span></em><span> reason of semver is for managing transitive dependencies.</span></p>
+<p><span>Let</span>&rsquo;<span>s say you are using some version of </span><code>apples</code><span> library and some version of </span><code>oranges</code><span> library. And</span>
+<span>suppose they both depend on the </span><code>trees</code><span> library. Because </span><code>apples</code><span> and </span><code>oranges</code><span> were authored at</span>
+<span>different times, they do not necessary depend on the </span><em><span>same</span></em><span> version of </span><code>trees</code><span>. There are two paths</span>
+<span>from here.</span></p>
+<p><span>The first is to include two different versions of the </span><code>trees</code><span> library with your app. This is unfortunate</span>
+<span>for the trivial reason of code bloat, and for a more subtle reason of interface leaking: if for some</span>
+<span>reason your code needs to pass a </span><code>tree</code><span> originating in </span><code>apples</code><span> over to the </span><code>oranges</code><span>, you must use</span>
+<span>exactly the same </span><code>trees</code><span> library.</span></p>
+<p><span>The second path is to somehow unify transitive dependencies, and pick a single version of </span><code>trees</code>
+<span>that</span>&rsquo;<span>s good for both </span><code>apples</code><span> and </span><code>oranges</code><span>. But perhaps there isn</span>&rsquo;<span>t a version that works for both?</span></p>
+<p><span>Who</span>&rsquo;<span>s the right person to choose the appropriate course of action? It </span><em><span>could</span></em><span> be you, but that</span>&rsquo;<span>s</span>
+<span>unfortunate </span>&mdash;<span> you are using libraries precisely because you want to avoid thinking too much about</span>
+<span>their internals. You don</span>&rsquo;<span>t know how </span><code>apples</code><span> is using </span><code>trees</code><span>. You </span><em><span>could</span></em><span> learn that, but,</span>
+<span>arguably, that</span>&rsquo;<span>s not a good tradeoff (if it is, perhaps you shouldn</span>&rsquo;<span>t depend on </span><code>apples</code><span> and instead</span>
+<span>maintain your own). What</span>&rsquo;<span>s worse, for featurefull applications dependency trees run very deep,</span>
+<span>potential for conflicts scales at least linearly, and there</span>&rsquo;<span>s only a single you.</span></p>
+<p><span>Another candidate is the author of the </span><code>trees</code><span> library </span>&mdash;<span> they don</span>&rsquo;<span>t know </span><code>apples</code><span> and </span><code>oranges</code>
+<span>directly, but they should be thinking about how their library </span><em><span>could</span></em><span> be used. </span><em><span>And</span></em><span>, because</span>
+<span>different libraries tend to have different authors, the work for resolving version conflicts get</span>
+<span>distributed across the set of people that also scales linearly!</span></p>
+<p><em><span>This</span></em><span> is the problem that SemVer solves </span>&mdash;<span> it has nothing to do with your code or your direct</span>
+<span>dependencies, it</span>&rsquo;<span>s all about dependencies of your dependencies. SemVer </span><em><span>is</span></em><span> a library maintainer</span>
+<span>saying when two versions of their library can be unified:</span></p>
+<ul>
+<li>
+<span>If major version is bumped, no unification happens, the library will get duplicated.</span>
+</li>
+<li>
+<span>If major is not bumped, the versions can be unified.</span>
+</li>
+</ul>
+<p><span>That</span>&rsquo;<span>s it! That</span>&rsquo;<span>s the whole thing! All the talk about breaking changes is downstream of this actual</span>
+<span>behavior of version resolvers.</span></p>
+<hr>
+<p><span>Notably, if you are a library maintainer, SemVer isn</span>&rsquo;<span>t about you either. When deciding between major</span>
+<span>and minor, you shouldn</span>&rsquo;<span>t be thinking about your </span><em><span>direct</span></em><span> dependents. They knowingly use your</span>
+<span>library, so they are capable of making informed decisions and will manage just fine. The problem is</span>
+<span>your transitive dependents. If you release a new major version, dependencies of some application up</span>
+<span>the stack could get wedged if somewhere in its dependencies tree there are both versions of your</span>
+<span>library which need interoperable types.</span></p>
+<p><span>Or, rather, if you release a new major version, it is guaranteed that some application would have</span>
+<span>two copies of your library. There</span>&rsquo;<span>s no such thing as atomic upgrade of dependencies across the</span>
+<span>ecosystem, propagating your new major will take time and there will be an extended period where</span>
+<span>both majors are used, by different libraries, and both majors end up in applications</span>&rsquo;
+<span>lockfiles. The question is rather would this be more harmful than just code bloat? If your library</span>
+<span>ends up in another</span>&rsquo;<span>s public API you will likely lock some upstream applications in a variant of the</span>
+<span>following problem:</span></p>
+<ul>
+<li>
+<span>We need to update </span><code>lemons</code><span> to a new version to get access to this critical bug fix for the new MacOS</span>
+<span>version</span>
+</li>
+<li>
+<span>But </span><code>lemons</code><span> is an actively developed library; it upgraded to the new version of the </span><code>trees</code><span> library</span>
+<span>three months ago and the MacOS bugfix sits on top of that version.</span>
+</li>
+<li>
+<span>But we also use </span><code>limes</code><span>, which is a bit of a more niche product, and so hasn</span>&rsquo;<span>t seen an upgrade for</span>
+<span>about a year.</span>
+</li>
+<li>
+<span>And we also use the same pool of </span><code>trees</code><span> for both, so our latest </span><code>limes</code><span> prevent upgrading</span>
+<code>lemons</code><span>.</span>
+</li>
+</ul>
+<p><span>It</span>&rsquo;<span>s also worth thinking about virality of major versions </span>&mdash;<span> if your library is someone elses</span>
+<span>public API, </span><em><span>your</span></em><span> major bump implies </span><em><span>their</span></em><span> major bump, which is of course bad because putting</span>
+<span>work on the plate of other maintainers is bad, but, what</span>&rsquo;<span>s worse, is that this virally amplifies the</span>
+<span>number of unsatisfiable graph dependencies a-la the example above.</span></p>
+<section id="SemVer">
+
+    <h2>
+    <a href="#SemVer"><span>SemVer-</span><span>-</span> </a>
+    </h2>
+<p><span>I</span>&rsquo;<span>ve seen two interesting extensions to the core SemVer. One is the observation that, to make</span>
+<span>tooling work, only two version numbers are sufficient. There</span>&rsquo;<span>s no </span><em><span>real</span></em><span> difference between </span><code>patch</code>
+<span>and </span><code>minor</code><span>, as far as the actual behavior of the version resolution algorithm goes. I am sympathetic to</span>
+<span>this argument!</span></p>
+<p><span>The second one is an observation that many projects follow the </span>&ldquo;<span>deprecate than remove cycle</span>&rdquo;<span>. I</span>&rsquo;<span>ve</span>
+<span>learned this with the release of Ember 2.0. The big deal about Ember 2.0 is that the </span><em><span>only</span></em><span> thing</span>
+<span>that it did was the removal of deprecation warnings. Code that didn</span>&rsquo;<span>t emit warnings on the latest</span>
+<span>Ember 1.x was compatible with 2.0.</span></p>
+<p><span>This feels like the fundamentally right way of going about the larger, more important building blocks.</span>
+<span>And you sort-of can do this with semver today, if you declare that you are compatible with </span><code>"1.9,
+2.0"</code><span>. But, even today, many years after Ember 2.0, this still feels like a cute trick. This isn</span>&rsquo;<span>t</span>
+<span>yet a pattern with a catchy name (like release trains or not rocket science rule) that everyone is</span>
+<span>using because it is an obviously good idea</span></p>
+</section>
+<section id="And-Now-To-Something-Completely-Different">
+
+    <h2>
+    <a href="#And-Now-To-Something-Completely-Different"><span>And Now To Something Completely Different</span> </a>
+    </h2>
+<p><span>Circling back to the introduction, the general pattern here is that there</span>&rsquo;<span>s a prescriptivist</span>
+<span>approach and a descriptivist one. Prescriptivist argues about the right and wrong ways to use a</span>
+<span>particular tool. Descriptivist avoids value judgement, and describes how the thing actually behaves.</span></p>
+<p><span>Another instance of this pattern playing out I</span>&rsquo;<span>ve noticed are log levels. You can get very</span>
+<span>philosophical about the difference between </span><code>error</code><span>, </span><code>warn</code><span> and </span><code>info</code><span>. But what helps is looking at</span>
+<span>what they do:</span></p>
+<ul>
+<li>
+<code>error</code><span> pages the operator immediately.</span>
+</li>
+<li>
+<code>warn</code><span> pages if it repeats frequently.</span>
+</li>
+<li>
+<code>info</code><span> is what you see in the prog logs when you actively look at them.</span>
+</li>
+<li>
+<span>And </span><code>debug</code><span> is what your developers see when they enable extra logging.</span>
+</li>
+</ul>
+
+<figure class="blockquote">
+<blockquote><p><span>давайте одевать одежду</span><br>
+<span>давайте звонит говорить</span><br>
+<span>а на прескриптивистов будем</span><br>
+<span>ложить</span></p>
+</blockquote>
+<figcaption><cite><a href="https://avva.livejournal.com/2748021.html"><span>avva</span></a></cite></figcaption>
+</figure>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-11-23-semver-is-not-about-you.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
