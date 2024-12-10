@@ -1,0 +1,1404 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Primitive Recursive Functions For A Working Programmer</title>
+  <meta name="description" content="Programmers on the internet often use Turing-completeness terminology. Typically, not being
+Turing-complete is extolled as a virtue or even a requirement in specific domains. I claim that most
+such discussions are misinformed --- that not being Turing complete doesn't actually mean what folks
+want it to mean, and is instead a stand-in for a bunch of different practically useful properties,
+which are mostly orthogonal to actual Turing completeness.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/08/01/primitive-recursive-functions.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Primitive Recursive Functions For A Working Programmer</span> <time class="meta" datetime="2024-08-01">Aug 1, 2024</time></h1>
+<p><span>Programmers on the internet often use </span>&ldquo;<span>Turing-completeness</span>&rdquo;<span> terminology. Typically, not being</span>
+<span>Turing-complete is extolled as a virtue or even a requirement in specific domains. I claim that most</span>
+<span>such discussions are misinformed </span>&mdash;<span> that not being Turing complete doesn</span>&rsquo;<span>t actually mean what folks</span>
+<span>want it to mean, and is instead a stand-in for a bunch of different practically useful properties,</span>
+<span>which are mostly orthogonal to actual Turing completeness.</span></p>
+<p><span>While I am generally descriptivist in nature and am ok with words losing their </span><em><span>original</span></em><span> meaning</span>
+<span>as long as the new meaning is sufficiently commonly understood, Turing completeness is a hill I will</span>
+<span>die on. It is a term from math, it has a very specific meaning, and you are not allowed to</span>
+<span>re-purpose it for anything else, sorry!</span></p>
+<p><span>I understand why this happens: to really understand what Turing completeness is and is not you need</span>
+<span>to know one (simple!) theoretical result about so-called primitive recursive functions. And,</span>
+<span>although this result is simple, I was only made aware of it in a fairly advanced course during my</span>
+<span>masters. That</span>&rsquo;<span>s the CS education deficiency I want to rectify </span>&mdash;<span> you can</span>&rsquo;<span>t teach students the</span>
+<span>halting problem without </span><em><span>also</span></em><span> teaching them about primitive recursion!</span></p>
+<p><span>The post is going to be rather meaty, and will be split in three parts:</span></p>
+<p><span>In Part I, I give a TL;DR for the theoretical result and some of its consequences. Part II is going</span>
+<span>to be a whirlwind tour of Turing Machines, Finite State Automata and Primitive Recursive Functions.</span>
+<span>And then Part III will circle back to practical matters.</span></p>
+<p><span>If math makes you slightly nauseous, you might to skip Part II. But maybe give it a try? The math</span>
+<span>we</span>&rsquo;<span>ll need will be baby math from first principles, without reference to any advanced results.</span></p>
+<section id="Part-I-TL-DR">
+
+    <h2>
+    <a href="#Part-I-TL-DR"><span>Part I: TL;DR</span> </a>
+    </h2>
+<p><span>Here</span>&rsquo;<span>s the key result </span>&mdash;<span> suppose you have a program in some Turing complete language, and you also</span>
+<span>know that it</span>&rsquo;<span>s not too slow. Suppose it runs faster than</span>
+<span class="display"><span>O(2</span><sup><span>2</span><sup><span>N</span></sup></sup><span>).</span></span>
+<span>That is, two to the power of two to the power of N, a very large number. In this case, you can</span>
+<span>implement this algorithm in a non-Turing complete language.</span></p>
+<p><span>Most practical problems fall into this </span>&ldquo;<span>faster than two to the two to the power of two</span>&rdquo;<span> space.</span>
+<span>Hence it follows that you don</span>&rsquo;<span>t need the full power of a Turing Machine to tackle them. Hence, a</span>
+<span>language not being Turing complete doesn</span>&rsquo;<span>t in any way restrict you in practice, or give you extra</span>
+<span>powers to control the computation.</span></p>
+<p><span>Or, to restate this: in practice, a program which doesn</span>&rsquo;<span>t terminate, and a program that needs a</span>
+<span>billion billion steps to terminate are equivalent. Making something non-Turing complete by itself</span>
+<span>doesn</span>&rsquo;<span>t help with the second problem in any way. And there</span>&rsquo;<span>s a trivial approach that solves the</span>
+<span>first problem for any existing Turing-complete language </span>&mdash;<span> in the implementation, count the steps</span>
+<span>and bail with an error after a billion.</span></p>
+</section>
+<section id="Part-II-Weird-Machines">
+
+    <h2>
+    <a href="#Part-II-Weird-Machines"><span>Part II: Weird Machines</span> </a>
+    </h2>
+<p><span>The actual theoretical result is quite a bit more general than that. It is (unsurprisingly)</span>
+<span>recursive:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>If a function is computed by a Turing Machine, and the runtime of this machine is bounded by some</span>
+<span>primitive recursive function of input, then the original function itself can be written as a</span>
+<span>primitive recursive function.</span></p>
+</blockquote>
+
+</figure>
+<p><span>It is expected that this sounds like gibberish at this point! So let</span>&rsquo;<span>s just go and prove this thing,</span>
+<span>right here in this blog post! Will work up slowly towards this result. The plan is as follows:</span></p>
+<ul>
+<li>
+<em><span>First</span></em><span>, to brush up notation, we</span>&rsquo;<span>ll define Finite State Machines.</span>
+</li>
+<li>
+<em><span>Second</span></em><span>, we</span>&rsquo;<span>ll turn our humble Finite State Machine into the all-powerful Turing Machine (spoiler</span>
+&mdash;<span> a Turing Machine is an FSM with a pair of stacks), and, as is customary, wave our hands about</span>
+<span>the Universal Turing Machine.</span>
+</li>
+<li>
+<em><span>Third</span></em><span>, we leave the cozy world of imperative programming and define primitive recursive</span>
+<span>functions.</span>
+</li>
+<li>
+<em><span>Finally</span></em><span>, we</span>&rsquo;<span>ll talk about the relative computational power of TMs and PRFs, including the teased</span>
+<span>up result and more!</span>
+</li>
+</ul>
+</section>
+<section id="Finite-State-Machines">
+
+    <h2>
+    <a href="#Finite-State-Machines"><span>Finite State Machines</span> </a>
+    </h2>
+<p><dfn><span>Finite State Machines</span></dfn><span> are simple! An FSM takes a string as input, and returns a binary</span>
+<span>answer, </span>&ldquo;<span>yes</span>&rdquo;<span> or </span>&ldquo;<span>no</span>&rdquo;<span>. Unsurprisingly an FSM has a finite number of states: Q0, Q1, </span>&hellip;<span>, Qn.</span>
+<span>A subset of states are designated as </span>&ldquo;<span>yes</span>&rdquo;<span> states, the rest are </span>&ldquo;<span>no</span>&rdquo;<span> states. There</span>&rsquo;<span>s also one</span>
+<span>specific starting state.</span></p>
+<p><span>The behavior of the state machine is guided by a transition (step) function, </span><code>s</code><span>. This function</span>
+<span>takes the current state of FSM, the next symbol of input, and returns a new state.</span></p>
+<p><span>The semantics of FSM is determined by repeatably applying the single step function for all symbols of</span>
+<span>the input, and noting whether the final state is a </span>&ldquo;<span>yes</span>&rdquo;<span> state or a </span>&ldquo;<span>no</span>&rdquo;<span> state.</span></p>
+<p><span>Here</span>&rsquo;<span>s an FSM which accepts only strings of zeros and ones of even length:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">States:     { Q0, Q1 }</span>
+<span class="line">Yes States: { Q0 }</span>
+<span class="line">Start State:  Q0</span>
+<span class="line"></span>
+<span class="line">s :: State -&gt; Symbol -&gt; State</span>
+<span class="line">s Q0 0 = Q1</span>
+<span class="line">s Q0 1 = Q1</span>
+<span class="line">s Q1 0 = Q0</span>
+<span class="line">s Q1 1 = Q0</span></code></pre>
+
+</figure>
+<p><span>This machine ping-pongs between states Q0 and Q1 ends up in Q0 only for inputs of even length</span>
+<span>(including an empty input).</span></p>
+<p><span>What can FSMs do? As they give a binary answer, they are recognizers </span>&mdash;<span> they don</span>&rsquo;<span>t compute</span>
+<span>functions, but rather just characterize certain sets of strings. A famous result is that the</span>
+<span>expressive power of FSMs is equivalent to the expressive power of regular expressions. If you can</span>
+<span>write a regular expression for it, you could also do an FSM!</span></p>
+<p><span>There are also certain things that state machines can</span>&rsquo;<span>t do. For example they can</span>&rsquo;<span>t enter an infinite</span>
+<span>loop. Any FSM is linear in the input size and always terminates. But there are much more specific</span>
+<span>sets of strings that couldn</span>&rsquo;<span>t be recognized by an FSM. Consider this set:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">1</span>
+<span class="line">010</span>
+<span class="line">00100</span>
+<span class="line">0001000</span>
+<span class="line">...</span></code></pre>
+
+</figure>
+<p><span>That is, an infinite set which contains </span>&lsquo;<span>1</span>&rsquo;<span>s surrounded by the equal number of </span>&lsquo;<span>0</span>&rsquo;<span>s on the both</span>
+<span>sides. Let</span>&rsquo;<span>s prove that there isn</span>&rsquo;<span>t a state machine that recognizes this set!</span></p>
+<p><span>As usually, suppose there </span><em><span>is</span></em><span> such a state machine. It has a certain number of states </span>&mdash;<span> maybe a</span>
+<span>dozen, maybe a hundred, maybe a thousand, maybe even more. But let</span>&rsquo;<span>s say fewer than a million.</span>
+<span>Then, let</span>&rsquo;<span>s take a string which looks like a million zeros, followed by one, followed by million</span>
+<span>zeros. And let</span>&rsquo;<span>s observe our FSM eating this particular string.</span></p>
+<p><span>First of all, because the string is in fact a one surrounded by the equal number of zeros on both</span>
+<span>sides, the FSM ends up in a </span>&ldquo;<span>yes</span>&rdquo;<span> state. Moreover, because the length of the string is much greater</span>
+<span>than the number of states in the state machine, the state machine necessarily visits some state twice.</span>
+<span>There is a cycle, where the machine goes from A to B to C to D and back to A. This cycle might be</span>
+<span>pretty long, but it</span>&rsquo;<span>s definitely shorter than the total number of states we have.</span></p>
+<p><span>And now we can fool the state machine. Let</span>&rsquo;<span>s make it eat our string again, but this time, once it</span>
+<span>completes the ABCDA cycle, we</span>&rsquo;<span>ll force it to traverse this cycle again. That is, the original cycle</span>
+<span>corresponds to some portion of our giant string:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">0000 0000000000000000000 00 .... 1 .... 00000</span>
+<span class="line">     &lt;- cycle portion -&gt;</span></code></pre>
+
+</figure>
+<p><span>If we duplicate this portion, our string will no longer look like one surrounded by equal number of</span>
+<span>twos, but the state machine will still in the </span>&ldquo;<span>yes</span>&rdquo;<span> state. Which is a contradiction that completes</span>
+<span>the proof.</span></p>
+</section>
+<section id="Turing-Machine-Definition">
+
+    <h2>
+    <a href="#Turing-Machine-Definition"><span>Turing Machine: Definition</span> </a>
+    </h2>
+<p><span>A </span><dfn><span>Turing Machine</span></dfn><span> is only slightly more complex than an FSM. Like an FSM, a TM has a bunch of states</span>
+<span>and a single-step transition function. While an FSM has an immutable input which is being fed to it</span>
+<span>symbol by symbol, a TM operates with a mutable tape. The input gets written to the tape at the</span>
+<span>start. At each step, a TM looks at the current symbol on the tape, changes its state according to a</span>
+<span>transition function and, additionally:</span></p>
+<ul>
+<li>
+<span>Replaces the current symbol with a new one (which might or might not be different).</span>
+</li>
+<li>
+<span>Moves the reading head that points at the current symbol one position to the left or to the right.</span>
+</li>
+</ul>
+<p><span>When a machine reaches a designated halt state, it stops, and whatever is written on the tape at</span>
+<span>that moment is the result. That is, while FSMs are binary recognizers, TMs are functions. Keep in</span>
+<span>mind that a TM does not necessarily stop. It might be the case that a TM goes back and forth over the</span>
+<span>tape, overwrites it, changes its internal state, but never quite gets to the final state.</span></p>
+<p><span>Here</span>&rsquo;<span>s an example Turing Machine:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">States:  {A, B, C, H}</span>
+<span class="line">Start State: A</span>
+<span class="line">Final State: H</span>
+<span class="line"></span>
+<span class="line">s :: State -&gt; Symbol -&gt; (State, Symbol, Left | Right)</span>
+<span class="line">s A 0 = (B, 1, Right)</span>
+<span class="line">s A 1 = (H, 1, Right)</span>
+<span class="line">s B 0 = (C, 0, Right)</span>
+<span class="line">s B 1 = (B, 1, Right)</span>
+<span class="line">s C 0 = (C, 1, Left)</span>
+<span class="line">s C 1 = (A, 1, Left)</span></code></pre>
+
+</figure>
+<p><span>If the configuration of the machine looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">000010100000</span>
+<span class="line">     ^</span>
+<span class="line">     A</span></code></pre>
+
+</figure>
+<p><span>Then we are in the </span><code>s A 0 = (B, 1, Right)</code><span> case, so we should change the state to B, replace 0 with</span>
+<span>1, and move to the right:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">000011100000</span>
+<span class="line">      ^</span>
+<span class="line">      B</span></code></pre>
+
+</figure>
+</section>
+<section id="Turing-Machine-Programming">
+
+    <h2>
+    <a href="#Turing-Machine-Programming"><span>Turing Machine: Programming</span> </a>
+    </h2>
+<p><span>There are a bunch of fiddly details to Turing Machines!</span></p>
+<p><span>The tape is conceptually infinite, so beyond the input, everything is just zeros. This creates a</span>
+<span>problem: it might be hard to say where the input (or the output) ends! There are a couple of</span>
+<span>technical solutions here. One is to say that there are three different symbols on the tape </span>&mdash;
+<span>zeros, ones, and blanks, and require that the tape is initialized with blanks. A different solution</span>
+<span>is to invent some encoding scheme. For example, we can say that the input is a sequence of 8-bit</span>
+<span>bytes, without interior null bytes. So, eight consecutive zeros at a byte boundary designate the end</span>
+<span>of input/output.</span></p>
+<p><span>It</span>&rsquo;<span>s useful to think about how this byte-oriented TM could be implemented. We could have one large</span>
+<span>state for each byte of input. So, Q142 would mean that the head is on the byte with value 142. And</span>
+<span>then we</span>&rsquo;<span>ll have a bunch of small states to read out the current byte. Eg, we start reading a byte in</span>
+<span>state </span><code>S</code><span>. Depending on the next bit we move to S0 or S1, then to S00, or S01, etc. Once we reached</span>
+<span>something like S01111001, we move back 8 positions and enter state Q121. This is one of the patterns</span>
+<span>of Turing Machine programming </span>&mdash;<span> while your main memory is the tape, you can represent some</span>
+<span>constant amount of memory directly in the states.</span></p>
+<p><span>What we</span>&rsquo;<span>ve done here is essentially lowering a byte-oriented Turing Machine to a bit-oriented</span>
+<span>machine. So, we could think only in terms of big states operating on bytes, as we know the general</span>
+<span>pattern for converting that to direct bit-twiddling.</span></p>
+<p><span>With this encoding scheme in place, we now can feed arbitrary files to a Turing Machine! Which will</span>
+<span>be handy to the next observation:</span></p>
+<p><span>You can</span>&rsquo;<span>t actually program a Turing Machine. What I mean is that, counter-intuitively, there isn</span>&rsquo;<span>t</span>
+<span>some user-supplied program that a Turing Machine executes. Rather, the program is hard-wired into</span>
+<span>the machine. The transition function </span><em><span>is</span></em><span> the program.</span></p>
+<p><span>But with some ingenuity we can regain our ability to write programs. Recall that we</span>&rsquo;<span>ve just learned</span>
+<span>to feed arbitrary files to a TM. So what we could do is to write a text file that specifies a TM and</span>
+<span>its input, and then feed that entire file as an input to an </span>&ldquo;<span>interpreter</span>&rdquo;<span> Turing Machine which would</span>
+<span>read the file, and act as the machine specified there. A Turing Machine can have an </span><code>eval</code>
+<span>function.</span></p>
+<p><span>Is such an </span>&ldquo;<span>interpreter</span>&rdquo;<span> Turing Machine possible? Yes! And it is not hard: if you spend a couple of hours</span>
+<span>programming Turing Machines by hand, you</span>&rsquo;<span>ll see that you pretty much can do anything </span>&mdash;<span> you can do</span>
+<span>numbers, arithmetic, loops, control flow. It</span>&rsquo;<span>s just very very tedious.</span></p>
+<p><span>So let</span>&rsquo;<span>s just declare that we</span>&rsquo;<span>ve actually coded up this Universal Turing Machine which simulates a</span>
+<span>TM given to it as an input in a particular encoding.</span></p>
+<p><span>This sort of construct also gives rise to the Church-Turing thesis. We have a TM which can run other</span>
+<span>TMs. And you can implement a TM interpreter in something like Python. And, with a bit of legwork,</span>
+<span>you could </span><em><span>also</span></em><span> implement a Python interpreter as a TM (you likely want to avoid doing that</span>
+<span>directly, and instead do a simpler interpreter for WASM, and then use a Python interpreter compiled</span>
+<span>to WASM). This sort of bidirectional interpretation shows that Python and TMs have equivalent</span>
+<span>computing power. Moreover, it</span>&rsquo;<span>s quite hard to come up with a reasonable computational device which</span>
+<span>is more powerful than a Turing Machine.</span></p>
+<p><span>There are computational devices that are strictly weaker than TMs though. Recall FSMs. By this point,</span>
+<span>it should be obvious that a TM can simulate an FSM. Everything a Finite State Machine can do, a</span>
+<span>Turing Machine can do as well. And it should be intuitively clear that a TM is more powerful than an</span>
+<span>FSM. An FSM gets to use only a finite number of states. A TM has these same states, but it also posses</span>
+<span>a tape which serves like an infinitely sized external memory.</span></p>
+<p><span>Directly proving that you </span><em><span>can</span>&rsquo;<span>t</span></em><span> encode a Universal Turing Machine as an FSM sounds complicated,</span>
+<span>so let</span>&rsquo;<span>s prove something simpler. Recall that we have established that there</span>&rsquo;<span>s no FSM that accepts</span>
+<span>only ones surrounded by an equal number of zeros on both sides (because a sufficiently large word</span>
+<span>of this form would necessary enter a cycle in a state machine, which could then be further pumped).</span>
+<span>But it</span>&rsquo;<span>s actually easy to write a Turing Machine that does this:</span></p>
+<ul>
+<li>
+<span>Erase zero (at the left side of the tape)</span>
+</li>
+<li>
+<span>Go to the right end of the tape</span>
+</li>
+<li>
+<span>Erase zero</span>
+</li>
+<li>
+<span>Go to the left side of the tape</span>
+</li>
+<li>
+<span>Repeat</span>
+</li>
+<li>
+<span>If what</span>&rsquo;<span>s left is a single </span><code>1</code><span> the answer is </span>&ldquo;<span>yes</span>&rdquo;<span>, otherwise it is a </span>&ldquo;<span>no</span>&rdquo;
+</li>
+</ul>
+<p><span>We found a specific problem that can be solved by a TM, but is out of reach of any FSM. So it</span>
+<span>necessarily follows that there isn</span>&rsquo;<span>t an FSM that can simulate an arbitrary TM.</span></p>
+<p><span>It is also useful to take a closer look at the tape. It is a convenient skeuomorphic abstraction</span>
+<span>which makes the behavior of the machine intuitive, but it is inconvenient to implement in a normal</span>
+<span>programming language. There isn</span>&rsquo;<span>t a standard data structure that behaves just like a tape.</span></p>
+<p><span>One cool practical trick is to simulate the tape as a pair of stacks. Take this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Tape: A B C D E F G</span>
+<span class="line">Head:     ^</span></code></pre>
+
+</figure>
+<p><span>And transform it to something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">Left Stack:  [A, B, C]</span>
+<span class="line">Right Stack: [G, F, E, D]</span></code></pre>
+
+</figure>
+<p><span>That is, everything to the left of the head is one stack, everything to the right, reversed, is the</span>
+<span>other.  Here, moving the reading head left or right corresponds to popping a value off one stack and</span>
+<span>pushing it onto another.</span></p>
+<p><span>So, an equivalent-in-power definition would be to say that a TM is an FSM endowed with two</span>
+<span>stacks.</span></p>
+<p><span>This of course creates an obvious question: is an FSM with just one stack a thing? Yes! It would be</span>
+<span>called a pushdown automaton, and it would correspond to context-free languages. But that</span>&rsquo;<span>s beyond</span>
+<span>the scope of this post!</span></p>
+<p><span>There</span>&rsquo;<span>s yet another way to look at the tape, or the pair of stacks, if the set of symbols is 0 and</span>
+<span>1. You could say that a stack is just a number! So, something like</span>
+<code class="display">[1, 0, 1, 1]</code>
+<span>will be</span>
+<span class="display"><code>1 + 2 + 8 = 11</code><span>.</span></span>
+<span>Looking at the top of the stack is </span><code>stack % 2</code><span>, removing an item from the stack is </span><code>stack / 2</code><span> and</span>
+<span>pushing x onto the stack is </span><code>stack * 2 + x</code><span>. We won</span>&rsquo;<span>t need this </span><em><span>right</span></em><span> now, so just hold onto this</span>
+<span>for a brief moment.</span></p>
+</section>
+<section id="Turing-Machine-Limits">
+
+    <h2>
+    <a href="#Turing-Machine-Limits"><span>Turing Machine: Limits</span> </a>
+    </h2>
+<p><span>Ok, so we have some idea about the lower bound for the power of a Turing Machine </span>&mdash;<span> FSMs are strictly</span>
+<span>less expressive. What about the opposite direction? Is there some computation that a Turing Machine</span>
+<span>is incapable of doing?</span></p>
+<p><span>Yes! Let</span>&rsquo;<span>s construct a function which maps natural numbers to natural numbers, which can</span>&rsquo;<span>t be</span>
+<span>implemented by a Turing Machine. Recall that we can encode an arbitrary Turing Machine as text. That</span>
+<span>means that we can actually enumerate all possible Turing Machines, and write them in a giant line,</span>
+<span>from the most simple Turing Machine to more complex ones:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">TM_0</span>
+<span class="line">TM_1</span>
+<span class="line">TM_2</span>
+<span class="line">...</span>
+<span class="line">TM_326</span>
+<span class="line">...</span></code></pre>
+
+</figure>
+<p><span>This is of course going to be an infinite list.</span></p>
+<p><span>Now, let</span>&rsquo;<span>s see how TM0 behaves on input </span><code>0</code><span>: it either prints something, or doesn</span>&rsquo;<span>t terminate. Then,</span>
+<span>note how TM1 behaves on input </span><code>1</code><span>, and generalizing, create function </span><code>f</code><span> that behaves as the nth TM</span>
+<span>on input </span><code>n</code><span>. It might look something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(0) = 0</span>
+<span class="line">f(1) = 111011</span>
+<span class="line">f(2) = doesn't terminate</span>
+<span class="line">f(3) = 0</span>
+<span class="line">f(4) = 101</span>
+<span class="line">...</span></code></pre>
+
+</figure>
+<p><span>Now, let</span>&rsquo;<span>s construct function </span><code>g</code><span> which is maximally diffed from </span><code>f</code><span>: where </span><code>f</code><span> gives </span><code>0</code><span>, </span><code>g</code><span> will</span>
+<span>return </span><code>1</code><span>, and it will return </span><code>0</code><span> in all other cases:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">g(0) = 1</span>
+<span class="line">g(1) = 0</span>
+<span class="line">g(2) = 0</span>
+<span class="line">g(3) = 1</span>
+<span class="line">g(4) = 0</span>
+<span class="line">...</span></code></pre>
+
+</figure>
+<p><span>There isn</span>&rsquo;<span>t a Turing machine that computes </span><code>g</code><span>. For suppose there is. Then, it exists in our list of</span>
+<span>all Turing Machines somewhere. Let</span>&rsquo;<span>s say it is TM1000064. So, if we feed </span><code>0</code><span> to it, it will return</span>
+<code>g(0)</code><span>, which is </span><code>1</code><span>, which is different from </span><code>f(0)</code><span>. And the same holds for </span><code>1</code><span>, and </span><code>2</code><span>, and </span><code>3</code><span>.</span>
+<span>But once we get to </span><code>g(1000064)</code><span>, we are in trouble, because, by the definition of </span><code>g</code><span>, </span><code>g(1000064)</code>
+<span>is different from what is computed by TM1000064! So such a machine is impossible.</span></p>
+<p><span>Those math savvy might express this more succinctly </span>&mdash;<span> there</span>&rsquo;<span>s a countably-infinite number of</span>
+<span>Turing Machines, and an uncountably-infinite number of functions. So there </span><em><span>must</span></em><span> be some functions</span>
+<span>which do not have a corresponding Turing Machine. It is the same proof </span>&mdash;<span> the diagonalization</span>
+<span>argument is hiding in the claim that the set of all functions is an uncountable set.</span></p>
+<p><span>But this is super weird and abstract. Let</span>&rsquo;<span>s rather come up with some very specific problem which</span>
+<span>isn</span>&rsquo;<span>t solvable by a Turing Machine. The halting problem: given source code for a Turing Machine and</span>
+<span>its input, determine if the machine halts on this input eventually.</span></p>
+<p><span>As we have waved our hands sufficiently vigorously to establish that Python and Turing Machines have</span>
+<span>equivalent computational power, I am going to try to solve this in Python:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">def</span> <span class="hl-title function_">halts</span>(<span class="hl-params">program_source_code: <span class="hl-built_in">str</span>, program_input: <span class="hl-built_in">str</span></span>) -&gt; Bool:</span>
+<span class="line">    <span class="hl-comment"># One million lines of readable, but somewhat</span></span>
+<span class="line">    <span class="hl-comment"># unsettling and intimidating Python code.</span></span>
+<span class="line">    <span class="hl-keyword">return</span> the_answer</span>
+<span class="line"></span>
+<span class="line">raw_input = <span class="hl-built_in">input</span>()</span>
+<span class="line">[program_source_code, program_input] = parse(raw_input)</span>
+<span class="line"><span class="hl-built_in">print</span>(<span class="hl-string">&quot;Yes&quot;</span> <span class="hl-keyword">if</span> halts(program_source_code, program_input) <span class="hl-keyword">else</span> <span class="hl-string">&quot;No&quot;</span>)</span></code></pre>
+
+</figure>
+<p><span>Now, I will do a weird thing and start asking whether a program terminates, if it is fed its own</span>
+<span>source code, in a reverse-quine of sorts:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">def</span> <span class="hl-title function_">halts_on_self</span>(<span class="hl-params">program_source_code: <span class="hl-built_in">str</span></span>) -&gt; Bool:</span>
+<span class="line">    program_input = program_source_code</span>
+<span class="line">    <span class="hl-keyword">return</span> halts(program_source_code, program_input)</span></code></pre>
+
+</figure>
+<p><span>and finally I construct this weird beast of a program:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">def</span> <span class="hl-title function_">halts</span>(<span class="hl-params">program_source_code: <span class="hl-built_in">str</span>, program_input: <span class="hl-built_in">str</span></span>) -&gt; Bool:</span>
+<span class="line">    <span class="hl-comment"># ...</span></span>
+<span class="line">    <span class="hl-keyword">return</span> the_answer</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">def</span> <span class="hl-title function_">halts_on_self</span>(<span class="hl-params">program_source_code: <span class="hl-built_in">str</span></span>) -&gt; Bool:</span>
+<span class="line">    program_input = program_source_code</span>
+<span class="line">    <span class="hl-keyword">return</span> halts(program_source_code, program_input)</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">def</span> <span class="hl-title function_">weird</span>(<span class="hl-params">program_input</span>):</span>
+<span class="line">    <span class="hl-keyword">if</span> halts_on_self(program_input):</span>
+<span class="line">        <span class="hl-keyword">while</span> <span class="hl-literal">True</span>:</span>
+<span class="line">            <span class="hl-keyword">pass</span></span>
+<span class="line"></span>
+<span class="line">weird(<span class="hl-built_in">input</span>())</span></code></pre>
+
+</figure>
+<p><span>To make this even worse, I</span>&rsquo;<span>ll feed the text of this </span><code>weird</code><span> program to itself. Does it terminate</span>
+<span>with this input? Well, if it terminates, and if our </span><code>halts</code><span> function is implemented correctly, then</span>
+<span>the </span><code>halts_on_self(program_input)</code><span> invocation above returns </span><code>True</code><span>. But then we enter the infinite</span>
+<span>loop and don</span>&rsquo;<span>t actually terminate.</span></p>
+<p><span>Hence, it must be the case that </span><code>weird</code><span> does not terminate when self-applied. But then</span>
+<code>halts_on_self</code><span> returns </span><code>False</code><span>, and it should terminate. So we get a contradiction both ways. Which</span>
+<span>necessarily means that either our </span><code>halts</code><span> sometimes returns a straight-up incorrect answer, or that it</span>
+<span>sometimes does not terminate.</span></p>
+<p><span>So this is the flip side of a Turing Machine</span>&rsquo;<span>s power </span>&mdash;<span> it is so powerful that it becomes impossible</span>
+<span>to tell whether it</span>&rsquo;<span>ll terminate or not!</span></p>
+<p><span>It actually gets much worse, because this result can be generalized to an unreasonable degree!</span>
+<span>In general, there</span>&rsquo;<span>s very little we can say about arbitrary programs.</span></p>
+<p><span>We can easily check syntactic properties (is the program text shorter than 4 kilobytes?), but they</span>
+<span>are, in some sense, not very interesting, as they depend a lot on how exactly one writes a program.</span>
+<span>It would be much more interesting to check some refactoring-invariant properties, which hold when</span>
+<span>you change the text of the program, but leave the behavior intact. Indeed, </span>&ldquo;<span>does this change</span>
+<span>preserve behavior?</span>&rdquo;<span> would be one very useful property to check!</span></p>
+<p><span>So let</span>&rsquo;<span>s define two TMs to be equivalent, if they have identical behavior. That is, for each</span>
+<span>specific input, either both machines don</span>&rsquo;<span>t terminate, or they both halt, and give identical results.</span></p>
+<p><span>Then, our refactoring-invariant properties are, by definition, properties that hold (or do not hold)</span>
+<span>for the entire classes of equivalence of TMs.</span></p>
+<p><span>And a somewhat depressing result here is that there are no non-trivial refactoring-invariant</span>
+<span>properties that you can algorithmically check.</span></p>
+<p><span>Suppose we have some magic TM, called P, which checks such a property. Let</span>&rsquo;<span>s show that, using P, we can</span>
+<span>solve the problem we know we can not solve </span>&mdash;<span> the halting problem.</span></p>
+<p><span>Consider a Turing Machine that is just an infinite loop and never terminates, M1. P might or might</span>
+<span>not hold for it. But, because P is non-trivial (it holds for some machines and doesn</span>&rsquo;<span>t hold for some</span>
+<span>machines), there</span>&rsquo;<span>s some different machine M2 which differs from M1 with respect to P. That is,</span>
+<code>P(M1) xor P(M2)</code><span> holds.</span></p>
+<p><span>Let</span>&rsquo;<span>s use these M1 and M2 to figure out whether a given machine M halts on input I. Using Universal</span>
+<span>Turing Machine (interpreter), we can construct a new machine, M12 that just runs M on input I, then</span>
+<span>erases the contents of the tape and runs M2. Now, if M halts on I, then the resulting machine M12 is</span>
+<span>behaviorally-equivalent to M2. If M doesn</span>&rsquo;<span>t halt on I, then the result is equivalent to the infinite</span>
+<span>loop program, M1. Or, in pseudo-code:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">def</span> <span class="hl-title function_">M1</span>(<span class="hl-params"><span class="hl-built_in">input</span></span>):</span>
+<span class="line">    <span class="hl-keyword">while</span> <span class="hl-literal">True</span>:</span>
+<span class="line">        <span class="hl-keyword">pass</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">def</span> <span class="hl-title function_">M2</span>(<span class="hl-params"><span class="hl-built_in">input</span></span>):</span>
+<span class="line">    <span class="hl-comment"># We don&#x27;t actually know what&#x27;s here</span></span>
+<span class="line">    <span class="hl-comment"># but we know that such a machine exists.</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">assert</span>(P(M1) != P(M2))</span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">def</span> <span class="hl-title function_">halts</span>(<span class="hl-params">M, I</span>):</span>
+<span class="line">    <span class="hl-keyword">def</span> <span class="hl-title function_">M12</span>(<span class="hl-params"><span class="hl-built_in">input</span></span>):</span>
+<span class="line">        M(I) <span class="hl-comment"># might or might not halt</span></span>
+<span class="line">        <span class="hl-keyword">return</span> M2(<span class="hl-built_in">input</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="hl-keyword">return</span> P(M12) == P(M2)</span></code></pre>
+
+</figure>
+<p><span>This is pretty bad and depressing </span>&mdash;<span> we can</span>&rsquo;<span>t learn anything meaningful about an arbitrary Turing</span>
+<span>Machine! So let</span>&rsquo;<span>s finally get to the actual topic of today</span>&rsquo;<span>s post:</span></p>
+</section>
+<section id="Primitive-Recursive-Functions">
+
+    <h2>
+    <a href="#Primitive-Recursive-Functions"><span>Primitive Recursive Functions</span> </a>
+    </h2>
+<p><span>This is going to be another computational device, like FSMs and TMs. Like an FSM, it</span>&rsquo;<span>s going to be a</span>
+<span>nice, always terminating, non-Turing complete device. But it will turn out to have quite a bit of</span>
+<span>the power of a full Turing Machine!</span></p>
+<p><span>However, unlike both TMs and FSMs, </span><dfn><span>Primitive Recursive Functions</span></dfn><span> are defined directly as</span>
+<span>functions which take a tuple of natural numbers and return a natural number. The two simplest ones</span>
+<span>are </span><code>zero</code><span> (that is, zero-arity function that returns </span><code>0</code><span>) and </span><code>succ</code><span> </span>&mdash;<span> a unary function that</span>
+<span>just adds 1. Everything else is going to get constructed out of these two:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">zero = 0</span>
+<span class="line">succ(x) = x + 1</span></code></pre>
+
+</figure>
+<p><span>One way we are allowed to combine these functions is by composition. So we can get all the constants</span>
+<span>right off the bat:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">succ(zero) = 1</span>
+<span class="line">succ(succ(zero)) = 2</span>
+<span class="line">succ(succ(succ(zero))) = 3</span></code></pre>
+
+</figure>
+<p><span>We aren</span>&rsquo;<span>t going to be allowed to use general recursion (because it can trivially non-terminate),</span>
+<span>but we do get to use a restricted form of C-style loop. It is a bit fiddly to define formally! The</span>
+<span>overall shape is </span><span class="display"><code>LOOP(init, f, n)</code><span>.</span></span></p>
+<p><span>Here, </span><code>init</code><span> and </span><code>n</code><span> are numbers </span>&mdash;<span> the initial value of the accumulator and the total number of</span>
+<span>iterations. The </span><code>f</code><span> is a unary function that specifies the loop body </span>&ndash;<span> it takes the current value</span>
+<span>of the accumulator and returns the new value. So</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">LOOP(init, f, 0) = init</span>
+<span class="line">LOOP(init, f, 1) = f(init)</span>
+<span class="line">LOOP(init, f, 2) = f(f(init))</span>
+<span class="line">LOOP(init, f, 3) = f(f(f(init)))</span></code></pre>
+
+</figure>
+<p><span>While this is </span><em><span>similar</span></em><span> to a C-style loop, the crucial difference here is that the total number of</span>
+<span>iterations </span><code>n</code><span> is fixed up-front. There</span>&rsquo;<span>s no way to mutate the loop counter in the loop body.</span></p>
+<p><span>This allows us to define addition:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">add(x, y) = LOOP(x, succ, y)</span></code></pre>
+
+</figure>
+<p><span>Multiplication is trickier. Conceptually, to multiply </span><code>x</code><span> and </span><code>y</code><span>, we want to </span><code>LOOP</code><span> from zero, and</span>
+<span>repeat </span>&ldquo;<span>add </span><code>x</code>&rdquo;<span> </span><code>y</code><span> times. The problem here is that we can</span>&rsquo;<span>t write an </span>&ldquo;<span>add </span><code>x</code>&rdquo;<span> function yet</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"># Doesn't work, add is a binary function!</span>
+<span class="line">mul(x, y) = LOOP(0, add, y)</span></code></pre>
+
+</figure>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"># Doesn't work either, no x in scope!</span>
+<span class="line">add_x v = add(x, v)</span>
+<span class="line">mul(x, y) = LOOP(0, add_x, y)</span></code></pre>
+
+</figure>
+<p><span>One way around this is to define </span><code>LOOP</code><span> as a family of operators, which can pass extra arguments to</span>
+<span>the iteration function:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">LOOP0(init, f, 2) = f(f(init))</span>
+<span class="line">LOOP1(c1, init, f, 2) = f(c1, f(c1, init))</span>
+<span class="line">LOOP2(c1, c2, init, f, 2) = f(c1, c2, f(c1, c2, init))</span></code></pre>
+
+</figure>
+<p><span>That is, </span><code>LOOP_N</code><span> takes an extra </span><code>n</code><span> arguments, and passes them through to any invocation of the body</span>
+<span>function. To express this idea a little bit more succinctly, let</span>&rsquo;<span>s just allow to partially  apply</span>
+<span>the second argument of </span><code>LOOP</code><span>. That is:</span></p>
+<ul>
+<li>
+<span>All our functions are going to be first order. All arguments are numbers, the result is a number.</span>
+<span>There aren</span>&rsquo;<span>t higher order functions, there aren</span>&rsquo;<span>t closures.</span>
+</li>
+<li>
+<span>The </span><code>LOOP</code><span> is not a function in our language </span>&mdash;<span> it</span>&rsquo;<span>s a builtin operator, a keyword. So, for</span>
+<span>convenience, we allow passing partially applied functions to it. But semantically this is</span>
+<span>equivalent to just passing in extra arguments on each iteration.</span>
+</li>
+</ul>
+<p><span>Which finally allows us to write</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">mul(x, y) = LOOP(0, add x, y)</span></code></pre>
+
+</figure>
+<p><span>Ok, so that</span>&rsquo;<span>s progress </span>&mdash;<span> we made something as complicated as multiplication, and we still are in</span>
+<span>the guaranteed-to-terminate land. Because each loop has a fixed number of iterations, everything</span>
+<span>eventually finishes.</span></p>
+<p><span>We can go on and define x</span><sup><span>y</span></sup><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">pow(x, y) = LOOP(1, mul x, y)</span></code></pre>
+
+</figure>
+<p><span>And this in turn allows us to define a couple of concerning fast growing functions:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">pow_2(n) = pow(2, n)</span>
+<span class="line">pow_2_2(n) = pow_2(pow_2(n))</span></code></pre>
+
+</figure>
+<p><span>That</span>&rsquo;<span>s fun, but to do some programming, we</span>&rsquo;<span>ll need an </span><code>if</code><span>. We</span>&rsquo;<span>ll get to it, but first we</span>&rsquo;<span>ll need</span>
+<span>some boolean operations. We can encode </span><code>false</code><span> as </span><code>0</code><span> and </span><code>true</code><span> as </span><code>1</code><span>. Then</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">and(x, y) = mul(x, y)</span></code></pre>
+
+</figure>
+<p><span>But </span><code>or</code><span> creates a problem: we</span>&rsquo;<span>ll need a subtraction.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">or(x, y) = sub(</span>
+<span class="line">  add(x, y),</span>
+<span class="line">  mul(x, y),</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><span>Defining </span><code>sub</code><span> is tricky, due to two problems:</span></p>
+<p><span>First, we only have natural numbers, no negatives. This one is easy to solve </span>&mdash;<span> we</span>&rsquo;<span>ll just define</span>
+<span>subtraction to saturate.</span></p>
+<p><span>The second problem is more severe </span>&mdash;<span> I think we actually can</span>&rsquo;<span>t express subtraction given the set of</span>
+<span>allowable operations so far. That is because all our operations are monotonic </span>&mdash;<span> the result is</span>
+<span>never less than the arguments. One way to solve this problem is to define the LOOP in such a way</span>
+<span>that the body function also gets passed a second argument </span>&mdash;<span> the current iteration. So, if you</span>
+<span>iterate up to </span><code>n</code><span>, the last iteration will observe </span><code>n - 1</code><span>, and that would be the non-monotonic</span>
+<span>operation that creates subtraction. But that seems somewhat inelegant to me, so instead I will just</span>
+<span>add a </span><code>pred</code><span> function to the basis, and use that to add loop counters to our iterations.</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">pred(0) = 0 # saturate</span>
+<span class="line">pred(1) = 0</span>
+<span class="line">pred(2) = 1</span>
+<span class="line">...</span></code></pre>
+
+</figure>
+<p><span>Now we can say:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">sub(x, y) = LOOP(x, pred, y)</span>
+<span class="line"></span>
+<span class="line">and(x, y) = mul(x, y)</span>
+<span class="line">or(x, y) = sub(</span>
+<span class="line">  add(x, y),</span>
+<span class="line">  mul(x, y)</span>
+<span class="line">)</span>
+<span class="line">not(x) = sub(1, x)</span>
+<span class="line"></span>
+<span class="line">if(cond, a, b) = add(</span>
+<span class="line">  mul(a, cond),</span>
+<span class="line">  mul(b, not(cond)),</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><span>And now we can do a bunch of comparison operators:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">is_zero(x) = sub(1, x)</span>
+<span class="line"></span>
+<span class="line"># x &gt;= y</span>
+<span class="line">ge(x, y) = is_zero(sub(y, x))</span>
+<span class="line"></span>
+<span class="line"># x == y</span>
+<span class="line">eq(x, y) = and(ge(x, y), ge(y, x))</span>
+<span class="line"></span>
+<span class="line"># x &gt; y</span>
+<span class="line">gt(x, y) = and(ge(x, y), not(eq(x, y)))</span>
+<span class="line"></span>
+<span class="line"># x &lt; y</span>
+<span class="line">lt(x, y) = gt(y, x)</span></code></pre>
+
+</figure>
+<p><span>With that we could implement modulus. To compute </span><code>x % m</code><span> we will start with </span><code>x</code><span>, and will be</span>
+<span>subtracting </span><code>m</code><span> until we get a number smaller than </span><code>m</code><span>. We</span>&rsquo;<span>ll need at most </span><code>x</code><span> iterations for that.</span></p>
+<p><span>In pseudo-code:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-keyword">def</span> <span class="hl-title function_">mod</span>(<span class="hl-params">x, m</span>):</span>
+<span class="line">  current = x</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">for</span> _ <span class="hl-keyword">in</span> <span class="hl-number">0.</span>.x:</span>
+<span class="line">    <span class="hl-keyword">if</span> current &lt; m:</span>
+<span class="line">      current = current</span>
+<span class="line">    <span class="hl-keyword">else</span>:</span>
+<span class="line">      current = current - m</span>
+<span class="line"></span>
+<span class="line">  <span class="hl-keyword">return</span> current</span></code></pre>
+
+</figure>
+<p><span>And as a bona fide PRF:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">mod_iter(m, x) = if(</span>
+<span class="line">  lt(x, m),</span>
+<span class="line">  x,        # then</span>
+<span class="line">  sub(x, m) # else</span>
+<span class="line">)</span>
+<span class="line">mod(x, m) = LOOP(x, mod_iter m, x)</span></code></pre>
+
+</figure>
+<p><span>That</span>&rsquo;<span>s a curious structure </span>&mdash;<span> rather than computing the modulo directly, we essentially search for</span>
+<span>it using trial and error, and relying on the fact that the search has a clear upper bound.</span></p>
+<p><span>Division can be done similarly: to divide x by y, start with 0, and then repeatedly add one to the</span>
+<span>accumulator until the product of the accumulator and y exceeds x:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">div_iter x y acc = if(</span>
+<span class="line">  le(mul(succ(acc), y), y),</span>
+<span class="line">  succ(acc), # then</span>
+<span class="line">  acc        # else</span>
+<span class="line">)</span>
+<span class="line">div(x, y) = LOOP(0, div_iter x y, x)</span></code></pre>
+
+</figure>
+<p><span>This really starts to look like programming! One thing we are currently missing are data structures.</span>
+<span>While our functions take multiple arguments, they only return one number. But it</span>&rsquo;<span>s easy enough to</span>
+<span>pack two numbers into one: to represent an </span><code>(a, b)</code><span> pair, we</span>&rsquo;<span>ll use 2</span><sup><span>a</span></sup><span> 3</span><sup><span>b</span></sup><span> number:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">mk_pair(a, b) = mul(pow(2, a), pow(3, b))</span></code></pre>
+
+</figure>
+<p><span>To deconstruct such a pair into its first and second components, we need to find the maximum power</span>
+<span>of 2 or 3 that divides our number. Which is exactly the same shape we used to implement </span><code>div</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">max_factor_iter p m acc = if(</span>
+<span class="line">  is_zero(mod(p, pow(m, succ(acc)))),</span>
+<span class="line">  succ(acc), # then</span>
+<span class="line">  acc,       # else</span>
+<span class="line">)</span>
+<span class="line">max_factor(p, m) = LOOP(0, max_factor_iter p m, p)</span>
+<span class="line"></span>
+<span class="line">fst(p) = max_factor(p, 2)</span>
+<span class="line">snd(p) = max_factor(p, 3)</span></code></pre>
+
+</figure>
+<p><span>Here again we use the fact that the maximal power of two that divides </span><code>p</code><span> is not larger than </span><code>p</code>
+<span>itself, so we can over-estimate the number of iterations we</span>&rsquo;<span>ll need as </span><code>p</code><span>.</span></p>
+<p><span>Using this pair construction, we can finally add a loop counter to our </span><code>LOOP</code><span> construct. To track</span>
+<span>the counter, we pack it as a pair with the accumulator:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">LOOP(mk_pair(init, 0), f, n)</span></code></pre>
+
+</figure>
+<p><span>And then inside f, we first unpack that pair into accumulator and counter, pass them to actual loop</span>
+<span>iteration, and then pack the result again, incrementing the counter:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f acc = mk_pair(</span>
+<span class="line">  g(fst(acc), snd(acc)),</span>
+<span class="line">  succ(snd(acc)),</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><span>Ok, so we have achieved something remarkable: while we are writing terminating-by-construction</span>
+<span>programs, which are definitely not Turing complete, we have constructed basic programming staples,</span>
+<span>like boolean logic and data structures, and we have also built some rather complicated mathematical</span>
+<span>functions, like </span><span class="display"><span>2</span><sup><span>2</span><sup><span>N</span></sup></sup><span>.</span></span></p>
+<p><span>We could try to further enrich our little primitive recursive kingdom by adding more and more</span>
+<span>functions on an ad hoc basis, but let</span>&rsquo;<span>s try to be really ambitious and go for the main prize </span>&mdash;
+<span>simulating Turing Machines.</span></p>
+<p><span>We know that we will fail: Turing machines can enter an infinite loop, but PRFs necessarily terminate.</span>
+<span>That means, that, if a PRF were able to simulate an arbitrary TM, it would have to say after a certain</span>
+<span>finite amount of steps that </span>&ldquo;<span>this TM doesn</span>&rsquo;<span>t terminate</span>&rdquo;<span>.  And, while we didn</span>&rsquo;<span>t do this, it</span>&rsquo;<span>s easy to</span>
+<span>see that you </span><em><span>could</span></em><span> simulate the other way around and implement PRFs in a TM. But that would give</span>
+<span>us a TM algorithm to decide if an arbitrary TM halts, which we know doesn</span>&rsquo;<span>t exist.</span></p>
+<p><span>So, this is hopeless! But we might still be able to learn something from failing.</span></p>
+<p><span>Ok! So let</span>&rsquo;<span>s start with a configuration of a TM which we somehow need to encode into a single</span>
+<span>number. First, we need the state variable proper (Q0, Q1, etc), which seems easy enough to represent</span>
+<span>with a number. Then, we need a tape and a position of the reading head. Recall how we used a pair of</span>
+<span>stacks to represent exactly the tape and the position. And recall that we can look at a stack of</span>
+<span>zeros and ones as a number in binary form, where push and pop operations are implemented using </span><code>%</code><span>,</span>
+<code>*</code><span>, and </span><code>/</code><span> </span>&mdash;<span> exactly the operations we already can do. So, our configuration is just three</span>
+<span>numbers: </span><span class="display"><code>(S, stack1, stack2)</code><span>.</span></span></p>
+<p><span>And, using the 2</span><sup><span>a</span></sup><span>3</span><sup><span>b</span></sup><span>5</span><sup><span>c</span></sup><span> trick, we can pack this triple into just a single number. But that means we</span>
+<span>could directly encode a single step of a Turing Machine:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">single_step(config) = if(</span>
+<span class="line">  # if the state is Q0 ...</span>
+<span class="line">  eq(fst(config), 0)</span>
+<span class="line"></span>
+<span class="line">  # and the symbol at the top of left stack is 0</span>
+<span class="line">  if(is_zero(mod(snd(config), 2))</span>
+<span class="line">    mk_triple(</span>
+<span class="line">      1,                    # move to state Q1</span>
+<span class="line">      div(snd(config), 2),  # pop value from the left stack</span>
+<span class="line">      mul(trd(config), 2),  # push zero onto the right stack</span>
+<span class="line">    ),</span>
+<span class="line">    ... # Handle symbol 1 in state Q1</span>
+<span class="line">  )</span>
+<span class="line">  # if the state is Q1 ...</span>
+<span class="line">  if(eq(fst(config), 1)</span>
+<span class="line">    ...</span>
+<span class="line">  )</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><span>And now we could plug that into our </span><code>LOOP</code><span> to simulate a Turing Machine running for N steps:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">n_steps initial_config n =</span>
+<span class="line">  LOOP(initial_config, single_step, n)</span></code></pre>
+
+</figure>
+<p><span>The catch of course is that we can</span>&rsquo;<span>t know the </span><code>N</code><span> that</span>&rsquo;<span>s going to be enough. But we can have a very</span>
+<span>good guess! We could do something like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">hopefully_enough_steps initial_config =</span>
+<span class="line">  LOOP(initial_config, single_step, pow_2_2(initial_config))</span></code></pre>
+
+</figure>
+<p><span>That is, run for some large tower of exponents of the initial state. Which would be plenty for</span>
+<span>normal algorithms, which are usually 2</span><sup><span>N</span></sup><span> at worst!</span></p>
+<p><span>Or, generalizing:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>If a TM has a runtime which is bounded by some primitive-recursive function, then the entire</span>
+<span>TM can be replaced with a PRF. Be advised that PRFs can grow </span><em><span>really</span></em><span> fast.</span></p>
+</blockquote>
+
+</figure>
+<p><span>Which is the headline result we have set out to prove!</span></p>
+</section>
+<section id="Primitive-Recursive-Functions-Limit">
+
+    <h2>
+    <a href="#Primitive-Recursive-Functions-Limit"><span>Primitive Recursive Functions: Limit</span> </a>
+    </h2>
+<p><span>It might seem that non-termination is the only principle obstacle. That anything that terminates at</span>
+<span>all has to be implementable as a PRF. Alas, that</span>&rsquo;<span>s not so. Let</span>&rsquo;<span>s go and construct a function that is</span>
+<span>surmountable by a TM, but is out of reach of PRFs.</span></p>
+<p><span>We will combine the ideas of the impossibility proofs for FSMs (noting that if a function is</span>
+<span>computed by some machine, that machine has a specific finite size) and TMs (diagonalization).</span></p>
+<p><span>So, suppose we have some function </span><code>f</code><span> that can</span>&rsquo;<span>t be computed by a PRF. How would we go about proving</span>
+<span>that? Well, we</span>&rsquo;<span>d start with </span>&ldquo;<span>suppose that we have a PRF P that computes </span><code>f</code>&rdquo;<span>. And then we could</span>
+<span>notice that P would have some finite size. If you look at it abstractly, the P is its syntax tree,</span>
+<span>with lots of </span><code>LOOP</code><span> constructs, but it always boils down to some </span><code>succ</code><span>s and </span><code>zero</code><span>s at the leaves.</span>
+<span>Let</span>&rsquo;<span>s say that the depth of P is </span><code>d</code><span>.</span></p>
+<p><span>And, actually, if you look at it, there are only a finite number of PRFs with depth at most </span><code>d</code><span>. Some</span>
+<span>of them describe pretty fast growing functions. But probably there</span>&rsquo;<span>s a limit to how fast a function</span>
+<span>can grow, given that it is computed by a PRF of size </span><code>d</code><span>. Or, to use a concrete example: we have</span>
+<span>constructed a PRF of depth 5 that computes two to the power of two to the power of N. Probably if we</span>
+<span>were smarter, we could have squeezed a couple more levels into that tower of exponents. But</span>
+<span>intuitively it seems that if you build a tower of, say, 10 exponents, that would grow faster than</span>
+<em><span>any</span></em><span> PRF of depth </span><code>5</code><span>. And that this generalizes </span>&mdash;<span> for any fixed depth, there</span>&rsquo;<span>s a high-enough</span>
+<span>tower of exponents that grows faster than any PRF with that depth.</span></p>
+<p><span>So we could conceivably build an </span><code>f</code><span> that defeats our </span><code>d</code><span>-deep P. But that</span>&rsquo;<span>s not quite a victory</span>
+<span>yet: maybe that </span><code>f</code><span> is feasible for </span><code>d+2</code><span>-deep PRFs! So here we</span>&rsquo;<span>ll additionally apply</span>
+<span>diagonalization: for each depth, we</span>&rsquo;<span>ll build it</span>&rsquo;<span>s own depth-specific nemesis </span><code>f_d</code><span>. And then we</span>&rsquo;<span>ll</span>
+<span>define our overall function as</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">a(n) = f_n(n)</span></code></pre>
+
+</figure>
+<p><span>So, for </span><code>n</code><span> large enough it</span>&rsquo;<span>ll grow faster than a PRF with any fixed depth.</span></p>
+<p><span>So that</span>&rsquo;<span>s the general plan, the rest of the own is basically just calculating the upper bound on the</span>
+<span>growth of a PRF of depth </span><code>d</code><span>.</span></p>
+<p><span>One technical difficulty here is that PRFs tend to have different arities:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(x, y)</span>
+<span class="line">g(x, y, z, t)</span>
+<span class="line">h(x)</span></code></pre>
+
+</figure>
+<p><span>Ideally, we</span>&rsquo;<span>d use just one upper bound of them all. So we</span>&rsquo;<span>ll be looking for an upper bound of the</span>
+<span>following form:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(x, y, z, t) &lt;= A_d(max(x, y, z, t))</span></code></pre>
+
+</figure>
+<p><span>That is:</span></p>
+<ul>
+<li>
+<span>Compute the depth of </span><code>f</code><span>, </span><code>d</code><span>.</span>
+</li>
+<li>
+<span>Compute the largest of its arguments.</span>
+</li>
+<li>
+<span>And plug that into unary function for depth </span><code>d</code><span>.</span>
+</li>
+</ul>
+<p><span>Let</span>&rsquo;<span>s start with </span><code>d=1</code><span>. We have only primitive functions on this level, </span><code>succ</code><span>, </span><code>zero</code><span>, and </span><code>pred</code><span>,</span>
+<span>so we could say that</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">A_1(x) = x + 1</span></code></pre>
+
+</figure>
+<p><span>Now, let</span>&rsquo;<span>s handle an arbitrary other depth </span><code>d + 1</code><span>. In that case, our function is non-primitive, so at</span>
+<span>the root of the syntax tree we have either a composition or a </span><code>LOOP</code><span>.</span></p>
+<p><span>Composition would look like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(x, y, z, ...) = g(</span>
+<span class="line">  h1(x, y, z, ...),</span>
+<span class="line">  h2(x, y, z, ...),</span>
+<span class="line">  h3(x, y, z, ...),</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><span>where </span><code>g</code><span> and </span><code>h_n</code><span> are </span><code>d</code><span> deep and the resulting </span><code>f</code><span> is </span><code>d+1</code><span> deep. We can immediately estimate</span>
+<span>the </span><code>h_n</code><span> then:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(args...) &lt;= g(</span>
+<span class="line">  A_d(maxarg),</span>
+<span class="line">  A_d(maxarg),</span>
+<span class="line">  A_d(maxarg),</span>
+<span class="line">  ...</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><span>In this somewhat loose notation, </span><code>args...</code><span> stands for a tuple of arguments, and </span><code>maxarg</code><span> stands for</span>
+<span>the largest one.</span></p>
+<p><span>And then we could use the same estimate for </span><code>g</code><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(args...) &lt;= A_d(A_d(maxarg))</span></code></pre>
+
+</figure>
+<p><span>This is super high-order, so let</span>&rsquo;<span>s do a concrete example for a depth-2 two-argument function which</span>
+<span>starts with a composition:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(x, y) &lt;= A_1(A_1(max(x, y)))</span>
+<span class="line">         = A_1(max(x, y) + 1)</span>
+<span class="line">         = max(x, y) + 2</span></code></pre>
+
+</figure>
+<p><span>This sounds legit: if we don</span>&rsquo;<span>t use LOOP, then </span><code>f(x, y)</code><span> is either </span><code>succ(succ(x))</code><span> or </span><code>succ(succ(y))</code>
+<span>so </span><code>max(x, y) + 2</code><span> indeed is the bound!</span></p>
+<p><span>Ok, now the fun case! If the top-level node is a </span><code>LOOP</code><span>, then we have</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(args...) = LOOP(</span>
+<span class="line">  g(args...),</span>
+<span class="line">  h(args...),</span>
+<span class="line">  t(args...),</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><span>This sounds complicated to estimate, especially due to that last </span><code>t(args...)</code><span> argument, which is the</span>
+<span>number of iterations. So we</span>&rsquo;<span>ll be cowards and </span><em><span>won</span>&rsquo;<span>t</span></em><span> actually try to estimate this case. Instead,</span>
+<span>we will require that our PRF is written in a simplified form, where the first and the last arguments</span>
+<span>to </span><code>LOOP</code><span> are simple.</span></p>
+<p><span>So, if your PRF looks like</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(x, y) = LOOP(x + y, mul, pow2(x))</span></code></pre>
+
+</figure>
+<p><span>you are required to re-write it first as</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">helper(u, v) = LOOP(u, mul, v)</span>
+<span class="line">f(x, y) = helper(x + y, pow2(x))</span></code></pre>
+
+</figure>
+<p><span>So now we only have to deal with this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(args...) = LOOP(</span>
+<span class="line">  arg,</span>
+<span class="line">  g(args...),</span>
+<span class="line">  arg,</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><code>f</code><span> has depth </span><code>d+1</code><span>, </span><code>g</code><span> has depth </span><code>d</code><span>.</span></p>
+<p><span>On the first iteration, we</span>&rsquo;<span>ll call </span><code>g(args..., arg)</code><span>, which we can estimate as </span><code>A_d(maxarg)</code><span>. That</span>
+<span>is, </span><code>g</code><span> does get an </span><em><span>extra</span></em><span> argument, but it is one of the original arguments of </span><code>f</code><span>, and we are</span>
+<span>looking at the maximum argument anyway, so it doesn</span>&rsquo;<span>t matter.</span></p>
+<p><span>On the second iteration, we are going to call</span>
+<code class="display">g(args..., prev_iteration)</code>
+<span>which we can estimate as</span>
+<span class="display"><code>A_d(max(maxarg, prev_iteration))</code><span>.</span></span></p>
+<p><span>Now we plug our estimation for the first iteration:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">g(args..., prev_iteration)</span>
+<span class="line">  &lt;= A_d(max(maxarg, prev_iteration))</span>
+<span class="line">  &lt;= A_d(max(maxarg, A_d(maxarg)))</span>
+<span class="line">  =  A_d(A_d(maxarg))</span></code></pre>
+
+</figure>
+<p><span>That is, the estimate for the first iteration is </span><code>A_d(maxarg)</code><span>. The estimation for the second</span>
+<span>iteration adds one more layer: </span><code>A_d(A_d(maxarg))</code><span>. For the third iteration we</span>&rsquo;<span>ll get</span>
+<span class="display"><code>A_d(A_d(A_d(maxarg)))</code><span>.</span></span></p>
+<p><span>So the overall thing is going to be smaller than </span><code>A_d</code><span> iteratively applied to itself some number of</span>
+<span>times, where </span>&ldquo;<span>some number</span>&rdquo;<span> is one of the </span><code>f</code><span> original arguments. But no harm</span>&rsquo;<span>s done if we iterate up</span>
+<span>to </span><code>maxarg</code><span>.</span></p>
+<p><span>As a sanity check, the worst depth-2 function constructed with iteration is probably</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(x, y) = LOOP(x, succ, y)</span></code></pre>
+
+</figure>
+<p><span>which is </span><code>x + y</code><span>. And our estimate gives </span><code>x + 1</code><span> applied </span><code>maxarg</code><span> times to </span><code>maxarg</code><span>, which is </span><code>2 *
+maxarg</code><span>, which is indeed the correct upper bound!</span></p>
+<p><span>Combining everything together, we have:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">A_1(x) = x + 1</span>
+<span class="line"></span>
+<span class="line">f(args...) &lt;= max(</span>
+<span class="line">  A_d(A_d(maxarg)),               # composition case</span>
+<span class="line">  A_d(A_d(A_d(... A_d(maxarg)))), # LOOP case,</span>
+<span class="line">   &lt;-    maxarg A's         -&gt;</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><span>That </span><code>max</code><span> there is significant </span>&mdash;<span> although it seems like the second line, with </span><code>maxarg</code>
+<span>applications, is always going to be longer, </span><code>maxarg</code><span>, in fact, could be as small as zero. But we</span>
+<span>can take </span><code>maxarg + 2</code><span> repetitions to fix this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">f(args...) &lt;=</span>
+<span class="line">  A_d(A_d(A_d(... A_d(maxarg)))),</span>
+<span class="line">  &lt;-    maxarg + 2 A's         -&gt;</span></code></pre>
+
+</figure>
+<p><span>So let</span>&rsquo;<span>s just define </span><code>A_{d+1}(x)</code><span> to make that inequality work:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">A_{d+1}(x) = A_d(A_d( .... A_d(x)))</span>
+<span class="line">            &lt;- x + 2 A_d's in total-&gt;</span></code></pre>
+
+</figure>
+<p><span>Unpacking:</span></p>
+<p><span>We define a family of unary functions </span><code>A_d</code><span>, such that each </span><code>A_d</code><span> </span>&ldquo;<span>grows faster</span>&rdquo;<span> than any n-ary PRF</span>
+<span>of depth </span><code>d</code><span>. If </span><code>f</code><span> is a ternary PRF of depth 3, then </span><span class="display"><code>f(1, 92, 10) &lt;= A_3(92)</code><span>.</span></span></p>
+<p><span>To evaluate </span><code>A_d</code><span> at point </span><code>x</code><span>, we use the following recursive procedure:</span></p>
+<ul>
+<li>
+<span>If </span><code>d</code><span> is </span><code>1</code><span>, return </span><code>x + 1</code><span>.</span>
+</li>
+<li>
+<span>Otherwise, evaluate </span><code>A_{d-1}</code><span> at point </span><code>x</code><span> to get, say, </span><code>v</code><span>. Then evaluate </span><code>A_{d-1}</code><span> again at</span>
+<span>point </span><code>v</code><span> this time, yielding </span><code>u</code><span>. Then compute </span><code>A_{d-1}(u)</code><span>. Overall, repeat this process </span><code>x+2</code>
+<span>times, and return the final number.</span>
+</li>
+</ul>
+<p><span>We can simplify this a bit if we stop treating </span><code>d</code><span> as a kind of function </span><em><span>index</span></em><span>, and instead say</span>
+<span>that our </span><code>A</code><span> is just a function of two arguments. Then we have the following equations:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">A(1, x) = x + 1</span>
+<span class="line">A(d + 1, x) = A(d, A(d, A(d, ..., A(d, x))))</span>
+<span class="line">                &lt;- x + 2 A_d's in total-&gt;</span></code></pre>
+
+</figure>
+<p><span>The last equation can re-formatted as</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">A(</span>
+<span class="line">  d,</span>
+<span class="line">  A(d, A(d, ..., A(d, x))),</span>
+<span class="line">  &lt;- x + 1 A_d's in total-&gt;</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><span>And for non-zero x that is just</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">A(</span>
+<span class="line">  d,</span>
+<span class="line">  A(d + 1, x - 1),</span>
+<span class="line">)</span></code></pre>
+
+</figure>
+<p><span>So we get the following recursive definition for A(d, x):</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">A(1, x) = x + 1</span>
+<span class="line">A(d + 1, 0) = A(d, A(d, 0))</span>
+<span class="line">A(d + 1, x) = A(d, A(d + 1, x - 1))</span></code></pre>
+
+</figure>
+<p><span>As a Python program:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">def A(d, x):</span>
+<span class="line">  if d == 1: return x + 1</span>
+<span class="line">  if x == 0: return A(d-1, A(d-1, 0))</span>
+<span class="line">  return A(d-1, A(d, x - 1))</span></code></pre>
+
+</figure>
+<p><span>It</span>&rsquo;<span>s easy to see that computing </span><code>A</code><span> on a Turing Machine using this definition terminates </span>&mdash;<span> this</span>
+<span>is a function with two arguments, and every recursive call uses a lexicographically smaller pair of</span>
+<span>arguments. And we constructed A in such a way that </span><code>A(d, x)</code><span> as a function of </span><code>x</code><span> is larger than any</span>
+<span>PRF with a single argument of depth d. But that means that the following function with one argument</span>
+<code class="display">a(x) = A(x, x) </code></p>
+<p><span>grows faster than </span><em><span>any</span></em><span> PRF. And that</span>&rsquo;<span>s an example of a function which a Turing Machine has no</span>
+<span>trouble computing (given sufficient time), but which is beyond the capabilities of PRFs.</span></p>
+</section>
+<section id="Part-III-Descent-From-the-Ivory-Tower">
+
+    <h2>
+    <a href="#Part-III-Descent-From-the-Ivory-Tower"><span>Part III, Descent From the Ivory Tower</span> </a>
+    </h2>
+<p><span>Remember, this is a three-part post! And are finally at the part 3! So let</span>&rsquo;<span>s circle back to the</span>
+<span>practical matters. We have learned that:</span></p>
+<ul>
+<li>
+<span>Turing machines don</span>&rsquo;<span>t necessarily terminate.</span>
+</li>
+<li>
+<span>While other computational devices, like FSMs and PRFs, can be made to always terminate, there</span>&rsquo;<span>s no</span>
+<span>guarantee that they</span>&rsquo;<span>ll terminate fast. PRFs in particular can compute quite large functions!</span>
+</li>
+<li>
+<span>And non-Turing complete devices can be quite expressive. For example, any real-world algorithm</span>
+<span>that works on a TM can be adapted to run as a PRF.</span>
+</li>
+<li>
+<span>Moreover, you don</span>&rsquo;<span>t even have to contort the algorithm much to make it fit. There</span>&rsquo;<span>s a universal</span>
+<span>recipe for how to take something Turing complete and make it a primitive recursive function</span>
+<span>instead </span>&mdash;<span> just add an iteration counter to the device, and forcibly halt it if the counter grows</span>
+<span>too large.</span>
+</li>
+</ul>
+<p><span>Or, more succinctly: there</span>&rsquo;<span>s no practical difference between a program that doesn</span>&rsquo;<span>t terminate, and</span>
+<span>the one that terminates after a billion years. As a practitioner, if you think you need to solve the</span>
+<span>first problem, you need to solve the second problem as well. And making your programming language</span>
+<span>non-Turing complete doesn</span>&rsquo;<span>t really help with this.</span></p>
+<p><span>And yet, there are a lot of configuration languages out there that use non-Turing completeness as</span>
+<span>one of their key design goals. Why is that?</span></p>
+<p><span>I would say that we are never interested in Turing-completeness per-se. We usually want some </span><em><span>much</span></em>
+<span>stronger properties. And yet there</span>&rsquo;<span>s no convenient catchy name for that bag of features of a good</span>
+<span>configuration language. So, </span>&ldquo;<span>non-Turing-complete</span>&rdquo;<span> gets used as a sort of rallying cry to signal that</span>
+<span>something is a good configuration language, and maybe sometimes even to justify to others inventing</span>
+<span>a new language instead of taking something like Lua. That is, the </span><em><span>real</span></em><span> reason why you want at</span>
+<span>least a different implementation is all those properties you really need, but they are kinda hard to</span>
+<span>explain, or at least much harder than </span>&ldquo;<span>we can</span>&rsquo;<span>t use Python/Lua/JavaScript because they are</span>
+<span>Turing-complete</span>&rdquo;<span>.</span></p>
+<p><span>So what </span><em><span>are</span></em><span> the properties of a good configuration language?</span></p>
+<p><em><span>First</span></em><span>, we need the language to be deterministic. If you launch Python and type </span><code>id([])</code><span>, you</span>&rsquo;<span>ll</span>
+<span>see some number. If you hit </span><code>^C</code><span>, and than do this again, you</span>&rsquo;<span>ll see a different number. This is OK</span>
+<span>for </span>&ldquo;<span>normal</span>&rdquo;<span> programming, but is usually anathema for configuration. Configuration is often used as a</span>
+<span>key in some incremental, caching system, and letting in non-determinism there wreaks absolute chaos!</span></p>
+<p><em><span>Second</span></em><span>, you need the language to be well-defined. You can compile Python with ASLR disabled, and</span>
+<span>use some specific allocator, such that </span><code>id([])</code><span> always returns the same result. But that result</span>
+<span>would be hard to predict! And if someone tries to do an alternative implementation, even if they</span>
+<span>disable ASLR as well, they are likely to get a different deterministic number! Or the same could</span>
+<span>happen if you just update the version of Python. So, the semantics of the language should be clearly</span>
+<span>pinned-down by some sort of a reference, such that it is possible to guarantee not only</span>
+<span>deterministic behavior, but fully identical behavior across different implementations.</span></p>
+<p><em><span>Third</span></em><span>, you need the language to be pure. If your configuration can access environment variables or</span>
+<span>read files on disk, than the meaning of the configuration would depend on the environment where the</span>
+<span>configuration is evaluated, and you again don</span>&rsquo;<span>t want that, to make caching work.</span></p>
+<p><em><span>Fourth</span></em><span>, a thing that is closely related to purity is security and sandboxing. The </span><em><span>mechanism</span></em><span> to</span>
+<span>achieve both purity and security is the same </span>&mdash;<span> you don</span>&rsquo;<span>t expose general IO to your language. But</span>
+<span>the purpose is different: purity is about not letting the results be non-deterministic, while</span>
+<span>security is about not exposing access tokens to the attacker.</span></p>
+<p><span>And now this gets tricky. One particular possible attack is a denial of service </span>&mdash;<span> sending some bad</span>
+<span>config which makes our system just spin there burning the CPU. Even if you control all IO, you</span>
+<span>are generally still open to these kinds of attacks. It might be OK to say this is outside of the</span>
+<span>threat model </span>&mdash;<span> that no one would find it valuable enough to just burn your CPU, if they can</span>&rsquo;<span>t also</span>
+<span>do IO, and that, even in the event that this happens, there</span>&rsquo;<span>s going to be some easy mitigation in the</span>
+<span>form of a higher-level timeout.</span></p>
+<p><span>But you also might choose to provide some sort of guarantees about execution time, and that</span>&rsquo;<span>s really</span>
+<span>hard. Two approaches work. One is to make sure that processing is </span><em><span>obviously linear</span></em><span>. Not just</span>
+<span>terminates, but is actually proportional to the size of inputs, and in a very direct way. If the</span>
+<span>correspondence is not direct, than it</span>&rsquo;<span>s highly likely that it is in fact non linear. The second</span>
+<span>approach is to ensure </span><em><span>metered execution</span></em><span> </span>&mdash;<span> during processing, decrement a counter for every</span>
+<span>simple atomic step and terminate processing when the counter reaches zero.</span></p>
+<p><em><span>Finally</span></em><span> one more vague property you</span>&rsquo;<span>d want from a configuration language is for it to be simple.</span>
+<span>That is, to ensure that, when people use your language, they write simple programs. It seems to me</span>
+<span>that this might actually be the case where banning recursion and unbounded loops could help, though</span>
+<span>I am not sure. As we know from the PRF exercise, this won</span>&rsquo;<span>t actually prevent people from writing</span>
+<span>arbitrary recursive programs. It</span>&rsquo;<span>ll just require </span><a href="https://mochiro.moe/posts/09-meson-raytracer/"><span>some roundabout</span>
+<span>code</span></a><span> to do that. But maybe that</span>&rsquo;<span>ll be enough of a</span>
+<span>speedbump to make someone invent a simple solution, instead of brute-forcing the most obvious one?</span></p>
+<p><span>That</span>&rsquo;<span>s all for today! Have a great weekend, and remember:</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>Any algorithm that can be implemented by a Turing Machine such that its runtime is bounded by some</span>
+<span>primitive recursive function of input can also be implemented by a primitive recursive function!</span></p>
+</blockquote>
+
+</figure>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-08-01-primitive-recursive-functions.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

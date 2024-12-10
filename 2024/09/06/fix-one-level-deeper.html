@@ -1,0 +1,154 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Try to Fix It One Level Deeper</title>
+  <meta name="description" content="I had a productive day today! I did many different and unrelated things, but they all had the same
+unifying theme:">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/09/06/fix-one-level-deeper.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Try to Fix It One Level Deeper</span> <time class="meta" datetime="2024-09-06">Sep 6, 2024</time></h1>
+<p><span>I had a productive day today! I did many different and unrelated things, but they all had the same</span>
+<span>unifying theme:</span></p>
+<p><span>There</span>&rsquo;<span>s a bug! And it is sort-of obvious how to fix it. But if you don</span>&rsquo;<span>t laser-focus on that, and</span>
+<span>try to perceive the surrounding context, it turns out that the bug is valuable, and it is pointing</span>
+<span>in the direction of a bigger related problem. So, instead of fixing the bug directly, a detour is</span>
+<span>warranted to close off the avenue for a class of bugs.</span></p>
+<p><span>Here are the examples!</span></p>
+<p><span>In the morning, my colleague pointed out that we are giving substandard error message for a pretty</span>
+<span>stressful situation when the database runs out of disk space. I went ahead and added appropriate log</span>
+<span>messages to make it clearer. But then I stopped for a moment and noticed that the problem is bigger</span>
+&mdash;<span> we are missing an infrastructure for fatal errors, and </span><code>NoSpaceLeft</code><span> is just one of a kind. So I</span>
+<span>went ahead and added that along the way:</span>
+<a href="https://github.com/tigerbeetle/tigerbeetle/pull/2289"><span>#2289</span></a><span>.</span></p>
+<p><span>Then, I was reviewing a PR by </span><code>@martinconic</code><span> which was fixing some typos, and noticed that it was</span>
+<span>also changing the formatting of our Go code. The latter is by far the biggest problem, as it is the</span>
+<span>sign that we somehow are not running </span><code>gofmt</code><span> during our CI, which I fixed in</span>
+<a href="https://github.com/tigerbeetle/tigerbeetle/pull/2287"><span>#2287</span></a><span>.</span></p>
+<p><span>Then, there was a PR from yesterday, where we again had a not quite right log message. The cause was</span>
+<span>a confusion between two compile-time configuration parameters, which were close, but not quite</span>
+<span>identical. So, instead of fixing the error message I went ahead and made the two parameters</span>
+<em><span>exactly</span></em><span> the same. But then my colleague noticed that I actually failed to fix it one level deeper</span>
+<span>in this case! Turns out, it is possible to remove this compile-time parametrization altogether,</span>
+<span>which I did in </span><a href="https://github.com/tigerbeetle/tigerbeetle/pull/2292"><span>#2292</span></a><span>.</span></p>
+<p><span>But these all were randomly-generated side quests. My intended story line for today was to refactor</span>
+<span>the piece of code I had trouble explaining (and understanding!) on </span><a href="https://www.youtube.com/watch?v=C3XAteN_lYk&amp;list=PL9eL-xg48OM3pnVqFSRyBFleHtBBw-nmZ&amp;index=41"><span>yesterday</span>&rsquo;<span>s</span>
+<span>episode</span></a>
+<span>of Iron Beetle. To get into the groove, I decided to first refactor the code that </span><em><span>calls</span></em><span> the</span>
+<span>problematic piece of logic, as I noticed a couple of minor stylistic problems there. Of course, when</span>
+<span>doing that, I discovered that we have a bit of dead code, which luckily doesn</span>&rsquo;<span>t affect correctness,</span>
+<span>but does obscure the logic. While fixing that, I used one of my favorite Zig patterns:</span>
+<span class="display"><code>defer assert(postcondition);</code></span></p>
+<p><span>It of course failed in the simulator in a way postcondition checks tend to fail </span>&mdash;<span> there was an</span>
+<span>unintended reentrancy in the code. So I slacked my colleague something like</span></p>
+
+<figure class="blockquote">
+<blockquote><p><span>I thought myself to be so clever adding this assert, but now it fails and I have to fix it TT</span>
+<span>I think I</span>&rsquo;<span>ll just go and </span><code>.next_tick</code><span> the prefetch path. It feels like there should be a more</span>
+<span>elegant solution here, but I am not seeing it.</span></p>
+</blockquote>
+
+</figure>
+<p><span>But of course I can</span>&rsquo;<span>t just </span>&ldquo;<span>go and </span><code>.next_tick</code><span> it</span>&rdquo;<span>, so here I am, trying to figure out how to</span>
+<span>encode a </span><a href="https://en.wikipedia.org/wiki/Duff%27s_device"><span>Duff</span>&rsquo;<span>s device</span></a><span> in Zig</span>
+<span>pre-</span><a href="https://github.com/ziglang/zig/issues/8220"><span>#8220</span></a><span>, so as to make this class of issues much</span>
+<span>less likely.</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-09-06-fix-one-level-deeper.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
