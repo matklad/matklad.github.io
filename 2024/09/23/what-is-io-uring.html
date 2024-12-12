@@ -1,0 +1,142 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What is io_uring?</title>
+  <meta name="description" content="An attempt at concise explanation of what io_uring is.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/09/23/what-is-io-uring.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>What is io_uring?</span> <time class="meta" datetime="2024-09-23">Sep 23, 2024</time></h1>
+<p><span>An attempt at concise explanation of what io_uring is.</span></p>
+<p><code>io_uring</code><span> is a new Linux kernel interface for making system calls.</span>
+<span>Traditionally, syscalls are submitted to the kernel </span><strong><span>individually</span></strong><span> and</span>
+<strong><span>synchronously</span></strong><span>: a syscall CPU instruction transfers control from the</span>
+<span>application to the kernel; control returns to the application only when the</span>
+<span>syscall is completed. In contrast, </span><code>io_uring</code><span> is a </span><strong><span>batched</span></strong><span> and </span><strong><span>asynchronous</span></strong>
+<span>interface. The application submits several syscalls by writing their codes &amp;</span>
+<span>arguments to a lock-free shared-memory ring buffer. The kernel reads the</span>
+<span>syscalls from this shared memory and executes them at its own pace. To</span>
+<span>communicate results back to the application, the kernel writes the results to a</span>
+<span>second lock-free shared-memory ring buffer, where they become available to the</span>
+<span>application asynchronously.</span></p>
+<p><span>You might want to use </span><code>io_uring</code><span> if:</span></p>
+<ul>
+<li>
+<span>you need extra performance unlocked by amortizing userspace/kernelspace</span>
+<span>context switching across entire batches of syscalls,</span>
+</li>
+<li>
+<span>you want a unified asynchronous interface to the entire system.</span>
+</li>
+</ul>
+<p><span>You might want to avoid </span><code>io_uring</code><span> if:</span></p>
+<ul>
+<li>
+<span>you need to write portable software,</span>
+</li>
+<li>
+<span>you want to use only old, proven features,</span>
+</li>
+<li>
+<span>and in particular you want to use features with a good security track record.</span>
+</li>
+</ul>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-09-23-what-is-io-uring.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
