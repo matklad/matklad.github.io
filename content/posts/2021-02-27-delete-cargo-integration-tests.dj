@@ -36,11 +36,11 @@ To build unit tests, Cargo runs
 rustc --test src/lib.rs
 ```
 
-Rustc then compiles the library with `--cfg test`.
+Then `rustc` compiles the library with `--cfg test`.
 It also injects a generated `fn main()`, which invokes all functions annotated with `#[test]`.
 The result is an executable file which, when run subsequently by Cargo, executes the tests.
 
-Integration tests are build differently.
+Integration tests are built differently.
 First, Cargo uses `rustc` to compile the library as usual, _without_ `--cfg test`:
 
 ```
@@ -170,7 +170,7 @@ mod tests {
 }
 ```
 
-This way, when you modify just the tests, the cargo is smart to not recompile the library crate.
+This way, when you modify just the tests, Cargo is smart to not recompile the library crate.
 It knows that the contents of `tests.rs` only affects compilation when `--test` is passed to rustc.
 Learned this one from [@petrochenkov](https://github.com/petrochenkov), thanks!
 
