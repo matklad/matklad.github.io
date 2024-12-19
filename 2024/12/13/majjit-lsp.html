@@ -1,0 +1,245 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Majjit LSP</title>
+  <meta name="description" content="An out-there suggestion for the nascent jj ecosystem!">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/12/13/majjit-lsp.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Majjit LSP</span> <time class="meta" datetime="2024-12-13">Dec 13, 2024</time></h1>
+<p><span>An out-there suggestion for the nascent </span><a href="https://github.com/martinvonz/jj"><span>jj</span></a><span> ecosystem!</span></p>
+<p><span>I was skimming </span><a href="https://neugierig.org/software/blog/2024/12/jujutsu.html"><span>Martin</span>&rsquo;<span>s post</span></a><span>, and the VS</span>
+<span>Code section of it kicked off this particular train of thought. Summarizing, VSCode has some</span>
+<span>built-in integrations with git, and they don</span>&rsquo;<span>t necessary directly applicable to jj. Direct solution</span>
+<span>is, of course, to add first class support of jj to VSCode.</span></p>
+<p><span>But I want better. Specifically, my problem is that I don</span>&rsquo;<span>t actually like VS Code VCS UI. I use</span>
+<a href="https://github.com/kahole"><span>@kahole</span></a>&rsquo;<span>s awesome implementation of </span><a href="https://magit.vc"><span>Magit</span></a><span> for</span>
+<span>VSCode, </span><a href="https://github.com/kahole/edamagit"><span>edamagit</span></a><span>. Magit is objectively correct way to</span>
+<span>implement a VCS user interface (more on this in just a moment).</span></p>
+<p><span>So I need to wait for someone for coding Magit/jj/VSCode triple. What</span>&rsquo;<span>s worse, I actually want to</span>
+<span>switch to Zed at some point, and absence of Magit is one of the bigger things that prevent this. But</span>
+<span>Zed doesn</span>&rsquo;<span>t at the moment have a rich-enough plugin API to express that.</span></p>
+<p><span>At the same time, although two separate code-bases, Magit in VSCode and Magit in Emacs are basically</span>
+<span>the same thing from the perspective of the user. We are </span><em><span>clearly</span></em><span> missing a </span><a href="https://www.oilshell.org/blog/2022/02/diagrams.html"><span>narrow</span>
+<span>waist</span></a><span> here which would allow us to implement</span>
+<span>Magit only once.</span></p>
+<p><span>Or rather, there</span>&rsquo;<span>s a </span>&ldquo;<span>barely adequate enough</span>&rdquo;<span> narrow waist </span>&mdash;<span> shell/terminal combo. You </span><em><span>could</span></em>
+<span>implement magit-tui which would be re-usable between, say, Vim and</span>
+<a href="https://helix-editor.com"><span>Helix</span></a><span>. But this particular thin waist sucks. It suffers from Byzantine</span>
+<span>complexity (why the hell the kernel needs to be directly involved), unfixable design bugs (terminfo</span>
+<span>database, necessity to set both your terminal emulator</span>&rsquo;<span>s and your shell color themes separately),</span>
+<span>and missing features (window management, for example). I </span><em><span>think</span></em><span> an absolutely massive improvement</span>
+<span>is possible here. I have </span><a href="https://github.com/matklad/abont"><span>a separate set of notes</span></a><span> about that, but</span>
+<span>that</span>&rsquo;<span>s a huge reinvent the wheel by starting from atoms kind of thing.</span></p>
+<p><span>Luckily, for the present problem of getting first-class UI for jj into any editor, I think a</span>
+<span>shortcut exists! We can implement </span>&ldquo;<span>magit for jj</span>&rdquo;<span> once, and have it working for almost free in any</span>
+<span>editor, GUI or terminal. To not spoil the answer right away, let me describe, first,</span></p>
+<section id="What-is-Magit">
+
+    <h2>
+    <a href="#What-is-Magit"><span>What is Magit</span> </a>
+    </h2>
+<p><span>The core idea is </span><strong><strong><span>text file is the user interface</span></strong></strong><span>. That</span>&rsquo;<span> it! This the paradigm of Emacs (and</span>
+<span>Acme), with Magit being the most successful application. Text being the interface means two things:</span></p>
+<ul>
+<li>
+<span>When we need to present information to the user, we present it in textual format.</span>
+</li>
+<li>
+<span>When we need </span><em><span>input</span></em><span> from the user, it is also text driven. In the simplest form, the user can</span>
+&ldquo;<span>click</span>&rdquo;<span> on a particular word in the text.</span>
+</li>
+</ul>
+<p><span>Let</span>&rsquo;<span>s apply this to various UI tasks of a VCS. The basic one is of course informing the user about</span>
+<span>changes. Here, we can generate a textual diff </span>&mdash;<span> a file witch each line marked at </span><code>+</code><span> or </span><code>-</code><span>. On</span>
+<span>top of this, there</span>&rsquo;<span>s a number of progressive enhancements:</span></p>
+<ul>
+<li>
+<span>Of course </span><code>+</code><span> lines are colored green and </span><code>-</code><span> red.</span>
+</li>
+<li>
+<span>Consecutive changes are grouped into hunks, and each hung is individually foldable.</span>
+</li>
+<li>
+<span>A diff can span multiple files, and files form another level in the folding hierarchy. By folding</span>
+<span>the entire diff recursively, you get a list of changed files, from which you can drill down an</span>
+<span>individual file.</span>
+</li>
+</ul>
+<p><span>This is the </span><em><span>presentation</span></em><span> side of the interface. And now, interaction:</span></p>
+<p><span>Clicking on any line in the diff opens the corresponding file in the working copy. This composes</span>
+<span>well with split view (a feature missing from the terminal</span>&rsquo;<span>s narrow waist): on the right you can have</span>
+<span>your hierarchical diff, on the left, your code. Moving in the diff file automatically moves the</span>
+<span>working copy view.</span></p>
+<p><span>This is a very productive interface to make sense of larger changes. You open the change as this</span>
+<span>hierarchical diff. First, everything is folded, so you only see the list of changed files, which</span>
+<span>gives you the context about a change. You then unfold the most interesting changed file and start</span>
+<span>perusing the diff. If, at some point, you realize that you need more context to understand a</span>
+<span>particular hunk, you click on it, and view, at the other half of the screen, the entire function</span>
+<span>surrounding the changed line.</span></p>
+<p><span>The rest of VCS builds naturally on top. Above hunks and files you add commits as another level of</span>
+<span>hierarchy. So, </span>&ldquo;<span>everything folded</span>&rdquo;<span> is now a list of commits. The list of commits view suggest a</span>
+<span>natural way to model history manipulation. If you want to reorder two commits, you can reorder two</span>
+<span>lines in the </span>&ldquo;<span>list of commits</span>&rdquo;<span> text document.</span></p>
+<p><span>If you want to split an individual commit, you can open a text document which contains </span><em><span>two</span></em><span> diffs.</span>
+<span>One is the commit, the other is initially empty. Clicking on a hunk moves is from one diff to</span>
+<span>another.</span></p>
+<p><span>And of course, you can have a </span>&ldquo;<span>dashboard</span>&rdquo;<span> text document, which shows the diff for the latest commit</span>
+<span>(jj) or staging area (git), a list of recent commits, a list of </span>&ldquo;<span>branches</span>&rdquo;<span>, and has </span>&ldquo;<span>hyper-links</span>&rdquo;
+<span>for all VCS operations.</span></p>
+</section>
+<section id="Magit-For-All-Editors">
+
+    <h2>
+    <a href="#Magit-For-All-Editors"><span>Magit For All Editors</span> </a>
+    </h2>
+<p><span>Finally, the idea I wrote this article for:</span></p>
+<p><strong><strong><span>You can materialize all the above files on disk</span></strong></strong></p>
+<p><span>That is, for the dashboard, we don</span>&rsquo;<span>t write a custom editor extension that materializes a virtual</span>
+<span>text buffer, but rather directly create an </span><code>.jj/status.jj</code><span> file on disk and open it in the editor.</span>
+<span>The editor watches the file for changes, so we can update the on-disk buffer to update the user.</span></p>
+<p><span>And I think </span><em><span>most</span></em><span> of the interactions you need to implement Magit-like experience are expressible</span>
+<span>in LSP:</span></p>
+<ul>
+<li>
+<a href="https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_semanticTokens"><span>Semantic Tokens</span></a>
+<span>give syntax highlighting for diffs&amp;dashboard.</span>
+</li>
+<li>
+<a href="https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_foldingRange"><span>Folding Ranges</span></a>
+<span>give folding for diffs.</span>
+</li>
+<li>
+<a href="https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_definition"><span>Goto Definition</span></a>
+<span>give </span>&ldquo;<span>click hunk to jump to working copy</span>&rdquo;<span> behavior for diffs. It can also be used by dashboard for</span>
+<span>materializing additional files. The dashboard probably </span><em><span>shouldn</span>&rsquo;<span>t</span></em><span> show diffs for any commits but</span>
+<span>last. Rather, </span>&ldquo;<span>goto to definition</span>&rdquo;<span> on a commit </span><code>zxf</code><span> should materialize </span><code>.jj/zxf.diff</code><span> file and</span>
+<span>than jump there.</span>
+</li>
+<li>
+<span>And of course, </span><a href="https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_codeAction"><span>Code</span>
+<span>Actions</span></a>
+<span>can provide interface for arbitrary commands. For example, if you want to reword a commit, you can</span>
+<span>place your cursor on it in the dashboard, and pick </span>&ldquo;<span>reword</span>&rdquo;<span> from code-actions context menu.</span>
+</li>
+</ul>
+<p><span>What you wouldn</span>&rsquo;<span>t get out of LSP is Magit</span>&rsquo;<span>s sleek one-letter mnemonics for action. In Magit, the</span>
+<span>status buffer is read-only, so rewording a commit is a simple as placing a cursor on it and typing</span>
+<code>r</code><span>. </span><em><span>This</span></em><span> level of integration I think will require some tighter interaction with the editor, but</span>
+<span>this should be a relatively thin layer.</span></p>
+</section>
+<section id="Bigger-Picture">
+
+    <h2>
+    <a href="#Bigger-Picture"><span>Bigger Picture</span> </a>
+    </h2>
+<p><span>It</span>&rsquo;<span>s useful to take a bird</span>&rsquo;<span>s eye view here. You can think of a VCS as a system for storing your</span>
+<span>source code files. But that is the illusion, the reality is the opposite. What VCS actually does is</span>
+<span>it stores is a complex graph of objects linked through content hashes. You use VCS to mutate this</span>
+<span>graph. Now, mutating the graph manually is a pain, so VCS resorts to using your working copy as a</span>
+<span>convenient way to author graph changes! To view a node in the graph, it is </span>&ldquo;<span>checked out</span>&rdquo;<span> into the</span>
+<span>working copy. To insert a new node, you save working copy as this node. See how bidirectional</span>
+<span>human-computer interaction is mediated through mutable file system!</span></p>
+<p><span>In other words, Git, and jj, already use </span>&ldquo;<span>file system as the user interface</span>&rdquo;<span> paradigm  at the macro</span>
+<span>level (authoring new commits) and at the micro level (authoring commit messages). The middle-end is</span>
+<span>missing though! </span><code>git status</code><span> is a CLI utility, but it could be just a file on disk!</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-12-13-majjit-lsp.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

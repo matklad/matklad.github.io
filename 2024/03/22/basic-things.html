@@ -1,0 +1,635 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Basic Things</title>
+  <meta name="description" content="After working on the initial stages of several largish projects, I accumulated a list of things that
+share the following three properties:">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/03/22/basic-things.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Basic Things</span> <time class="meta" datetime="2024-03-22">Mar 22, 2024</time></h1>
+<p><span>After working on the initial stages of several largish projects, I accumulated a list of things that</span>
+<span>share the following three properties:</span></p>
+<ul>
+<li>
+<span>they are irrelevant while the project is small,</span>
+</li>
+<li>
+<span>they are a productivity multiplier when the project is large,</span>
+</li>
+<li>
+<span>they are much harder to introduce down the line.</span>
+</li>
+</ul>
+<p><span>Here</span>&rsquo;<span>s the list:</span></p>
+<section id="READMEs">
+
+    <h2>
+    <a href="#READMEs"><span>READMEs</span> </a>
+    </h2>
+<p><span>A project should have a </span><em><span>short</span></em><span> one-page readme that is mostly links to more topical documentation.</span>
+<span>The two most important links are the user docs and the dev docs.</span></p>
+<p><span>A common failure is a readme growing haphazardly by accretion, such that it is neither a good</span>
+<span>landing page, nor a source of comprehensive docs on any particular topic. It is hard to refactor</span>
+<span>such an unstructured readme later. The information is valuable, if disorganized, but there</span>
+<span>isn</span>&rsquo;<span>t any better place to move it to.</span></p>
+</section>
+<section id="Developer-Docs">
+
+    <h2>
+    <a href="#Developer-Docs"><span>Developer Docs</span> </a>
+    </h2>
+<p><span>For developers, you generally want to have a docs folder in the repository. The docs folder should</span>
+<em><span>also</span></em><span> contain a short landing page describing the structure of the documentation. This structure</span>
+<span>should allow for both a small number of high quality curated documents, and a large number of ad-hoc</span>
+<span>append-only notes on any particular topic. For example, </span><code>docs/README.md</code><span> could point to carefully</span>
+<span>crafted</span>
+<a href="https://matklad.github.io/2021/02/06/ARCHITECTURE.md.html"><code>ARCHITECTURE.md</code></a>
+<span>and </span><code>CONTRIBUTING.md</code><span>, which describe high level code and social</span>
+<span>architectures, and explicitly say that everything else in the </span><code>docs/</code><span> folder is a set of unorganized</span>
+<span>topical guides.</span></p>
+<p><span>Common failure modes here:</span></p>
+<ol type="a">
+<li>
+<p><span>There</span>&rsquo;<span>s no place where to put new developer documentation at all. As a result, no docs are</span>
+<span>getting written, and, by the time you do need docs, the knowledge is lost.</span></p>
+</li>
+<li>
+<p><span>There</span>&rsquo;<span>s only highly  structured, carefully reviewed developer documentation. Contributing docs</span>
+<span>requires a lot of efforts, and many small things go undocumented.</span></p>
+</li>
+<li>
+<p><span>There</span>&rsquo;<span>s only unstructured append-only pile of isolated documents. Things are </span><em><span>mostly</span></em><span> documented,</span>
+<span>often two or three times, but any new team member has to do the wheat from the chaff thing anew.</span></p>
+</li>
+</ol>
+</section>
+<section id="Users-Website">
+
+    <h2>
+    <a href="#Users-Website"><span>Users Website</span> </a>
+    </h2>
+<p><span>Most project can benefit from a dedicated website targeted at the users. You want to have website</span>
+<span>ready when there are few-to-no users: usage compounds over time, so, if you find yourself with a</span>
+<span>significant number of users and no web </span>&ldquo;<span>face</span>&rdquo;<span>, you</span>&rsquo;<span>ve lost quite a bit of value already!</span></p>
+<p><span>Some other failure modes here:</span></p>
+<ol type="a">
+<li>
+<p><span>A different team manages the website. This prevents project developers from directly contributing</span>
+<span>improvements, and may lead to divergence between the docs and the shipped product.</span></p>
+</li>
+<li>
+<p><span>Today</span>&rsquo;<span>s web stacks gravitate towards infinite complexity. It</span>&rsquo;<span>s all too natural to pick an </span>&ldquo;<span>easy</span>&rdquo;
+<span>heavy framework at the start, and then get yourself into npm</span>&rsquo;<span>s bog. Website is about content, and</span>
+<span>content has gravity. Whatever markup language dialect you choose at the beginning is going to</span>
+<span>stay with for some time. Do carefully consider the choice of your web stack.</span></p>
+</li>
+<li>
+<p><span>Saying that which isn</span>&rsquo;<span>t quite done yet. Don</span>&rsquo;<span>t overpromise, it</span>&rsquo;<span>s much easier to say more later</span>
+<span>than to take back your words, and humbleness might be a good marketing. Consider if you are in a</span>
+<span>domain where engineering credibility travel faster than buzz words. But this is situational. More</span>
+<span>general advice would be that marketing also compounds over time, so it pays off to be deliberate</span>
+<span>about your image from the start.</span></p>
+</li>
+</ol>
+</section>
+<section id="Internal-Website">
+
+    <h2>
+    <a href="#Internal-Website"><span>Internal Website</span> </a>
+    </h2>
+<p><span>This is more situational, but consider if, in addition to public-facing website, you also need an</span>
+<span>internal, engineering-facing one. At some point you</span>&rsquo;<span>ll probably need a bit more interactivity than</span>
+<span>what</span>&rsquo;<span>s available in a </span><code>README.md</code><span> </span>&mdash;<span> perhaps you need a place to display code-related metrics like</span>
+<span>coverage or some javascript to compute release rotation. Having a place on the web where a</span>
+<span>contributor can place something they need right now without much red tape is nice!</span></p>
+<p><span>This is a recurring theme </span>&mdash;<span> you should be organized, you should not be organized. </span><em><span>Some</span></em><span> things</span>
+<span>have large fan-out and should be guarded with careful review. </span><em><span>Other</span></em><span> things benefit from just being</span>
+<span>there and a lightweight process. You need to create places for both kinds of things, and a clear</span>
+<span>decision rule about what goes where.</span></p>
+<p><span>For internal website, you</span>&rsquo;<span>ll probably need some kind of data store as well. If you want to track</span>
+<span>binary size across commits, </span><em><span>something</span></em><span> needs to map commit hashes to (lets be optimistic)</span>
+<span>kilobytes! I don</span>&rsquo;<span>t know a good solution here. I use a JSON file in a github repository for similar</span>
+<span>purposes.</span></p>
+</section>
+<section id="Process-Docs">
+
+    <h2>
+    <a href="#Process-Docs"><span>Process Docs</span> </a>
+    </h2>
+<p><span>There are many possible ways to get some code into the main branch. Pick one, and spell it out in</span>
+<span>an </span><code>.md</code><span> file explicitly:</span></p>
+<ul>
+<li>
+<p><span>Are feature branches pushed to the central repository, or is anyone works off their fork? I find</span>
+<span>forks work better in general as they automatically namespace everyone</span>&rsquo;<span>s branches, and put team</span>
+<span>members and external contributors on equal footing.</span></p>
+</li>
+<li>
+<p><span>If the repository is shared, what is the naming convention for branches? I prefix mine with</span>
+<code>matklad/</code><span>.</span></p>
+</li>
+<li>
+<p><span>You use </span><a href="https://graydon2.dreamwidth.org/1597.html"><span>not rocket-science rule</span></a><span> (more on this later :).</span></p>
+</li>
+<li>
+<p><span>Who should do code review of a particular PR? A single person, to avoid bystander effect and to</span>
+<span>reduce notification fatigue. The reviewer is picked by the author of PR, as that</span>&rsquo;<span>s a stable</span>
+<span>equilibrium in a high-trust team and cuts red tape.</span></p>
+</li>
+<li>
+<p><span>How the reviewer knows that they need to review code? On GitHub, you want to </span><em><span>assign</span></em><span> rather than</span>
+<em><span>request</span></em><span> a review. Assign is level-triggered </span>&mdash;<span> it won</span>&rsquo;<span>t go away until the PR is merged, and it</span>
+<span>becomes the responsibility of the reviewer to help the PR along until it is merged (</span><em><span>request</span>
+<span>review</span></em><span> is still useful to poke the assignee after a round of feedback&amp;changes). More generally,</span>
+<span>code review is the highest priority task </span>&mdash;<span> there</span>&rsquo;<span>s no reason to work on new code</span>
+<span>if there</span>&rsquo;<span>s already some finished code which is just blocked on your review.</span></p>
+</li>
+<li>
+<p><span>What is the purpose of review? Reviewing for correctness, for single voice, for idioms, for</span>
+<span>knowledge sharing, for high-level architecture are choices! Explicitly spell out what makes most</span>
+<span>sense in the context of your project.</span></p>
+</li>
+<li>
+<p><span>Meta process docs: positively encourage contributing process documentation itself.</span></p>
+</li>
+</ul>
+</section>
+<section id="Style">
+
+    <h2>
+    <a href="#Style"><span>Style</span> </a>
+    </h2>
+<p><span>Speaking about meta process, style guide is where it is most practically valuable. Make sure that</span>
+<span>most stylistic comments during code reviews are immediately codified in the project-specific style</span>
+<span>document. New contributors should learn project</span>&rsquo;<span>s voice not through a hundred repetitive comments on</span>
+<span>PRs, but through a dozen links to specific items of the style guide.</span></p>
+<p><span>Do you even need a project-specific style guide? I think you do </span>&mdash;<span> cutting down mental energy for</span>
+<span>trivial decisions is helpful. If you need a result variable, and half of the functions call it </span><code>res</code>
+<span>and another half of the functions call it </span><code>result</code><span>, making this choice is just distracting.</span></p>
+<p><span>Project-specific naming conventions is one of the more useful thing to place in the style guide.</span></p>
+<p><span>Optimize style guide for extensibility. Uplifting a comment from a code review to the style guide</span>
+<span>should not require much work.</span></p>
+<p><span>Ensure that there</span>&rsquo;<span>s a style tzar </span>&mdash;<span> building consensus around </span><em><span>specific</span></em><span> style choices is very</span>
+<span>hard, better to delegate the entire responsibility to one person who can make good enough choices.</span>
+<span>Style usually is not about what</span>&rsquo;<span>s better, it</span>&rsquo;<span>s about removing needless options in a semi-arbitrary</span>
+<span>ways.</span></p>
+</section>
+<section id="Git">
+
+    <h2>
+    <a href="#Git"><span>Git</span> </a>
+    </h2>
+<p><span>Document stylistic details pertaining to git. If project uses </span><code>area:</code><span> prefixes for commits, spell</span>
+<span>out an explicit list of such prefixes.</span></p>
+<p><span>Consider documenting acceptable line length for the summary line. Git man page boldly declares that</span>
+<span>a summary should be under 50 characters, but that is just plain false. Even in the kernel, most</span>
+<span>summaries are somewhere between 50 and 80 characters.</span></p>
+<p><span>Definitely explicitly forbid adding large files to git. Repository size increases monotonically,</span>
+<code>git clone</code><span> time is important.</span></p>
+<p><span>Document merge-vs-rebase thing. My preferred answer is:</span></p>
+<ul>
+<li>
+<span>A unit of change is a pull request, which might contain several commits</span>
+</li>
+<li>
+<span>Merge commit for the pull request is what is being tested</span>
+</li>
+<li>
+<span>The main branch contains only merge commits</span>
+</li>
+<li>
+<span>Conversely, </span><em><span>only</span></em><span> the main branch contains merge commits, pull requests themselves are always</span>
+<span>rebased.</span>
+</li>
+</ul>
+<p><span>Forbidding large files in the repo is a good policy, but it</span>&rsquo;<span>s hard to follow. Over the lifetime of</span>
+<span>the project, someone somewhere will sneakily add and revert a megabyte of generated protobufs, and</span>
+<span>that will fly under code review radar.</span></p>
+<p><span>This brings us to the most basic thing of them all:</span></p>
+</section>
+<section id="Not-Rocket-Science-Rule">
+
+    <h2>
+    <a href="#Not-Rocket-Science-Rule"><span>Not Rocket Science Rule</span> </a>
+    </h2>
+<p><span>Maintain a well-defined set of automated checks that pass on the main branch at all times. If you</span>
+<span>don</span>&rsquo;<span>t want large blobs in git repository, write a test rejecting large git objects and run that</span>
+<span>right before updating the main branch. No merge commits on feature branches? Write a test which</span>
+<span>fails with a pageful of Git self-help if one is detected. Want to wrap </span><code>.md</code><span> at 80 columns? Write a</span>
+<span>test :)</span></p>
+<p><span>It is perhaps worth you while to re-read the original post:</span>
+<a href="https://graydon2.dreamwidth.org/1597.html" class="display url">https://graydon2.dreamwidth.org/1597.html</a></p>
+<p><a href="https://matklad.github.io/2024/01/03/of-rats-and-ratchets.html"><span>This mindset of monotonically growing set of properties</span></a>
+<span>that are true about the codebase is </span><em><span>incredibly</span></em><span> powerful. You start seeing code as temporary, fluid</span>
+<span>thing that can always be changed relatively cheaply, and the accumulated set of automated tests as</span>
+<span>the real value of the project.</span></p>
+<p><span>Another second order effect is that NRSR puts a pressure to optimize your build and test</span>
+<span>infrastructure. If you don</span>&rsquo;<span>t have an option to merge the code when an unrelated flaky test fails,</span>
+<span>you won</span>&rsquo;<span>t have flaky tests.</span></p>
+<p><span>A common anti-pattern here is that a project grows a set of semi-checks </span>&mdash;<span> tests that exists, but</span>
+<span>are not 100% reliable, and thus are not exercised by the CI routinely. And that creates ambiguity</span>
+&mdash;<span> are tests failing due to a regression which should be fixed, or were they never reliable, and</span>
+<span>just test a property that isn</span>&rsquo;<span>t actually essential for functioning of the project? This fuzziness</span>
+<span>compounds over time. If a check isn</span>&rsquo;<span>t reliable enough to be part of NRSR CI gate, it isn</span>&rsquo;<span>t actually</span>
+<span>a check you care about, and should be removed.</span></p>
+<p><span>But to do NRSR, you need to build &amp; CI your code first:</span></p>
+</section>
+<section id="Build-CI">
+
+    <h2>
+    <a href="#Build-CI"><span>Build &amp; CI</span> </a>
+    </h2>
+<p><span>This is a complex topic. Let</span>&rsquo;<span>s start with the basics: what is a build system? I would love to</span>
+<span>highlight a couple of slightly unconventional answers here.</span></p>
+<p><em><span>First</span></em><span>, a build system is a bootstrap process: it is how you get from </span><code>git clone</code><span> to a working</span>
+<span>binary. The two aspects of this boostrapping process are important:</span></p>
+<ul>
+<li>
+<span>It should be simple. No</span>
+<span class="display"><code>sudo apt-get install bazzilion packages</code><span>,</span></span>
+<span>the single binary of your build system should be able to bring everything else that</span>&rsquo;<span>s needed,</span>
+<span>automatically.</span>
+</li>
+<li>
+<span>It should be repeatable. Your laptop and your CI should end up with exactly identical set of</span>
+<span>dependencies. The end result should be a function of commit hash, and not your local shell</span>
+<span>history, otherwise NRSR doesn</span>&rsquo;<span>t work.</span>
+</li>
+</ul>
+<p><em><span>Second</span></em><span>, a build system is developer UI. To do almost anything, you need to type some sort of build</span>
+<span>system invocation into your shell. There should be a single, clearly documented command for building</span>
+<span>and testing the project. If it is not a single </span><code>makebelieve test</code><span>, something</span>&rsquo;<span>s wrong.</span></p>
+<p><span>One anti-pattern here is when the build system spills over to CI. When, to figure out what the set</span>
+<span>of checks even is, you need to read </span><code>.github/workflows/*.yml</code><span> to compile a list of commands. That</span>&rsquo;<span>s</span>
+<span>accidental complexity! Sprawling yamls are a bad entry point. Put all the logic into the build</span>
+<span>system and let the CI drive that, and not vice verse.</span></p>
+<p><a href="https://matklad.github.io/2023/12/31/O(1)-build-file.html"><span>There is a stronger version of the</span>
+<span>advice</span></a><span>. No matter the size of the</span>
+<span>project, there</span>&rsquo;<span>s probably only a handful of workflows that make sense for it: testing, running,</span>
+<span>releasing, etc. This small set of workflows should be nailed from the start, and specific commands</span>
+<span>should be documented. When the project subsequently grows in volumes, this set of build-system entry</span>
+<span>points should </span><em><span>not</span></em><span> grow.</span></p>
+<p><span>If you add a Frobnicator, </span><code>makebelieve test</code><span> invocation </span><em><span>should</span></em><span> test that Frobnicator works. If</span>
+<span>instead you need a dedicated </span><code>makebelieve test-frobnicator</code><span> and the corresponding line in some CI</span>
+<span>yaml, you are on a perilous path.</span></p>
+<p><em><span>Finally</span></em><span>, a build system is a collection of commands to make stuff happen. In larger projects,</span>
+<span>you</span>&rsquo;<span>ll inevitably need some non-trivial amount of glue automation. Even if the entry point is just</span>
+<code>makebelive release</code><span>, internally that might require any number of different tools to build, sign,</span>
+<span>tag, upload, validate, and generate a changelog for a new release.</span></p>
+<p><span>A common anti-pattern is to write these sorts of automations in bash and Python, but that</span>&rsquo;<span>s almost</span>
+<span>pure technical debt. These ecosystems are extremely finnicky in and of themselves, and, crucially</span>
+<span>(unless your project itself is written in bash or Python), they are a second ecosystem to what you</span>
+<span>already have in your project for </span>&ldquo;<span>normal</span>&rdquo;<span> code.</span></p>
+<p><span>But releasing software is also just code, which you can write in your primarly language.</span>
+<a href="https://twitter.com/id_aa_carmack/status/989951283900514304"><span>The right tool for the job is often the tool you are already using</span></a><span>.</span>
+<span>It pays off to explicitly attack the problem of glue from the start, and to pick/write a library</span>
+<span>that makes writing subprocess wrangling logic easy.</span></p>
+<p><span>Summing the build and CI story up:</span></p>
+<p><span>Build system is self-contained, reproducible and takes on the task of downloading all external</span>
+<span>dependencies. Irrespective of size of the project, it contains O(1) different entry points. One of</span>
+<span>those entry points is triggered by the not rocket science rule CI infra to run the set of canonical</span>
+<span>checks. There</span>&rsquo;<span>s an explicit support for free-form automation, which is implemented in the same</span>
+<span>language as the bulk of the project.</span></p>
+<p><span>Integration with NRSR is the most important aspect of the build process, as it determines how the</span>
+<span>project evolves over time. Let</span>&rsquo;<span>s zoom in.</span></p>
+</section>
+<section id="Testing">
+
+    <h2>
+    <a href="#Testing"><span>Testing</span> </a>
+    </h2>
+<p><span>Testing is a primary architectural concern. When the first line of code is written, you already</span>
+<span>should understand the big picture testing story. It is empathically </span><em><span>not</span></em><span> </span>&ldquo;<span>every class and module</span>
+<span>has unit-test</span>&rdquo;<span>. Testing should be data oriented </span>&mdash;<span> the job of a particular software is to take some</span>
+<span>data in, transform it, and spit different data out. Overall testing strategy requires:</span></p>
+<ul>
+<li>
+<span>some way to specify/generate input data,</span>
+</li>
+<li>
+<span>some way to assert desired properties of output data, and</span>
+</li>
+<li>
+<span>a way to run many individual checks very fast.</span>
+</li>
+</ul>
+<p><span>If time is a meaningful part of the input data, it should be modeled explicitly. Not getting the</span>
+<span>testing architecture right usually results in:</span></p>
+<ul>
+<li>
+<span>Software that is hard to change because thousands of test nail existing internal APIs.</span>
+</li>
+<li>
+<span>Software that is hard to change because there are no test to confidently verify absence of</span>
+<span>unintended breakages.</span>
+</li>
+<li>
+<span>Software that is hard to change because each change requires hours of testing time to verify.</span>
+</li>
+</ul>
+<p><span>How to architect a test suite goes beyond the scope of this article, but please read</span>
+<a href="https://matklad.github.io/2022/07/04/unit-and-integration-tests.html"><span>Unit and Integration Tests</span></a>
+<span>and</span>
+<a href="https://matklad.github.io/2021/05/31/how-to-test.html"><span>How To Test</span></a><span>.</span></p>
+<p><span>Some specific things that are in scope for this article:</span></p>
+<p><span>Zero tolerance for flaky tests. Strict not rocket science rules gives this by construction </span>&mdash;<span> if</span>
+<span>you can</span>&rsquo;<span>t merge </span><em><span>your</span></em><span> pull request because someone elses test is flaky, that flaky test immediately</span>
+<span>becomes your problem.</span></p>
+<p><span>Fast tests. Again, NRSR already provides a natural pressure for this, but it also helps to make</span>
+<span>testing time more salient otherwise. Just by default printing the total test time and five slowest</span>
+<span>tests in a run goes a long way.</span></p>
+<p><span>Not all tests could be fast. Continuing the ying-yang theme of embracing order and chaos</span>
+<span>simultaneously, it helps to introduce the concept of slow tests early on. CI always runs the full</span>
+<span>suite of tests, fast and slow. But the local </span><code>makebelive test</code><span> by default runs only fast test, with</span>
+<span>an opt-in for slow tests. Opt in can be as simple as an </span><code>SLOW_TESTS=1</code><span> environmental variable.</span></p>
+<p><span>Introduce a </span><a href="https://ianthehenry.com/posts/my-kind-of-repl/"><span>snapshot testing</span></a><span> library early.</span>
+<span>Although the bulk of tests should probably use project-specific testing harness, for everything else</span>
+<span>inline repl-driven snapshot testing is a good default approach, and is something costly to introduce</span>
+<span>once you</span>&rsquo;<span>ve accumulated a body of non-snapshot-based tests.</span></p>
+<p><span>Alongside the tests, come the benchmarks.</span></p>
+</section>
+<section id="Benchmarking">
+
+    <h2>
+    <a href="#Benchmarking"><span>Benchmarking</span> </a>
+    </h2>
+<p><span>I don</span>&rsquo;<span>t have a grand vison about how to make benchmark work in a large, living project, it always</span>
+<span>feels like a struggle to me. I do have a couple of tactical tips though.</span></p>
+<p><em><span>Firstly</span></em><span>, any code that is </span><em><span>not</span></em><span> running during NRSR is effectively dead. It is exceedingly common</span>
+<span>for benchmarks to be added alongside a performance improvement, and then </span><em><span>not</span></em><span> getting hooked up</span>
+<span>with CI. So, two month down the line, the benchmark either stops compiling outright, or maybe just</span>
+<span>panics at a startup due to some unrelated change.</span></p>
+<p><span>This fix here is to make sure that every benchmark is </span><em><span>also</span></em><span> a test. Parametrize every benchmark by</span>
+<span>input size, such that with a small input it finishes in milliseconds. Then write a test that</span>
+<span>literally just calls the benchmarking code with this small input. And remember that your build</span>
+<span>system should have O(1) entry points. Plug this into a </span><span class="display"><code>makebelieve test</code><span>,</span></span><span> not into a</span>
+<span>dedicated </span><span class="display"><code>makebelieve benchmark --small-size</code><span>.</span></span></p>
+<p><em><span>Secondly</span></em><span>, any large project has a certain amount of very important macro metrics.</span></p>
+<ul>
+<li>
+<span>How long does it take to build?</span>
+</li>
+<li>
+<span>How long does it take to test?</span>
+</li>
+<li>
+<span>How large is the resulting artifact shipping to users?</span>
+</li>
+</ul>
+<p><span>These are some of the questions that always matter. You need infrastructure to track these numbers,</span>
+<span>and to see them regularly. This where the internal website and its data store come in. During CI,</span>
+<span>note those number. After CI run, upload a record with commit hash, metric name, metric value</span>
+<em><span>somewhere</span></em><span>. Don</span>&rsquo;<span>t worry if the results are noisy </span>&mdash;<span> you target the baseline here, ability to</span>
+<span>notice large changes over time.</span></p>
+<p><span>Two options for the </span>&ldquo;<span>upload</span>&rdquo;<span> part:</span></p>
+<ul>
+<li>
+<p><span>Just put them into some </span><code>.json</code><span> file in a git repo, and LLM a bit of javascript to display a nice</span>
+<span>graph from these data.</span></p>
+</li>
+<li>
+<p><a href="https://nyrkio.com" class="url">https://nyrkio.com</a><span> is a surprisingly good SaaS offering that I can recommend.</span></p>
+</li>
+</ul>
+</section>
+<section id="Fuzz-Testing">
+
+    <h2>
+    <a href="#Fuzz-Testing"><span>Fuzz Testing</span> </a>
+    </h2>
+<p><span>Serious fuzz testing curiously shares characteristics of tests and benchmarks. Like a normal test, a</span>
+<span>fuzz test informs you about a correctness issue in your application, and is reproducible. Like a</span>
+<span>benchmark, it is (infinitely) long running and infeasible to do as a part of NRSR.</span></p>
+<p><span>I don</span>&rsquo;<span>t yet have a good hang on how to most effectively integrate continuous fuzzing into</span>
+<span>development process. I don</span>&rsquo;<span>t know what is the not rocket science rule of fuzzing. But two things</span>
+<span>help:</span></p>
+<p><em><span>First</span></em><span>, even if you can</span>&rsquo;<span>t run fuzzing loop during CI, you can run isolated seeds. To help ensure</span>
+<span>that the fuzing code doesn</span>&rsquo;<span>t get broken, do the same thing as with benchmark </span>&mdash;<span> add a test that</span>
+<span>runs fuzzing logic with a fixed seed and small, fast parameters. One variation here is that you can</span>
+<span>use commit sha as random a seed </span>&mdash;<span> that way the code is still reproducible, but there is enough</span>
+<span>variation to avoid dynamically dead code.</span></p>
+<p><em><span>Second</span></em><span>, it is helpful to think about fuzzing in terms of level triggering. With tests, when you</span>
+<span>make an erroneous commit, you immediately know that it breaks stuff. With fuzzing, you generally</span>
+<span>discover this later, and a broken seed generally persists for several commits. So, as an output of</span>
+<span>the fuzzer, I think what you want is </span><em><span>not</span></em><span> a set of GitHub issues, but rather a dashboard of sorts</span>
+<span>which shows a table of recent commits and failing seeds for those commits.</span></p>
+<p><span>With not rocket science rule firmly in place, it makes sense to think about releases.</span></p>
+</section>
+<section id="Releases">
+
+    <h2>
+    <a href="#Releases"><span>Releases</span> </a>
+    </h2>
+<p><span>Two core insights here:</span></p>
+<p><em><span>First</span></em><span> release </span><em><span>process</span></em><span> is orthogonal from software being </span><em><span>production ready</span></em><span>. You can release</span>
+<span>stuff before it is ready (provided that you add a short disclaimer to the readme). So, it pays off</span>
+<span>to add proper release process early on, such that, when the time comes to actually release</span>
+<span>software, it comes down to removing disclaimers and writing the announcement post, as all technical</span>
+<span>work has been done ages ago.</span></p>
+<p><em><span>Second</span></em><span>, software engineering in general observes reverse triangle inequality: to get from A to C,</span>
+<span>it is faster to go from A to B and then from B to C, then moving from A to C atomically. If you make</span>
+<span>a pull request, it helps to split it up into smaller parts. If you refactor something, it is faster</span>
+<span>to first introduce a new working copy and then separately retire the old code, rather than changing</span>
+<span>the thing in place.</span></p>
+<p><span>Releases are no different: faster, more frequent releases are easier and less risky. Weekly cadence</span>
+<span>works great, provided that you have a solid set of checks in your NRSR.</span></p>
+<p><span>It is much easier to start with a state where almost nothing works, but there</span>&rsquo;<span>s a solid release</span>
+<span>(with an empty set of features), and ramp up from there, than to hack with reckless abandon</span>
+<em><span>without</span></em><span> thinking much about eventual release, and then scramble to decide which is ready and</span>
+<span>releasable, a what should be cut.</span></p>
+</section>
+<section id="Summary">
+
+    <h2>
+    <a href="#Summary"><span>Summary</span> </a>
+    </h2>
+<p><span>I think that</span>&rsquo;<span>s it for today? That</span>&rsquo;<span>s a lot of small points! Here</span>&rsquo;<span>s a bullet list for convenient</span>
+<span>reference:</span></p>
+<ul>
+<li>
+<span>README as a landing page.</span>
+</li>
+<li>
+<span>Dev docs.</span>
+</li>
+<li>
+<span>User docs.</span>
+</li>
+<li>
+<span>Structured dev docs (architecture and processes).</span>
+</li>
+<li>
+<span>Unstructured ingest-optimized dev docs (code style, topical guides).</span>
+</li>
+<li>
+<span>User website, beware of content gravity.</span>
+</li>
+<li>
+<span>Ingest-optimized internal web site.</span>
+</li>
+<li>
+<span>Meta documentation process </span>&mdash;<span> its everyone job to append to code style and process docs.</span>
+</li>
+<li>
+<span>Clear code review protocol (in whose court is the ball currently?).</span>
+</li>
+<li>
+<span>Automated check for no large blobs in a git repo.</span>
+</li>
+<li>
+<span>Not rocket science rule.</span>
+</li>
+<li>
+<span>Let</span>&rsquo;<span>s repeat: at </span><strong><span>all</span></strong><span> times, the main branch points at a commit hash which is known to pass a</span>
+<span>set of well-defined checks.</span>
+</li>
+<li>
+<span>No semi tests: if the code is not good enough to add to NRSR, it is deleted.</span>
+</li>
+<li>
+<span>No flaky tests (mostly by construction from NRSR).</span>
+</li>
+<li>
+<span>Single command build.</span>
+</li>
+<li>
+<span>Reproducible build.</span>
+</li>
+<li>
+<span>Fixed number of build system entry points. No separate lint step, a lint is a kind of a test.</span>
+</li>
+<li>
+<span>CI delegates to the build system.</span>
+</li>
+<li>
+<span>Space for ad-hoc automation in the main language.</span>
+</li>
+<li>
+<span>Overarching testing infrastructure, grand unified theory of project</span>&rsquo;<span>s testing.</span>
+</li>
+<li>
+<span>Fast/Slow test split (fast=seconds per test suite, slow=low digit minutes per test suite).</span>
+</li>
+<li>
+<span>Snapshot testing.</span>
+</li>
+<li>
+<span>Benchmarks are tests.</span>
+</li>
+<li>
+<span>Macro metrics tracking (time to build, time to test).</span>
+</li>
+<li>
+<span>Fuzz tests are tests.</span>
+</li>
+<li>
+<span>Level-triggered display of continuous fuzzing results.</span>
+</li>
+<li>
+<span>Inverse triangle inequality.</span>
+</li>
+<li>
+<span>Weekly releases.</span>
+</li>
+</ul>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-03-22-basic-things.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
