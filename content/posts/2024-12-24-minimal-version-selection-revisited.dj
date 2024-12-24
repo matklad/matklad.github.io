@@ -1,0 +1,91 @@
+# Minimal Version Selection Revisited
+
+In this post, I want to highlight one aspect of Go-style minimal version selection that I have
+missed completely at first. Maybe you missed it too?
+
+If you recall, some years ago there was a discussion of various version selection algorithms in the
+Go and the Rust communities. See this list for a refresher:
+
+<https://research.swtch.com/vgo>{.display}
+
+Broadly, when you write `foo = "1.2.3"` in the manifest for your library, what you are specifying is
+not a specific _version_ of `foo`, but rather _a set of versions_ (a version constraint). Some of
+these versions might not had existed when you wrote `foo = "1.2.3"` line!
+
+As an author of a library, you can't actually pick your dependencies exactly. Instead, the final
+application that uses your library is in charger of picking specific dependencies, including those
+for your library. In particular, if that application depends on some other library which says `foo =
+"1.3.0"`, then _your_ library gets at least `1.3.0` as well, although you've written `1.2.3`.
+
+In general, there are many ways to pick a specific set of versions that satisfy the constraints.
+It's interesting that Go and Rust chose, in some sense, opposite algorithms for solving these
+constraints. Rust selects maximal versions, while Go selects minimal versions.
+
+The original discussion focused (or at least I perceived it as being focused) on the algorithmic
+complexity. The strawhat claim was that min-ver can be solved linearly, while max-ver requires
+NP-hard SAT-solving. This is not a particularly strong claim:
+
+- First of all, it is plainly wrong. Min-ver can be solved efficiently by a greedy algorithm that
+  picks the minimal versions, while max-ver can be solved efficiently by the same algorithm that
+  just greedily picks maximal versions. NP-hardness comes not from preferred direction of
+  resolution, but rather from complexity of version requirements. If you only have semver-open
+  constraints like `^1.2.3`, the solution is easy. If you have non-convex constraints like `(^1.2.3
+  OR ^1.2.5) AND ≠1.2.4`, then stuff becomes NP-hard.
+- Second, SAT is not a big deal. It is well understood how to solve even elaborate constraints
+  sufficiently quickly in practice. This does require moderate amount of engineering effort, but
+  this effort is a fixed cost that amortizes across the entire ecosystem and can be just dismissed.
+
+It's much more interesting to look at the ecosystem implications of the two approaches.
+
+The big benefit of max-ver is the ecosystem-wide live-at-head: if everyone uses latest versions,
+than everyone uses the same _combination_ of versions of libraries. In particular, ecosystem-wide
+testing ends up being concentrated on a few combinations that everyone is using. In practice, if you
+release a new version of a library, and it turns out to be buggy, someone immediately discovers it
+in _their_ tests, so that you can quickly yank&regroup.
+
+But the min-ver has a dual property (_this_ is the new thing I've realized only recently). In
+min-ver, if you get `foo=1.2.3` in your build graph, that means that someone somewhere made an
+explicit decision to write `foo=1.2.3` in the manifest for their library. That is, any version in
+your dependency graph is additionally vetted manually by someone who is _not_ the original library
+developer.
+
+This is quite neat --- it puts a natural damper on the supply chain attacks. If a bad version of a
+library is released, someone needs to explicitly opt into this new version. What's more, the deeper
+in your dependency tree the library is, the more explicit approvals are required for the library to
+propagate to your project.
+
+---
+
+Consider this hypothetical system for specifying dependencies:
+
+In the manifest file, you specify dependencies by listing both a version and a checksum:
+
+```toml
+foo = { version = "1.2.3", checksum = "sha256:bee71ecaffe" }
+```
+
+Only direct dependencies are listed. Checksums are of course filled-in by a tool.
+
+Checksum covers the content of a dependency, including its manifest file. In other words, the
+checksum for `foo` above implicitly includes checksums of all direct dependencies of `foo`.
+
+By exploring the set of dependencies from the root, we collect the set of dependencies and their
+checksums that are protected by some checksum in the root manifest. Then, if we have several
+versions for a single dependency, we pick the largest one.
+
+This is cool. This is essentially "bring your own registry" version resolution, where the set of
+available versions is fixed, and pinned by the root hashes. All dependencies in the set have the
+"min-ver" property that someone somewhere in the dependency graph asked for this version of the
+dependency explicitly.
+
+We also need neither lockfiles, nor the Go-style checksum files. Manifest form a distributed
+lockfile, where each dependency locks a part of the graph, and this lockfile fragment is itself
+hashed&locked by some direct-dependency specification.
+
+But we still get "dependency resolution" --- only direct dependencies are specified, and, if both
+`foo=1.2.3` and `foo=1.3.0` end up being in the set of dependencies, only `1.3.0` will be included
+in the final graph.
+
+My understanding is that Zig is trying to do something like this, and, as all things Zig, it feels
+extremely neat, even if rough at the edges. It never occurred to me before that putting hashes of
+direct dependencies in the manifest _also_ locks transitive dependencies. So cute!
