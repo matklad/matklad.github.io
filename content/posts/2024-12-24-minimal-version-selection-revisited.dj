@@ -89,3 +89,23 @@ in the final graph.
 My understanding is that Zig is trying to do something like this, and, as all things Zig, it feels
 extremely neat, even if rough at the edges. It never occurred to me before that putting hashes of
 direct dependencies in the manifest _also_ locks transitive dependencies. So cute!
+
+---
+
+**Update(2024-12-25):** It is worth mentioning another qualitative difference between min-ver and
+max-ver. The latter generally requires some form of centralized registry --- an entity which knows
+all the versions of all the libraries. When you pick a maximal version, you pick the highest version
+known to the registry. For example, in the case of Cargo the central registry is implemented as a
+git repository (<https://github.com/rust-lang/crates.io-index>) which holds JSON files describing
+available versions.
+
+With min-ver, you don't need a registry, as the set of versions to choose from can be incrementally
+discovered by crawling the web of dependencies starting from the final application, as long
+dependency specifications include not only a name and a version, but also a location (URL) and a
+checksum. Though, keep in mind that you still need _some_ solution to ensure availability of
+dependencies --- with a large enough dependency tree there will be at least one dependency hosted
+from grandma's old PC, prone to flooding. You can use either Go-style global shared cache (it
+doesn't have to be trusted, as long as hashes are included in dependency specification), or make it
+very easy to create a project-local cache --- a `./vendor` directory in the same repository which
+embeds all the dependencies (again, it is important that `./vendor` is strictly a cache, and the
+source of truth is the checksum in the manifest).
