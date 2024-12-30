@@ -1,9 +1,12 @@
 {
-    "importMap": "import_map.json",
-    "tasks": {
-        "build": "                deno run --lock --allow-write=./out,./build --allow-read=./out,./build,./content --allow-net --allow-import         ./src/main.ts build --profile",
-        "watch": "rm -rf ./out && deno run --lock --allow-write=./out,./build --allow-read=./out,./build,./content --allow-net --allow-import --watch ./src/main.ts watch",
-        "serve": "deno task watch & live-server --host 127.0.0.1 --port 8080 ./out/res",
-        "touch": "deno run --allow-write=./content/posts ./src/main.ts touch"
-    }
+  "importMap": "import_map.json",
+  "lock": {
+    "frozen": true
+  },
+  "tasks": {
+    "build": "                deno run --lock --allow-write=./out,./build --allow-read=./out,./build,./content --allow-net --allow-import         ./src/main.ts build --profile",
+    "watch": "rm -rf ./out && deno run --lock --allow-write=./out,./build --allow-read=./out,./build,./content --allow-net --allow-import --watch ./src/main.ts watch",
+    "serve": "deno task watch & live-server --host 127.0.0.1 --port 8080 ./out/res",
+    "touch": "deno run --allow-write=./content/posts ./src/main.ts touch"
+  }
 }

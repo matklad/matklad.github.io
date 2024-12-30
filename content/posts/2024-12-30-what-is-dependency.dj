@@ -1,0 +1,62 @@
+# What Is a dependency?
+
+For whatever reason, I've been thinking about dependencies lately:
+
+* [The Fundamental Law Of Software Dependencies](https://matklad.github.io/2024/09/03/the-fundamental-law-of-dependencies.html)
+* [SemVer Is Not About You](https://matklad.github.io/2024/11/23/semver-is-not-about-you.html)
+* [Minimal Version Selection Revisited](https://matklad.github.io/2024/12/24/minimal-version-selection-revisited.html)
+
+Today, I managed to capture crisply the principal components of a "dependency". A dependency is:
+
+* A checksum
+* A location
+* A name
+* A version
+
+## Checksum
+
+Checksum is a cryptographic hash of the contents of a dependency. In many systems, checksums are
+treated as optional addons --- if you want to, you can additionally verify downloaded dependencies
+against pre-computed checksums. I think it is more useful to start with a checksum as a primary
+identity of a dependency, and build the rest of the system on top, as this gives the system many
+powerful properties. In particular, checksums force you to actually declare all dependencies, and
+they make it irrelevant where the dependency comes from.
+
+The checksum should be computed over a specific file tree, rather than over a compressed archive, to
+make sure that details of some random archive format do not leak into the definition of the hash.
+Curiously, it seems like it is possible to avoid hashing file system metadata, like permissions. The
+trick, as seen in Zig, is to set the executable bit based on the contents of the file (ELFs and
+hash-bangs get `+x`).
+
+If (direct) dependencies are specified via checksums, there's no need for lockfiles. Or, rather, the
+lock-file becomes a hash-tree structure, where the content hash of the root transitively pins down
+the rest of the hashes.
+
+## Location
+
+Location is the suggested way to acquire dependency. It is something that tells you how to get a
+file tree that matches the checksum you already know. Typically, a location is just an URL.
+
+If a dependency is identified via a checksum, than there might be several locations. In fact, common
+scenarios would have at least three or four:
+
+* The canonical URL from which the dependency can be downloaded, and which is considered the source
+  of truth.
+* Global distributed content-addressable cache, which stores redundant copies of all dependencies in
+  the ecosystem to provide availability.
+* Local on-disk cache of dependencies that are actually used on the machine.
+* Project local cache of dependencies that is a part of project's repository, to guarantee that
+  dependencies are as available as the project itself.
+
+It doesn't matter _where_ you got the dependency from, as long as the checksum matches. But it
+certainly helps to have at least one suggested place to search in
+
+## Name & Version
+
+Name is a part of a dependency and is covered by dependency's checksum. Name tells when two
+different dependencies (two different checksums) correspond to different versions of the same thing.
+If you have two dependencies called `foo`, you might want to look into deduplicating them. That is,
+keeping only one hash, and replacing all the references to the other one.
+
+Version is a specific rule about dependency substitutability. SemVer is a good option here: `1.2.0`
+can be substituted for `1.1.2`, but `1.2.0` and `2.1.0` are not interchangeable. 
