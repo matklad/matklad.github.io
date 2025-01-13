@@ -4,17 +4,17 @@ An out-there suggestion for the nascent [jj](https://github.com/martinvonz/jj) e
 
 I was skimming [Martin's post](https://neugierig.org/software/blog/2024/12/jujutsu.html), and the VS
 Code section of it kicked off this particular train of thought. Summarizing, VSCode has some
-built-in integrations with git, and they don't necessary directly applicable to jj. Direct solution
-is, of course, to add first class support of jj to VSCode.
+built-in integrations with git, and they aren't necessarily directly applicable to jj. The direct solution
+is, of course, to add first class support for jj to VSCode.
 
 But I want better. Specifically, my problem is that I don't actually like VS Code VCS UI. I use
 [@kahole](https://github.com/kahole)'s awesome implementation of [Magit](https://magit.vc) for
-VSCode, [edamagit](https://github.com/kahole/edamagit). Magit is objectively correct way to
+VSCode, [edamagit](https://github.com/kahole/edamagit). Magit is objectively the correct way to
 implement a VCS user interface (more on this in just a moment).
 
-So I need to wait for someone for coding Magit/jj/VSCode triple. What's worse, I actually want to
-switch to Zed at some point, and absence of Magit is one of the bigger things that prevent this. But
-Zed doesn't at the moment have a rich-enough plugin API to express that.
+So I need to wait for someone to code the Magit/jj/VSCode triple. What's worse, I actually want to
+switch to Zed at some point, and the absence of Magit is one of the bigger things that prevents this. But
+Zed doesn't at the moment have a rich enough plugin API to express that.
 
 At the same time, although two separate code-bases, Magit in VSCode and Magit in Emacs are basically
 the same thing from the perspective of the user. We are _clearly_ missing a [narrow
@@ -30,13 +30,13 @@ and missing features (window management, for example). I _think_ an absolutely m
 is possible here. I have [a separate set of notes](https://github.com/matklad/abont) about that, but
 that's a huge reinvent the wheel by starting from atoms kind of thing.
 
-Luckily, for the present problem of getting first-class UI for jj into any editor, I think a
+Luckily, for the present problem of getting a first-class UI for jj into any editor, I think a
 shortcut exists! We can implement "magit for jj" once, and have it working for almost free in any
 editor, GUI or terminal. To not spoil the answer right away, let me describe, first,
 
 ## What is Magit
 
-The core idea is **text file is the user interface**. That' it! This the paradigm of Emacs (and
+The core idea is **text file is the user interface**. That's it! This is the paradigm of Emacs (and
 Acme), with Magit being the most successful application. Text being the interface means two things:
 
 - When we need to present information to the user, we present it in textual format.
@@ -44,13 +44,13 @@ Acme), with Magit being the most successful application. Text being the interfac
   "click" on a particular word in the text.
 
 Let's apply this to various UI tasks of a VCS. The basic one is of course informing the user about
-changes. Here, we can generate a textual diff --- a file witch each line marked at `+` or `-`. On
+changes. Here, we can generate a textual diff --- a file with each line marked as `+` or `-`. On
 top of this, there's a number of progressive enhancements:
 
 - Of course `+` lines are colored green and `-` red.
-- Consecutive changes are grouped into hunks, and each hung is individually foldable.
+- Consecutive changes are grouped into hunks, and each hunk is individually foldable.
 - A diff can span multiple files, and files form another level in the folding hierarchy. By folding
-  the entire diff recursively, you get a list of changed files, from which you can drill down an
+  the entire diff recursively, you get a list of changed files, from which you can drill down into an
   individual file.
 
 This is the _presentation_ side of the interface. And now, interaction:
@@ -67,7 +67,7 @@ perusing the diff. If, at some point, you realize that you need more context to 
 particular hunk, you click on it, and view, at the other half of the screen, the entire function
 surrounding the changed line.
 
-The rest of VCS builds naturally on top. Above hunks and files you add commits as another level of
+The rest of the VCS builds naturally on top. Above hunks and files you add commits as another level of
 hierarchy. So, "everything folded" is now a list of commits. The list of commits view suggest a
 natural way to model history manipulation. If you want to reorder two commits, you can reorder two
 lines in the "list of commits" text document.
@@ -87,28 +87,28 @@ Finally, the idea I wrote this article for:
 **You can materialize all the above files on disk**
 
 That is, for the dashboard, we don't write a custom editor extension that materializes a virtual
-text buffer, but rather directly create an `.jj/status.jj` file on disk and open it in the editor.
+text buffer, but rather directly create a `.jj/status.jj` file on disk and open it in the editor.
 The editor watches the file for changes, so we can update the on-disk buffer to update the user.
 
 And I think _most_ of the interactions you need to implement Magit-like experience are expressible
 in LSP:
 
 - [Semantic Tokens](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_semanticTokens)
-  give syntax highlighting for diffs&dashboard.
+  gives syntax highlighting for diffs&dashboard.
 - [Folding Ranges](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_foldingRange)
-  give folding for diffs.
+  gives folding for diffs.
 - [Goto Definition](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_definition)
-  give "click hunk to jump to working copy" behavior for diffs. It can also be used by dashboard for
+  gives "click hunk to jump to working copy" behavior for diffs. It can also be used by the dashboard for
   materializing additional files. The dashboard probably _shouldn't_ show diffs for any commits but
-  last. Rather, "goto to definition" on a commit `zxf` should materialize `.jj/zxf.diff` file and
-  than jump there.
+  the last. Rather, "goto definition" on a commit `zxf` should materialize a `.jj/zxf.diff` file and
+  then jump there.
 - And of course, [Code
 Actions](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_codeAction)
-can provide interface for arbitrary commands. For example, if you want to reword a commit, you can
-place your cursor on it in the dashboard, and pick "reword" from code-actions context menu.
+can provide an interface for arbitrary commands. For example, if you want to reword a commit, you could
+place your cursor on it in the dashboard, and pick "reword" from the code-actions context menu.
 
 
-What you wouldn't get out of LSP is Magit's sleek one-letter mnemonics for action. In Magit, the
+What you wouldn't get out of LSP is Magit's sleek one-letter mnemonics for actions. In Magit, the
 status buffer is read-only, so rewording a commit is a simple as placing a cursor on it and typing
 `r`. _This_ level of integration I think will require some tighter interaction with the editor, but
 this should be a relatively thin layer.
@@ -117,12 +117,12 @@ this should be a relatively thin layer.
 
 It's useful to take a bird's eye view here. You can think of a VCS as a system for storing your
 source code files. But that is the illusion, the reality is the opposite. What VCS actually does is
-it stores is a complex graph of objects linked through content hashes. You use VCS to mutate this
+it stores a complex graph of objects linked through content hashes. You use VCS to mutate this
 graph. Now, mutating the graph manually is a pain, so VCS resorts to using your working copy as a
 convenient way to author graph changes! To view a node in the graph, it is "checked out" into the
-working copy. To insert a new node, you save working copy as this node. See how bidirectional
-human-computer interaction is mediated through mutable file system!
+working copy. To insert a new node, you save the working copy as this node. See how bidirectional
+human-computer interaction is mediated through a mutable file system!
 
-In other words, Git, and jj, already use "file system as the user interface" paradigm  at the macro
+In other words, Git, and jj, already use the "file system as the user interface" paradigm at the macro
 level (authoring new commits) and at the micro level (authoring commit messages). The middle-end is
 missing though! `git status` is a CLI utility, but it could be just a file on disk!
