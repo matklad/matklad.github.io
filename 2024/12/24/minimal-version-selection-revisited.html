@@ -1,0 +1,203 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minimal Version Selection Revisited</title>
+  <meta name="description" content="In this post, I want to highlight one aspect of Go-style minimal version selection that I have
+missed completely at first. Maybe you missed it too?">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/12/24/minimal-version-selection-revisited.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Minimal Version Selection Revisited</span> <time class="meta" datetime="2024-12-24">Dec 24, 2024</time></h1>
+<p><span>In this post, I want to highlight one aspect of Go-style minimal version selection that I have</span>
+<span>missed completely at first. Maybe you missed it too?</span></p>
+<p><span>If you recall, some years ago there was a discussion of various version selection algorithms in the</span>
+<span>Go and the Rust communities. See this list for a refresher:</span></p>
+<p><a href="https://research.swtch.com/vgo" class="display url">https://research.swtch.com/vgo</a></p>
+<p><span>Broadly, when you write </span><code>foo = "1.2.3"</code><span> in the manifest for your library, what you are specifying is</span>
+<span>not a specific </span><em><span>version</span></em><span> of </span><code>foo</code><span>, but rather </span><em><span>a set of versions</span></em><span> (a version constraint). Some of</span>
+<span>these versions might not had existed when you wrote </span><code>foo = "1.2.3"</code><span> line!</span></p>
+<p><span>As an author of a library, you can</span>&rsquo;<span>t actually pick your dependencies exactly. Instead, the final</span>
+<span>application that uses your library is in charge of picking specific dependencies, including those</span>
+<span>for your library. In particular, if that application depends on some other library which says </span><code>foo =
+"1.3.0"</code><span>, then </span><em><span>your</span></em><span> library gets at least </span><code>1.3.0</code><span> as well, although you</span>&rsquo;<span>ve written </span><code>1.2.3</code><span>.</span></p>
+<p><span>In general, there are many ways to pick a specific set of versions that satisfy the constraints.</span>
+<span>It</span>&rsquo;<span>s interesting that Go and Rust chose, in some sense, opposite algorithms for solving these</span>
+<span>constraints. Rust selects maximal versions, while Go selects minimal versions.</span></p>
+<p><span>The original discussion focused (or at least I perceived it as being focused) on the algorithmic</span>
+<span>complexity. The strawhat claim was that min-ver can be solved linearly, while max-ver requires</span>
+<span>NP-hard SAT-solving. This is not a particularly strong claim:</span></p>
+<ul>
+<li>
+<span>First of all, it is plainly wrong. Min-ver can be solved efficiently by a greedy algorithm that</span>
+<span>picks the minimal versions, while max-ver can be solved efficiently by the same algorithm that</span>
+<span>just greedily picks maximal versions. NP-hardness comes not from preferred direction of</span>
+<span>resolution, but rather from complexity of version requirements. If you only have semver-open</span>
+<span>constraints like </span><code>^1.2.3</code><span>, the solution is easy. If you have non-convex constraints like </span><code>(^1.2.3
+OR ^1.2.5) AND ≠1.2.4</code><span>, then stuff becomes NP-hard.</span>
+</li>
+<li>
+<span>Second, SAT is not a big deal. It is well understood how to solve even elaborate constraints</span>
+<span>sufficiently quickly in practice. This does require moderate amount of engineering effort, but</span>
+<span>this effort is a fixed cost that amortizes across the entire ecosystem and can be just dismissed.</span>
+</li>
+</ul>
+<p><span>It</span>&rsquo;<span>s much more interesting to look at the ecosystem implications of the two approaches.</span></p>
+<p><span>The big benefit of max-ver is the ecosystem-wide live-at-head: if everyone uses latest versions,</span>
+<span>than everyone uses the same </span><em><span>combination</span></em><span> of versions of libraries. In particular, ecosystem-wide</span>
+<span>testing ends up being concentrated on a few combinations that everyone is using. In practice, if you</span>
+<span>release a new version of a library, and it turns out to be buggy, someone immediately discovers it</span>
+<span>in </span><em><span>their</span></em><span> tests, so that you can quickly yank&amp;regroup.</span></p>
+<p><span>But the min-ver has a dual property (</span><em><span>this</span></em><span> is the new thing I</span>&rsquo;<span>ve realized only recently). In</span>
+<span>min-ver, if you get </span><code>foo=1.2.3</code><span> in your build graph, that means that someone somewhere made an</span>
+<span>explicit decision to write </span><code>foo=1.2.3</code><span> in the manifest for their library. That is, any version in</span>
+<span>your dependency graph is additionally vetted manually by someone who is </span><em><span>not</span></em><span> the original library</span>
+<span>developer.</span></p>
+<p><span>This is quite neat </span>&mdash;<span> it puts a natural damper on the supply chain attacks. If a bad version of a</span>
+<span>library is released, someone needs to explicitly opt into this new version. What</span>&rsquo;<span>s more, the deeper</span>
+<span>in your dependency tree the library is, the more explicit approvals are required for the library to</span>
+<span>propagate to your project.</span></p>
+<hr>
+<p><span>Consider this hypothetical system for specifying dependencies:</span></p>
+<p><span>In the manifest file, you specify dependencies by listing both a version and a checksum:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-attr">foo</span> = { version = <span class="hl-string">&quot;1.2.3&quot;</span>, checksum = <span class="hl-string">&quot;sha256:bee71ecaffe&quot;</span> }</span></code></pre>
+
+</figure>
+<p><span>Only direct dependencies are listed. Checksums are of course filled-in by a tool.</span></p>
+<p><span>Checksum covers the content of a dependency, including its manifest file. In other words, the</span>
+<span>checksum for </span><code>foo</code><span> above implicitly includes checksums of all direct dependencies of </span><code>foo</code><span>.</span></p>
+<p><span>By exploring the set of dependencies from the root, we collect the set of dependencies and their</span>
+<span>checksums that are protected by some checksum in the root manifest. Then, if we have several</span>
+<span>versions for a single dependency, we pick the largest one.</span></p>
+<p><span>This is cool. This is essentially </span>&ldquo;<span>bring your own registry</span>&rdquo;<span> version resolution, where the set of</span>
+<span>available versions is fixed, and pinned by the root hashes. All dependencies in the set have the</span>
+&ldquo;<span>min-ver</span>&rdquo;<span> property that someone somewhere in the dependency graph asked for this version of the</span>
+<span>dependency explicitly.</span></p>
+<p><span>We also need neither lockfiles, nor the Go-style checksum files. Manifest form a distributed</span>
+<span>lockfile, where each dependency locks a part of the graph, and this lockfile fragment is itself</span>
+<span>hashed&amp;locked by some direct-dependency specification.</span></p>
+<p><span>But we still get </span>&ldquo;<span>dependency resolution</span>&rdquo;<span> </span>&mdash;<span> only direct dependencies are specified, and, if both</span>
+<code>foo=1.2.3</code><span> and </span><code>foo=1.3.0</code><span> end up being in the set of dependencies, only </span><code>1.3.0</code><span> will be included</span>
+<span>in the final graph.</span></p>
+<p><span>My understanding is that Zig is trying to do something like this, and, as all things Zig, it feels</span>
+<span>extremely neat, even if rough at the edges. It never occurred to me before that putting hashes of</span>
+<span>direct dependencies in the manifest </span><em><span>also</span></em><span> locks transitive dependencies. So cute!</span></p>
+<hr>
+<p><strong><strong><span>Update(2024-12-25):</span></strong></strong><span> It is worth mentioning another qualitative difference between min-ver and</span>
+<span>max-ver. The latter generally requires some form of centralized registry </span>&mdash;<span> an entity which knows</span>
+<span>all the versions of all the libraries. When you pick a maximal version, you pick the highest version</span>
+<span>known to the registry. For example, in the case of Cargo the central registry is implemented as a</span>
+<span>git repository (</span><a href="https://github.com/rust-lang/crates.io-index" class="url">https://github.com/rust-lang/crates.io-index</a><span>) which holds JSON files describing</span>
+<span>available versions.</span></p>
+<p><span>With min-ver, you don</span>&rsquo;<span>t need a registry, as the set of versions to choose from can be incrementally</span>
+<span>discovered by crawling the web of dependencies starting from the final application, as long</span>
+<span>dependency specifications include not only a name and a version, but also a location (URL) and a</span>
+<span>checksum. Though, keep in mind that you still need </span><em><span>some</span></em><span> solution to ensure availability of</span>
+<span>dependencies </span>&mdash;<span> with a large enough dependency tree there will be at least one dependency hosted</span>
+<span>from grandma</span>&rsquo;<span>s old PC, prone to flooding. You can use either Go-style global shared cache (it</span>
+<span>doesn</span>&rsquo;<span>t have to be trusted, as long as hashes are included in dependency specification), or make it</span>
+<span>very easy to create a project-local cache </span>&mdash;<span> a </span><code>./vendor</code><span> directory in the same repository which</span>
+<span>embeds all the dependencies (again, it is important that </span><code>./vendor</code><span> is strictly a cache, and the</span>
+<span>source of truth is the checksum in the manifest).</span></p>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-12-24-minimal-version-selection-revisited.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

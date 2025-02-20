@@ -1,0 +1,196 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What Is a dependency?</title>
+  <meta name="description" content="For whatever reason, I've been thinking about dependencies lately:">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/12/30/what-is-dependency.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>What Is a dependency?</span> <time class="meta" datetime="2024-12-30">Dec 30, 2024</time></h1>
+<p><span>For whatever reason, I</span>&rsquo;<span>ve been thinking about dependencies lately:</span></p>
+<ul>
+<li>
+<a href="https://matklad.github.io/2024/09/03/the-fundamental-law-of-dependencies.html"><span>The Fundamental Law Of Software Dependencies</span></a>
+</li>
+<li>
+<a href="https://matklad.github.io/2024/11/23/semver-is-not-about-you.html"><span>SemVer Is Not About You</span></a>
+</li>
+<li>
+<a href="https://matklad.github.io/2024/12/24/minimal-version-selection-revisited.html"><span>Minimal Version Selection Revisited</span></a>
+</li>
+</ul>
+<p><span>Today, I managed to capture crisply the principal components of a </span>&ldquo;<span>dependency</span>&rdquo;<span>. A dependency is:</span></p>
+<ul>
+<li>
+<span>A checksum</span>
+</li>
+<li>
+<span>A location</span>
+</li>
+<li>
+<span>A name</span>
+</li>
+<li>
+<span>A version</span>
+</li>
+</ul>
+<section id="Checksum">
+
+    <h2>
+    <a href="#Checksum"><span>Checksum</span> </a>
+    </h2>
+<p><span>Checksum is a cryptographic hash of the contents of a dependency. In many systems, checksums are</span>
+<span>treated as optional addons </span>&mdash;<span> if you want to, you can additionally verify downloaded dependencies</span>
+<span>against pre-computed checksums. I think it is more useful to start with a checksum as a primary</span>
+<span>identity of a dependency, and build the rest of the system on top, as this gives the system many</span>
+<span>powerful properties. In particular, checksums force you to actually declare all dependencies, and</span>
+<span>they make it irrelevant where the dependency comes from.</span></p>
+<p><span>The checksum should be computed over a specific file tree, rather than over a compressed archive, to</span>
+<span>make sure that details of some random archive format do not leak into the definition of the hash.</span>
+<span>Curiously, it seems like it is possible to avoid hashing file system metadata, like permissions. The</span>
+<span>trick, as seen in Zig, is to set the executable bit based on the contents of the file (ELFs and</span>
+<span>hash-bangs get </span><code>+x</code><span>).</span></p>
+<p><span>If (direct) dependencies are specified via checksums, there</span>&rsquo;<span>s no need for lockfiles. Or, rather, the</span>
+<span>lock-file becomes a hash-tree structure, where the content hash of the root transitively pins down</span>
+<span>the rest of the hashes.</span></p>
+</section>
+<section id="Location">
+
+    <h2>
+    <a href="#Location"><span>Location</span> </a>
+    </h2>
+<p><span>Location is the suggested way to acquire dependency. It is something that tells you how to get a</span>
+<span>file tree that matches the checksum you already know. Typically, a location is just an URL.</span></p>
+<p><span>If a dependency is identified via a checksum, than there might be several locations. In fact, common</span>
+<span>scenarios would have at least three or four:</span></p>
+<ul>
+<li>
+<span>The canonical URL from which the dependency can be downloaded, and which is considered the source</span>
+<span>of truth.</span>
+</li>
+<li>
+<span>Global distributed content-addressable cache, which stores redundant copies of all dependencies in</span>
+<span>the ecosystem to provide availability.</span>
+</li>
+<li>
+<span>Local on-disk cache of dependencies that are actually used on the machine.</span>
+</li>
+<li>
+<span>Project local cache of dependencies that is a part of project</span>&rsquo;<span>s repository, to guarantee that</span>
+<span>dependencies are as available as the project itself.</span>
+</li>
+</ul>
+<p><span>It doesn</span>&rsquo;<span>t matter </span><em><span>where</span></em><span> you got the dependency from, as long as the checksum matches. But it</span>
+<span>certainly helps to have at least one suggested place to search in</span></p>
+</section>
+<section id="Name-Version">
+
+    <h2>
+    <a href="#Name-Version"><span>Name &amp; Version</span> </a>
+    </h2>
+<p><span>Name is a part of a dependency and is covered by dependency</span>&rsquo;<span>s checksum. Name tells when two</span>
+<span>different dependencies (two different checksums) correspond to different versions of the same thing.</span>
+<span>If you have two dependencies called </span><code>foo</code><span>, you might want to look into deduplicating them. That is,</span>
+<span>keeping only one hash, and replacing all the references to the other one.</span></p>
+<p><span>Version is a specific rule about dependency substitutability. SemVer is a good option here: </span><code>1.2.0</code>
+<span>can be substituted for </span><code>1.1.2</code><span>, but </span><code>1.2.0</code><span> and </span><code>2.1.0</code><span> are not interchangeable.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-12-30-what-is-dependency.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
