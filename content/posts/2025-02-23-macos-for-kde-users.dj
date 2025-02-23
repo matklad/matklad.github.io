@@ -1,0 +1,389 @@
+# MacOS for KDE Users
+
+I've switched to MacOS after using Linux continuously since 2012 or thereabouts (first Arch, and
+then, since 2015, NixOS). This post documents my experience.
+
+I like to be an expert user --- for tools that I use daily, I invest time into understanding how
+they work and try to learn every trick. Occasionally, I just building my own thing. For me as a tools
+builder and tools user, this is the essence:
+
+The author of a tool is the world's best expert in the respective domain. They spent a lot of their
+own time figuring out what works, and what doesn't, in blatant disregard of
+[xkcd://1205](https://xkcd.com/1205/). They then encode this knowledge in the tool they write,
+making it freely available for all the users. As a tool author, your goal is to save time scalably,
+by imparting your expertise onto your users. As a tool user, the path of success is learning how the
+tool is meant to be used, rather than molding it to the form _you_ think is useful.
+
+So, for switching to MacOS, I really wanted to _get_ the underlying ideas behind the system, rather
+than trying to make a poor Linux clone out of it. I wasn't successful --- resources aimed at me
+either don't exist, or are ungooglable. The only exception is most excellent and highly
+recommended
+
+<https://blog.xoria.org/macos-tips/>
+
+(which is partially the result of my whining :)
+
+So let me add what I've learned!
+
+## Why Switching?
+
+Some reasons for preferring Mac over Linux are the same as they were ten years ago:
+
+Hardware is built marginally better. MacBook is a powerful, rectangular slab, a design invented by
+Stanley Kubrick and never surpassed since. PC laptops generally are either underpowered, or a LED
+christmas tree. The magnetic charger which you can just toss in the general direction of the port,
+and equally easy unplug by stumbling over the wire is nice. The laptop speakers are actually there,
+etc.
+
+Software tends to just work more often! This one is curiously the same --- Linux certainly got
+better! Wi-Fi tends to work out of the box, while I remember it being a major headache 10 years ago.
+But the peripherals got more complex --- there are now a couple of web cameras, three microphones,
+some bluetooth to manage, and those in aggregate are still a pain on Linux.
+
+But, well, these two were true many years ago, and hadn't lured me over to the dark side.
+
+So here are the things that changed:
+
+The CPU is leaps and bounds better. It is very fast, very cool, very silent, and uses very little
+power. This actually what annoyed me most about my past couple of Linux machines --- the increase in
+computing power comes at the cost of very noticeable increase in loudness.
+
+I am mentally ready to jump into remote development setup. Meaning, up to this point I viewed my
+laptop as the primary development machine, which does all the compiling and testing, and which
+should ideally somewhat resemble the deployment setup. Now, I think about it as thin client, which
+just holds the code and the editor, but doesn't necessary _run_ the thing I am building. Instead,
+the actual work happens in some nebulous "remote machine".
+
+Case in point --- originally, when hacking on IntelliJ Rust and rust-analyzer, my approach to
+reproducing Windows-specific bugs was to dual-boot my (gaming) Windows, and work from there. I got
+increasingly frustrated with the setup, as it requires re-creating my very comfy development
+environment on an OS I use only occasionally. Plus, there are security concerns --- I am not feeling
+comfortable giving my Windows OS easy access to my SSH keys.
+
+So at some point I switched to a different setup, where, instead of booting a real Windows, I
+spawned a Windows VM on my Linux box. And, crucially, the actual development still happened on the
+Linux host --- Windows was used solely for running the code.
+
+And that's my intended way to do development on Mac --- I use Mac to host the GUI for my code
+editor, and remain agnostic of the actual machine that would run the code I am developing.
+
+It's also important that the _way_ we do remote dev seems to be slowly changing for the better.
+Traditional approach to remoting (ssh & X forwarding) is to run the target application on the remote
+host and then transparently transfer the interface and user interactions back and forth. This
+doesn't work great for the same reason you can't transparently replace a synchronous function call
+with RPC: latency exists, failures exist, state synchronization exists. You can't usefully pretend
+that a distributed system isn't.
+
+I _think_ a more fruitful way to approach remote development is to have the application be running
+locally, but with explicit awareness that a different computer exists. And newer applications, like
+VS Code or WezTerm, work that way. Sadly, we don't have a good shell working along those principles
+(or a good shell at all, period, but I am getting carried away here so let me stop while I can).
+
+So anyway, fast CPU & new focus on remote dev did it for me, I am now a Mac user.
+
+## Managing Software
+
+After years of NixOS, I am convinced about the usefulness of the following two features:
+
+- Maintaining a canonical, human-readable list of software installed on a machine, which is
+  available in a git repository and allows to replicate a particular setup with high-fidelity.
+- Ability to install software temporarily, such that it is automatically deleted without a trace
+  once you stop using it.
+
+I am not too happy about Nix implementation of these ideas --- it's the best there is, but still not
+good enough. Furthermore, while Nix is available on MacOS, using it would be fighting the platform.
+
+So I am sticking with homebrew. Crucially I am using Brewfile to manage packages declaration. I
+highly recommend this post:
+
+<https://matthiasportzel.com/brewfile/>
+
+The TL;DR is that I run
+
+```console
+brew bundle install --cleanup --file=~/config/Brewfile --no-lock
+```
+
+and that synchronizes the installed software with what's listed in my config file. If I want to
+install an app temporary, I use the "normal" `brew install` command, and the app gets removed on my
+next `brew bundle install`.
+
+Typing the whole thing gets tiresome fast (even with `fish` shell smart history), so I also have a
+small Rust utility for managing my configuration, which is unimaginatively called `config`
+([source](https://github.com/matklad/config/blob/master/tools/config/src/main.rs)) and can do:
+
+```console
+$ config brew # Runs bundle install.
+$ config edit # Opens config in my editor.
+$ config link # Symlinks dotfiels.
+```
+
+Like with NixOS, I don't do anything fancy like home-manager or gnu stow to manage my dotfiles, and
+just have a tiny script for linking configs from my dotfies repository to where various tools expect
+to find their settings.
+
+## No Lock Files
+
+Although Brewfile supports lock files, I am not using them. Here's my reasoning. In a GNU/Linux
+system, the part you can rely on, the part that guarantees stable interfaces whose stability has a
+dedicated gatekeeper, is the kernel. Everything else is composition of many different components,
+maintained, by different entities, with varying degrees of stability. Crucially, most interfaces
+relevant to building user-facing desktop software are outside of the kernel. So you _really_ need
+nix to pin _everything_ to make sure that, even if your X/wayland breaks after update, you can at
+lest painlessly rollback.
+
+On Mac, the base system is much more expansive. I don't realistically have to worry about my browser
+breaking, as it is shipped by Apple, and it certainly has organizational capacity to make the
+upgrades smooth.
+
+So only the end applications themselves are prone to breakage, and there I suppose that the benefit
+of locking everything super tightly would be small.
+
+So far, this hasn't been refuted, upgrades of the system or of the software went smoothly. There
+was one instance where Ghostty upgrade broke for me due to my non-QWERTY layout, but the downgrade
+was as easy as
+
+```
+curl https://raw.githubusercontent.com/Homebrew/homebrew-cask/99378d4eaa63a12947b8eccd526a6d9d27564cce/Casks/g/ghostty.rb > ghostty.rb
+brew uninstall ghostty && brew install --cask ./ghostty.rb
+```
+
+Speaking of layouts, I haven't yet figured out how to use my layout, workman, on the login screen
+after reboot.
+
+## Managing Windows
+
+I have slightly odd habits when it comes to managing windows. I don't use a tiling window manager. I
+_also_ use a single display (when I plug my laptop into an external monitor, I close the lid). I can
+only work with only one application at a time, and I prefer the app to be full-screen. So what I
+need is not so much window management, as an ability to quickly switch between full-screen apps.
+
+Windows 7 nailed this workload, through two features:
+
+_First_, you can pin a number of applications next to the Start menu. Than, you can use
+[Win + 1]{.kbd}, [Win + 2]{.kbd}, [Win + 3]{.kbd} to switch the app. Pressing the shortcut launches
+the application if it isn't already running, and brings its window to the front otherwise.
+
+_Second_, Windows 7 implemented lightweight tiling: [Win + Up]{.kbd} maximizes the window, and
+[Win + Left]{.kbd}, [Win + Right]{.kbd} tiles it to the corresponding half of the screen.
+
+MacOS has a similar lightweight tiling out of the box these days, so that's good.
+
+App switching is not good out of the box though. You can make an app full-screen, such that it
+occupies an entire virtual desktop. But, infuriatingly, switching between such full-screen apps
+triggers an animation, which you can't turn off. I remember struggling with it more than decade ago
+on my work Mac, so at least the stability of interfaces is heartening (seriously though, maybe I am
+misremembering, but Mac OS looks like more or less exactly like it did many years ago, this _is_
+good).
+
+What is cool though, is how easy it is to script the functionality I want, using
+[hammerspoon](https://www.hammerspoon.org):
+
+```
+local apps =
+{
+    F1 = "Ghostty",
+    F2 = "Visual Studio Code",
+    F3 = "Safari",
+    F4 = "Slack",
+}
+
+for key, app in pairs(apps) do
+    hs.hotkey.bind({"cmd"}, key, function()
+        hs.application.launchOrFocus(app)
+    end)
+end
+```
+
+It is instructive to compare this script to the equivalent from Linux:
+
+{cap="win-or-app.sh"}
+```bash
+#!/bin/sh
+
+function find_window {
+    windows=$(wmctrl -lx | awk -v name="$1" '$3 ~ name' | grep -v "Hangouts")
+}
+
+key=$1
+bin=$2
+shift 2
+args=$@
+
+find_window $key
+if [ $? != 0 ];
+then
+    $bin $args
+    sleep 0.2
+fi
+find_window $key
+
+set -- $windows
+if [ $1 ]; then
+    wmctrl -ia $1
+fi
+```
+
+{cap="xbindkeysrc"}
+```
+"~/config/scripts/win-or-app.sh jetbrains-idea-ce idea"
+  Control + F2
+
+
+"~/config/scripts/win-or-app.sh Chromium.Chromium chromium-browser"
+  Control + F3
+```
+
+There, I had to string several parts together:
+
+- `wmctrl` to list windows,
+- a hack to run the binary, wait, and grab its window after delay for focusing,
+- `xbindkeys` to setup the shortcut,
+- and `bash` to run everything.
+
+Of course, Linux version broke with transition to wayland.
+
+So, while out-of-the-box Mac here is worse than Windows 7 or KDE (which also has this feature
+built-in nowadays), it's actually easier to make it do what I want than Linux! Again, it's very
+helpful to have stable interfaces for desktop software!
+
+In a similar vein, on Linux, I have `ctrlc` / `ctrlv` command line alias to wrap the clipboard
+manipulation tool, while on Mac `pbcopy` / `pbpaste` do what I need without any extra arguments.
+
+## Keyboard
+
+One of my biggest workflow improvements was a switch to
+[home row computing](https://manybutfinite.com/post/home-row-computing/) many years ago. The
+basic observation is that the arrow keys are some of the most frequently needed keys, and yet they
+require completely moving your wrist off the home row. As horrible Emacs [ctrl+n]{.kbd},
+[ctrl+p]{.kbd}, [ctrl+f]{.kbd}, [ctrl+b]{.kbd} are, even they are better than arrow keys, as you
+don't need to break the flow of typing to use them.
+
+But you totally can get arrow keys on your home row! One simple version is to arrange [Caps Lock +
+hjkl]{.kbd} to act, on the device level, as arrow keys. Or, as I do these days, [space +
+ijkl]{.kbd}. If you use programmable keyboard, like Moonlander, you get this sort of feature for
+granted. But you can do that with a normal laptop keyboard, where it's even more valuable!
+
+The standard MacOS app here is [Karabiner-Elements](https://karabiner-elements.pqrs.org). It
+consists of two parts: a driver for providing a virtual keyboard. As far as I understand, this is
+the most excellent piece of software which is used by any alternative project. And than there's a
+GUI for configuring this driver...
+
+I was very determined to use Mac-native karabiner, rather than any of the Linux invader tools, but
+the GUI part is just not good. Configuring your keyboard is an _excellent_ use-case for GUI. E.g.,
+Moonlander's configuration tool is top notch:
+
+<https://configure.zsa.io/moonlander/layouts/default/latest/0>
+
+But Karabiner actually lacks this sort of GUI. If you avoid GUI, you can configure it in JSON, but
+thats the most long-winded JSON configuration format I've ever seen, which is unusable directly.
+
+So, I used the same solution I was using for Linux, [kanata](https://github.com/jtroo/kanata). It's
+a lovely Rust tool which uses simple S-expressions for configuration. It recently gained support for
+Mac, using the aforementioned driver from the Karabiner project. It wasn't packaged for Mac, so [I
+added it to homebrew](https://github.com/Homebrew/homebrew-core/pull/196811), which was quite easy
+(definitely easier than to figure out how to package stuff with nix). For the curious, here's
+the config I am using:
+
+```
+(defcfg
+  process-unmapped-keys yes
+  concurrent-tap-hold   yes
+)
+
+(defsrc
+        esc  f1   f2   f3   f4   f5   f6   f7   f8   f9    f10  f11  f12
+        grv  1    2    3    4    5    6    7    8    9     0    -    =    bspc
+        tab  q    w    e    r    t    y    u    i    o     p    [    ]    \
+        caps a    s    d    f    g    h    j    k    l     ;    '    ret
+        lsft z    x    c    v    b    n    m    ,    .     /    rsft
+        lctl lalt lmet           spc            rmet ralt)
+
+(deflayer qwerty
+        esc  🔅    🔆   f3   f4   f5   f6   ◀◀   ▶⏸   ▶▶    🔇   🔉   🔊
+        grv  1    2    3    4    5    6    7    8    9     0    -    =    bspc
+        tab  q    w    e    r    t    y    u    i    o     p    [    ]    \
+        esc  a    s    d    f    g    h    j    k    l     ;    '    ret
+        lsft @lc  @la  @lm  v    b    n    m    @rm  @ra   @rc  rsft
+        lctl lalt lmet           @sp            rmet ralt)
+
+(deflayer motion
+        esc  f1   f2   f3   f4   f5   f6   f7   f8   f9    f10  f11  f12
+        grv  @1   @2   @3   @4   @5    6    7    8    9     0    -    =    bspc
+        tab  q    w    e    r    t    y    pgup up   pgdn  p    [    ]    \
+        esc  a    s    d    f    g    bspc lft  down rght del   '    ret
+        lsft @lc @la   @lm  v    b    ret  m M-lft M-rght /    rsft
+        lctl lalt lmet           @sp            rmet ralt)
+
+(defalias
+    1  M-f1
+    2  M-f2
+    3  M-f3
+    4  M-f4
+    5  M-f5
+    sp (tap-hold-release-keys 200 200 spc (layer-toggle motion) (a    s    d    f    g))
+    lc (tap-hold 200 200 z lctl)
+    la (tap-hold 200 200 x lalt)
+    lm (tap-hold 200 200 c lmet)
+    rm (tap-hold 200 200 , rmet)
+    ra (tap-hold 200 200 . lalt)
+    rc (tap-hold 200 200 / rctl))
+```
+
+There's something odd around the fn/globe key, so I needed to re-add media control keys manually.
+
+## Standard Shortcuts
+
+One cool thing about Mac is that the aforementioned Emacs shortcuts like [ctrl+a]{.kbd} or
+[ctrl+e]{.kbd} tend to work almost everywhere. Almost, but not quite --- I _think_ they are not
+working for me in Slack? Which is not a fault of Mac but, still, reduces the utility quite a bit.
+
+Similarly, there's was some disagreement about whether "normal" way to get to the start of the line
+is [Home]{.kbd} or [Cmd+Left]{.kbd}. I fixed that with
+
+```
+{
+
+    "\UF729"   = "moveToBeginningOfLine:";                       /* Home         */
+    "$\UF729"  = "moveToBeginningOfLineAndModifySelection:";     /* Shift + Home */
+    "\UF72B"   = "moveToEndOfLine:";                             /* End          */
+    "$\UF72B"  = "moveToEndOfLineAndModifySelection:";           /* Shift + End  */
+}
+```
+
+in my `~/Library/KeyBindings/DefaultKeyBinding.Dict`. In general, one my big hope for Mac was
+system-wide consistency in shortcuts, but that didn't fully pan out. For example, I was hoping that
+there's a standard shortcut for vertical and horizontal split, which I can use in my shell and in my
+editor, but looks that's not the case.
+
+## Command Palette
+
+There's one consistent shortcut though --- [Cmd+Shift+?]{.kbd} toggles "command palette" --- a fuzzy
+search for all application's menus, much like `M-x` in Emacs. It's funny that, on Linux, I used
+Vivaldi browser just so that I get `M-x`-like interface, while on Mac I get this out of the box, as
+a natural consequence of OS design. It's nice to be able to pin a tab with [Cmd+Shift+?]{.kbd},
+"pin", [Enter]{.kbd}. In apps with dedicated command palettes, I override [Cmd+Shift+?]{.kbd} to use
+app-specific command, and then I even have dedicated key for this shortcut in my Moonlander.
+
+## Gaming
+
+It is way better than expected! I've learned two things:
+
+_First_, Macs these days have a pretty powerful GPU. For example, Baldur's Gate III runs natively
+without any problem with all its fancy graprics. The hardware is clearly there, although the
+software isn't always.
+
+But, _second_, the Windows emulation layer is very mature. For example, Windows version of Path Of
+Exile 2 just works.
+
+And of course Factorio is available natively.
+
+I actually find myself playing more this days, than with my Linux/Windows dual boot setup -- quite
+and relatively cool laptop adds a lot to experience!
+
+---
+
+That's all I have for now! There are some extra tips about actually doing remote dev, but those will
+wait for a dedicated post, but check out
+[this](https://peter.bourgon.org/blog/2011/04/27/remote-development-from-mac-to-linux.html)
+in the meantime.
