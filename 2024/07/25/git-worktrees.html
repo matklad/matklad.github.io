@@ -1,0 +1,317 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How I Use Git Worktrees</title>
+  <meta name="description" content="There are a bunch of posts on the internet about using git worktree command. As far as I can tell,
+most of them are primarily about using worktrees as a replacement of, or a supplement to git
+branches. Instead of switching branches, you just change directories. This is also how I originally
+had used worktrees, but that didn't stick, and I abandoned them. But recently worktrees grew
+on me, though my new use-case is unlike branching.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/07/25/git-worktrees.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>How I Use Git Worktrees</span> <time class="meta" datetime="2024-07-25">Jul 25, 2024</time></h1>
+<p><span>There are a bunch of posts on the internet about using </span><code>git worktree</code><span> command. As far as I can tell,</span>
+<span>most of them are primarily about using worktrees as a replacement of, or a supplement to git</span>
+<span>branches. Instead of switching branches, you just change directories. This is also how I originally</span>
+<span>had used worktrees, but that didn</span>&rsquo;<span>t stick, and I abandoned them. But recently worktrees grew</span>
+<span>on me, though my new use-case is unlike branching.</span></p>
+<section id="When-a-Branch-is-Enough">
+
+    <h2>
+    <a href="#When-a-Branch-is-Enough"><span>When a Branch is Enough</span> </a>
+    </h2>
+<p><span>If you use worktrees as a replacement for branching, that</span>&rsquo;<span>s great, no need to change anything! But</span>
+<span>let me start with explaining why that workflow isn</span>&rsquo;<span>t for me.</span></p>
+<p><span>The principal problem with using branches is that it</span>&rsquo;<span>s hard to context switch in the middle of doing</span>
+<span>something. You have your branch, your commit, a bunch of changes in the work tree, some of them</span>
+<span>might be stages and some unstaged. You can</span>&rsquo;<span>t really tell Git </span>&ldquo;<span>save all this context and restore it</span>
+<span>later.</span>&rdquo;<span> The solution that Git suggests here is to use stashing, but that</span>&rsquo;<span>s awkward, as it is too</span>
+<span>easy to get lost when stashing several things at the same time, and then applying the stash on top</span>
+<span>of the wrong branch.</span></p>
+<p><span>Managing Git state became much easier for me when I realized that the staging area and the stash are just bad</span>
+<span>features, and life is easier if I avoid them. Instead, I just commit whatever and deal with</span>
+<span>it later. So, when I need to switch a branch in the middle of things, what I do is, basically:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> git add .</span>
+<span class="line"><span class="hl-title function_">$</span> git commit -m.</span>
+<span class="line"><span class="hl-title function_">$</span> git switch another-branch</span></code></pre>
+
+</figure>
+<p><span>And, to switch back,</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> git switch -</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># Undo the last commit, but keep its changes in the working tree</span></span>
+<span class="line"><span class="hl-title function_">$</span> git reset HEAD~</span></code></pre>
+
+</figure>
+<p><span>To make this more streamlined, I have a </span><code>ggc</code><span> utility which does </span>&ldquo;<span>commit all with a trivial message</span>&rdquo;
+<span>atomically.</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>Reminder: Git is not a version control system, Git is a toolbox for building a VCS. Do have a</span>
+<span>low-friction way to add your own scripts for common git operations.</span></p>
+</div>
+</aside><p><span>And I don</span>&rsquo;<span>t always </span><code>reset HEAD~</code><span> </span>&mdash;<span> I usually just continue hacking with </span><code>.</code><span> in my Git log and then amend the commit</span>
+<span>once I am satisfied with subset of changes</span></p>
+
+<aside class="admn note">
+<svg class="icon"><use href="/assets/icons.svg#info"/></svg>
+<div><p><span>Reminder: magit, for </span><a href="https://magit.vc"><span>Emacs</span></a><span> and </span><a href="https://github.com/kahole/edamagit"><span>VS Code</span></a><span>, is</span>
+<span>excellent for making such commit surgery easy. In particular, </span><strong><strong><span>instant fixup</span></strong></strong><span> is excellent. Even</span>
+<span>if you don</span>&rsquo;<span>t use magit, you should have an equivalent of instant fixup among your Git scripts.</span></p>
+</div>
+</aside><p><span>So that</span>&rsquo;<span>s how I deal with switching branches. But why worktrees then?</span></p>
+</section>
+<section id="Worktree-Per-Concurrent-Activity">
+
+    <h2>
+    <a href="#Worktree-Per-Concurrent-Activity"><span>Worktree Per Concurrent Activity</span> </a>
+    </h2>
+<p><span>It</span>&rsquo;<span>s a bit hard to describe, but:</span></p>
+<ul>
+<li>
+<span>I have a fixed number of worktrees (5, to be exact)</span>
+</li>
+<li>
+<span>worktrees are mostly uncorrelated to branches</span>
+</li>
+<li>
+<span>but instead correspond to my concurrent activities during coding.</span>
+</li>
+</ul>
+<p><span>Specifically:</span></p>
+<ul>
+<li>
+<p><span>The </span><strong><span>main</span></strong><span> worktree is a readonly worktree that contains a recent snapshot of the remote main</span>
+<span>branch. I use this tree to compare the code I am currently working on and/or reviewing with the</span>
+<span>master version (this includes things like </span>&ldquo;<span>how long the build takes</span>&rdquo;<span>, </span>&ldquo;<span>what is the behavior of</span>
+<span>this test</span>&rdquo;<span> and the like, so not just the actual source code).</span></p>
+</li>
+<li>
+<p><span>The </span><strong><span>work</span></strong><span> worktree, where I write most of the code. I often need to write new code and compare it</span>
+<span>with old code at the same time. But can</span>&rsquo;<span>t actually work on two different things in parallel.</span>
+<span>That</span>&rsquo;<span>s why </span><code>main</code><span> and </span><code>work</code><span> are different worktrees, but </span><code>work</code><span> also constantly switches branches.</span></p>
+</li>
+<li>
+<p><span>The </span><strong><span>review</span></strong><span> worktree, where I checkout code for code review. While I can</span>&rsquo;<span>t review code and write</span>
+<span>code at the same time, there is one thing I am implementing, and one thing I am reviewing, but the</span>
+<span>review and implementation proceed concurrently.</span></p>
+</li>
+<li>
+<p><span>Then, there</span>&rsquo;<span>s the </span><strong><span>fuzz</span></strong><span> tree, where I run long-running fuzzing jobs for the code I am actively working</span>
+<span>on. My overall idealized feature workflow looks like this:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-comment"># go to the `work` worktree</span></span>
+<span class="line"><span class="hl-title function_">$</span> cd ~/projects/tigerbeetle/work</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># Create a new branch. As we work with a centralized repo,</span></span>
+<span class="line"><span class="hl-comment"># rather than personal forks, I tend to prefix my branch names</span></span>
+<span class="line"><span class="hl-comment"># with `matklad/`</span></span>
+<span class="line"><span class="hl-title function_">$</span> git switch -c matklad/awesome-feature</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># Start with a reasonably clean slate.</span></span>
+<span class="line"><span class="hl-comment"># In reality, I have yet another script to start a branch off</span></span>
+<span class="line"><span class="hl-comment"># fresh from the main remote, but this reset is a good enough approximation.</span></span>
+<span class="line"><span class="hl-title function_">$</span> git reset --hard origin/main</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># For more complicated features, I start with an empty commit</span></span>
+<span class="line"><span class="hl-comment"># and write the commit message _first_, before starting the work.</span></span>
+<span class="line"><span class="hl-comment"># That's a good way to collect your thoughts and discover dead</span></span>
+<span class="line"><span class="hl-comment"># ends more gracefully than hitting a brick wall coding at 80 WPM.</span></span>
+<span class="line"><span class="hl-title function_">$</span> git commit --allow-empty</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># Hack furiously writing throughway code.</span></span>
+<span class="line"><span class="hl-title function_">$</span> code .</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># At this point, I have something that I hope works</span></span>
+<span class="line"><span class="hl-comment"># but would be embarrassed to share with anyone!</span></span>
+<span class="line"><span class="hl-comment"># So that's the good place to kick off fuzzing.</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># First, I commit everything so far.</span></span>
+<span class="line"><span class="hl-comment"># Remember, I have `ggc` one liner for this:</span></span>
+<span class="line"><span class="hl-title function_">$</span> git add . &amp;&amp; git commit -m.</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># Now I go to my `fuzz` worktree and kick off fuzzing.</span></span>
+<span class="line"><span class="hl-comment"># I usually split screen here.</span></span>
+<span class="line"><span class="hl-comment"># On the left, I copy the current commit hash.</span></span>
+<span class="line"><span class="hl-comment"># On the right, I switch to the fuzzing worktree,</span></span>
+<span class="line"><span class="hl-comment"># switch to the copied commit, and start fuzzing:</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-title function_">$</span> git add . &amp;&amp; git commit -m.  |</span>
+<span class="line"><span class="hl-title function_">$</span> git rev-parse HEAD | ctrlc   | $ cd ../fuzz</span>
+<span class="line"><span class="hl-title function_">$</span>                              | $ git switch -d $(ctrlv)</span>
+<span class="line"><span class="hl-title function_">$</span>                              | $ ./zig/zig build fuzz</span>
+<span class="line"><span class="hl-title function_">$</span>                              |</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># While the fuzzer hums on the right, I continue to furiously refactor</span></span>
+<span class="line"><span class="hl-comment"># the code on the left and hammer my empty commit with a wishful</span></span>
+<span class="line"><span class="hl-comment"># thinking message and my messy code commit with `.` message into</span></span>
+<span class="line"><span class="hl-comment"># a semblance of clean git history</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-title function_">$</span> code .</span>
+<span class="line"><span class="hl-title function_">$</span> magit-goes-brrrrr</span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-comment"># At this point, in the work tree, I am happy with both the code</span></span>
+<span class="line"><span class="hl-comment"># and the Git history, so, if the fuzzer on the right is happy,</span></span>
+<span class="line"><span class="hl-comment"># a PR is opened!</span></span>
+<span class="line"><span class="hl-output"></span></span>
+<span class="line"><span class="hl-title function_">$</span>                              |</span>
+<span class="line"><span class="hl-title function_">$</span> git push --force-with-lease  | $ ./zig/zig build fuzz</span>
+<span class="line"><span class="hl-title function_">$</span> gh pr create --web           | # Still hasn't failed</span>
+<span class="line"><span class="hl-title function_">$</span>                              |</span></code></pre>
+
+</figure>
+<p><span>This is again concurrent: I can hack on the branch while the fuzzer tests the </span>&ldquo;<span>same</span>&rdquo;<span> code. Note</span>
+<span>that it is crucial that the fuzzing tree operates in the detached head state (</span><code>-d</code><span> flag for </span><code>git</code>
+<code>switch</code><span>). In general, </span><code>-d</code><span> is very helpful with this style of worktree work. I am also</span>
+<span>sympathetic to </span><a href="https://martinvonz.github.io/jj/latest/"><span>the argument</span></a><span> that, like the staging area</span>
+<span>and the stash, Git branches are a misfeature, but I haven</span>&rsquo;<span>t made the plunge personally yet.</span></p>
+</li>
+<li>
+<p><span>Finally, the last tree I have is </span><strong><span>scratch</span></strong><span> </span>&ndash;<span> this is a tree for arbitrary random things I need</span>
+<span>to do while working on something else. For example, if I am working on </span><code>matklad/my-feature</code><span> in</span>
+<code>work</code><span>, and reviewing </span><code>#6292</code><span> in </span><code>review</code><span>, and, while reviewing, notice a tiny unrelated typo, the</span>
+<span>PR for that typo is quickly prepped in the </span><code>scratch</code><span> worktree:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> cd ../scratch</span>
+<span class="line"><span class="hl-title function_">$</span> git switch -c matklad/quick-fix</span>
+<span class="line"><span class="hl-title function_">$</span> code . &amp;&amp; git add . &amp;&amp; git commit -m 'typo' &amp;&amp; git push</span>
+<span class="line"><span class="hl-title function_">$</span> cd -</span></code></pre>
+
+</figure>
+</li>
+</ul>
+<p><span>TL;DR: consider using worktrees not as a replacement for branches, but as a means to manage</span>
+<span>concurrency in your tasks. My level of concurrency is:</span></p>
+<ul>
+<li>
+<code>main</code><span> for looking at the pristine code,</span>
+</li>
+<li>
+<code>work</code><span> for looking at my code,</span>
+</li>
+<li>
+<code>review</code><span> for looking at someone else</span>&rsquo;<span>s code,</span>
+</li>
+<li>
+<code>fuzz</code><span> for my computer to look at my code,</span>
+</li>
+<li>
+<code>scratch</code><span> for everything else!</span>
+</li>
+</ul>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-07-25-git-worktrees.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

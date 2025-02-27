@@ -1,0 +1,255 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Two Workflow Tips</title>
+  <meta name="description" content="An article about a couple of relatively recent additions to my workflow which I wish I knew about
+years ago.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2024/10/08/two-tips.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>Two Workflow Tips</span> <time class="meta" datetime="2024-10-08">Oct 8, 2024</time></h1>
+<p><span>An article about a couple of relatively recent additions to my workflow which I wish I knew about</span>
+<span>years ago.</span></p>
+<section id="Split-And-Go-To-Definition">
+
+    <h2>
+    <a href="#Split-And-Go-To-Definition"><span>Split And Go To Definition</span> </a>
+    </h2>
+<p><span>Go to definition is super useful (in general, navigation is much more important than code</span>
+<span>completion). But often, when I use </span>&ldquo;<span>goto def</span>&rdquo;<span> I don</span>&rsquo;<span>t actually mean to permanently </span><em><span>go</span></em><span> there.</span>
+<span>Rather, I want to stay where I am, but I need a bit more context about a particular thing at point.</span></p>
+<p><span>What I</span>&rsquo;<span>ve found works really great in this context is to </span><em><span>split</span></em><span> the screen in two, and issue </span>&ldquo;<span>go to</span>
+<span>def</span>&rdquo;<span> in the split. So that you see both the original context, and the definition at the same time,</span>
+<span>and can choose just how far you would like to go. Here</span>&rsquo;<span>s an example, where I want to understand how</span>
+<code>apply</code><span> function works, and, to understand </span><em><span>that</span></em><span>, I want to quickly look up the definition of</span>
+<code>FuzzOp</code><span>:</span></p>
+
+<figure>
+
+<video src="https://github.com/user-attachments/assets/0adc0f3c-ec7e-49a6-9e7e-f93f30704fdd" controls muted=true></video>
+</figure>
+<p><span>VS Code actually has a first-class UI for something like this, called </span>&ldquo;<span>Peek Definition</span>&rdquo;<span> but it is</span>
+<span>just not good </span>&mdash;<span> it opens some kind of separate pop-up, with a completely custom UX. It</span>&rsquo;<span>s much more</span>
+<span>fruitful to compose two existing basic features </span>&mdash;<span> splitting the screen and going to definition.</span></p>
+<p><span>Note that in the example above I do move focus to the split. I also tried a version that keeps focus</span>
+<span>in the original split, but focusing new one turned out to be much better. You actually don</span>&rsquo;<span>t always</span>
+<span>know up front which split would become the </span>&ldquo;<span>main</span>&rdquo;<span> one, and moving the focus gives you flexibility of</span>
+<span>moving around, closing the split, or closing the other split.</span></p>
+<p><span>I highly recommend adding a shortcut for this action. It</span>&rsquo;<span>s a good idea to make it a </span>&ldquo;<span>complementary</span>&rdquo;
+<span>shortcut for the usual goto definition. I use </span><kbd><kbd>, .</kbd></kbd><span> for goto definition, and hence </span><kbd><kbd>, ></kbd></kbd>
+<span>is the splitting version:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-punctuation">{</span> <span class="hl-attr">&quot;key&quot;</span><span class="hl-punctuation">:</span> <span class="hl-string">&quot;, .&quot;</span><span class="hl-punctuation">,</span>       <span class="hl-attr">&quot;command&quot;</span><span class="hl-punctuation">:</span> <span class="hl-string">&quot;editor.action.revealDefinition&quot;</span> <span class="hl-punctuation">}</span><span class="hl-punctuation">,</span></span>
+<span class="line"><span class="hl-punctuation">{</span> <span class="hl-attr">&quot;key&quot;</span><span class="hl-punctuation">:</span> <span class="hl-string">&quot;, shift+.&quot;</span><span class="hl-punctuation">,</span> <span class="hl-attr">&quot;command&quot;</span><span class="hl-punctuation">:</span> <span class="hl-string">&quot;editor.action.revealDefinitionAside&quot;</span> <span class="hl-punctuation">}</span><span class="hl-punctuation">,</span></span></code></pre>
+
+</figure>
+</section>
+<section id="s-1">
+
+    <h2>
+    <a href="#s-1"><span>, .</span> </a>
+    </h2>
+<p><span>Yes, you are reading this right. </span><kbd><kbd>, .</kbd></kbd><span>, that is a comma followed by a full stop, is my goto</span>
+<span>definition shortcut. This is not some kind of evil vim mode. I use pedestrian non-modal editing,</span>
+<span>where I copy with </span><kbd><kbd>ctrl </kbd>+<kbd> c</kbd></kbd><span>, move to the beginning of line with </span><kbd><kbd>Home</kbd></kbd><span> and kill a word</span>
+<span>with </span><kbd><kbd>ctrl </kbd>+<kbd> Backspace</kbd></kbd><span> (though keys like </span><kbd><kbd>Home</kbd></kbd><span>, </span><kbd><kbd>Backspace</kbd></kbd><span>, or arrows are on my</span>
+<span>home row thanks to </span><a href="https://github.com/jtroo/kanata"><code>kanata</code></a><span>).</span></p>
+<p><span>And yet, I use </span><code>,</code><span> as a first keypress in a sequence for multiple shortcuts. That is, </span><kbd><kbd>, .</kbd></kbd><span> is</span>
+<span>not </span><kbd><kbd>, </kbd>+<kbd> .</kbd></kbd><span> pressed together, but rather a </span><kbd><kbd>,</kbd></kbd><span> followed by a separate </span><kbd><kbd>.</kbd></kbd><span>. So,</span>
+<span>when I press </span><kbd><kbd>,</kbd></kbd><span> my editor doesn</span>&rsquo;<span>t actually type a comma, but rather waits for me to complete</span>
+<span>the shortcut. I have many of them, with just a few being:</span></p>
+<ul>
+<li>
+<kbd><kbd>, .</kbd></kbd><span> goes to definition,</span>
+</li>
+<li>
+<kbd><kbd>, ></kbd></kbd><span> goes to definition in a split,</span>
+</li>
+<li>
+<kbd><kbd>, r</kbd></kbd><span> runs a task,</span>
+</li>
+<li>
+<kbd><kbd>, e s</kbd></kbd><span> </span><strong><span>e</span></strong><span>dits selection by sorting it, </span><kbd><kbd>, e C</kbd></kbd><span> converts to camel</span><strong><span>C</span></strong><span>ase,</span>
+</li>
+<li>
+<kbd><kbd>, o g</kbd></kbd><span> </span><strong><span>o</span></strong><span>pens </span><a href="https://github.com/kahole/edamagit"><span>magit for VS Code</span></a><span>, </span><kbd><kbd>, o k</kbd></kbd><span> opens</span>
+<span>keybindings.</span>
+</li>
+<li>
+<kbd><kbd>, w</kbd></kbd><span> re-</span><strong><span>w</span></strong><span>raps selection at 80 (something I just did to format the previous bullet point),</span>
+<kbd><kbd>, p</kbd></kbd><span> </span><strong><span>p</span></strong><span>retty-prints the whole file.</span>
+</li>
+</ul>
+<p><span>I</span>&rsquo;<span>ve used many different shortcut schemes, but this is by far the most convenient one for me. How do</span>
+<span>I type an comma? I bind </span><kbd><kbd>, Space</kbd></kbd><span> and </span><kbd><kbd>, Enter</kbd></kbd><span> to insert comma and a space/newline</span>
+<span>respectively, which handles most of the cases. And there</span>&rsquo;<span>s </span><kbd><kbd>, ,</kbd></kbd><span> which types just a lone comma.</span></p>
+<p><span>To remember longer sequences, I pair the comma with</span>
+<a href="https://github.com/VSpaceCode/vscode-which-key"><span>whichkey</span></a><span>, such that, when I type </span><kbd><kbd>, e</kbd></kbd><span>, what</span>
+<span>I see is actually a menu of editing operations:</span></p>
+
+<figure>
+
+<img alt="" src="https://github.com/user-attachments/assets/57f50d23-8c4d-4ec3-a1f0-51fce46bf4d0">
+</figure>
+<p><span>This horrible idea was born in the mind of Susam Pal, and is officially (and aptly I should say)</span>
+<span>named </span><span class="display"><a href="https://susam.github.io/devil/"><span>Devil Mode</span></a><span>.</span></span></p>
+<p><span>I highly recommend trying it out! It is the perfect interface for actions that you do once in a</span>
+<span>while. Where it doesn</span>&rsquo;<span>t work is for actions you want to repeat. For example, if you want to cycle</span>
+<span>through compilation errors, binding </span><kbd><kbd>, e</kbd></kbd><span> to the </span>&ldquo;<span>next error</span>&rdquo;<span> would probably be a bad</span>
+<span>idea, as typing </span><code>, e , e , e</code><span> to cycle three times is quite tiring.</span></p>
+<p><span>This is actually a common theme, there are </span><em><span>many</span></em><span> things you might to cycle back and forward</span>
+<span>through:</span></p>
+<ul>
+<li>
+<span>completion suggestions</span>
+</li>
+<li>
+<span>compiler errors</span>
+</li>
+<li>
+<span>textual search results</span>
+</li>
+<li>
+<span>reference search results</span>
+</li>
+<li>
+<span>merge conflicts</span>
+</li>
+<li>
+<span>working tree changes</span>
+</li>
+</ul>
+<p><span>It is mighty annoying to have to remember different shortcuts for all of them, isn</span>&rsquo;<span>t it? If only</span>
+<span>there was some way to have a universal pair of shortcuts for the next/prev generalized motion</span>&hellip;</p>
+<p><span>The insight here is that you</span>&rsquo;<span>d rarely need to cycle through several different categories of things</span>
+<span>at the same time. So I bind the venerable </span><kbd><kbd>ctrl</kbd>+<kbd>n</kbd></kbd><span> and </span><kbd><kbd>ctrl</kbd>+<kbd>p</kbd></kbd><span> to </span><em><span>repeating</span></em><span> the last</span>
+<span>next/prev motion. So, if the last next thing was a worktree change, then </span><kbd><kbd>ctrl</kbd>+<kbd>n</kbd></kbd><span> moves me to</span>
+<span>the next worktree change. But if I then query the next compilation error, the subsequent</span>
+<kbd><kbd>ctrl</kbd>+<kbd>n</kbd></kbd><span> would continue cycling through compilation errors. To kick-start the cycle, I have a</span>
+<kbd><kbd>, n</kbd></kbd><span> hydra:</span></p>
+<ul>
+<li>
+<kbd><kbd>, n e</kbd></kbd><span> next error</span>
+</li>
+<li>
+<kbd><kbd>, n c</kbd></kbd><span> next change</span>
+</li>
+<li>
+<kbd><kbd>, n C</kbd></kbd><span> next merge Conflict</span>
+</li>
+<li>
+<kbd><kbd>, n r</kbd></kbd><span> next reference</span>
+</li>
+<li>
+<kbd><kbd>, n f</kbd></kbd><span> next find</span>
+</li>
+<li>
+<kbd><kbd>, n .</kbd></kbd><span> previous edit</span>
+</li>
+</ul>
+<p><span>I don</span>&rsquo;<span>t know if there</span>&rsquo;<span>s some existing VS Code extension to do this, I implement this in</span>
+<a href="https://github.com/matklad/config/blob/0f690f89c80b0e246909b54a0e97c67d5ce6ab0c/my-code/src/main.ts#L63-L96"><span>my personal extension</span></a><span>.</span></p>
+<p><span>Hope this is useful! Now go and make a deal with the devil yourself!</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2024-10-08-two-tips.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>

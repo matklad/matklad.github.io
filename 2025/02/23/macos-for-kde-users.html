@@ -1,0 +1,503 @@
+
+<!DOCTYPE html>
+<html lang='en-US'>
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MacOS for KDE Users</title>
+  <meta name="description" content="I've switched to MacOS after using Linux continuously since 2012 or thereabouts (first Arch, and
+then, since 2015, NixOS). This post documents my experience.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://matklad.github.io/2025/02/23/macos-for-kde-users.html">
+  <link rel="alternate" type="application/rss+xml" title="matklad" href="https://matklad.github.io/feed.xml">
+  <style>
+  @font-face {
+    font-family: 'Open Sans'; src: url('/css/OpenSans-300-Normal.woff2') format('woff2');
+    font-weight: 300; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; src: url('/css/JetBrainsMono-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Normal.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-400-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Normal.woff2') format('woff2');
+    font-weight: 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'EB Garamond'; src: url('/css/EBGaramond-700-Italic.woff2') format('woff2');
+    font-weight: 700; font-style: italic;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; margin-block-start: 0; margin-block-end: 0; }
+
+  body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  header { margin-bottom: 2rem; }
+  header > nav { display: flex; column-gap: 2ch; align-items: baseline; flex-wrap: wrap; }
+  header a { font-style: normal; color: rgba(0, 0, 0, .8); text-decoration: none; }
+  header a:hover { color: rgba(0, 0, 0, .8); text-decoration: underline; }
+  header .title { font-size: 1.25em; flex-grow: 2; }
+
+  footer { margin-top: 2rem; }
+  footer > p { display: flex; column-gap: 2ch; justify-content: center; flex-wrap: wrap; }
+  footer a { color: rgba(0, 0, 0, .8); text-decoration: none; white-space: nowrap; }
+  footer i { vertical-align: middle; color: rgba(0, 0, 0, .8) }
+
+  </style>
+
+  <link rel="stylesheet" href="/css/main.css">
+  
+</head>
+
+<body>
+  <header>
+    <nav>
+      <a class="title" href="/">matklad</a>
+      <a href="/about.html">About</a>
+      <a href="/links.html">Links</a>
+      <a href="/blogroll.html">Blogroll</a>
+    </nav>
+  </header>
+
+  <main>
+  <article >
+
+<h1><span>MacOS for KDE Users</span> <time class="meta" datetime="2025-02-23">Feb 23, 2025</time></h1>
+<p><span>I</span>&rsquo;<span>ve switched to MacOS after using Linux continuously since 2012 or thereabouts (first Arch, and</span>
+<span>then, since 2015, NixOS). This post documents my experience.</span></p>
+<p><span>I like to be an expert user </span>&mdash;<span> for tools that I use daily, I invest time into understanding how</span>
+<span>they work and try to learn every trick. Occasionally, I just building my own thing. For me as a tools</span>
+<span>builder and tools user, this is the essence:</span></p>
+<p><span>The author of a tool is the world</span>&rsquo;<span>s best expert in the respective domain. They spent a lot of their</span>
+<span>own time figuring out what works, and what doesn</span>&rsquo;<span>t, in blatant disregard of</span>
+<a href="https://xkcd.com/1205/"><span>xkcd://1205</span></a><span>. They then encode this knowledge in the tool they write,</span>
+<span>making it freely available for all the users. As a tool author, your goal is to save time scalably,</span>
+<span>by imparting your expertise onto your users. As a tool user, the path of success is learning how the</span>
+<span>tool is meant to be used, rather than molding it to the form </span><em><span>you</span></em><span> think is useful.</span></p>
+<p><span>So, for switching to MacOS, I really wanted to </span><em><span>get</span></em><span> the underlying ideas behind the system, rather</span>
+<span>than trying to make a poor Linux clone out of it. I wasn</span>&rsquo;<span>t successful </span>&mdash;<span> resources aimed at me</span>
+<span>either don</span>&rsquo;<span>t exist, or are ungooglable. The only exception is most excellent and highly</span>
+<span>recommended</span></p>
+<p><a href="https://blog.xoria.org/macos-tips/" class="url">https://blog.xoria.org/macos-tips/</a></p>
+<p><span>(which is partially the result of my whining :)</span></p>
+<p><span>So let me add what I</span>&rsquo;<span>ve learned!</span></p>
+<section id="Why-Switching">
+
+    <h2>
+    <a href="#Why-Switching"><span>Why Switching?</span> </a>
+    </h2>
+<p><span>Some reasons for preferring Mac over Linux are the same as they were ten years ago:</span></p>
+<p><span>Hardware is built marginally better. MacBook is a powerful, rectangular slab, a design invented by</span>
+<span>Stanley Kubrick and never surpassed since. PC laptops generally are either underpowered, or a LED</span>
+<span>christmas tree. The magnetic charger which you can just toss in the general direction of the port,</span>
+<span>and equally easy unplug by stumbling over the wire is nice. The laptop speakers are actually there,</span>
+<span>etc.</span></p>
+<p><span>Software tends to just work more often! This one is curiously the same </span>&mdash;<span> Linux certainly got</span>
+<span>better! Wi-Fi tends to work out of the box, while I remember it being a major headache 10 years ago.</span>
+<span>But the peripherals got more complex </span>&mdash;<span> there are now a couple of web cameras, three microphones,</span>
+<span>some bluetooth to manage, and those in aggregate are still a pain on Linux.</span></p>
+<p><span>But, well, these two were true many years ago, and hadn</span>&rsquo;<span>t lured me over to the dark side.</span></p>
+<p><span>So here are the things that changed:</span></p>
+<p><span>The CPU is leaps and bounds better. It is very fast, very cool, very silent, and uses very little</span>
+<span>power. This actually what annoyed me most about my past couple of Linux machines </span>&mdash;<span> the increase in</span>
+<span>computing power comes at the cost of very noticeable increase in loudness.</span></p>
+<p><span>I am mentally ready to jump into remote development setup. Meaning, up to this point I viewed my</span>
+<span>laptop as the primary development machine, which does all the compiling and testing, and which</span>
+<span>should ideally somewhat resemble the deployment setup. Now, I think about it as thin client, which</span>
+<span>just holds the code and the editor, but doesn</span>&rsquo;<span>t necessary </span><em><span>run</span></em><span> the thing I am building. Instead,</span>
+<span>the actual work happens in some nebulous </span>&ldquo;<span>remote machine</span>&rdquo;<span>.</span></p>
+<p><span>Case in point </span>&mdash;<span> originally, when hacking on IntelliJ Rust and rust-analyzer, my approach to</span>
+<span>reproducing Windows-specific bugs was to dual-boot my (gaming) Windows, and work from there. I got</span>
+<span>increasingly frustrated with the setup, as it requires re-creating my very comfy development</span>
+<span>environment on an OS I use only occasionally. Plus, there are security concerns </span>&mdash;<span> I am not feeling</span>
+<span>comfortable giving my Windows OS easy access to my SSH keys.</span></p>
+<p><span>So at some point I switched to a different setup, where, instead of booting a real Windows, I</span>
+<span>spawned a Windows VM on my Linux box. And, crucially, the actual development still happened on the</span>
+<span>Linux host </span>&mdash;<span> Windows was used solely for running the code.</span></p>
+<p><span>And that</span>&rsquo;<span>s my intended way to do development on Mac </span>&mdash;<span> I use Mac to host the GUI for my code</span>
+<span>editor, and remain agnostic of the actual machine that would run the code I am developing.</span></p>
+<p><span>It</span>&rsquo;<span>s also important that the </span><em><span>way</span></em><span> we do remote dev seems to be slowly changing for the better.</span>
+<span>Traditional approach to remoting (ssh &amp; X forwarding) is to run the target application on the remote</span>
+<span>host and then transparently transfer the interface and user interactions back and forth. This</span>
+<span>doesn</span>&rsquo;<span>t work great for the same reason you can</span>&rsquo;<span>t transparently replace a synchronous function call</span>
+<span>with RPC: latency exists, failures exist, state synchronization exists. You can</span>&rsquo;<span>t usefully pretend</span>
+<span>that a distributed system isn</span>&rsquo;<span>t.</span></p>
+<p><span>I </span><em><span>think</span></em><span> a more fruitful way to approach remote development is to have the application be running</span>
+<span>locally, but with explicit awareness that a different computer exists. And newer applications, like</span>
+<span>VS Code or WezTerm, work that way. Sadly, we don</span>&rsquo;<span>t have a good shell working along those principles</span>
+<span>(or a good shell at all, period, but I am getting carried away here so let me stop while I can).</span></p>
+<p><span>So anyway, fast CPU &amp; new focus on remote dev did it for me, I am now a Mac user.</span></p>
+</section>
+<section id="Managing-Software">
+
+    <h2>
+    <a href="#Managing-Software"><span>Managing Software</span> </a>
+    </h2>
+<p><span>After years of NixOS, I am convinced about the usefulness of the following two features:</span></p>
+<ul>
+<li>
+<span>Maintaining a canonical, human-readable list of software installed on a machine, which is</span>
+<span>available in a git repository and allows to replicate a particular setup with high-fidelity.</span>
+</li>
+<li>
+<span>Ability to install software temporarily, such that it is automatically deleted without a trace</span>
+<span>once you stop using it.</span>
+</li>
+</ul>
+<p><span>I am not too happy about Nix implementation of these ideas </span>&mdash;<span> it</span>&rsquo;<span>s the best there is, but still not</span>
+<span>good enough. Furthermore, while Nix is available on MacOS, using it would be fighting the platform.</span></p>
+<p><span>So I am sticking with homebrew. Crucially I am using Brewfile to manage packages declaration. I</span>
+<span>highly recommend this post:</span></p>
+<p><a href="https://matthiasportzel.com/brewfile/" class="url">https://matthiasportzel.com/brewfile/</a></p>
+<p><span>The TL;DR is that I run</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-output">brew bundle install --cleanup --file=~/config/Brewfile --no-lock</span></span></code></pre>
+
+</figure>
+<p><span>and that synchronizes the installed software with what</span>&rsquo;<span>s listed in my config file. If I want to</span>
+<span>install an app temporary, I use the </span>&ldquo;<span>normal</span>&rdquo;<span> </span><code>brew install</code><span> command, and the app gets removed on my</span>
+<span>next </span><code>brew bundle install</code><span>.</span></p>
+<p><span>Typing the whole thing gets tiresome fast (even with </span><code>fish</code><span> shell smart history), so I also have a</span>
+<span>small Rust utility for managing my configuration, which is unimaginatively called </span><code>config</code>
+<span>(</span><a href="https://github.com/matklad/config/blob/master/tools/config/src/main.rs"><span>source</span></a><span>) and can do:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line"><span class="hl-title function_">$</span> config brew # Runs bundle install.</span>
+<span class="line"><span class="hl-title function_">$</span> config edit # Opens config in my editor.</span>
+<span class="line"><span class="hl-title function_">$</span> config link # Symlinks dotfiles.</span></code></pre>
+
+</figure>
+<p><span>Like with NixOS, I don</span>&rsquo;<span>t do anything fancy like home-manager or gnu stow to manage my dotfiles, and</span>
+<span>just have a tiny script for linking configs from my dotfies repository to where various tools expect</span>
+<span>to find their settings.</span></p>
+</section>
+<section id="No-Lock-Files">
+
+    <h2>
+    <a href="#No-Lock-Files"><span>No Lock Files</span> </a>
+    </h2>
+<p><span>Although Brewfile supports lock files, I am not using them. Here</span>&rsquo;<span>s my reasoning. In a GNU/Linux</span>
+<span>system, the part you can rely on, the part that guarantees stable interfaces whose stability has a</span>
+<span>dedicated gatekeeper, is the kernel. Everything else is composition of many different components,</span>
+<span>maintained, by different entities, with varying degrees of stability. Crucially, most interfaces</span>
+<span>relevant to building user-facing desktop software are outside of the kernel. So you </span><em><span>really</span></em><span> need</span>
+<span>nix to pin </span><em><span>everything</span></em><span> to make sure that, even if your X/wayland breaks after update, you can at</span>
+<span>lest painlessly rollback.</span></p>
+<p><span>On Mac, the base system is much more expansive. I don</span>&rsquo;<span>t realistically have to worry about my browser</span>
+<span>breaking, as it is shipped by Apple, and it certainly has organizational capacity to make the</span>
+<span>upgrades smooth.</span></p>
+<p><span>So only the end applications themselves are prone to breakage, and there I suppose that the benefit</span>
+<span>of locking everything super tightly would be small.</span></p>
+<p><span>So far, this hasn</span>&rsquo;<span>t been refuted, upgrades of the system or of the software went smoothly. There</span>
+<span>was one instance where Ghostty upgrade broke for me due to my non-QWERTY layout, but the downgrade</span>
+<span>was as easy as</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">curl https://raw.githubusercontent.com/Homebrew/homebrew-cask/99378d4eaa63a12947b8eccd526a6d9d27564cce/Casks/g/ghostty.rb &gt; ghostty.rb</span>
+<span class="line">brew uninstall ghostty &amp;&amp; brew install --cask ./ghostty.rb</span></code></pre>
+
+</figure>
+<p><span>Speaking of layouts, I haven</span>&rsquo;<span>t yet figured out how to use my layout, workman, on the login screen</span>
+<span>after reboot.</span></p>
+</section>
+<section id="Managing-Windows">
+
+    <h2>
+    <a href="#Managing-Windows"><span>Managing Windows</span> </a>
+    </h2>
+<p><span>I have slightly odd habits when it comes to managing windows. I don</span>&rsquo;<span>t use a tiling window manager. I</span>
+<em><span>also</span></em><span> use a single display (when I plug my laptop into an external monitor, I close the lid). I can</span>
+<span>only work with only one application at a time, and I prefer the app to be full-screen. So what I</span>
+<span>need is not so much window management, as an ability to quickly switch between full-screen apps.</span></p>
+<p><span>Windows 7 nailed this workload, through two features:</span></p>
+<p><em><span>First</span></em><span>, you can pin a number of applications next to the Start menu. Than, you can use</span>
+<kbd><kbd>Win </kbd>+<kbd> 1</kbd></kbd><span>, </span><kbd><kbd>Win </kbd>+<kbd> 2</kbd></kbd><span>, </span><kbd><kbd>Win </kbd>+<kbd> 3</kbd></kbd><span> to switch the app. Pressing the shortcut launches</span>
+<span>the application if it isn</span>&rsquo;<span>t already running, and brings its window to the front otherwise.</span></p>
+<p><em><span>Second</span></em><span>, Windows 7 implemented lightweight tiling: </span><kbd><kbd>Win </kbd>+<kbd> Up</kbd></kbd><span> maximizes the window, and</span>
+<kbd><kbd>Win </kbd>+<kbd> Left</kbd></kbd><span>, </span><kbd><kbd>Win </kbd>+<kbd> Right</kbd></kbd><span> tiles it to the corresponding half of the screen.</span></p>
+<p><span>MacOS has a similar lightweight tiling out of the box these days, so that</span>&rsquo;<span>s good.</span></p>
+<p><span>App switching is not good out of the box though. You can make an app full-screen, such that it</span>
+<span>occupies an entire virtual desktop. But, infuriatingly, switching between such full-screen apps</span>
+<span>triggers an animation, which you can</span>&rsquo;<span>t turn off. I remember struggling with it more than decade ago</span>
+<span>on my work Mac, so at least the stability of interfaces is heartening (seriously though, maybe I am</span>
+<span>misremembering, but Mac OS looks like more or less exactly like it did many years ago, this </span><em><span>is</span></em>
+<span>good).</span></p>
+<p><span>What is cool though, is how easy it is to script the functionality I want, using</span>
+<a href="https://www.hammerspoon.org"><span>hammerspoon</span></a><span>:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">local apps =</span>
+<span class="line">{</span>
+<span class="line">    F1 = "Ghostty",</span>
+<span class="line">    F2 = "Visual Studio Code",</span>
+<span class="line">    F3 = "Safari",</span>
+<span class="line">    F4 = "Slack",</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">for key, app in pairs(apps) do</span>
+<span class="line">    hs.hotkey.bind({"cmd"}, key, function()</span>
+<span class="line">        hs.application.launchOrFocus(app)</span>
+<span class="line">    end)</span>
+<span class="line">end</span></code></pre>
+
+</figure>
+<p><span>It is instructive to compare this script to the equivalent from Linux:</span></p>
+
+<figure class="code-block">
+<figcaption class="title">win-or-app.sh</figcaption>
+
+
+<pre><code><span class="line"><span class="hl-meta">#!/bin/sh</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-keyword">function</span> find_window {</span>
+<span class="line">    windows=$(wmctrl -lx | awk -v name=<span class="hl-string">&quot;<span class="hl-variable">$1</span>&quot;</span> <span class="hl-string">&#x27;$3 ~ name&#x27;</span> | grep -v <span class="hl-string">&quot;Hangouts&quot;</span>)</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line">key=<span class="hl-variable">$1</span></span>
+<span class="line">bin=<span class="hl-variable">$2</span></span>
+<span class="line"><span class="hl-built_in">shift</span> 2</span>
+<span class="line">args=<span class="hl-variable">$@</span></span>
+<span class="line"></span>
+<span class="line">find_window <span class="hl-variable">$key</span></span>
+<span class="line"><span class="hl-keyword">if</span> [ $? != 0 ];</span>
+<span class="line"><span class="hl-keyword">then</span></span>
+<span class="line">    <span class="hl-variable">$bin</span> <span class="hl-variable">$args</span></span>
+<span class="line">    <span class="hl-built_in">sleep</span> 0.2</span>
+<span class="line"><span class="hl-keyword">fi</span></span>
+<span class="line">find_window <span class="hl-variable">$key</span></span>
+<span class="line"></span>
+<span class="line"><span class="hl-built_in">set</span> -- <span class="hl-variable">$windows</span></span>
+<span class="line"><span class="hl-keyword">if</span> [ <span class="hl-variable">$1</span> ]; <span class="hl-keyword">then</span></span>
+<span class="line">    wmctrl -ia <span class="hl-variable">$1</span></span>
+<span class="line"><span class="hl-keyword">fi</span></span></code></pre>
+
+</figure>
+
+<figure class="code-block">
+<figcaption class="title">xbindkeysrc</figcaption>
+
+
+<pre><code><span class="line">"~/config/scripts/win-or-app.sh jetbrains-idea-ce idea"</span>
+<span class="line">  Control + F2</span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line">"~/config/scripts/win-or-app.sh Chromium.Chromium chromium-browser"</span>
+<span class="line">  Control + F3</span></code></pre>
+
+</figure>
+<p><span>There, I had to string several parts together:</span></p>
+<ul>
+<li>
+<code>wmctrl</code><span> to list windows,</span>
+</li>
+<li>
+<span>a hack to run the binary, wait, and grab its window after delay for focusing,</span>
+</li>
+<li>
+<code>xbindkeys</code><span> to setup the shortcut,</span>
+</li>
+<li>
+<span>and </span><code>bash</code><span> to run everything.</span>
+</li>
+</ul>
+<p><span>Of course, Linux version broke with transition to wayland.</span></p>
+<p><span>So, while out-of-the-box Mac here is worse than Windows 7 or KDE (which also has this feature</span>
+<span>built-in nowadays), it</span>&rsquo;<span>s actually easier to make it do what I want than Linux! Again, it</span>&rsquo;<span>s very</span>
+<span>helpful to have stable interfaces for desktop software!</span></p>
+<p><span>In a similar vein, on Linux, I have </span><code>ctrlc</code><span> / </span><code>ctrlv</code><span> command line alias to wrap the clipboard</span>
+<span>manipulation tool, while on Mac </span><code>pbcopy</code><span> / </span><code>pbpaste</code><span> do what I need without any extra arguments.</span></p>
+</section>
+<section id="Keyboard">
+
+    <h2>
+    <a href="#Keyboard"><span>Keyboard</span> </a>
+    </h2>
+<p><span>One of my biggest workflow improvements was a switch to</span>
+<a href="https://manybutfinite.com/post/home-row-computing/"><span>home row computing</span></a><span> many years ago. The</span>
+<span>basic observation is that the arrow keys are some of the most frequently needed keys, and yet they</span>
+<span>require completely moving your wrist off the home row. As horrible Emacs </span><kbd><kbd>ctrl</kbd>+<kbd>n</kbd></kbd><span>,</span>
+<kbd><kbd>ctrl</kbd>+<kbd>p</kbd></kbd><span>, </span><kbd><kbd>ctrl</kbd>+<kbd>f</kbd></kbd><span>, </span><kbd><kbd>ctrl</kbd>+<kbd>b</kbd></kbd><span> are, even they are better than arrow keys, as you</span>
+<span>don</span>&rsquo;<span>t need to break the flow of typing to use them.</span></p>
+<p><span>But you totally can get arrow keys on your home row! One simple version is to arrange </span><kbd><kbd>Caps Lock </kbd>+<kbd>
+hjkl</kbd></kbd><span> to act, on the device level, as arrow keys. Or, as I do these days, </span><kbd><kbd>space </kbd>+<kbd>
+ijkl</kbd></kbd><span>. If you use programmable keyboard, like Moonlander, you get this sort of feature for</span>
+<span>granted. But you can do that with a normal laptop keyboard, where it</span>&rsquo;<span>s even more valuable!</span></p>
+<p><span>The standard MacOS app here is </span><a href="https://karabiner-elements.pqrs.org"><span>Karabiner-Elements</span></a><span>. It</span>
+<span>consists of two parts: a driver for providing a virtual keyboard. As far as I understand, this is</span>
+<span>the most excellent piece of software which is used by any alternative project. And than there</span>&rsquo;<span>s a</span>
+<span>GUI for configuring this driver</span>&hellip;</p>
+<p><span>I was very determined to use Mac-native karabiner, rather than any of the Linux invader tools, but</span>
+<span>the GUI part is just not good. Configuring your keyboard is an </span><em><span>excellent</span></em><span> use-case for GUI. E.g.,</span>
+<span>Moonlander</span>&rsquo;<span>s configuration tool is top notch:</span></p>
+<p><a href="https://configure.zsa.io/moonlander/layouts/default/latest/0" class="url">https://configure.zsa.io/moonlander/layouts/default/latest/0</a></p>
+<p><span>But Karabiner actually lacks this sort of GUI. If you avoid GUI, you can configure it in JSON, but</span>
+<span>thats the most long-winded JSON configuration format I</span>&rsquo;<span>ve ever seen, which is unusable directly.</span></p>
+<p><span>So, I used the same solution I was using for Linux, </span><a href="https://github.com/jtroo/kanata"><span>kanata</span></a><span>. It</span>&rsquo;<span>s</span>
+<span>a lovely Rust tool which uses simple S-expressions for configuration. It recently gained support for</span>
+<span>Mac, using the aforementioned driver from the Karabiner project. It wasn</span>&rsquo;<span>t packaged for Mac, so </span><a href="https://github.com/Homebrew/homebrew-core/pull/196811"><span>I</span>
+<span>added it to homebrew</span></a><span>, which was quite easy</span>
+<span>(definitely easier than to figure out how to package stuff with nix). For the curious, here</span>&rsquo;<span>s</span>
+<span>the config I am using:</span></p>
+
+<figure class="code-block">
+
+
+<pre><code><span class="line">(defcfg</span>
+<span class="line">  process-unmapped-keys yes</span>
+<span class="line">  concurrent-tap-hold   yes</span>
+<span class="line">)</span>
+<span class="line"></span>
+<span class="line">(defsrc</span>
+<span class="line">        esc  f1   f2   f3   f4   f5   f6   f7   f8   f9    f10  f11  f12</span>
+<span class="line">        grv  1    2    3    4    5    6    7    8    9     0    -    =    bspc</span>
+<span class="line">        tab  q    w    e    r    t    y    u    i    o     p    [    ]    \</span>
+<span class="line">        caps a    s    d    f    g    h    j    k    l     ;    '    ret</span>
+<span class="line">        lsft z    x    c    v    b    n    m    ,    .     /    rsft</span>
+<span class="line">        lctl lalt lmet           spc            rmet ralt)</span>
+<span class="line"></span>
+<span class="line">(deflayer qwerty</span>
+<span class="line">        esc  🔅    🔆   f3   f4   f5   f6   ◀◀   ▶⏸   ▶▶    🔇   🔉   🔊</span>
+<span class="line">        grv  1    2    3    4    5    6    7    8    9     0    -    =    bspc</span>
+<span class="line">        tab  q    w    e    r    t    y    u    i    o     p    [    ]    \</span>
+<span class="line">        esc  a    s    d    f    g    h    j    k    l     ;    '    ret</span>
+<span class="line">        lsft @lc  @la  @lm  v    b    n    m    @rm  @ra   @rc  rsft</span>
+<span class="line">        lctl lalt lmet           @sp            rmet ralt)</span>
+<span class="line"></span>
+<span class="line">(deflayer motion</span>
+<span class="line">        esc  f1   f2   f3   f4   f5   f6   f7   f8   f9    f10  f11  f12</span>
+<span class="line">        grv  @1   @2   @3   @4   @5    6    7    8    9     0    -    =    bspc</span>
+<span class="line">        tab  q    w    e    r    t    y    pgup up   pgdn  p    [    ]    \</span>
+<span class="line">        esc  a    s    d    f    g    bspc lft  down rght del   '    ret</span>
+<span class="line">        lsft @lc @la   @lm  v    b    ret  m M-lft M-rght /    rsft</span>
+<span class="line">        lctl lalt lmet           @sp            rmet ralt)</span>
+<span class="line"></span>
+<span class="line">(defalias</span>
+<span class="line">    1  M-f1</span>
+<span class="line">    2  M-f2</span>
+<span class="line">    3  M-f3</span>
+<span class="line">    4  M-f4</span>
+<span class="line">    5  M-f5</span>
+<span class="line">    sp (tap-hold-release-keys 200 200 spc (layer-toggle motion) (a    s    d    f    g))</span>
+<span class="line">    lc (tap-hold 200 200 z lctl)</span>
+<span class="line">    la (tap-hold 200 200 x lalt)</span>
+<span class="line">    lm (tap-hold 200 200 c lmet)</span>
+<span class="line">    rm (tap-hold 200 200 , rmet)</span>
+<span class="line">    ra (tap-hold 200 200 . lalt)</span>
+<span class="line">    rc (tap-hold 200 200 / rctl))</span></code></pre>
+
+</figure>
+<p><span>There</span>&rsquo;<span>s something odd around the fn/globe key, so I needed to re-add media control keys manually.</span></p>
+</section>
+<section id="Standard-Shortcuts">
+
+    <h2>
+    <a href="#Standard-Shortcuts"><span>Standard Shortcuts</span> </a>
+    </h2>
+<p><span>One cool thing about Mac is that the aforementioned Emacs shortcuts like </span><kbd><kbd>ctrl</kbd>+<kbd>a</kbd></kbd><span> or</span>
+<kbd><kbd>ctrl</kbd>+<kbd>e</kbd></kbd><span> tend to work almost everywhere. Almost, but not quite </span>&mdash;<span> I </span><em><span>think</span></em><span> they are not</span>
+<span>working for me in Slack? Which is not a fault of Mac but, still, reduces the utility quite a bit.</span></p>
+<p><span>Similarly, there</span>&rsquo;<span>s was some disagreement about whether </span>&ldquo;<span>normal</span>&rdquo;<span> way to get to the start of the line</span>
+<span>is </span><kbd><kbd>Home</kbd></kbd><span> or </span><kbd><kbd>Cmd</kbd>+<kbd>Left</kbd></kbd><span>. I fixed that with the following </span><code>DefaultKeyBinding.Dict</code><span> file:</span></p>
+
+<figure class="code-block">
+<figcaption class="title">~/Library/KeyBindings/DefaultKeyBinding.Dict</figcaption>
+
+
+<pre><code><span class="line">{</span>
+<span class="line"></span>
+<span class="line">    "\UF729"   = "moveToBeginningOfLine:";                       /* Home         */</span>
+<span class="line">    "$\UF729"  = "moveToBeginningOfLineAndModifySelection:";     /* Shift + Home */</span>
+<span class="line">    "\UF72B"   = "moveToEndOfLine:";                             /* End          */</span>
+<span class="line">    "$\UF72B"  = "moveToEndOfLineAndModifySelection:";           /* Shift + End  */</span>
+<span class="line">}</span></code></pre>
+
+</figure>
+<p><span>In general, one my big hope for Mac was system-wide consistency in shortcuts, but that didn</span>&rsquo;<span>t fully</span>
+<span>pan out. For example, I was hoping that there</span>&rsquo;<span>s a standard shortcut for vertical and horizontal</span>
+<span>split, which I can use in my shell and in my editor, but looks that</span>&rsquo;<span>s not the case.</span></p>
+</section>
+<section id="Command-Palette">
+
+    <h2>
+    <a href="#Command-Palette"><span>Command Palette</span> </a>
+    </h2>
+<p><span>There</span>&rsquo;<span>s one consistent shortcut though </span>&mdash;<span> </span><kbd><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>?</kbd></kbd><span> toggles </span>&ldquo;<span>command palette</span>&rdquo;<span> </span>&mdash;<span> a fuzzy</span>
+<span>search for all application</span>&rsquo;<span>s menus, much like </span><code>M-x</code><span> in Emacs. It</span>&rsquo;<span>s funny that, on Linux, I used</span>
+<span>Vivaldi browser just so that I get </span><code>M-x</code><span>-like interface, while on Mac I get this out of the box, as</span>
+<span>a natural consequence of OS design. It</span>&rsquo;<span>s nice to be able to pin a tab with </span><kbd><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>?</kbd></kbd><span>,</span>
+&ldquo;<span>pin</span>&rdquo;<span>, </span><kbd><kbd>Enter</kbd></kbd><span>. In apps with dedicated command palettes, I override </span><kbd><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>?</kbd></kbd><span> to use</span>
+<span>app-specific command, and then I even have dedicated key for this shortcut in my Moonlander.</span></p>
+</section>
+<section id="Gaming">
+
+    <h2>
+    <a href="#Gaming"><span>Gaming</span> </a>
+    </h2>
+<p><span>It is way better than expected! I</span>&rsquo;<span>ve learned two things:</span></p>
+<p><em><span>First</span></em><span>, Macs these days have a pretty powerful GPU. For example, Baldur</span>&rsquo;<span>s Gate III runs natively</span>
+<span>without any problem with all its fancy graphics. The hardware is clearly there, although the</span>
+<span>software isn</span>&rsquo;<span>t always.</span></p>
+<p><span>But, </span><em><span>second</span></em><span>, the Windows emulation layer is very mature. For example, Windows version of Path Of</span>
+<span>Exile 2 just works.</span></p>
+<p><span>And of course Factorio is available natively.</span></p>
+<p><span>I actually find myself playing more this days, than with my Linux/Windows dual boot setup </span>&ndash;<span> quiet</span>
+<span>and relatively cool laptop adds a lot to experience!</span></p>
+<hr>
+<p><span>That</span>&rsquo;<span>s all I have for now! There are some extra tips about actually doing remote dev, but those will</span>
+<span>wait for a dedicated post, but check out</span>
+<a href="https://peter.bourgon.org/blog/2011/04/27/remote-development-from-mac-to-linux.html"><span>this</span></a>
+<span>in the meantime.</span></p>
+</section>
+</article>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/matklad/matklad.github.io/edit/master/content/posts/2025-02-23-macos-for-kde-users.dj">
+        <svg class="icon"><use href="/assets/icons.svg#edit"/></svg>
+        Fix typo
+      </a>
+      <a href="/feed.xml">
+        <svg class="icon"><use href="/assets/icons.svg#rss"/></svg>
+        Subscribe
+      </a>
+      <a href="mailto:aleksey.kladov+blog@gmail.com">
+        <svg class="icon"><use href="/assets/icons.svg#email"/></svg>
+        Get in touch
+      </a>
+      <a href="https://github.com/matklad">
+        <svg class="icon"><use href="/assets/icons.svg#github"/></svg>
+        matklad
+      </a>
+    </p>
+  </footer>
+</body>
+
+</html>
