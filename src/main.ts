@@ -1,5 +1,4 @@
-import * as async from "std/async/mod.ts";
-import * as fs from "std/fs/mod.ts";
+import { debounce } from "@std/async/debounce";
 import * as templates from "./templates.ts";
 import * as djot from "./djot.ts";
 import * as blogroll from "./blogroll.ts";
@@ -87,7 +86,7 @@ async function watch(params: { filter: string }) {
 
   signal.resolve(true);
 
-  const rebuild_debounced = async.debounce(
+  const rebuild_debounced = debounce(
     () => signal.resolve(true),
     16,
   );
@@ -119,18 +118,24 @@ async function build(params: {
   const t = performance.now();
 
   const ctx = new Ctx();
-  if (params.update) {
-    await Deno.mkdir("./out/res", { recursive: true });
-  } else {
-    await fs.emptyDir("./out/res");
+
+  if (!params.update) {
+    try {
+      await Deno.remove("./out/www", { recursive: true });
+    } catch (err) {
+      if (!(err instanceof Deno.errors.NotFound)) {
+        throw err;
+      }
+    }
   }
+  await Deno.mkdir("./out/www", { recursive: true });
 
   const posts = await collect_posts(ctx, params.filter);
-  await update_file("out/res/index.html", templates.post_list(posts).value);
-  await update_file("out/res/feed.xml", templates.feed(posts).value);
+  await update_file("out/www/index.html", templates.post_list(posts).value);
+  await update_file("out/www/feed.xml", templates.feed(posts).value);
   for (const post of posts) {
     await update_file(
-      `out/res${post.path}`,
+      `out/www${post.path}`,
       templates.post(post, params.spell).value,
     );
   }
@@ -138,7 +143,7 @@ async function build(params: {
   if (params.blogroll) {
     const blogroll_posts = await blogroll.blogroll();
     await update_file(
-      "out/res/blogroll.html",
+      "out/www/blogroll.html",
       templates.blogroll_list(blogroll_posts).value,
     );
   }
@@ -148,7 +153,7 @@ async function build(params: {
     const text = await Deno.readTextFile(`content/${page}.dj`);
     const ast = await djot.parse(text);
     const html = djot.render(ast, {});
-    await update_file(`out/res/${page}.html`, templates.page(page, html).value);
+    await update_file(`out/www/${page}.html`, templates.page(page, html).value);
   }
 
   const redirects = [
@@ -156,7 +161,7 @@ async function build(params: {
   ];
 
   for (const [from, to] of redirects) {
-    await update_file(`out/res/${from}`, templates.redirect(to).value);
+    await update_file(`out/www/${from}`, templates.redirect(to).value);
   }
 
   const paths = [
@@ -176,11 +181,15 @@ async function build(params: {
   if (params.profile) console.log(JSON.stringify(ctx));
 }
 
+function dirname(path: string): string {
+  return path.substring(0, path.lastIndexOf("/"));
+}
+
 async function update_file(path: string, content: Uint8Array | string) {
   if (!content) return;
-  await fs.ensureFile(path);
-  await fs.ensureDir("./build");
-  const temp = await Deno.makeTempFile({ dir: "./build" });
+  await Deno.mkdir(dirname(path), { recursive: true });
+  await Deno.mkdir("./out/tmp", { recursive: true });
+  const temp = await Deno.makeTempFile({ dir: "./out/tmp" });
   if (content instanceof Uint8Array) {
     await Deno.writeFile(temp, content);
   } else {
@@ -201,7 +210,7 @@ async function update_path(path: string) {
     await Promise.all(futs);
   } else {
     await update_file(
-      `out/res/${path}`,
+      `out/www/${path}`,
       await Deno.readFile(`content/${path}`),
     );
   }
@@ -223,21 +232,19 @@ export type Post = {
 async function collect_posts(ctx: Ctx, filter: string): Promise<Post[]> {
   const start = performance.now();
   const posts = [];
-  for await (
-    const entry of fs.walk("./content/posts", { includeDirs: false })
-  ) {
-    if (!entry.name.endsWith(".dj")) continue;
+  for await (const file_path of walk("./content/posts/")) {
+    if (!file_path.endsWith(".dj")) continue;
     if (filter !== "") {
-      if (entry.name.indexOf(filter) === -1) continue;
+      if (file_path.indexOf(filter) === -1) continue;
     }
-    const [, y, m, d, slug] = entry.name.match(
-      /^(\d\d\d\d)-(\d\d)-(\d\d)-(.*)\.dj$/,
+    const [, y, m, d, slug] = file_path.match(
+      /^.*(\d\d\d\d)-(\d\d)-(\d\d)-(.*)\.dj$/,
     )!;
     const [year, month, day] = [y, m, d].map((it) => parseInt(it, 10));
     const date = new Date(Date.UTC(year, month - 1, day));
 
     let t = performance.now();
-    const text = await Deno.readTextFile(entry.path);
+    const text = await Deno.readTextFile(file_path);
     ctx.read_ms += performance.now() - t;
 
     t = performance.now();
@@ -265,6 +272,17 @@ async function collect_posts(ctx: Ctx, filter: string): Promise<Post[]> {
   posts.sort((l, r) => l.path < r.path ? 1 : -1);
   ctx.collect_ms = performance.now() - start;
   return posts;
+}
+
+async function* walk(root: string): AsyncIterableIterator<string> {
+  for await (const entry of Deno.readDir(root)) {
+    const path = `${root}${entry.name}`;
+    if (entry.isDirectory) {
+      yield* walk(path);
+    } else {
+      yield path;
+    }
+  }
 }
 
 if (import.meta.main) await main();

@@ -1,5 +1,5 @@
 // deno-lint-ignore-file
-import { parseFeed } from "jsr:@mikaelporttila/rss@1.0.3";
+import { parseFeed } from "@rss";
 
 export async function blogroll(): Promise<FeedEntry[]> {
   const urls = (await Deno.readTextFile("content/blogroll.txt"))

@@ -1,12 +1,29 @@
 {
-  "importMap": "import_map.json",
   "lock": {
     "frozen": true
   },
+  "vendor": true,
   "tasks": {
-    "build": "                deno run --lock --allow-write=./out,./build --allow-read=./out,./build,./content --allow-net --allow-import         ./src/main.ts build --profile",
-    "watch": "rm -rf ./out && deno run --lock --allow-write=./out,./build --allow-read=./out,./build,./content --allow-net --allow-import --watch ./src/main.ts watch",
-    "serve": "deno task watch & live-server --host 127.0.0.1 --port 8080 ./out/res",
+    "build": "                deno run --lock --allow-write=./out --allow-read=./out,./content --allow-net --allow-import         ./src/main.ts build --profile",
+    "watch": "rm -rf ./out && deno run --lock --allow-write=./out --allow-read=./out,./content --allow-net --allow-import --watch ./src/main.ts watch",
+    "serve": "deno task watch & live-server --host 127.0.0.1 --port 8080 ./out/www",
     "touch": "deno run --allow-write=./content/posts ./src/main.ts touch"
+  },
+  "imports": {
+    "@highlightjs/": "https://unpkg.com/@highlightjs/cdn-assets@11.6.0/es/",
+
+    "@std/async/debounce": "https://raw.githubusercontent.com/denoland/std/refs/tags/release-2025.03.04/async/debounce.ts",
+    "@rss": "https://raw.githubusercontent.com/MikaelPorttila/rss/refs/tags/1.0.3/mod.ts",
+    "jsr:@maxim-mazurok/sax-ts@1.2.13": "https://raw.githubusercontent.com/Maxim-Mazurok/sax-ts/refs/tags/v1.2.13/src/sax.ts",
+
+    "@djot/": "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/",
+    "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/ast": "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/ast.ts",
+    "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/attributes": "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/attributes.ts",
+    "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/block": "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/block.ts",
+    "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/event": "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/event.ts",
+    "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/find": "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/find.ts",
+    "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/inline": "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/inline.ts",
+    "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/options": "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/options.ts",
+    "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/parse": "https://raw.githubusercontent.com/jgm/djot.js/@djot/djot@0.3.2/src/parse.ts"
   }
 }

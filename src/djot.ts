@@ -1,7 +1,8 @@
 import { highlight } from "./highlight.ts";
 import { HtmlString, time } from "./templates.ts";
 
-import * as djot from "djot";
+import { parse as djot_parse } from "@djot/parse.ts";
+import { HTMLRenderer, renderHTML } from "@djot/html.ts";
 import {
   AstNode,
   BlockQuote,
@@ -17,10 +18,10 @@ import {
   Str,
   Url,
   Visitor,
-} from "djot/ast.ts";
+} from "@djot/ast.ts";
 
 export function parse(source: string): Doc {
-  return djot.parse(source);
+  return djot_parse(source);
 }
 
 type RenderCtx = {
@@ -31,8 +32,8 @@ type RenderCtx = {
 
 export function render(doc: Doc, ctx: RenderCtx): HtmlString {
   let section: Section | undefined = undefined;
-  const overrides: Visitor<djot.HTMLRenderer, string> = {
-    section: (node: Section, r: djot.HTMLRenderer): string => {
+  const overrides: Visitor<HTMLRenderer, string> = {
+    section: (node: Section, r: HTMLRenderer): string => {
       const section_prev = section;
       section = node;
       const result = get_child(node, "heading")?.level == 1
@@ -41,9 +42,11 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
       section = section_prev;
       return result;
     },
-    heading: (node: Heading, r: djot.HTMLRenderer) => {
+    heading: (node: Heading, r: HTMLRenderer) => {
       const tag = `h${node.level}`;
-      const date = node.level == 1 && ctx.date ? time(ctx.date, "meta").value : "";
+      const date = node.level == 1 && ctx.date
+        ? time(ctx.date, "meta").value
+        : "";
       const children = r.renderChildren(node);
       if (node.level == 1) ctx.title = get_string_content(node);
       const id = node.level > 1 && section?.attributes?.id;
@@ -58,11 +61,11 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
         }>${children} ${date}</${tag}>\n`;
       }
     },
-    ordered_list: (node: OrderedList, r: djot.HTMLRenderer): string => {
+    ordered_list: (node: OrderedList, r: HTMLRenderer): string => {
       if (node.style === "1)") add_class(node, "callout");
       return r.renderAstNodeDefault(node);
     },
-    para: (node: Para, r: djot.HTMLRenderer) => {
+    para: (node: Para, r: HTMLRenderer) => {
       if (node.children.length == 1 && node.children[0].tag == "image") {
         node.attributes = node.attributes || {};
         let cap = extract_cap(node);
@@ -83,7 +86,7 @@ ${r.renderChildren(node)}
       if (!ctx.summary) ctx.summary = get_string_content(node);
       return result;
     },
-    block_quote: (node: BlockQuote, r: djot.HTMLRenderer) => {
+    block_quote: (node: BlockQuote, r: HTMLRenderer) => {
       let source = undefined;
       if (node.children.length > 0) {
         const last_child: { tag: string; children?: AstNode[] } =
@@ -108,7 +111,7 @@ ${cite}
 </figure>
 `;
     },
-    div: (node: Div, r: djot.HTMLRenderer): string => {
+    div: (node: Div, r: HTMLRenderer): string => {
       let admon_icon = "";
       if (has_class(node, "note")) admon_icon = "info";
       if (has_class(node, "quiz")) admon_icon = "question";
@@ -167,7 +170,7 @@ ${pre}
 </figure>
 `;
     },
-    image: (node: Image, r: djot.HTMLRenderer): string => {
+    image: (node: Image, r: HTMLRenderer): string => {
       if (has_class(node, "video")) {
         if (!node.destination) throw "missing destination";
         if (has_class(node, "loop")) {
@@ -178,7 +181,7 @@ ${pre}
       }
       return r.renderAstNodeDefault(node);
     },
-    span: (node: Span, r: djot.HTMLRenderer) => {
+    span: (node: Span, r: HTMLRenderer) => {
       if (has_class(node, "code")) {
         const children = r.renderChildren(node);
         return `<code>${children}</code>`;
@@ -202,19 +205,19 @@ ${pre}
       }
       return r.renderAstNodeDefault(node);
     },
-    str: (node: Str, r: djot.HTMLRenderer) => {
+    str: (node: Str, r: HTMLRenderer) => {
       if (has_class(node, "dfn")) {
         return `<dfn>${node.text}</dfn>`;
       }
       return r.renderAstNodeDefault(node);
     },
-    url: (node: Url, r: djot.HTMLRenderer) => {
+    url: (node: Url, r: HTMLRenderer) => {
       add_class(node, "url");
       return r.renderAstNodeDefault(node);
     },
   };
 
-  const result = djot.renderHTML(doc, { overrides });
+  const result = renderHTML(doc, { overrides });
   return new HtmlString(result);
 }
 

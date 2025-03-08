@@ -10,6 +10,9 @@ on:
 jobs:
   CI:
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
 
     steps:
     - uses: actions/checkout@v4
@@ -19,10 +22,7 @@ jobs:
 
     - run: deno task build --blogroll
 
-    - name: Deploy
-      uses: peaceiris/actions-gh-pages@364c31d33bb99327c77b3a5438a83a357a6729ad # v3.4.0
+    - uses: actions/upload-pages-artifact@v3
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_branch: gh-pages
-        publish_dir: out/res
-        force_orphan: true
+        path: ./out/www
+    - uses: actions/deploy-pages@v4
