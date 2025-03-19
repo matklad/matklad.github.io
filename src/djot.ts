@@ -49,7 +49,7 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
         : "";
       const children = r.renderChildren(node);
       if (node.level == 1) ctx.title = get_string_content(node);
-      const id = node.level > 1 && section?.attributes?.id;
+      const id = node.level > 1 && section?.autoAttributes?.id;
       if (id) {
         return `
     <${tag}${r.renderAttributes(node)}>

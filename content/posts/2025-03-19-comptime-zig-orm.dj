@@ -1,0 +1,1813 @@
+# Comptime Zig ORM
+
+This post can be considered an advanced Zig tutorial. I will be covering some of the more unique
+aspects of the language, but won't be explaining the easy part. If you haven't read the [Zig
+Language Reference](https://ziglang.org/documentation/0.14.0/), you might start there. Additionally,
+we will also learn the foundational trick for implementing relational model.
+
+You _will_ learn a sizable chunk of Zig after this post, but this isn't going to be an easy read, so
+prepare your favorite beverage and get comfy!
+
+## On Learning
+
+One of the most ridiculously effective ways of learning for me is building _toy_ versions of
+programs. This is slightly more specific than "to learn to code, code": I claim that you can learn
+more by spending a week building your own very bad version of an application from scratch that you'd
+learn from working full-time for a year on a production ready codebase. Case in point: although the
+code in this post is lifter from [TigerBeetle](https://github.com/tigerbeetle/tigerbeetle/),
+and I've been working with it for a couple of years, I've learned a bunch of new things myself
+in the evening of hacking on the code for the post.
+
+The hard part about the toy problem approach is finding the right toy! I remember, early in my
+career, spending about a year pestering everything with "what is your favorite model problem?"
+question, and not getting a real answer. Until one day [@zmacter](https://github.com/zmactep) asked
+"have you tried a raytracer?" and that became my model problem for learning programming languages.
+Seriously, if you want to learn Zig, go write yourself a raytracer, I have some notes for that
+[here](https://matklad.github.io/2022/12/31/raytracer-construction-kit.html).
+
+## The Database
+
+In this post, we'll work on a solution of a different model problem, which I think is an especially
+good fit for showcasing Zig's comptime capabilities. This problem is a simplified version of the
+[LSM Forest](https://github.com/tigerbeetle/tigerbeetle/blob/0.16.32/src/lsm/forest.zig) code from
+TigerBeetle.
+
+Specifically, we will be implementing an in-memory relational database, whose schema is set at
+compile time. Before diving into the implementation, let's sketch the interface we want.
+
+First, we define objects which we will be storing in our database, accounts and transfers:
+
+```zig
+const Account = struct {
+    id: ID = @enumFromInt(0),
+    balance: u128,
+
+    pub const ID = enum(u64) { _ };
+};
+
+const Transfer = struct {
+    id: ID = @enumFromInt(0),
+    amount: u128,
+    debit_account: Account.ID,
+    credit_account: Account.ID,
+
+    pub const ID = enum(u64) { _ };
+};
+```
+
+In Zig, `struct` is an expression that yields an anonymous struct type, which needs to be explicitly
+bound to an identifier: `const Account = struct { ... }`{.display}
+
+Structs contain fields and declarations. Fields can have default values. This curious pattern
+`pub const ID = enum(u64) { _ };`{.display}
+is a Zig idiom for creating a newtype over an integer. `ID` is an enumeration, whose backing type is
+`u64`. This enumeration doesn't have any explicitly named variants, but it is open (`_`) --- any
+`u64` numeric value is considered to be a member. This is exactly what we want for an id --- it's an
+opaque number with a unique type, whose "numberness" is not exposed (you can't add two ids
+together). In the transfer struct, we refer to account id:
+`debit_account: Account.ID`{.display}
+
+Note that although `Account.ID` and `Transfer.ID` have exactly the same definition, they are
+distinct types. Let this sink in --- Zig's type system is nominal, but all types are anonymous!
+
+ids will be assigned by our database automatically, using an auto-incrementing counter, and we will
+use zero id to signify a new object without an id assigned yet:
+`id: ID = @enumFromInt(0),`{.display}
+
+`@enumFromInt` and `@intFromEnum` are built-in functions for casting between an enum and its backing
+integer. It could have been cleaner to instead write:
+
+```zig
+const Account = struct {
+    id: ID = .unassigned,
+    balance: u128,
+
+    pub const ID = enum(u64) {
+        unassigned = 0,
+        _,
+    };
+};
+```
+
+That is, to add an explicitly named variant for zero.
+
+::: note
+A word on built in functions. In Zig, all compiler builtins use special syntax with `@`. This is
+somewhat unusual --- traditionally, builtins are some magic functions inside the standard library,
+specially marked. Zig boldly uses a dedicated _syntax_ for builtins, but, in the exchange, the Zig
+standard library is not privileged at all. It is just a normal library which happens to be
+distributed with the compiler, it doesn't have special powers.
+:::
+
+---
+
+::: note
+A word on type inference. Zig hits sweat spot:
+
+- explicit types are rarely needed in expressions,
+- where they _are_ needed a human reader usually wouldn't be able to tell the type on the spot
+  anyway,
+- function signatures are always explicit,
+- and the inference algorithm is direct and simple.
+
+Specifically, Zig doesn't do Hindley-Milner (separate phases of constraint gathering and solving),
+and instead directly infers a type of expression from the types of its subexpressions, with a small
+twist. If the type of the result is known already through other means, it is propagated down.
+Certain syntaxes and builtins take advantage of this known result type. Consider both flavors of
+defaulting id to zero:
+
+```zig
+id: ID = .unassigned,
+id: ID = @enumFromInt(0),
+```
+
+Here, the result type is known, it is `ID`. So, when Zig evaluates `.unassigned`, it knows that the
+result type must be `ID`, and "desugars" the shorthand to `ID.unassigned` (the type needn't be
+namable). Similarly, for `@enumFromInt` case, the type of an enum to convert to is taken from the
+result. If the type is not otherwise known from the context, the result is a compilation error which
+can be fixed with an `@as` type ascription builtin:
+
+```zig
+// Compilation error: _which_ enum?
+const mystery = @enumFromInt(0);
+
+const mystery = @as(ID, @enumFromInt(0));
+```
+
+Note how Zig doesn't need type ascription _syntax_, and just uses a builtin function.
+:::
+
+So, yeah, we have accounts and transfers, they both have ids assigned by the database, an account
+has a balance, a transfer has an amount and refers to two accounts:
+
+```zig
+const Account = struct {
+    id: ID = @enumFromInt(0),
+    balance: u128,
+
+    pub const ID = enum(u64) { _ };
+};
+
+const Transfer = struct {
+    id: ID = @enumFromInt(0),
+    amount: u128,
+    debit_account: Account.ID,
+    credit_account: Account.ID,
+
+    pub const ID = enum(u64) { _ };
+};
+```
+
+Now, let's define our database from the schema:
+
+```zig
+const DBType = @import("./db.zig").DBType;
+
+const DB = DBType(.{
+    .tables = .{
+        .account = Account,
+        .transfer = Transfer,
+    },
+    .indexes = .{
+        .transfer = .{
+            .debit_account, .credit_account,
+        },
+    },
+});
+```
+
+A lot is going on here. First, we use `@import` builtin function to import (look, no need for syntax
+again!) `DBType` function. `DBType` is a type constructor --- it takes a DB schema, and returns a
+database type. For the schema, we ask for two tables, accounts and transfers, and also ask to
+include indexes on transfers' foreign keys.
+
+The implementation of `DBType` is the meat of this post, but, for now, let's see how we use it.
+Let's write a function to add a transfer to the database:
+
+```zig
+fn create_transfer(
+    db: *DB,
+    gpa: std.mem.Allocator,
+    debit_account: Account.ID,
+    credit_account: Account.ID,
+    amount: u128,
+) !?Transfer.ID {
+    ...
+}
+```
+
+Zig doesn't have a global allocator, so anything that needs to allocate takes an allocator argument.
+`std.mem.Allocator` is dynamically dispatched: inside it are a type-erased pointer to a particular
+allocator's state, and a pointer to a vtable:
+
+```zig
+const Allocator = struct {
+    ptr: *anyopaque,
+    vtable: *const VTable,
+
+    pub const VTable = struct {
+        alloc: *const fn (
+            *anyopaque,
+            len: usize,
+            alignment: Alignment,
+            ret_addr: usize,
+        ) ?[*]u8,
+        ...
+    };
+};
+```
+
+This is a trait object, coded manually. `gpa` stands for general purpose allocator, which behaves
+more or less like a global allocator would, as far as the code is concerned. You often see `arena:
+Allocator`, signifying that memory doesn't need to be freed on per-object basis, or `scratch:
+Allocator`, signifying that the memory can be used for short-lived allocations inside the function,
+but can't outlive it.
+
+Inserting a new object into our in-memory database could allocate, so we need an allocator argument,
+and, conversely, need to signal possibility of an allocation failure in our result type, which is
+what the bang (`!`) is for.
+
+Another reason for why the operation might fail is that the transfer itself might be invalid (e.g.,
+insufficient balance). For simplicity, I choose to model this by returning a `null` instead of
+`Transfer.ID`, hence the question mark (`?`).
+
+::: note
+In Zig, types are always specified in prefix notation, without exception. For example,
+`[3]?struct { r: u8, g: u8, b:u8 }`{.display}
+is an array of three optional colors.
+:::
+
+Let's see the implementation of `create_transfer`:
+
+```zig
+if (debit_account == credit_account) return null;
+const dr = mc orelse
+    return null;
+const cr = db.account.get(credit_account) orelse
+    return null;
+if (dr.balance < amount) return null;
+if (cr.balance > std.math.maxInt(u128) - amount) return null;
+
+db.account.update(.{
+    .id = debit_account,
+    .balance = dr.balance - amount,
+});
+db.account.update(.{
+    .id = credit_account,
+    .balance = dr.balance + amount,
+});
+return try db.transfer.create(gpa, .{
+    .debit_account = debit_account,
+    .credit_account = credit_account,
+    .amount = amount,
+});
+```
+
+Zig doesn't require braces around if's body which makes for concise "guard" ifs. It comes with
+autoformatter out of the box, so there's very little possibility for indentation confusion.
+
+`db.account.get(credit_account)` looks up an account by an id. The account might or might not exist,
+the return type of this function is `?Account`. Zig's `orelse` unpacks optionals. The type of
+`return` expression is `noreturn` (`!` from Rust), so the type of `cr` and `dr` is just `Account`,
+without a question mark. Instead of `return`ing, we could have `orelse`ed some default `Account`.
+
+This line is the only place where we need to help type inference by spelling a type explicitly:
+`if (cr.balance > std.math.maxInt(u128) - amount) return null;`{.display}
+
+We pass `u128` type tothe `maxInt` function. This is the case where a sophisticated smart type
+inference algorithm could look at the surrounding context and _infer_ the type, but Zig deliberately
+requires the user to spell it in stations like this.
+
+Having done the balance checks, we ask our database to update the two balances, and to persist the
+new transfer object. Only `transfer.create` calls gets an allocator, so it is immediately obvious
+that only this part of the function can allocate.
+
+## A Usage Example
+
+Now, let's write some test program:
+
+```zig
+pub fn main() !void {
+    ...
+}
+```
+
+We are going to allocate, so we might fail, so we return `!void`. So, we'll need an allocator:
+
+```zig
+var gpa_instance: std.heap.DebugAllocator(.{}) = .{};
+const gpa = gpa_instance.allocator();
+```
+
+`gpa_instance` is a concrete allocator, of type `std.heap.DebugAllocator(.{})`. It is initialized
+with default values for all the fields. When evaluating `= .{}`, Zig knows the result type, so it
+knows _which_ fields are defaulted.
+
+`gpa` is our trait object. Internally, it contains a pointer to `gpa_instance`. The state of
+`gpa_instance` will be mutated, so it needs to be declared as a `var`. The `gpa` though is just a
+pair of pointes, and those pointers won't be mutated themselves, so we can declare it `const`.
+Similarly to how in Rust you'd write
+
+```rust
+let mut x = 92;
+let r = &mut r; // no mut on r!
+```
+
+Because Zig doesn't track aliasing in the type system, figuring out what can get mutated when is
+generally harder in Zig than in Rust.
+
+For the usage example, we'll need some random numbers, which follow a similar pattern --- a
+concrete PRNG and a dynamically dispatched trait object / vtable:
+
+```zig
+var random_instance = std.Random.DefaultPrng.init(92);
+const random = random_instance.random();
+```
+
+Finally, we create an instance of our database:
+
+```zig
+var db: DB = .{};
+// defer db.deinit(gpa);
+```
+
+`DB` will allocate memory, so we absolutely do need a deinit function to free it, but I am excluding
+it from the tutorial, as it requires some not particularly illuminating legwork.
+
+For starters, just create two accounts and a transfer:
+
+```zig
+const alice: Account.ID =
+    try db.account.create(gpa, .{ .balance = 100 });
+
+const bob: Account.ID =
+    try db.account.create(gpa, .{ .balance = 200 });
+
+const transfer: ?Transfer.ID =
+    try create_transfer(&db, gpa, alice, bob, 100);
+
+assert(transfer != null);
+```
+
+So far, this feels like a hash-map with more steps. We aren't doing anything relational here. We
+will, soon, but we'll need some fake data. To keep things a touch more realistic, we won't be
+distributing transfers equally between accounts, and instead ensure that 20% of hottest accounts are
+responsible for 80% of transfers:
+
+```zig
+fn pareto_index(random: std.Random, count: usize) usize {
+    assert(count > 0);
+    const hot = @divFloor(count * 2, 10);
+    if (hot == 0) return random.uintLessThan(usize, count);
+    if (random.uintLessThan(u32, 10) < 8) {
+        return pareto_index(random, hot);
+    }
+    return hot + random.uintLessThan(usize, count - hot);
+}
+```
+
+Nothing new here --- `@divFloor` is another builtin (an intention-bearing name for `/`), and we need
+to pass the type we want to get out of random explicitly, instead of having type inference (and the
+human reader) figuring it out.
+
+The loop to populate the database is slightly more interesting:
+
+```zig
+var accounts: std.ArrayListUnmanaged(Account.ID) = .empty;
+defer accounts.deinit(gpa);
+
+const account_count = 100;
+try accounts.ensureTotalCapacity(gpa, account_count);
+
+accounts.appendAssumeCapacity(alice);
+accounts.appendAssumeCapacity(bob);
+while (accounts.items.len < account_count) {
+    const account = try db.account.create(gpa, .{ .balance = 1000 });
+    accounts.appendAssumeCapacity(account);
+}
+
+const transfer_count = 100;
+for (0..transfer_count) |_| {
+    const debit = pareto_index(random, account_count);
+    const credit = pareto_index(random, account_count);
+    const amount = random.uintLessThan(u128, 10);
+    _ = try create_transfer(
+        &db,
+        gpa,
+        accounts.items[debit],
+        xaccounts.items[credit],
+        amount,
+    );
+}
+```
+
+We'll need to store generated account ids somewhere, so we use an `ArrayList`. Zig _strongly_ pushes
+you towards batching your allocations, so we preallocate space for a hundred accounts at once, and
+then append _without_ passing a `gpa` in. For  simplicity, we don't implement reservation API for
+our database, so we do need a `gpa` when creating an account or a transfer.
+
+In Zig, unused return value is a compilation error, so we need `_ =` to ignore the result of the
+transfer.
+
+Finally, we come to the relational part of the tutorial, we'll do a non-trivial lookup. First, we'll
+asks for all transfers from `alice` to anyone, and then for transfers between `alice` and `bob`
+specifically:
+
+{highlight="2-5,14-17"}
+```zig
+var transfers_buffer: [10]Transfer = undefined;
+const alice_transfers = db.transfer.filter(
+    .{ .debit_account = alice },
+    &transfers_buffer,
+);
+for (alice_transfers) |t| {
+    std.debug.print("alice: from={} to={} amount={}\n", .{
+        t.debit_account,
+        t.credit_account,
+        t.amount,
+    });
+}
+
+const alice_to_bob_transfers = db.transfer.filter(
+    .{ .debit_account = alice, .credit_account = bob },
+    &transfers_buffer,
+);
+for (alice_to_bob_transfers) |t| {
+    std.debug.print("alice to bob: from={} to={} amount={}\n", .{
+        t.debit_account,
+        t.credit_account,
+        t.amount,
+    });
+}
+```
+
+The interesting parts are highlighted. We can ask the database to filter transfer objects to only
+those with matching attributes. You can do it using a brute-force loop over all transfers. But, if
+you are serious about your relational model, you obviously want to be faster than that! I wonder if
+this has something to do with the indexes we added when declaring `DB`?
+
+For Zig specifics, I don't want to allocate the result, and I don't want to bother with iterators,
+so I pass a stack-allocated out buffer in.
+
+## A Call To Action
+
+Here's what we got so far, the interface for the so-far mysterious `db.zig`:
+
+```zig
+const std = @import("std");
+const assert = std.debug.assert;
+
+const DBType = @import("./db.zig").DBType;
+
+const Account = struct {
+    id: ID = @enumFromInt(0),
+    balance: u128,
+
+    pub const ID = enum(u64) {
+        unassigned,
+        _,
+    };
+};
+
+const Transfer = struct {
+    id: ID = @enumFromInt(0),
+    amount: u128,
+    debit_account: Account.ID,
+    credit_account: Account.ID,
+
+    pub const ID = enum(u64) { _ };
+};
+
+const DB = DBType(.{
+    .tables = .{
+        .account = Account,
+        .transfer = Transfer,
+    },
+    .indexes = .{
+        .transfer = .{
+            .debit_account, .credit_account,
+        },
+    },
+});
+
+fn create_transfer(
+    db: *DB,
+    gpa: std.mem.Allocator,
+    debit_account: Account.ID,
+    credit_account: Account.ID,
+    amount: u128,
+) !?Transfer.ID {
+    if (debit_account == credit_account)
+        return null;
+    const dr = db.account.get(debit_account) orelse
+        return null;
+    const cr = db.account.get(credit_account) orelse
+        return null;
+    if (dr.balance < amount) return null;
+    if (cr.balance > std.math.maxInt(u128) - amount) return null;
+
+    db.account.update(.{
+        .id = debit_account,
+        .balance = dr.balance - amount,
+     });
+    db.account.update(.{
+        .id = credit_account,
+        .balance = dr.balance + amount,
+     });
+    return try db.transfer.create(gpa, .{
+        .debit_account = debit_account,
+        .credit_account = credit_account,
+        .amount = amount,
+    });
+}
+
+pub fn main() !void {
+    var gpa_instance: std.heap.DebugAllocator(.{}) = .{};
+    const gpa = gpa_instance.allocator();
+
+    var random_instance = std.Random.DefaultPrng.init(92);
+    const random = random_instance.random();
+
+    var db: DB = .{};
+    // defer db.deinit(gpa);
+
+    const alice: Account.ID =
+        try db.account.create(gpa, .{ .balance = 100 });
+    const bob: Account.ID =
+        try db.account.create(gpa, .{ .balance = 200 });
+    const transfer =
+         try create_transfer(&db, gpa, alice, bob, 100);
+    assert(transfer != null);
+
+    var accounts: std.ArrayListUnmanaged(Account.ID) = .empty;
+    defer accounts.deinit(gpa);
+
+    const account_count = 100;
+    try accounts.ensureTotalCapacity(gpa, account_count);
+
+    accounts.appendAssumeCapacity(alice);
+    accounts.appendAssumeCapacity(bob);
+    while (accounts.items.len < account_count) {
+        const account =
+            try db.account.create(gpa, .{ .balance = 1000 });
+        accounts.appendAssumeCapacity(account);
+    }
+
+    const transfer_count = 100;
+    for (0..transfer_count) |_| {
+        const debit = pareto_index(random, account_count);
+        const credit = pareto_index(random, account_count);
+        const amount = random.uintLessThan(u128, 10);
+        _ = try create_transfer(
+            &db,
+            gpa,
+            accounts.items[debit],
+            accounts.items[credit],
+            amount,
+        );
+    }
+
+    var transfers_buffer: [10]Transfer = undefined;
+    const alice_transfers = db.transfer.filter(
+        .{ .debit_account = alice },
+        &transfers_buffer
+    );
+    for (alice_transfers) |t| {
+        std.debug.print("alice: from={} to={} amount={}\n", .{
+            t.debit_account,
+            t.credit_account,
+            t.amount,
+        });
+    }
+    std.debug.print("\n\n", .{});
+
+    const alice_to_bob_transfers = db.transfer.filter(
+        .{ .debit_account = alice, .credit_account = bob },
+        &transfers_buffer,
+    );
+    for (alice_to_bob_transfers) |t| {
+        std.debug.print("alice to bob: from={} to={} amount={}\n", .{
+            t.debit_account,
+            t.credit_account,
+            t.amount,
+        });
+    }
+}
+
+fn pareto_index(random: std.Random, count: usize) usize {
+    assert(count > 0);
+    const hot = @divFloor(count * 2, 10);
+    if (hot == 0) return random.uintLessThan(usize, count);
+    if (random.uintLessThan(u32, 10) < 8) return pareto_index(random, hot);
+    return hot + random.uintLessThan(usize, count - hot);
+}
+```
+
+If you want to get 90% out of this post, I _strongly_ recommend you to not read any further, and
+instead copy the above code into your own `main.zig` and try to write `db.zig` yourself. I do think
+this is the most excellent exercise that can teach you more effectively than any blog post. It'll
+take _more_ time, of course, but you'll get more knowledge per minute spent out of it.
+
+If you will settle for the 10%, read on! And, if you want 100% percent, than do your implemetation
+first and then come back here!
+
+## The Table
+
+We will be building `db.zig` from the gound up. It all will make sense! At the end.
+
+Our fundamental data structure is a sorted list of values. Here, I kindly ask the reader to engage
+suspension of disbelief: in a real database we will be using a data structure with efficient looks
+and modifications, such as a B-tree or an LSM tree. For the purposes of this tutorial, we will use a
+simpe sorted array, and will just close our eyes on O(N) insertions and removals.
+
+Values are going to be sorted by a paricular field. For example, we sort transfers by their ids. So,
+when creating a "Table" of transfers, we'll need to pass the type of key, the type of value, and
+functions for extracting and comparing keys:
+
+
+```zig
+const TransfersTable = TableType(Transfer.ID, Transfer, struct {
+    pub fn key_fn(value: Transfer) Transfer.ID {
+        return value.id;
+    }
+    pub fn key_cmp(lhs: Transfer.ID, rhs: Transfer.ID) std.math.Order {
+        return std.math.order(@intFromEnum(lhs), @intFromEnum(rhs));
+    }
+});
+```
+
+Here's the corresponding declaration:
+
+```zig
+fn TableType(
+    comptime KeyType: type,
+    comptime ValueType: type,
+    comptime Functions: type,
+) type {
+    const key_fn = Functions.key_fn;
+    const key_cmp = Functions.key_cmp;
+
+    return struct {
+        ...
+    };
+}
+```
+
+This is a type constructor function, which takes a bunch of types as arguments and returns a new
+type. Such functions can only be called at compile time., Zig doesn't have the ability to create new
+types at runtime, unlike something like the JVM.
+
+Passing the table of functions as a `Functions` type is a weird idiom of Zig. It would be more
+natural to use the following signature:
+
+```zig
+fn TableType(
+    comptime KeyType: type,
+    comptime ValueType: type,
+    comptime key_fn: fn(value: ValueType): KeyType,
+    comptime key_cmp: fn(lhs: KeyType, rhs: KeyType): std.math.Order,
+) type
+```
+
+But this version is more painful to use at the call site. While `struct` is an expression in `Zig`,
+and you can declre one inline, `fn` is not an expression, you can't declare a function inline unless
+you employ another Zig idiom:
+
+```zig
+const my_function = struct {
+    fn double(x: u32) u32 { return x * 2; }
+}.double;
+```
+
+Here's the implementation of the table:
+
+```zig
+struct {
+    values: std.ArrayListUnmanaged(Value) = .empty,
+
+    pub const Key = KeyType;
+    pub const Value = ValueType;
+    const Table = @This();
+
+    pub fn search(
+        table: *const Table,
+        key: Key,
+        start_index: usize,
+    ) usize {
+        return start_index + std.sort.lowerBound(
+            Value,
+            table.values.items[start_index..],
+            key,
+            compare_fn,
+        );
+    }
+
+    fn compare_fn(key: Key, value: Value) std.math.Order {
+        return key_cmp(key, key_fn(value));
+    }
+
+    pub fn get(table: *const Table, key: Key) ?Value {
+        const index = table.search(key, 0);
+        if (index >= table.values.items.len) return null;
+
+        const value = table.values.items[index];
+        if (key_cmp(key, key_fn(value)) != .eq) return null;
+
+        return value;
+    }
+
+    pub fn reserve(
+        table: *Table,
+        gpa: std.mem.Allocator,
+        extra: usize,
+    ) !void {
+        try table.values.ensureUnusedCapacity(gpa, extra);
+    }
+
+    pub fn insert(table: *Table, value: Value) void {
+        assert(table.values.unusedCapacitySlice().len > 0);
+        const index = table.search(key_fn(value), 0);
+        table.values.insertAssumeCapacity(index, value);
+    }
+
+    pub fn remove(table: *Table, value: Value) void {
+        const index = table.search(key_fn(value), 0);
+        const removed = table.values.orderedRemove(index);
+        assert(std.meta.eql(value, removed));
+    }
+};
+```
+
+The `search` function binary searches for the index corresponding to the given `key` in the list of
+values. For convenience of the call-site we are yet to see, we also pass in the starting index for
+the search. It is useful for, e.g., pagination-style API where you use index as a cursor.
+
+The `get` function than uses `search` to find the index, and then furthermore checks thta we have an
+exact match.
+
+For the `insert` function, we _do_ implement the resvation pattern: memory allocation and data
+structure modification are split into two functions. Modification proper is infailable, and has a
+reservation as a precondition.
+
+As promised, we do a naive linear memcpy for `insert` / `remove`, but we pretend that it is actually
+logarithmic.
+
+Another unrealistic simplification is that our API is scalar --- we insert or remove a single item
+at a time. Both Zig and relational model strongly encorage operating on a batch of objects at a
+time, [pushing the `for`s down](https://matklad.github.io/2023/11/15/push-ifs-up-and-fors-down.html):
+`pub fn insert(table: *Table, values: []const Value) void`{.display}
+
+Even with a naive array list, the batched version runs in O(N + K log K), which is much faster than
+O(N K) of the scalar version repeated K times. But we leave batching as an exercise for the reader.
+
+## The Indexes
+
+Now comes the relational model part of the tutorial. If we have
+
+```zig
+const TransfersTable = TableType(Transfer.ID, Transfer, struct {
+    pub fn key_fn(value: Transfer) Transfer.ID {
+        return value.id;
+    }
+    pub fn key_cmp(lhs: Transfer.ID, rhs: Transfer.ID) std.math.Order {
+        return std.math.order(@intFromEnum(lhs), @intFromEnum(rhs));
+    }
+});
+```
+
+we can efficiently filter transfers by their ids. How can we add an ability to filter transfers by,
+say, debit account id?
+
+The idea is to add a second sorted list, which stores pairs of
+[`(Account.ID, Transfer.ID)`]{.display}
+
+With this setup, if you are interested in all transfers from alice, you can binary search for
+alice's account ID in the second list, fetch corresponding transfer ids, and then lookup transfers
+in the first list:
+
+```
+Transfers:
+id=1 debit_account=alice    credit_account=bob
+id=2 debit_account=charley  credit_account=bob
+id=3 debit_account=alice    credit_account=charley
+
+Index:
+debit_account=alice   id=1
+debit_account=alice   id=3
+debit_account=charley id=2
+```
+
+What makes this work is that we can maintain two lists in sync. When creating a transfer, you insert
+it in the Transfers table, but also insert the corresponding pair to the index table. Removal works
+similarly.
+
+## Implementing the Index
+
+Let's implement an index table. Here, we start using `comptime` for real. In particular, we will
+parametrize our index table by the type (such as `Transfer`) and the name of the field to build an
+index over (such as `.debit_account`):
+
+```zig
+const TransferDebitAccountIndex =
+    IndexTableType(Transfer, .debit_account);
+```
+
+This is the signature:
+
+```zig
+fn IndexTableType(
+    comptime Value: type,
+    comptime field: std.meta.FieldEnum(Value),
+) type {
+    ...
+}
+```
+
+This is a type constructor, which takes a type and returns a type. The
+`std.meta.FieldEnum(Value)`{.display}
+call returns an enum whose variants are fields of `Value`. E.g, our `Transfer` is
+
+```zig
+const Transfer = struct {
+    id: ID,
+    amount: u128,
+    debit_account: Account.ID,
+    credit_account: Account.ID,
+};
+```
+
+so the corresponding `FieldEnum` would look like this:
+
+```zig
+const TransferFieldEnum = enum {
+    id,
+    amount,
+    debit_account,
+    credit_account,
+};
+```
+
+Now, the body:
+
+```zig
+fn IndexTableType(
+    comptime Value: type,
+    comptime field: std.meta.FieldEnum(Value),
+) type {
+    const FieldType = @FieldType(Value, @tagName(field));
+
+    const Pair = struct {
+        field: FieldType,
+        id: Value.ID,
+    };
+
+    return TableType(Pair, Pair, struct {
+        pub fn key_fn(value: Pair) Pair {
+            return value;
+        }
+
+        pub fn key_cmp(lhs: Pair, rhs: Pair) std.math.Order {
+            return order_by(Pair, lhs, rhs, &.{ .field, .id });
+        }
+    });
+}
+```
+
+Ultimately, we want to delegate to existing `TableType`, as that already implements the logic for
+storing a sorted list of items. The item for us is a pair of field's type, and value id. One note
+about the
+[`const FieldType = @FieldType(Value, @tagName(field));`]{.display}
+incantation used. `FieldEnum` is the library-level abstraction. Meta programming builtins, like
+`@FieldType` or `@field`, work with string names of field (at compile time, of course). `@tagName`
+converts from `.debit_account` to `"debit_account"`. We don't _have_ to use `FieldEnum`, and could
+have used strings throughout, but `FieldEnum` gives us two advantages:
+
+- Earlier types errors: calling `IndexTableType` with the field that doesn't exist will error out
+  at the call site, rather than at the definition side.
+- Grepability: in Zig, field access is always spelled as `.debit_account` syntactically, so it is
+  advantageous to stick to the same convention during meta programming, to make sure it also gets
+  into textual searches.
+
+The `Key` for our table is the entire `Pair`. That is, we want to sort not only on the field value,
+but on ID as well, to make sure that, when we lookup all ids for a particular field value, we get
+back a sorted list. That's why our `key_fn` is an identity function:
+
+```zig
+pub fn key_fn(value: Pair) Pair {
+    return value;
+}
+```
+
+In `key_cmp`, we want to compare first by `field`, and then by `id`. We can do it manually, but it's
+more fun to do some meta programming here as well:
+
+```zig
+pub fn key_cmp(lhs: Pair, rhs: Pair) std.math.Order {
+    return order_by(Pair, lhs, rhs, &.{ .field, .id });
+}
+
+fn order_by(
+    comptime T: type,
+    lhs: T,
+    rhs: T,
+    comptime fields: []const std.meta.FieldEnum(T),
+) std.math.Order {
+    ...
+}
+```
+
+`order_by` is our first mixed-mode function. Some arguments are `comptime`, but some are runtime.
+This function should compare a pair of `T` by sequentially compare the values of the corresponding
+fields, and returning as soon as two unequal fields are found. Here we use an `inline for`:
+
+```zig
+fn order_by(
+    comptime T: type,
+    lhs: T,
+    rhs: T,
+    comptime fields: []const std.meta.FieldEnum(T),
+) std.math.Order {
+    inline for (fields) |field| {
+        const order = order_enums(
+            @field(lhs, @tagName(field)),
+            @field(rhs, @tagName(field)),
+        );
+        if (order != .eq) return order;
+    }
+    return .eq;
+}
+```
+
+Because the list of fields is known at compile time, the loop is fully unrolled, and the  actual
+generated code ends up looking as a sequence of direct comparisons. `@field` fetches a field from a
+value given a `comptime` field's name. `order_enums` is a little helper which allows comparing
+either numbers or enums:
+
+```zig
+fn order_enums(lhs: anytype, rhs: @TypeOf(lhs)) std.math.Order {
+    return switch (@typeInfo(@TypeOf(lhs))) {
+        .int => std.math.order(lhs, rhs),
+        .@"enum" => std.math.order(
+            @intFromEnum(lhs),
+            @intFromEnum(rhs),
+        ),
+        else => comptime unreachable,
+    };
+}
+```
+
+`@typeInfo` is a builtin that allows reflecting on the structure of types. In particular, it
+classifies types as structs, unions, enums, integers, etc, exactly what we need here. One wrinkle
+here is that `enum` is a keyword, so the `enum` variant of `@typeInfo` is spelled as `@"enum"`. The
+`@""` syntax allows using any string as a Zig identifier, it's an escape for keywords.
+
+And that's basically it for indexes! Now we have our main table (object table), and a number of
+index tables. The next task is to bundle them together, so that we can enforce consistency between
+the tables.
+
+## The Bundle
+
+The next thing we will be building is the `Bundle`. It takes a type, a list of fields to build
+indexes over, and provides an API for creating and looking up values while maintaining consistency
+of indexes:
+
+```zig
+pub fn BundleType(
+    comptime Value: type,
+    comptime indexed_fields: []const std.meta.FieldEnum(Value),
+) type
+```
+
+With the bundle, we can finally explain what is the database that we've started with:
+
+```zig
+const DB = struct {
+    account: BundleType(Account, &.{}),
+    transfer: BundleType(Transfer, &.{
+        debit_account,
+        credit_account,
+    }),
+}
+```
+
+And these were the API we used, and which we'll now implement:
+
+```zig
+var db: DB = ...;
+try db.account.create(gpa, .{ .balance = 100 });
+db.account.update(.{ .id = debit_account, .balance = dr.balance - amount });
+db.account.get(debit_account);
+
+try db.transfer.create(gpa, .{
+    .debit_account = debit_account,
+    .credit_account = credit_account,
+    .amount = amount,
+})
+
+db.transfer.filter(
+    .{ .debit_account = alice, .credit_account = bob },
+    &transfers_buffer,
+);
+```
+
+Let's start:
+
+```zig
+pub fn BundleType(
+    comptime Value: type,
+    comptime indexed_fields: []const std.meta.FieldEnum(Value),
+) type {
+    return struct {
+        id_counter: u64 = 0,
+
+        objects: TableType(Value.ID, Value, struct {
+            pub fn key_fn(value: Value) Value.ID {
+                return value.id;
+            }
+            pub fn key_cmp(
+                lhs: Value.ID,
+                rhs: Value.ID,
+            ) std.math.Order {
+                return std.math.order(
+                    @intFromEnum(lhs),
+                    @intFromEnum(rhs),
+                );
+            }
+        }) = .{},
+
+        indexes: ???,
+
+        const Bundle = @This();
+
+        pub fn get(bundle: *Bundle, id: Value.ID) ?Value {
+            return bundle.objects.get(id);
+        }
+
+        ...
+    }
+}
+```
+
+The basic structure is clear: we have an `id_counter` for assigning new ids when creating values,
+the object table which stores sorted values and which directly powers the `get` method, and than we
+have the indexes. The indexes are tricky. For transfers, where we index `debit_account` and
+`credit_account`, we want the `indexes` look like this:
+
+```zig
+indexes: struct {
+    debit_account:  IndexTreeType(Transfer, .debit_account),
+    credit_account: IndexTreeType(Transfer, .debit_account),
+}
+```
+
+So we need to iterate over passed in `indexed_fields` and create a struct with a field for each
+index. And that's exactly what we'll do:
+
+```zig
+indexes: blk: {
+    var fields: [indexed_fields.len]std.builtin.Type.StructField =
+        undefined;
+    for (indexed_fields, 0..) |indexed, i| {
+        const Type = IndexTableType(Value, indexed);
+        fields[i] = .{
+            .name = @tagName(indexed),
+            .type = Type,
+            .default_value_ptr = &(Type{}),
+            .is_comptime = false,
+            .alignment = @alignOf(Type),
+        };
+    }
+    break :blk @Type(.{ .@"struct" = .{
+        .layout = .auto,
+        .is_tuple = false,
+        .decls = &.{},
+        .fields = &fields,
+    } });
+} = .{},
+```
+
+This makes much more sense if you read it backwards:
+
+- `break :blk` "returns" a value from the block labeled `blk:`, this is Zig's more imperative take
+  on "everything is an expression"
+- We return a `@Type`. `@Type` is an inverse of `@TypeInfo`, in a sense that, hand waving a bit,
+  [`@Type(@TypeInfo(T)) == T`.]{.display} That is, we pass a description of the type, and get a type
+  back. What we want to get is a struct with fields, so we pass `@"struct"` and an array of fields.
+- Each element of `fields` is an
+  [`std.builtin.Type.StructField`, ]{.display}
+  a description of a field, that is, its type, name, and default.
+- The type is
+  [`const Type = IndexTableType(Value, indexed);`]{.display}
+  That is, the index table for the `indexed` field of `Value`.
+- The name matches the name of the index field.
+- And the default is just a default for the `Type`.
+- Finally, we need `indexed_fields.len` fields.
+
+Now that we have all tables, `create` and `update` are relatively straightforward. For create, we
+need to make sure to insert the appropriate values into the objects table and into all of the
+indexes:
+
+```zig
+pub fn create(
+    bundle: *Bundle,
+    gpa: std.mem.Allocator,
+    value: Value,
+) !Value.ID {
+    assert(@intFromEnum(value.id) == 0);
+
+    try bundle.objects.reserve(gpa, 1);
+    inline for (indexed_fields) |field| {
+        try @field(bundle.indexes, @tagName(field))
+                .reserve(gpa, 1);
+    }
+    errdefer comptime unreachable;
+
+    bundle.id_counter += 1;
+    const id: Value.ID = @enumFromInt(bundle.id_counter);
+
+    var value_with_id = value;
+    value_with_id.id = id;
+
+    bundle.objects.insert(value_with_id);
+    inline for (indexed_fields) |indexed_field| {
+        const field = @tagName(indexed_field);
+        @field(bundle.indexes, field)
+            .insert(.{ .field = @field(value, field), .id = id });
+    }
+
+    return id;
+}
+```
+
+We start with asserting that the id is 0. It's our job to assign the id! But, before we do that, we
+reserve space for one more entry in all the tables. This is the place in the function where we
+allocate, and where we can fail. The cryptic
+[`errdefer comptime unreachable`]{.display}
+is a Zig tongue twister to say that no errors can happen after this point in function. Separating
+memory reservation and actual modification is helpful to make sure that the data structure remains
+consistent even in the face of a memory error.
+
+Had we not split out fallible `reserve` from infallible `insert`, and kept the allocation inside
+`insert`, we could have ended in a situation when a value is inserted only in _some_ of the indexes.
+
+I must admit that I am deeply skeptical that it is possible to consistently handle these kind of
+issues on memory allocation error correctly, I am in the "abort on OOM" camp personally. As a quick
+quiz, have you noticed when we _didn't_ handle this issue correctly in the code we've already seen?
+
+With that throat clearing done, the actual logic is straightforward:
+
+- assign id,
+- insert the value into the objects table,
+- and then, for each of the indexed fields, insert the `(id, field)` pair into the corresponding
+  index tree. The `inline for` loop is guaranteed to be fully unrolled at compile time.
+
+As usual, we use `@field` to get a field by name (c.f. JavaScript `obj.foo` vs `obj[foo]`).
+
+The `update` is even simple, as we don't need to allocate new memory. So we just remove old values
+and insert new ones:
+
+```zig
+pub fn update(bundle: *Bundle, value_new: Value) void {
+    const id = value_new.id;
+    assert(@intFromEnum(id) != 0);
+    const value_old = bundle.get(value_new.id).?;
+    assert(value_old.id == id);
+
+    bundle.objects.remove(value_old);
+    bundle.objects.insert(value_new);
+
+    inline for (indexed_fields) |indexed_field| {
+        const field = @tagName(indexed_field);
+        @field(bundle.indexes, field).remove(.{
+            .field = @field(value_old, field),
+            .id = id,
+         });
+        @field(bundle.indexes, field).insert(.{
+            .field = @field(value_new, field),
+            .id = id,
+         });
+    }
+}
+```
+
+Although simple, this is the trick that makes the whole relational model work. See how we
+keep the indexes consistent, by looking up the old value, and removing the corresponding old pairs
+from indexes.
+
+If that was to easy, don't worry, we'll do `filter` next, and that's the toughest one in the entire
+exercise :)
+
+## Merge Sort Join
+
+Let's revisit our original example:
+
+```zig
+var transfers_buffer: [10]Transfer = undefined;
+const alice_to_bob_transfers = db.transfer.filter(
+    .{ .debit_account = alice, .credit_account = bob },
+    &transfers_buffer,
+);
+for (alice_to_bob_transfers) |t| {
+    std.debug.print("alice to bob: from={} to={} amount={}\n", .{
+        t.debit_account,
+        t.credit_account,
+        t.amount,
+    });
+}
+```
+
+The filter takes a filtering condition, equality conditions on a _subset_ of indexed fields. It then
+fills the output buffer with as much objects as possible that match all conditions. How can we do
+that effectively?
+
+Recall that our index tables are sorted by field's value first, and than by object's ID. So, to find
+all transfers with
+[`.debit_account = alice`,]{.display}
+we binary search the debit account index for pairs starting with `alice`. Similarly, we can find all
+transfers with
+[`.credit_account = bob`,]{.display} by binary searching in the other index table.
+
+In both indexes, we get some slice of pairs whose first components are `alice` and `bob`
+respectively. Whats more, the _second_ components of the pairs are sorted transfers ids! So, if we
+want to find ids which match both conditions, we _merge_ two sorted sequencies of ids!
+
+Now lets do this for an arbitrary number of indexes:
+
+```zig
+pub fn filter(bundle: *Bundle, query: anytype, out: []Value) []Value {
+}
+```
+
+We can't really type the `query` parameter, so we use Zig's `anytype` here. This is _not_ dynamic
+typing, rather, it's monomorphization maximus --- every distinct type of `query` will generate a
+fresh copy of the `filter` function.
+
+First, we reflect on `query` to figure out how many indexes tables we need to intersect:
+
+```zig
+const fields = comptime std.meta.fieldNames(@TypeOf(query));
+```
+
+Than, we setup a bunch of indexes (the `ijk` kind, not the database index kind). We need an index
+into the output buffer, and index into the object table, and an index for each index table:
+
+```zig
+var out_index: usize = 0;
+var object_index: usize = 0;
+var indexes: [fields.len]usize = @splat(0);
+```
+
+Then, for each index table, we'd want to get a slice of pairs that match the query. Ideally, we'd
+want to have `fields.len` local variables, one variable per each query field, but Zig doesn't allow
+creating local variables via reflation.
+
+What we can have though is a single variable, which is a tuple of slices. To create such a thing, we
+first need to create its type:
+
+```zig
+const TupleOfSlices = comptime blk: {
+    var components: [fields.len]type = undefined;
+    for (0..fields.len) |i| {
+        const IndexTable = @FieldType(
+            @TypeOf(bundle.indexes),
+            fields[i],
+        );
+        const Pair = IndexTable.Value;
+        components[i] = []Pair;
+    }
+    break :blk std.meta.Tuple(&components);
+};
+
+var slices: TupleOfSlices = undefined;
+```
+
+Then, we can use `search` function to find the actual slices:
+
+```zig
+var slices: TupleOfSlices = undefined;
+
+inline for (fields, 0..) |field, i| {
+    const index = @field(bundle.indexes, field).search(.{
+        .field = @field(query, field),
+        .id = @enumFromInt(0),
+    }, 0);
+    slices[i] = @field(bundle.indexes, field)
+        .values.items[index..];
+}
+```
+
+Now, the merge algorithm proper. We are pointing a finger at each of the slices we have and, on each
+step, advance the fingers that point at the smallest ID. If at some point all our fingers point at the same id, we fetch the corresponding `Value` and add it to the output.
+
+Ideally, we'd use a k-way merge mere (`comptime` specialized to a particular k!), but, for
+simplicity, we'll use linear search to find the lowest id. We will be iterating until either we run
+out of space in the output buffer, or we run off one of our slices:
+
+```zig
+outer: while (true) {
+    if (out_index == out.len) break :outer;
+    inline for (0..fields.len) |i| {
+        if (indexes[i] == slices[i].len) {
+            break :outer;
+        }
+        if (slices[i][indexes[i]].field != @field(query, fields[i])) {
+            break :outer;
+        }
+    }
+
+    ...
+}
+```
+
+Then, we find the minimum ID:
+
+```zig
+var id_min = slices[0][indexes[0]].id;
+inline for (1..slices.len) |i| {
+    const id_next = slices[i][indexes[i]].id
+    if (@intFromEnum(id_next) < @intFromEnum(id_min)) {
+        id_min = id_next;
+    }
+}
+```
+
+Then, we advance all slices with the minimal ID, counting them:
+
+```zig
+var advanced_count: u32 = 0;
+inline for (0..slices.len) |i| {
+    if (slices[i][indexes[i]].id == id_min) {
+        indexes[i] += 1;
+        advanced_count += 1;
+    }
+}
+```
+
+If we advanced _all_ slices (that is, all ids at a particular position are the same), we lookup the
+corresponding transfer in the object table and add it to the output:
+
+```zig
+if (advanced_count == slices.len) {
+    object_index = bundle.objects.search(id_min, object_index);
+    assert(object_index < bundle.objects.values.items.len);
+    const value = bundle.objects.values.items[object_index];
+
+    inline for (fields) |field| {
+        assert(@field(value, field) == @field(query, field));
+    }
+
+    out[out_index] = value;
+    out_index += 1;
+    object_index += 1;
+}
+```
+
+This is where we pass a non-zero index to `search`!
+
+Altogether:
+
+```zig
+pub fn filter(bundle: *Bundle, query: anytype, out: []Value) []Value {
+    const fields = comptime std.meta.fieldNames(@TypeOf(query));
+
+    var indexes: [fields.len]usize = @splat(0);
+    var out_index: usize = 0;
+    var object_index: usize = 0;
+
+    const TupleOfSlices = comptime blk: {
+        var components: [fields.len]type = undefined;
+        for (0..fields.len) |i| {
+            const IndexTable = @FieldType(
+                @TypeOf(bundle.indexes),
+                fields[i],
+            );
+            const Pair = IndexTable.Value;
+            components[i] = []Pair;
+        }
+        break :blk std.meta.Tuple(&components);
+    };
+
+    var slices: TupleOfSlices = undefined;
+
+    inline for (fields, 0..) |field, i| {
+        const index = @field(bundle.indexes, field).search(.{
+            .field = @field(query, field),
+            .id = @enumFromInt(0),
+        }, 0);
+        slices[i] = @field(bundle.indexes, field)
+            .values.items[index..];
+    }
+
+    outer: while (true) {
+        if (out_index == out.len) break :outer;
+        inline for (0..fields.len) |i| {
+            if (indexes[i] == slices[i].len) {
+                break :outer;
+            }
+            if (slices[i][indexes[i]].field != @field(query, fields[i])) {
+                break :outer;
+            }
+        }
+
+        var id_min = slices[0][indexes[0]].id;
+        inline for (1..slices.len) |i| {
+            const id_next = slices[i][indexes[i]].id;
+            if (@intFromEnum(id_next) < @intFromEnum(id_min)) {
+                id_min = id_next;
+            }
+        }
+
+        var advanced_count: u32 = 0;
+        inline for (0..slices.len) |i| {
+            if (slices[i][indexes[i]].id == id_min) {
+                indexes[i] += 1;
+                advanced_count += 1;
+            }
+        }
+
+        if (advanced_count == slices.len) {
+            object_index = bundle.objects.search(id_min, object_index);
+            assert(object_index < bundle.objects.values.items.len);
+            const value = bundle.objects.values.items[object_index];
+
+            inline for (fields) |field| {
+                assert(@field(value, field) == @field(query, field));
+            }
+
+            out[out_index] = value;
+            out_index += 1;
+            object_index += 1;
+        }
+    }
+
+    return out[0..out_index];
+}
+```
+
+Congratulations! We've finished `BundleType`, which means we are past the worst of it, and are
+almost at the end!
+
+## The Database Factory
+
+We only need code to turn
+
+```zig
+const DB = DBType(.{
+    .tables = .{
+        .account = Account,
+        .transfer = Transfer,
+    },
+    .indexes = .{
+        .transfer = .{
+            .debit_account, .credit_account,
+        },
+    },
+});
+```
+
+into a bunch of bundles with indexes, but at this point this should be trivial:
+
+```zig
+pub fn DBType(comptime schema: anytype) type {
+    const bundle_names =
+        std.meta.fieldNames(@TypeOf(schema.tables));
+    var bundles: [bundle_names.len]std.builtin.Type.StructField =
+        undefined;
+    for (bundle_names, 0..) |name, i| {
+        const Value = @field(schema.tables, name);
+        const indexes =
+            if (@hasField(@TypeOf(schema.indexes), name))
+                @field(schema.indexes, name)
+            else
+                .{};
+        const Bundle = BundleType(Value, &indexes);
+        bundles[i] = .{
+            .name = name,
+            .type = Bundle,
+            .default_value_ptr = &Bundle{},
+            .is_comptime = false,
+            .alignment = @alignOf(Bundle),
+        };
+    }
+
+    return @Type(.{ .@"struct" = .{
+        .layout = .auto,
+        .is_tuple = false,
+        .decls = &.{},
+        .fields = &bundles,
+    } });
+}
+```
+
+Here's the entire thing, `db.zig`, just under 300 lines:
+
+```zig
+const std = @import("std");
+const assert = std.debug.assert;
+
+pub fn DBType(comptime schema: anytype) type {
+    const bundle_names =
+        std.meta.fieldNames(@TypeOf(schema.tables));
+    var bundles: [bundle_names.len]std.builtin.Type.StructField =
+        undefined;
+    for (bundle_names, 0..) |name, i| {
+        const Value = @field(schema.tables, name);
+        const indexes =
+            if (@hasField(@TypeOf(schema.indexes), name))
+                @field(schema.indexes, name)
+            else
+                .{};
+        const Bundle = BundleType(Value, &indexes);
+        bundles[i] = .{
+            .name = name,
+            .type = Bundle,
+            .default_value_ptr = &Bundle{},
+            .is_comptime = false,
+            .alignment = @alignOf(Bundle),
+        };
+    }
+
+    return @Type(.{ .@"struct" = .{
+        .layout = .auto,
+        .is_tuple = false,
+        .decls = &.{},
+        .fields = &bundles,
+    } });
+}
+
+pub fn BundleType(
+    comptime Value: type,
+    comptime indexed_fields: []const std.meta.FieldEnum(Value),
+) type {
+    return struct {
+        id_counter: u64 = 0,
+
+        objects: TableType(Value.ID, Value, struct {
+            pub fn key_fn(value: Value) Value.ID {
+                return value.id;
+            }
+            pub fn key_cmp(lhs: Value.ID, rhs: Value.ID) std.math.Order {
+                return std.math.order(@intFromEnum(lhs), @intFromEnum(rhs));
+            }
+        }) = .{},
+
+        indexes: blk: {
+            var fields: [indexed_fields.len]std.builtin.Type.StructField = undefined;
+            for (indexed_fields, 0..) |indexed, i| {
+                const Type = IndexTableType(Value, indexed);
+                fields[i] = .{
+                    .name = @tagName(indexed),
+                    .type = Type,
+                    .default_value_ptr = &(Type{}),
+                    .is_comptime = false,
+                    .alignment = @alignOf(Type),
+                };
+            }
+            break :blk @Type(.{ .@"struct" = .{
+                .layout = .auto,
+                .is_tuple = false,
+                .decls = &.{},
+                .fields = &fields,
+            } });
+        } = .{},
+
+        const Bundle = @This();
+
+        pub fn get(bundle: *Bundle, id: Value.ID) ?Value {
+            return bundle.objects.get(id);
+        }
+
+        pub fn create(
+            bundle: *Bundle,
+            gpa: std.mem.Allocator,
+            value: Value,
+        ) !Value.ID {
+            assert(@intFromEnum(value.id) == 0);
+
+            try bundle.objects.reserve(gpa, 1);
+            inline for (indexed_fields) |field| {
+                try @field(bundle.indexes, @tagName(field))
+                    .reserve(gpa, 1);
+            }
+            errdefer comptime unreachable;
+
+            bundle.id_counter += 1;
+            const id: Value.ID = @enumFromInt(bundle.id_counter);
+
+            var value_with_id = value;
+            value_with_id.id = id;
+
+            bundle.objects.insert(value_with_id);
+            inline for (indexed_fields) |indexed_field| {
+                const field = @tagName(indexed_field);
+                @field(bundle.indexes, field)
+                    .insert(.{ .field = @field(value, field), .id = id });
+            }
+
+            return id;
+        }
+
+        pub fn update(bundle: *Bundle, value_new: Value) void {
+            const id = value_new.id;
+            assert(@intFromEnum(id) != 0);
+            const value_old = bundle.get(value_new.id).?;
+            assert(value_old.id == id);
+
+            bundle.objects.remove(value_old);
+            bundle.objects.insert(value_new);
+
+            inline for (indexed_fields) |indexed_field| {
+                const field = @tagName(indexed_field);
+                @field(bundle.indexes, field)
+                    .remove(.{ .field = @field(value_old, field), .id = id });
+                @field(bundle.indexes, field)
+                    .insert(.{ .field = @field(value_new, field), .id = id });
+            }
+        }
+
+        pub fn filter(bundle: *Bundle, query: anytype, out: []Value) []Value {
+            const fields = comptime std.meta.fieldNames(@TypeOf(query));
+
+            var indexes: [fields.len]usize = @splat(0);
+            var out_index: usize = 0;
+            var object_index: usize = 0;
+
+            const TupleOfSlices = comptime blk: {
+                var components: [fields.len]type = undefined;
+                for (0..fields.len) |i| {
+                    const IndexTable = @FieldType(
+                        @TypeOf(bundle.indexes),
+                        fields[i],
+                    );
+                    const Pair = IndexTable.Value;
+                    components[i] = []Pair;
+                }
+                break :blk std.meta.Tuple(&components);
+            };
+
+            var slices: TupleOfSlices = undefined;
+
+            inline for (fields, 0..) |field, i| {
+                const index = @field(bundle.indexes, field).search(.{
+                    .field = @field(query, field),
+                    .id = @enumFromInt(0),
+                }, 0);
+                slices[i] = @field(bundle.indexes, field)
+                    .values.items[index..];
+            }
+
+            outer: while (true) {
+                if (out_index == out.len) break :outer;
+                inline for (0..fields.len) |i| {
+                    if (indexes[i] == slices[i].len) break :outer;
+                    if (slices[i][indexes[i]].field != @field(query, fields[i])) break :outer;
+                }
+
+                var id_min = slices[0][indexes[0]].id;
+                inline for (1..slices.len) |i| {
+                    if (@intFromEnum(slices[i][indexes[i]].id) < @intFromEnum(id_min)) {
+                        id_min = slices[i][indexes[i]].id;
+                    }
+                }
+
+                var advanced_count: u32 = 0;
+                inline for (0..slices.len) |i| {
+                    if (slices[i][indexes[i]].id == id_min) {
+                        indexes[i] += 1;
+                        advanced_count += 1;
+                    }
+                }
+
+                if (advanced_count == slices.len) {
+                    object_index = bundle.objects.search(id_min, object_index);
+                    assert(object_index < bundle.objects.values.items.len);
+                    const value = bundle.objects.values.items[object_index];
+
+                    inline for (fields) |field| {
+                        assert(@field(value, field) == @field(query, field));
+                    }
+
+                    out[out_index] = value;
+                    out_index += 1;
+                    object_index += 1;
+                }
+            }
+
+            return out[0..out_index];
+        }
+    };
+}
+
+fn IndexTableType(comptime Value: type, comptime field: std.meta.FieldEnum(Value)) type {
+    const FieldType = @FieldType(Value, @tagName(field));
+
+    const Pair = struct {
+        field: FieldType,
+        id: Value.ID,
+    };
+
+    return TableType(Pair, Pair, struct {
+        pub fn key_fn(value: Pair) Pair {
+            return value;
+        }
+
+        pub fn key_cmp(lhs: Pair, rhs: Pair) std.math.Order {
+            return order_by(Pair, lhs, rhs, &.{ .field, .id });
+        }
+    });
+}
+
+fn order_by(
+    comptime T: type,
+    lhs: T,
+    rhs: T,
+    comptime fields: []const std.meta.FieldEnum(T),
+) std.math.Order {
+    inline for (fields) |field| {
+        const order = order_enums(
+            @field(lhs, @tagName(field)),
+            @field(rhs, @tagName(field)),
+        );
+        if (order != .eq) return order;
+    }
+    return .eq;
+}
+
+fn order_enums(lhs: anytype, rhs: @TypeOf(lhs)) std.math.Order {
+    return switch (@typeInfo(@TypeOf(lhs))) {
+        .int => std.math.order(lhs, rhs),
+        .@"enum" => std.math.order(
+            @intFromEnum(lhs),
+            @intFromEnum(rhs),
+        ),
+        else => comptime unreachable,
+    };
+}
+
+fn TableType(
+    comptime KeyType: type,
+    comptime ValueType: type,
+    comptime Functions: type,
+) type {
+    const key_fn = Functions.key_fn;
+    const key_cmp = Functions.key_cmp;
+
+    return struct {
+        values: std.ArrayListUnmanaged(Value) = .empty,
+
+        pub const Key = KeyType;
+        pub const Value = ValueType;
+        const Table = @This();
+
+        pub fn get(table: *const Table, key: Key) ?Value {
+            const index = table.search(key, 0);
+            if (index >= table.values.items.len) return null;
+
+            const value = table.values.items[index];
+            if (key_cmp(key, key_fn(value)) != .eq) return null;
+
+            return value;
+        }
+
+        pub fn reserve(table: *Table, gpa: std.mem.Allocator, extra: usize) !void {
+            try table.values.ensureUnusedCapacity(gpa, extra);
+        }
+
+        pub fn insert(table: *Table, value: Value) void {
+            assert(table.values.unusedCapacitySlice().len > 0);
+            const index = table.search(key_fn(value), 0);
+            table.values.insertAssumeCapacity(index, value);
+        }
+
+        pub fn remove(table: *Table, value: Value) void {
+            const index = table.search(key_fn(value), 0);
+            const removed = table.values.orderedRemove(index);
+            assert(std.meta.eql(value, removed));
+        }
+
+        pub fn search(table: *const Table, key: Key, start_index: usize) usize {
+            return start_index + std.sort.lowerBound(
+                Value,
+                table.values.items[start_index..],
+                key,
+                compare_fn,
+            );
+        }
+
+        fn compare_fn(key: Key, value: Value) std.math.Order {
+            return key_cmp(key, key_fn(value));
+        }
+    };
+}
+```
+
+## Post Script
+
+Note that, while the exercise is useful, it deliberately focuses narrowly on a single aspect of Zig
+--- comptime reflection. You should avoid this features if possible: hopefully, I have successfully
+convinced you that they can lead to somewhat mind-bending code. The topic of Zig in _general_ is
+much larger, and I highly recommend the following resources, in this order:
+
+- [Zig Reference](https://ziglang.org/documentation/0.14.0/)
+- [Assorted thoughts on zig (and rust)](https://www.scattered-thoughts.net/writing/assorted-thoughts-on-zig-and-rust/)
+- [Zig and Rust](https://matklad.github.io/2023/03/26/zig-and-rust.html)
