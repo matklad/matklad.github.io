@@ -1220,7 +1220,7 @@ The filter takes a filtering condition, equality conditions on a _subset_ of ind
 fills the output buffer with as much objects as possible that match all conditions. How can we do
 that effectively?
 
-Recall that our index tables are sorted by field's value first, and than by object's ID. So, to find
+Recall that our index tables are sorted by the field's value first, and then by the object's ID. So, to find
 all transfers with
 [`.debit_account = alice`,]{.display}
 we binary search the debit account index for pairs starting with `alice`. Similarly, we can find all
@@ -1229,9 +1229,9 @@ transfers with
 
 In both indexes, we get some slice of pairs whose first components are `alice` and `bob`
 respectively. Whats more, the _second_ components of the pairs are sorted transfers ids! So, if we
-want to find ids which match both conditions, we _merge_ two sorted sequencies of ids!
+want to find ids which match both conditions, we _merge_ two sorted sequences of ids!
 
-Now lets do this for an arbitrary number of indexes:
+Now let's do this for an arbitrary number of indexes:
 
 ```zig
 pub fn filter(bundle: *Bundle, query: anytype, out: []Value) []Value {
@@ -1242,13 +1242,13 @@ We can't really type the `query` parameter, so we use Zig's `anytype` here. This
 typing, rather, it's monomorphization maximus --- every distinct type of `query` will generate a
 fresh copy of the `filter` function.
 
-First, we reflect on `query` to figure out how many indexes tables we need to intersect:
+First, we reflect on `query` to figure out how many index tables we need to intersect:
 
 ```zig
 const fields = comptime std.meta.fieldNames(@TypeOf(query));
 ```
 
-Than, we setup a bunch of indexes (the `ijk` kind, not the database index kind). We need an index
+Then, we setup a bunch of indexes (the `ijk` kind, not the database index kind). We need an index
 into the output buffer, and index into the object table, and an index for each index table:
 
 ```zig
@@ -1259,7 +1259,7 @@ var indexes: [fields.len]usize = @splat(0);
 
 Then, for each index table, we'd want to get a slice of pairs that match the query. Ideally, we'd
 want to have `fields.len` local variables, one variable per each query field, but Zig doesn't allow
-creating local variables via reflation.
+creating local variables via reflection.
 
 What we can have though is a single variable, which is a tuple of slices. To create such a thing, we
 first need to create its type:
@@ -1281,7 +1281,7 @@ const TupleOfSlices = comptime blk: {
 var slices: TupleOfSlices = undefined;
 ```
 
-Then, we can use `search` function to find the actual slices:
+Then, we can use the `search` function to find the actual slices:
 
 ```zig
 var slices: TupleOfSlices = undefined;
