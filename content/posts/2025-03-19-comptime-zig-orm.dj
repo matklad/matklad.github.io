@@ -14,7 +14,7 @@ One of the most ridiculously effective ways of learning for me is building _toy_
 programs. This is slightly more specific than "to learn to code, code": I claim that you can learn
 more by spending a week building your own very bad version of an application from scratch that you'd
 learn from working full-time for a year on a production ready codebase. Case in point: although the
-code in this post is lifter from [TigerBeetle](https://github.com/tigerbeetle/tigerbeetle/),
+code in this post is lifted from [TigerBeetle](https://github.com/tigerbeetle/tigerbeetle/),
 and I've been working with it for a couple of years, I've learned a bunch of new things myself
 in the evening of hacking on the code for the post.
 
@@ -70,7 +70,7 @@ together). In the transfer struct, we refer to account id:
 Note that although `Account.ID` and `Transfer.ID` have exactly the same definition, they are
 distinct types. Let this sink in --- Zig's type system is nominal, but all types are anonymous!
 
-ids will be assigned by our database automatically, using an auto-incrementing counter, and we will
+Ids will be assigned by our database automatically, using an auto-incrementing counter, and we will
 use zero id to signify a new object without an id assigned yet:
 `id: ID = @enumFromInt(0),`{.display}
 
@@ -102,7 +102,7 @@ distributed with the compiler, it doesn't have special powers.
 ---
 
 ::: note
-A word on type inference. Zig hits sweat spot:
+A word on type inference. Zig hits a sweet spot:
 
 - explicit types are rarely needed in expressions,
 - where they _are_ needed a human reader usually wouldn't be able to tell the type on the spot
@@ -177,7 +177,7 @@ const DB = DBType(.{
 ```
 
 A lot is going on here. First, we use `@import` builtin function to import (look, no need for syntax
-again!) `DBType` function. `DBType` is a type constructor --- it takes a DB schema, and returns a
+again!) the `DBType` function. `DBType` is a type constructor --- it takes a DB schema, and returns a
 database type. For the schema, we ask for two tables, accounts and transfers, and also ask to
 include indexes on transfers' foreign keys.
 
@@ -241,7 +241,7 @@ Let's see the implementation of `create_transfer`:
 
 ```zig
 if (debit_account == credit_account) return null;
-const dr = mc orelse
+const dr = db.account.get(debit_account) orelse
     return null;
 const cr = db.account.get(credit_account) orelse
     return null;
@@ -274,7 +274,7 @@ without a question mark. Instead of `return`ing, we could have `orelse`ed some d
 This line is the only place where we need to help type inference by spelling a type explicitly:
 `if (cr.balance > std.math.maxInt(u128) - amount) return null;`{.display}
 
-We pass `u128` type tothe `maxInt` function. This is the case where a sophisticated smart type
+We pass the `u128` type to the `maxInt` function. This is the case where a sophisticated smart type
 inference algorithm could look at the surrounding context and _infer_ the type, but Zig deliberately
 requires the user to spell it in stations like this.
 
@@ -305,8 +305,8 @@ knows _which_ fields are defaulted.
 
 `gpa` is our trait object. Internally, it contains a pointer to `gpa_instance`. The state of
 `gpa_instance` will be mutated, so it needs to be declared as a `var`. The `gpa` though is just a
-pair of pointes, and those pointers won't be mutated themselves, so we can declare it `const`.
-Similarly to how in Rust you'd write
+pair of pointers, and those pointers won't be mutated themselves, so we can declare it `const`,
+similarly to how in Rust you'd write
 
 ```rust
 let mut x = 92;
