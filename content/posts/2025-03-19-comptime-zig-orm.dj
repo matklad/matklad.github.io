@@ -14,7 +14,7 @@ One of the most ridiculously effective ways of learning for me is building _toy_
 programs. This is slightly more specific than "to learn to code, code": I claim that you can learn
 more by spending a week building your own very bad version of an application from scratch that you'd
 learn from working full-time for a year on a production ready codebase. Case in point: although the
-code in this post is lifter from [TigerBeetle](https://github.com/tigerbeetle/tigerbeetle/),
+code in this post is lifted from [TigerBeetle](https://github.com/tigerbeetle/tigerbeetle/),
 and I've been working with it for a couple of years, I've learned a bunch of new things myself
 in the evening of hacking on the code for the post.
 
@@ -70,7 +70,7 @@ together). In the transfer struct, we refer to account id:
 Note that although `Account.ID` and `Transfer.ID` have exactly the same definition, they are
 distinct types. Let this sink in --- Zig's type system is nominal, but all types are anonymous!
 
-ids will be assigned by our database automatically, using an auto-incrementing counter, and we will
+Ids will be assigned by our database automatically, using an auto-incrementing counter, and we will
 use zero id to signify a new object without an id assigned yet:
 `id: ID = @enumFromInt(0),`{.display}
 
@@ -102,7 +102,7 @@ distributed with the compiler, it doesn't have special powers.
 ---
 
 ::: note
-A word on type inference. Zig hits sweat spot:
+A word on type inference. Zig hits a sweet spot:
 
 - explicit types are rarely needed in expressions,
 - where they _are_ needed a human reader usually wouldn't be able to tell the type on the spot
@@ -177,7 +177,7 @@ const DB = DBType(.{
 ```
 
 A lot is going on here. First, we use `@import` builtin function to import (look, no need for syntax
-again!) `DBType` function. `DBType` is a type constructor --- it takes a DB schema, and returns a
+again!) the `DBType` function. `DBType` is a type constructor --- it takes a DB schema, and returns a
 database type. For the schema, we ask for two tables, accounts and transfers, and also ask to
 include indexes on transfers' foreign keys.
 
@@ -241,7 +241,7 @@ Let's see the implementation of `create_transfer`:
 
 ```zig
 if (debit_account == credit_account) return null;
-const dr = mc orelse
+const dr = db.account.get(debit_account) orelse
     return null;
 const cr = db.account.get(credit_account) orelse
     return null;
@@ -274,7 +274,7 @@ without a question mark. Instead of `return`ing, we could have `orelse`ed some d
 This line is the only place where we need to help type inference by spelling a type explicitly:
 `if (cr.balance > std.math.maxInt(u128) - amount) return null;`{.display}
 
-We pass `u128` type tothe `maxInt` function. This is the case where a sophisticated smart type
+We pass the `u128` type to the `maxInt` function. This is the case where a sophisticated smart type
 inference algorithm could look at the surrounding context and _infer_ the type, but Zig deliberately
 requires the user to spell it in stations like this.
 
@@ -305,8 +305,8 @@ knows _which_ fields are defaulted.
 
 `gpa` is our trait object. Internally, it contains a pointer to `gpa_instance`. The state of
 `gpa_instance` will be mutated, so it needs to be declared as a `var`. The `gpa` though is just a
-pair of pointes, and those pointers won't be mutated themselves, so we can declare it `const`.
-Similarly to how in Rust you'd write
+pair of pointers, and those pointers won't be mutated themselves, so we can declare it `const`,
+similarly to how in Rust you'd write
 
 ```rust
 let mut x = 92;
@@ -395,7 +395,7 @@ for (0..transfer_count) |_| {
         &db,
         gpa,
         accounts.items[debit],
-        xaccounts.items[credit],
+        accounts.items[credit],
         amount,
     );
 }
@@ -410,7 +410,7 @@ In Zig, unused return value is a compilation error, so we need `_ =` to ignore t
 transfer.
 
 Finally, we come to the relational part of the tutorial, we'll do a non-trivial lookup. First, we'll
-asks for all transfers from `alice` to anyone, and then for transfers between `alice` and `bob`
+ask for all transfers from `alice` to anyone, and then for transfers between `alice` and `bob`
 specifically:
 
 {highlight="2-5,14-17"}
@@ -608,7 +608,7 @@ instead copy the above code into your own `main.zig` and try to write `db.zig` y
 this is the most excellent exercise that can teach you more effectively than any blog post. It'll
 take _more_ time, of course, but you'll get more knowledge per minute spent out of it.
 
-If you will settle for the 10%, read on! And, if you want 100% percent, than do your implemetation
+If you will settle for the 10%, read on! And, if you want 100% percent, then do your implementation
 first and then come back here!
 
 ## The Table
@@ -616,11 +616,11 @@ first and then come back here!
 We will be building `db.zig` from the gound up. It all will make sense! At the end.
 
 Our fundamental data structure is a sorted list of values. Here, I kindly ask the reader to engage
-suspension of disbelief: in a real database we will be using a data structure with efficient looks
+suspension of disbelief: in a real database we will be using a data structure with efficient lookups
 and modifications, such as a B-tree or an LSM tree. For the purposes of this tutorial, we will use a
-simpe sorted array, and will just close our eyes on O(N) insertions and removals.
+simple sorted array, and will just close our eyes on O(N) insertions and removals.
 
-Values are going to be sorted by a paricular field. For example, we sort transfers by their ids. So,
+Values are going to be sorted by a particular field. For example, we sort transfers by their ids. So,
 when creating a "Table" of transfers, we'll need to pass the type of key, the type of value, and
 functions for extracting and comparing keys:
 
@@ -670,7 +670,7 @@ fn TableType(
 ```
 
 But this version is more painful to use at the call site. While `struct` is an expression in `Zig`,
-and you can declre one inline, `fn` is not an expression, you can't declare a function inline unless
+and you can declare one inline, `fn` is not an expression, you can't declare a function inline unless
 you employ another Zig idiom:
 
 ```zig
@@ -742,11 +742,11 @@ The `search` function binary searches for the index corresponding to the given `
 values. For convenience of the call-site we are yet to see, we also pass in the starting index for
 the search. It is useful for, e.g., pagination-style API where you use index as a cursor.
 
-The `get` function than uses `search` to find the index, and then furthermore checks thta we have an
+The `get` function then uses `search` to find the index, and furthermore checks that we have an
 exact match.
 
-For the `insert` function, we _do_ implement the resvation pattern: memory allocation and data
-structure modification are split into two functions. Modification proper is infailable, and has a
+For the `insert` function, we _do_ implement the reservation pattern: memory allocation and data
+structure modification are split into two functions. Modification proper is infallible, and has a
 reservation as a precondition.
 
 As promised, we do a naive linear memcpy for `insert` / `remove`, but we pretend that it is actually
@@ -874,7 +874,7 @@ fn IndexTableType(
 ```
 
 Ultimately, we want to delegate to existing `TableType`, as that already implements the logic for
-storing a sorted list of items. The item for us is a pair of field's type, and value id. One note
+storing a sorted list of items. The item for us is a field type and value id pair. One note
 about the
 [`const FieldType = @FieldType(Value, @tagName(field));`]{.display}
 incantation used. `FieldEnum` is the library-level abstraction. Meta programming builtins, like
@@ -882,9 +882,9 @@ incantation used. `FieldEnum` is the library-level abstraction. Meta programming
 converts from `.debit_account` to `"debit_account"`. We don't _have_ to use `FieldEnum`, and could
 have used strings throughout, but `FieldEnum` gives us two advantages:
 
-- Earlier types errors: calling `IndexTableType` with the field that doesn't exist will error out
+- Earlier type errors: calling `IndexTableType` with a field that doesn't exist will error out
   at the call site, rather than at the definition side.
-- Grepability: in Zig, field access is always spelled as `.debit_account` syntactically, so it is
+- Greppability: in Zig, field access is always spelled as `.debit_account` syntactically, so it is
   advantageous to stick to the same convention during meta programming, to make sure it also gets
   into textual searches.
 
@@ -917,7 +917,7 @@ fn order_by(
 ```
 
 `order_by` is our first mixed-mode function. Some arguments are `comptime`, but some are runtime.
-This function should compare a pair of `T` by sequentially compare the values of the corresponding
+This function should compare a pair of `T` by sequentially comparing the values of the corresponding
 fields, and returning as soon as two unequal fields are found. Here we use an `inline for`:
 
 ```zig
@@ -1049,14 +1049,14 @@ pub fn BundleType(
 ```
 
 The basic structure is clear: we have an `id_counter` for assigning new ids when creating values,
-the object table which stores sorted values and which directly powers the `get` method, and than we
+the object table which stores sorted values and which directly powers the `get` method, and then we
 have the indexes. The indexes are tricky. For transfers, where we index `debit_account` and
-`credit_account`, we want the `indexes` look like this:
+`credit_account`, we want the `indexes` to look like this:
 
 ```zig
 indexes: struct {
-    debit_account:  IndexTreeType(Transfer, .debit_account),
-    credit_account: IndexTreeType(Transfer, .debit_account),
+    debit_account:  IndexTableType(Transfer, .debit_account),
+    credit_account: IndexTableType(Transfer, .credit_account),
 }
 ```
 
@@ -1103,7 +1103,7 @@ This makes much more sense if you read it backwards:
 - And the default is just a default for the `Type`.
 - Finally, we need `indexed_fields.len` fields.
 
-Now that we have all tables, `create` and `update` are relatively straightforward. For create, we
+Now that we have all tables, `create` and `update` are relatively straightforward. For `create`, we
 need to make sure to insert the appropriate values into the objects table and into all of the
 indexes:
 
@@ -1220,7 +1220,7 @@ The filter takes a filtering condition, equality conditions on a _subset_ of ind
 fills the output buffer with as much objects as possible that match all conditions. How can we do
 that effectively?
 
-Recall that our index tables are sorted by field's value first, and than by object's ID. So, to find
+Recall that our index tables are sorted by the field's value first, and then by the object's ID. So, to find
 all transfers with
 [`.debit_account = alice`,]{.display}
 we binary search the debit account index for pairs starting with `alice`. Similarly, we can find all
@@ -1229,9 +1229,9 @@ transfers with
 
 In both indexes, we get some slice of pairs whose first components are `alice` and `bob`
 respectively. Whats more, the _second_ components of the pairs are sorted transfers ids! So, if we
-want to find ids which match both conditions, we _merge_ two sorted sequencies of ids!
+want to find ids which match both conditions, we _merge_ two sorted sequences of ids!
 
-Now lets do this for an arbitrary number of indexes:
+Now let's do this for an arbitrary number of indexes:
 
 ```zig
 pub fn filter(bundle: *Bundle, query: anytype, out: []Value) []Value {
@@ -1242,13 +1242,13 @@ We can't really type the `query` parameter, so we use Zig's `anytype` here. This
 typing, rather, it's monomorphization maximus --- every distinct type of `query` will generate a
 fresh copy of the `filter` function.
 
-First, we reflect on `query` to figure out how many indexes tables we need to intersect:
+First, we reflect on `query` to figure out how many index tables we need to intersect:
 
 ```zig
 const fields = comptime std.meta.fieldNames(@TypeOf(query));
 ```
 
-Than, we setup a bunch of indexes (the `ijk` kind, not the database index kind). We need an index
+Then, we setup a bunch of indexes (the `ijk` kind, not the database index kind). We need an index
 into the output buffer, and index into the object table, and an index for each index table:
 
 ```zig
@@ -1259,7 +1259,7 @@ var indexes: [fields.len]usize = @splat(0);
 
 Then, for each index table, we'd want to get a slice of pairs that match the query. Ideally, we'd
 want to have `fields.len` local variables, one variable per each query field, but Zig doesn't allow
-creating local variables via reflation.
+creating local variables via reflection.
 
 What we can have though is a single variable, which is a tuple of slices. To create such a thing, we
 first need to create its type:
@@ -1281,7 +1281,7 @@ const TupleOfSlices = comptime blk: {
 var slices: TupleOfSlices = undefined;
 ```
 
-Then, we can use `search` function to find the actual slices:
+Then, we can use the `search` function to find the actual slices:
 
 ```zig
 var slices: TupleOfSlices = undefined;
@@ -1804,7 +1804,7 @@ fn TableType(
 ## Post Script
 
 Note that, while the exercise is useful, it deliberately focuses narrowly on a single aspect of Zig
---- comptime reflection. You should avoid this features if possible: hopefully, I have successfully
+--- comptime reflection. You should avoid this feature if possible: hopefully, I have successfully
 convinced you that they can lead to somewhat mind-bending code. The topic of Zig in _general_ is
 much larger, and I highly recommend the following resources, in this order:
 
