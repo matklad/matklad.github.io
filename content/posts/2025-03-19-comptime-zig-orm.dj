@@ -616,11 +616,11 @@ first and then come back here!
 We will be building `db.zig` from the gound up. It all will make sense! At the end.
 
 Our fundamental data structure is a sorted list of values. Here, I kindly ask the reader to engage
-suspension of disbelief: in a real database we will be using a data structure with efficient looks
+suspension of disbelief: in a real database we will be using a data structure with efficient lookups
 and modifications, such as a B-tree or an LSM tree. For the purposes of this tutorial, we will use a
-simpe sorted array, and will just close our eyes on O(N) insertions and removals.
+simple sorted array, and will just close our eyes on O(N) insertions and removals.
 
-Values are going to be sorted by a paricular field. For example, we sort transfers by their ids. So,
+Values are going to be sorted by a particular field. For example, we sort transfers by their ids. So,
 when creating a "Table" of transfers, we'll need to pass the type of key, the type of value, and
 functions for extracting and comparing keys:
 
@@ -670,7 +670,7 @@ fn TableType(
 ```
 
 But this version is more painful to use at the call site. While `struct` is an expression in `Zig`,
-and you can declre one inline, `fn` is not an expression, you can't declare a function inline unless
+and you can declare one inline, `fn` is not an expression, you can't declare a function inline unless
 you employ another Zig idiom:
 
 ```zig
@@ -742,11 +742,11 @@ The `search` function binary searches for the index corresponding to the given `
 values. For convenience of the call-site we are yet to see, we also pass in the starting index for
 the search. It is useful for, e.g., pagination-style API where you use index as a cursor.
 
-The `get` function than uses `search` to find the index, and then furthermore checks thta we have an
+The `get` function then uses `search` to find the index, and furthermore checks that we have an
 exact match.
 
-For the `insert` function, we _do_ implement the resvation pattern: memory allocation and data
-structure modification are split into two functions. Modification proper is infailable, and has a
+For the `insert` function, we _do_ implement the reservation pattern: memory allocation and data
+structure modification are split into two functions. Modification proper is infallible, and has a
 reservation as a precondition.
 
 As promised, we do a naive linear memcpy for `insert` / `remove`, but we pretend that it is actually
@@ -874,7 +874,7 @@ fn IndexTableType(
 ```
 
 Ultimately, we want to delegate to existing `TableType`, as that already implements the logic for
-storing a sorted list of items. The item for us is a pair of field's type, and value id. One note
+storing a sorted list of items. The item for us is a field type and value id pair. One note
 about the
 [`const FieldType = @FieldType(Value, @tagName(field));`]{.display}
 incantation used. `FieldEnum` is the library-level abstraction. Meta programming builtins, like
@@ -882,9 +882,9 @@ incantation used. `FieldEnum` is the library-level abstraction. Meta programming
 converts from `.debit_account` to `"debit_account"`. We don't _have_ to use `FieldEnum`, and could
 have used strings throughout, but `FieldEnum` gives us two advantages:
 
-- Earlier types errors: calling `IndexTableType` with the field that doesn't exist will error out
+- Earlier type errors: calling `IndexTableType` with a field that doesn't exist will error out
   at the call site, rather than at the definition side.
-- Grepability: in Zig, field access is always spelled as `.debit_account` syntactically, so it is
+- Greppability: in Zig, field access is always spelled as `.debit_account` syntactically, so it is
   advantageous to stick to the same convention during meta programming, to make sure it also gets
   into textual searches.
 
@@ -917,7 +917,7 @@ fn order_by(
 ```
 
 `order_by` is our first mixed-mode function. Some arguments are `comptime`, but some are runtime.
-This function should compare a pair of `T` by sequentially compare the values of the corresponding
+This function should compare a pair of `T` by sequentially comparing the values of the corresponding
 fields, and returning as soon as two unequal fields are found. Here we use an `inline for`:
 
 ```zig
