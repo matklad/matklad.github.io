@@ -1049,14 +1049,14 @@ pub fn BundleType(
 ```
 
 The basic structure is clear: we have an `id_counter` for assigning new ids when creating values,
-the object table which stores sorted values and which directly powers the `get` method, and than we
+the object table which stores sorted values and which directly powers the `get` method, and then we
 have the indexes. The indexes are tricky. For transfers, where we index `debit_account` and
-`credit_account`, we want the `indexes` look like this:
+`credit_account`, we want the `indexes` to look like this:
 
 ```zig
 indexes: struct {
-    debit_account:  IndexTreeType(Transfer, .debit_account),
-    credit_account: IndexTreeType(Transfer, .debit_account),
+    debit_account:  IndexTableType(Transfer, .debit_account),
+    credit_account: IndexTableType(Transfer, .credit_account),
 }
 ```
 
@@ -1103,7 +1103,7 @@ This makes much more sense if you read it backwards:
 - And the default is just a default for the `Type`.
 - Finally, we need `indexed_fields.len` fields.
 
-Now that we have all tables, `create` and `update` are relatively straightforward. For create, we
+Now that we have all tables, `create` and `update` are relatively straightforward. For `create`, we
 need to make sure to insert the appropriate values into the objects table and into all of the
 indexes:
 
