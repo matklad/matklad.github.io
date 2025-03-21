@@ -309,7 +309,7 @@ Or, if you are _really_ short on fitting metaphors:
 
 ## The Watermelon Operator
 
-Now, I understand that I've already poked fun at unfortunate `FuturesUnordered` name, but I can't
+Now, I understand that I've already poked fun at the unfortunate `FuturesUnordered` name, but I can't
 really find a fitting name for the construct we want here. So I am going to boringly use
 `concurrently` keyword, which is way too long, but I'll refer to it as "the watermelon operator"
 The stripes on the watermelon resemble the independent strands of execution this operator creates:
@@ -551,11 +551,11 @@ I postulate that fully general cancellation is an asynchronous protocol:
 3. A _waits_ until B is cancelled.
 
 That is, cancellation is not "I cancel thou". Rather it is "I ask you to stop, and then I
-cooperatively wait until you do so". This is very abstract, but the following three examples should
+cooperatively wait until you do so". This is very abstract, but the following two examples should
 help make this concrete.
 
 1. A is some generic asynchronous task, which offloads some computation-heavy work to a CPU pool.
-   That work (B) _doesn't_ have checks for cancelled flags. So, if A is canceled, it can't really
+   That work (B) _doesn't_ have checks for cancelled flags. So, if A is cancelled, it can't really
    stop B, which means we are violating structured concurrency.
 
 2. A is doing async IO. Specifically, A uses `io_uring` to read data from a socket. A owns a buffer,
