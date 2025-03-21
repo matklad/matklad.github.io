@@ -1,0 +1,18 @@
+# Use Long Options in Scripts
+
+Many command line utilities support short form options (`-f`) and long form options (`--force`).
+Short form is for interactive usage. In scripts, use the long form.
+
+That is, in your terminal, type [`$ git switch -c my-new-branch`]{.display}
+
+In your release infrastructure script, write
+
+```zig
+try shell.exec("git fetch origin --quiet", .{});
+try shell.exec(
+    "git switch --create release-{today} origin/main",
+    .{ .today = stdx.DateUTC.now() },
+);
+```
+
+Long form options are much more self-explanatory for the reader.
