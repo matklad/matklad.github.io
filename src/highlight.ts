@@ -70,8 +70,14 @@ export function highlight(
 function add_spans(source: string, language?: string): HtmlString {
   if (!language || language === "adoc") return html`${source}`;
   if (language == "console") return add_spans_console(source);
-  const res = hljs.highlight(source, { language, ignoreIllegals: true });
-  return new HtmlString(res.value);
+  try {
+    const res = hljs.highlight(source, { language, ignoreIllegals: true });
+    return new HtmlString(res.value);
+  } catch (e) {
+    console.error(e);
+    console.error(`\n    hljs failed for language=${language}\n`);
+    return html`${source}`;
+  }
 }
 
 function add_spans_console(source: string): HtmlString {
@@ -102,7 +108,7 @@ function parse_highlight_spec(spec?: string): number[] {
       const [los, his] = el.split("-");
       const lo = parseInt(los, 10);
       const hi = parseInt(his, 10);
-      return Array.from({ length: (hi - lo) + 1 }, (x, i) => lo + i);
+      return Array.from({ length: (hi - lo) + 1 }, (_x, i) => lo + i);
     }
     return [parseInt(el, 10)];
   });
