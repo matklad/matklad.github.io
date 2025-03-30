@@ -6,7 +6,7 @@ export type VNode = string | number | boolean | null | undefined | {
 };
 
 // deno-fmt-ignore
-const selfClosingTags = new Set([
+const void_elements = new Set([
   "area", "base", "br", "col", "embed", "hr", "img", "input",
   "link", "meta", "param", "source", "track", "wbr", "use",
 ]);
@@ -53,8 +53,8 @@ export function render(vnode: VNode): string {
     .filter(Boolean)
     .join(" ");
 
-  if (selfClosingTags.has(tag)) {
-    return `<${tag}${attrs ? " " + attrs : ""} />`;
+  if (void_elements.has(tag)) {
+    return `<${tag}${attrs ? " " + attrs : ""}${tag == "use" ? "/" : ""}>`;
   }
 
   const renderedChildren = children.map(render).join("");
