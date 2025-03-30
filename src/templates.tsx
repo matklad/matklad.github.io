@@ -290,7 +290,7 @@ function FeedEntry({ post }: { post: PostData }) {
         <Raw unsafe={`<![CDATA[${post.summary}]]>`} />
       </summary>
       <content type="html" xml:base={`${site_url}${post.path}`}>
-        <Raw unsafe={`<![CDATA[${post.content}]]>`} />
+        <Raw unsafe={`<![CDATA[${post.content.value}]]>`} />
       </content>
     </entry>
   );
