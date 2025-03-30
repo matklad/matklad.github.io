@@ -1,0 +1,68 @@
+# Deno Simple Server Side Rendering
+
+I've finally cleared a bit of technical debt I had in the implementation of this blog. I don't use a
+templating engine, and instead define all of the templates in code. JavaScript [template
+literals](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals)
+(backtick strings) make this relatively nice:
+
+```ts
+return html`
+    <time ${cls ? `class="${cls}"` : ""} datetime="${machine}">
+        ${human}
+    </time>`;
+```
+
+Still, given that Deno comes with JSX "out of the box", an even better approach should be
+theoretically possible:
+
+```tsx
+return <time class={className} datatype={machine}>{human}</time>;
+```
+
+In practice, this is needlessly fiddly, at least for someone like me, who haven't used JSX before.
+As far as I can tell, there isn't anything built into Deno or Deno's std, that would allow me to
+write code like this:
+
+```tsx
+const html: string = render_to_string(<div>
+    Hello, world!
+</div>);
+```
+
+The suggestion is to use some library, and that increases annoyance manyfold: which library? which
+cdn/registry should I be pulling it from? how can I vendor it without adding a hundred of auxiliary
+files?
+
+While Deno in general is refreshingly out-of-the-box, the "I want to render an HTML tree into a
+string" part decidedly is not.
+
+Fundamentally, the JSR library is easy --- it is just some boilerplate tree constructing code.
+There's a dozen micro JSR libraries out there, you can pick one. Alternatively, you can ask your
+local LLM to give you a single-file no-dependencies thing, it'll probably do a decent job. My
+version is here, less than 100 lines of code:
+[`tsx.ts`](https://github.com/matklad/matklad.github.io/blob/89b0c63855a359272a6746552b11ebd8cb0deec1/src/tsx.ts):
+
+To use this file, I add
+
+```ts
+/** @jsx h */
+/** @jsxFrag Fragment */
+import { escapeHtml, h, Raw, render, VNode } from "./tsx.ts";
+```
+
+at the start of the `templates.tsx` file with my templates. No changes to `deno.jsonc` are required.
+
+One thing which you don't get for free with this ad hoc implementation is nice formatting of HTML.
+I'd love the source to be at least somewhat readable. Luckily, `deno` the command line tool comes
+with html formatter out of the box, so you could use that to prettify the results:
+
+```ts
+const t_fmt = performance.now();
+const { success } = await new Deno.Command(Deno.execPath(), {
+  args: ["fmt", "./out/www"],
+}).output();
+if (!success) throw "deno fmt failed";
+ctx.fmt_ms = performance.now() - t_fmt;
+```
+
+Running this on every file is much too slow, but reformatting everything at the end is fast enough!
