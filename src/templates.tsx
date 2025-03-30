@@ -213,7 +213,7 @@ function Time(
     timeZone: "UTC",
   });
   const machine = yyyy_mm_dd(date);
-  return <time class={className} datatype={machine}>{human}</time>;
+  return <time class={className} datetime={machine}>{human}</time>;
 }
 function yyyy_mm_dd(date: Date): string {
   return date.toISOString().slice(0, 10);
