@@ -1,4 +1,4 @@
-import { html, HtmlString } from "./templates.ts";
+import { html, HtmlString } from "./templates.tsx";
 
 import hljs_ from "@highlightjs/highlight.min.js";
 const hljs: any = hljs_;
@@ -23,8 +23,8 @@ hljs.registerLanguage("ungrammar", () => ({
     },
     {
       scope: "literal",
-      match:"[A-Z][_a-zA-Z0-9]*(?= =)"
-    }
+      match: "[A-Z][_a-zA-Z0-9]*(?= =)",
+    },
   ],
 }));
 
@@ -57,7 +57,7 @@ export function highlight(
     },
   );
   const lines = highlighted.split("\n").map((it, idx) => {
-    const cls = spec.includes(idx + 1) ? ' hl-line' : '';
+    const cls = spec.includes(idx + 1) ? " hl-line" : "";
     const calls = (callouts.get(idx) ?? [])
       .map((it) => `<i class="callout" data-value="${it}"></i>`)
       .join(" ");

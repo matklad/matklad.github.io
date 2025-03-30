@@ -1,5 +1,5 @@
 import { highlight } from "./highlight.ts";
-import { HtmlString, time } from "./templates.ts";
+import { HtmlString, time_html } from "./templates.tsx";
 
 import { parse as djot_parse } from "@djot/parse.ts";
 import { HTMLRenderer, renderHTML } from "@djot/html.ts";
@@ -9,6 +9,7 @@ import {
   CodeBlock,
   Div,
   Doc,
+  HasAttributes,
   Heading,
   Image,
   OrderedList,
@@ -45,7 +46,7 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
     heading: (node: Heading, r: HTMLRenderer) => {
       const tag = `h${node.level}`;
       const date = node.level == 1 && ctx.date
-        ? time(ctx.date, "meta").value
+        ? time_html(ctx.date, "meta")
         : "";
       const children = r.renderChildren(node);
       if (node.level == 1) ctx.title = get_string_content(node);
@@ -67,7 +68,6 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
     },
     para: (node: Para, r: HTMLRenderer) => {
       if (node.children.length == 1 && node.children[0].tag == "image") {
-        node.attributes = node.attributes || {};
         let cap = extract_cap(node);
         if (cap) {
           cap = `<figcaption class="title">${cap}</figcaption>\n`;
@@ -161,7 +161,7 @@ ${r.renderChildren(node)}
       const pre = highlight(
         node.text,
         node.lang,
-        node.attributes?.highlight,
+        attr(node, "highlight"),
       ).value;
       return `
 <figure class="code-block">
@@ -234,23 +234,30 @@ function get_child<Tag extends AstTag>(
 }
 
 function has_class(node: AstNode, cls: string): boolean {
-  node.attributes = node.attributes || {};
-  const attr = node.attributes?.["class"] || "";
-  return attr.split(" ").includes(cls);
+  const classes = attr(node, "class") ?? "";
+  return classes.split(" ").includes(cls);
 }
 
 function add_class(node: AstNode, cls: string) {
-  node.attributes = node.attributes || {};
-  const attr = node.attributes["class"];
-  node.attributes["class"] = attr ? `${attr} ${cls}` : cls;
+  const classes = attr(node, "class");
+  setattr(node, "class", classes ? `${classes} ${cls}` : cls);
 }
 
 function extract_cap(node: AstNode): string | undefined {
-  if (node.attributes?.cap) {
-    const result = node.attributes.cap;
-    delete node.attributes.cap;
-    return result;
+  const cap = attr(node, "cap");
+  if (cap) {
+    delete node.attributes!.cap;
+    return cap;
   }
+}
+
+function attr(node: HasAttributes, name: string): string | undefined {
+  return node.attributes ? node.attributes[name] : undefined;
+}
+
+function setattr(node: HasAttributes, name: string, value: string) {
+  node.attributes = node.attributes || {};
+  node.attributes[name] = value;
 }
 
 const get_string_content = function (node: AstNode): string {

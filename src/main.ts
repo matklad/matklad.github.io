@@ -1,8 +1,16 @@
 import { debounce } from "@std/async/debounce";
-import * as templates from "./templates.ts";
 import * as djot from "./djot.ts";
 import * as blogroll from "./blogroll.ts";
-import { HtmlString } from "./templates.ts";
+import {
+  BlogRoll,
+  feed_xml,
+  html_ugly,
+  HtmlString,
+  Page,
+  Post,
+  PostList,
+  Redirect,
+} from "./templates.tsx";
 
 async function main() {
   const params = {
@@ -104,6 +112,7 @@ class Ctx {
     public parse_ms: number = 0,
     public render_ms: number = 0,
     public collect_ms: number = 0,
+    public fmt_ms: number = 0,
     public total_ms: number = 0,
   ) {}
 }
@@ -131,12 +140,15 @@ async function build(params: {
   await Deno.mkdir("./out/www", { recursive: true });
 
   const posts = await collect_posts(ctx, params.filter);
-  await update_file("out/www/index.html", templates.post_list(posts).value);
-  await update_file("out/www/feed.xml", templates.feed(posts).value);
+  await update_file(
+    "out/www/index.html",
+    html_ugly(PostList({ posts })),
+  );
+  await update_file("out/www/feed.xml", feed_xml(posts));
   for (const post of posts) {
     await update_file(
       `out/www${post.path}`,
-      templates.post(post, params.spell).value,
+      html_ugly(Post({ post })),
     );
   }
 
@@ -144,7 +156,7 @@ async function build(params: {
     const blogroll_posts = await blogroll.blogroll();
     await update_file(
       "out/www/blogroll.html",
-      templates.blogroll_list(blogroll_posts).value,
+      html_ugly(BlogRoll({ posts: blogroll_posts })),
     );
   }
 
@@ -153,7 +165,10 @@ async function build(params: {
     const text = await Deno.readTextFile(`content/${page}.dj`);
     const ast = await djot.parse(text);
     const html = djot.render(ast, {});
-    await update_file(`out/www/${page}.html`, templates.page(page, html).value);
+    await update_file(
+      `out/www/${page}.html`,
+      html_ugly(Page(page, html)),
+    );
   }
 
   const redirects = [
@@ -161,7 +176,10 @@ async function build(params: {
   ];
 
   for (const [from, to] of redirects) {
-    await update_file(`out/www/${from}`, templates.redirect(to).value);
+    await update_file(
+      `out/www/${from}`,
+      html_ugly(Redirect({ path: to })),
+    );
   }
 
   const paths = [
@@ -176,9 +194,24 @@ async function build(params: {
     await update_path(path);
   }
 
+  const t_fmt = performance.now();
+  const { success } = await new Deno.Command(Deno.execPath(), {
+    args: ["fmt", "./out/www"],
+  }).output();
+  if (!success) throw "deno fmt failed";
+  ctx.fmt_ms = performance.now() - t_fmt;
+
   ctx.total_ms = performance.now() - t;
   console.log(`${ctx.total_ms}ms`);
-  if (params.profile) console.log(JSON.stringify(ctx));
+  if (params.profile) {
+    let profile = "";
+    let key: keyof Ctx;
+    for (key in ctx) {
+      if (profile) profile += " ";
+      profile += `${key.slice(0, key.length - 3)}=${ctx[key].toFixed(2)}ms`;
+    }
+    console.log(profile);
+  }
 }
 
 function dirname(path: string): string {
@@ -285,4 +318,4 @@ async function* walk(root: string): AsyncIterableIterator<string> {
   }
 }
 
-if (import.meta.main) await main();
+ if (import.meta.main) await main();
