@@ -1,0 +1,31 @@
+# Random Numbers Included
+
+I've recently worked on a
+[PRNG API for TigerBeetle](https://github.com/tigerbeetle/tigerbeetle/pull/2798), and made a
+surprising discovery! While most APIs work best with "half-open" intervals,
+[`for(int i = 0; i < n; i++)`,]{.display}
+it seems that random numbers really work best with closed intervals, `≤n`.
+
+_First_, closed interval means that you can actually generate the highest-possible number:
+
+```zig
+prng.range_inclusive(
+    u32,
+    math.intMax(u32) - 9,
+    math.intMax(u32),
+);
+```
+
+This call generates one of the ten largest `u32`s. With exclusive ranges, you'd have to generate
+`u64` and downcast it.
+
+_Second_, close interval removes a possibility of a subtle crash. It is impossible to generate a
+random number _less_ than zero, so exclusive APIs are panicky. This can crash!:
+[`rng.random_range(..n)`]{.display}
+
+_Third_, as a flip-side of the previous bullet point, by pushing the `-1` to the call-site, you make
+it immediately obvious that there's non-zero pre-condition:
+
+```zig
+const replica = prng.int_inclusive(u8, replica_count - 1);
+```
