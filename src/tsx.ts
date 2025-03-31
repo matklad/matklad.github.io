@@ -54,7 +54,11 @@ export function render(vnode: VNode): string {
     .join(" ");
 
   if (void_elements.has(tag)) {
-    return `<${tag}${attrs ? " " + attrs : ""}${tag == "use" ? "/" : ""}>`;
+    const self_closing = tag == "use" || // SVG
+      (tag == "link" && // Atom
+        (props["type"] == "text/html" ||
+          props["type"] == "application/atom+xml"));
+    return `<${tag}${attrs ? " " + attrs : ""}${self_closing ? "/" : ""}>`;
   }
 
   const renderedChildren = children.map(render).join("");
