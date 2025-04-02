@@ -40,13 +40,13 @@ Pratt parsing is one of the most frequently used techniques for hand-written par
 The pinnacle of syntactic analysis theory is discovering the context free grammar
 notation (often using BNF concrete syntax) for decoding linear structures into trees:
 
-```
-Item ::=
+```ungrammar
+Item =
     StructItem
   | EnumItem
   | ...
 
-StructItem ::=
+StructItem =
     'struct' Name '{' FieldList '}'
 
 ...
@@ -56,8 +56,8 @@ I remember being fascinated by this idea, especially by parallels with natural l
 However, my optimism quickly waned once we got to describing expressions.
 The natural expression grammar indeed allows one to see what is an expression.
 
-```
-Expr ::=
+```ungrammar
+Expr =
     Expr '+' Expr
   | Expr '*' Expr
   | '(' Expr ')'
@@ -68,16 +68,16 @@ Although this grammar looks great, it is in fact ambiguous and imprecise, and ne
 Specifically, we need to specify precedence and associativity of operators.
 The fixed grammar looks like this:
 
-```
-Expr ::=
+```ungrammar
+Expr =
     Factor
   | Expr '+' Factor
 
-Factor ::=
+Factor =
     Atom
   | Factor '*' Atom
 
-Atom ::=
+Atom =
     'number'
   | '(' Expr ')'
 ```
@@ -118,8 +118,8 @@ Traditionally, text-books point out left-recursive grammars as the Achilles heel
 of this approach, and use this drawback to motivate more advanced LR parsing
 techniques. An example of problematic grammar can look like this:
 
-```
-Sum ::=
+```ungrammar
+Sum =
     Sum '+' Int
   | Int
 ```
@@ -186,7 +186,7 @@ The `*` is stronger, it has more power to hold together `B` and `C`, and so the 
 `A + (B * C)`.
 
 What about associativity though? In `A + B + C` all operators seem to have the same power, and it is unclear which `+` to fold first.
-But this can also be modelled with power, if we make it slightly asymmetric:
+But this can also be modeled with power, if we make it slightly asymmetric:
 
 ```
 expr:      A       +       B       +       C
