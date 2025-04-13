@@ -6,7 +6,8 @@
   "tasks": {
     "build": "                deno run --lock --allow-write=./out --allow-read --allow-run --allow-net --allow-import         ./src/main.ts build --profile",
     "watch": "rm -rf ./out && deno run --lock --allow-write=./out --allow-read --allow-run --allow-net --allow-import --watch ./src/main.ts watch",
-    "serve": "deno task watch & live-server --host 127.0.0.1 --port 8080 ./out/www",
+    "open": "live-server --host 127.0.0.1 --port 8080 ./out/www & open 'http://127.0.0.1:8080/blogroll.html'",
+    "serve": "deno task watch & deno task open",
     "touch": "deno run --allow-write=./content/posts ./src/main.ts touch"
   },
   "imports": {
