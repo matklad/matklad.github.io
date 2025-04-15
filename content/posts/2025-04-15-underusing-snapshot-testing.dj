@@ -1,0 +1,211 @@
+# Underusing Snapshot Testing
+
+I love [snapshot testing](https://ianthehenry.com/posts/my-kind-of-repl/). I often say something
+along the lines of
+
+> If I need to test something, I write a property/fuzz/randomized test.
+> If I can't fuzz, I write a snapshot test.
+
+Still, today I've realized that I have not being using snapshot tests enough, and that I can improve
+my testing workflow further.
+
+Perhaps I can improve your workflow too? Read on!
+
+## Snapshot Testing Introduction
+
+The idea of snapshot testing is simple. First, you convert the outcome of a test to a textual
+representation. Then, you compare it with expected value, specified as an inline string literal,
+using textual diff. Finally, there's a tool that will _automatically_ update the literal in the
+source code to match the value actually observed.
+
+API-wise, it can look like this:
+
+```zig
+const Snap = @import("./testing/snaptest.zig").Snap;
+const snap = Snap.snap;
+
+test "basic arithmetics" {
+    const result = 2 + 2;
+
+    try snap(@src(),
+        \\2 + 2 = 4
+    ).diff_fmt("2 + 2 = {}", .{result});
+}
+```
+
+As written, the test will fail. However, if I change it to say
+
+```
+- ).diff_fmt("2 + 2 = {}", .{result});
++ ).update().diff_fmt("2 + 2 = {}", .{result});
+```
+
+then running the test will update the "gold" value in the source code as a side effect. Here's what
+this looks like in action (pardon me my amateur vim):
+
+```=html
+<figure>
+<script src="https://asciinema.org/a/rWrOXDber7UanR06XhoUZ4G4E.js" id="asciicast-rWrOXDber7UanR06XhoUZ4G4E" async="true"></script>
+</figure>
+```
+
+I explained how to implement this style of API on [TigerBeetle](http://tigerbeetle.com) blog:
+[Snapshot Testing For The Masses](https://tigerbeetle.com/blog/2024-05-14-snapshot-testing-for-the-masses/){.display}
+
+## Permutations
+
+The main benefit of this style of testing is that it makes software easy to change. When
+requirements change, and the shapes of data processed by software change, you only need to update
+the stringification function. New test output will be captured by re-running the tests once in
+update mode.
+
+Today, I needed to write a function that takes a permutation of numbers like `1 3 2` and converts it
+to the index of permutation in the "dictionary of all permutations" (don't ask). For example,
+`1 3 2` would be the second lexicographically smallest permutation of three numbers.
+
+Permutation aren't going to change. Number's aren't going to change. There's no reason to use
+snapshot testing here, so I start with a simple assert-based smoke test:
+
+```zig
+test "permutation smoke" {
+    var p: [5]u8 = undefined;
+    assert(permutation_encode(&.{}) == 0);
+    try permutation_decode(0, p[0..0]);
+
+    assert(permutation_encode(&.{ 0, 1, 2, 3, 4 }) == 0);
+    try permutation_decode(0, p[0..5]);
+    assert(std.mem.eql(u8, p[0..5], &.{ 0, 1, 2, 3, 4 }));
+
+    assert(permutation_encode(&.{ 4, 3, 2, 1, 0 }) == 119);
+    try permutation_decode(119, p[0..5]);
+    assert(std.mem.eql(u8, p[0..5], &.{ 4, 3, 2, 1, 0 }));
+}
+```
+
+I am not a perfect programmer, so of course this fails at the second case, gotta debug this. I need
+to learn in which way exactly my code is broken, so I reach out for `std.debug.print`, but then
+recall that Zig has `std.testing.expectEqualSlices`{.display} whose job is precisely to print useful
+diff.
+
+So I change my code to use proper assertions, and find that my
+`try permutation_decode(0, p[0..5]);`{.display}
+is `0 0 0 0 0`. Which is not really helpful! Ideally, I'd want to see the result for the third case
+as well, in case it turns out to be more illuminating.
+
+But I already fail the second case, so I won't get to the last one without commenting out code or
+something. And then, I'll have to fish for the output in my terminal, far from my code. That's too
+many context switches! And here I was enlightened.
+
+I rewrite my test using `snaptest` library instead:
+
+```zig
+const Snap = @import("../testing/snaptest.zig").Snap;
+const snap = Snap.snap;
+
+test "permutation smoke" {
+    var p: [5]u8 = undefined;
+    assert(permutation_encode(&.{}) == 0);
+    try permutation_decode(0, p[0..0]);
+    try snap(@src(),
+        \\
+    ).diff_fmt("{any}", .{p[0..0]});
+
+    assert(permutation_encode(&.{ 0, 1, 2, 3, 4 }) == 0);
+    try permutation_decode(0, p[0..5]);
+    try snap(@src(),
+        \\
+    ).diff_fmt("{any}", .{p[0..5]});
+
+    assert(permutation_encode(&.{ 4, 3, 2, 1, 0 }) == 119);
+    try permutation_decode(119, p[0..5]);
+    try snap(@src(),
+        \\
+    ).diff_fmt("{any}", .{p[0..5]});
+}
+```
+
+After running it in the update mode, I get
+
+```zig
+test "permutation smoke" {
+    Snap.update_all = true;
+
+    var p: [5]u8 = undefined;
+    assert(permutation_encode(&.{}) == 0);
+    try permutation_decode(0, p[0..0]);
+    try snap(@src(),
+        \\{  }
+    ).diff_fmt("{any}", .{p[0..0]});
+
+    assert(permutation_encode(&.{ 0, 1, 2, 3, 4 }) == 0);
+    try permutation_decode(0, p[0..5]);
+    try snap(@src(),
+        \\{ 0, 0, 0, 0, 0 }
+    ).diff_fmt("{any}", .{p[0..5]});
+
+    assert(permutation_encode(&.{ 4, 3, 2, 1, 0 }) == 119);
+    try permutation_decode(119, p[0..5]);
+    try snap(@src(),
+        \\{ 3, 2, 1, 0, 0 }
+    ).diff_fmt("{any}", .{p[0..5]});
+}
+```
+
+First things first, yes, my hunch was correct, the last failure where I get `3 2 1 0` instead of
+`4 3 2 1 0` is indeed illuminating, and tells me exactly which two off-by-ones I have.
+
+But the larger lesson here is that this is much easier to debug now in general! Notice how we have
+_all_ failures, how they are right there in the code you are looking at, rather than in an unrelated
+terminal window, and how the failures are kept "live" whenever you change the code and re-run the
+test.
+
+So, even if you don't expect requirements to change, snapshot tests can still accelerate your
+development speed, because they keep the data closer to you, they make erroneous results immediately
+available for slicing and dicing, and they shorten the feedback loop, reactive-programming style!
+Snapshot tests give you a repeatable REPL!
+
+## Bonus Track
+
+Technically, this article has ended, but here's some hidden content. You might be wondering,
+recalling the initial quote, why I am bothering with an example-based test here and don't go
+directly to fuzzing? The answer is that a couple of example based tests are still useful for magic
+smoke checks! In particular, if I mess up my encoding such that I reverse the order of permutations,
+my fuzz test are likely to miss it, but if I see that the code for `0 1 2 3 4` is `119 = 5! - 1`, I
+am much more confident that the thing indeed computes what I want. But of course I have a randomized
+test as well! Or rather, given that my N is small, an _exhaustive_ test for all permutations I care
+about, using the technique form
+[Generate All The Things](https://matklad.github.io/2021/11/07/generate-all-the-things.html){.display}
+
+Here's this test:
+
+```zig
+test "permutation exhaustive" {
+  const Gen = @import("../testing/exhaustigen.zig");
+  for (0..permutation_max + 1) |n| {
+    var g: Gen = .{};
+    var counter: u8 = 0;
+    while (!g.done()) : (counter += 1) {
+      var pool: BoundedArray(u8, permutation_max) = .{};
+      for (0..n) |i| pool.append_assume_capacity(@intCast(i));
+      var permutation: BoundedArray(u8, permutation_max) = .{};
+
+      assert(permutation.count() == 0);
+      assert(pool.count() == n);
+      for (0..n) |_| {
+          const index = g.index(pool.const_slice());
+          permutation.append_assume_capacity(pool.get(index));
+          _ = pool.ordered_remove(index);
+      }
+      assert(permutation.count() == n);
+      assert(pool.count() == 0);
+
+      const code = permutation_encode(permutation.const_slice());
+      assert(code == counter);
+
+      var buffer: [permutation_max]u8 = undefined;
+      try permutation_decode(code, buffer[0..n]);
+      assert(std.mem.eql(u8, buffer[0..n], permutation.const_slice()));
+    }
+  }
+}
+```
