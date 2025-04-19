@@ -13,14 +13,14 @@ pretty limited. Let's see!
 
 ## No Host Leakage
 
-When you execute code at compile time, on which machine it executes? The natural answer is "on your
+When you execute code at compile time, on which machine does it execute? The natural answer is "on your
 machine", but it is wrong! The code might not run on your machine, it can be cross compiled! For
 overall development sanity, it is important that `comptime` code observes the same behavior as the
 runtime code, and doesn't leak details about the host on which the code is compiled. Zig doesn't
 give comptime code access to host architecture (host --- machine on which you compile code).
 Consider this Zig program:
 
-```
+```zig
 const std = @import("std");
 
 comptime {
@@ -95,7 +95,8 @@ fn f(comptime x: u32, y: u32) u32 {
 ```
 
 The restriction here is that now, of course, when you call `f`, the first argument must be
-comptime-known. You can `f(92, user_input())`{.display}, but you can't `f(user_input(), 92)`{.display}.
+comptime-known. You can [`f(92, user_input())`,]{.display} but you can't
+[`f(user_input(), 92)`.]{.display}
 
 The carrot you'll get in exchange is a guarantee that, for each specific call with a particular
 value of `x`, the compiler will partially evaluate `f`, so only one branch will be left.
@@ -165,7 +166,7 @@ fn print_literal(literal: []const u8) void {
 ```
 
 Our `print` is set up exactly as our `f` before --- the first argument is a comptime-known dispatch
-parameter. if `T` is an int or a string, the compiler calls `print_u32` or `print_string` directly.
+parameter. If `T` is an int or a string, the compiler calls `print_u32` or `print_string` directly.
 
 The third case is more complicated. First, we use `@typeInfo` to get a comptime value describing our
 type, and, in particular, the list of fields it has. Then, we iterate this list and recursively
@@ -247,11 +248,13 @@ according to RTTI:
 fn print_dyn(T: RTTI, value: *const anyopaque) void {
     switch (T) {
         .u32 => {
-            const value_u32: *const u32 = @alignCast(@ptrCast(value));
+            const value_u32: *const u32 =
+                @alignCast(@ptrCast(value));
             print_u32(value_u32.*);
         },
         .string => {
-            const value_string: *const []const u8 = @alignCast(@ptrCast(value));
+            const value_string: *const []const u8 =
+                @alignCast(@ptrCast(value));
             print_string(value_string.*);
         },
         .@"struct" => |info| {
@@ -263,10 +266,8 @@ fn print_dyn(T: RTTI, value: *const anyopaque) void {
 
                 print_literal(field.name);
                 print_literal(" = ");
-                const field_ptr: *const anyopaque = @ptrFromInt(
-                    @intFromPtr(value) + field.offset,
-                );
-                print_dyn(field.rtti, field_ptr);
+                const field_ptr: *const anyopaque =
+                    @as([*]const u8, @ptrCast(value)) + field.offset;
             }
             print_literal("}");
         },
@@ -321,12 +322,12 @@ pub fn main() void {
 You can use Zig comptime to create new types. That's how a [Zig
 ORM](https://matklad.github.io/2025/03/19/comptime-zig-orm.html) can work. However, it is impossible
 to add methods to generated types, they must be inert bundles of fields.  In Rust, when you use a
-derive macro, it can arbitrary extend type's public API, and you need to read proc macro docs (or
+derive macro, it can arbitrarily extend type's public API, and you need to read proc macro docs (or
 look at the generated code) to figure out what's available. In Zig, types's API is always hand
 written, but it can use comptime reflection internally.
 
 So, if you are building a JSON serialization library in Zig, you can't add `.to_json` method to
-user-types. You'll necessary have to supply a normal top-level function like
+user-types. You'll necessarily have to supply a normal top-level function like
 
 ```zig
 fn to_json(comptime T: type, value: T, writer: Writer) !void {
@@ -352,8 +353,8 @@ With this setup, `to_json` can only allow primitives and types with `JSONOptions
 
 ## No IO
 
-Last but not least, Zig comptime does not allow any kind of input output. There's not any kind of
-sandbox even, as there's no IO facilities in the first place. So, while compiling the code, you
+Last but not least, Zig comptime does not allow any kind of input output. There isn't even any kind
+of sandbox, as there are no IO facilities in the first place. So, while compiling the code, you
 can't talk to your database to generate the schema. In exchange, compile time evaluation is
 hermetic, reproducible, safe, and cacheable.
 
@@ -361,3 +362,17 @@ If you do need to talk to the database at build time, you can still do that, jus
 system! Zig's `build.zig` is a general purpose build system, which easily supports the use-case of
 running an arbitrary Zig program to generate arbitrary Zig code which can then be normally
 `@import`ed.
+
+## El Disco
+
+[Any abstraction has two sides](https://www.tedinski.com/2018/01/30/the-one-ring-problem-abstraction-and-power.html).
+Powerful abstractions are useful because they are more expressive. But the flip-side is that
+abstraction-using code becomes harder to reason about, because the space of what it can possibly do
+is so vast. This dependency is not zero sum. A good abstraction can be simultaneously more powerful
+and easier to reason about than a bad one.
+
+Meta programming is one of the more powerful abstractions. It is very capable in Zig, and comes at a
+significant cost --- Zig doesn't have declaration-site type checking of comptime code. That being
+said, I personally find Zig's approach to be uniquely tidy, elegant, and neat! It does much less
+than alternative systems, but ends extremely ergonomic in practice, and _relatively_ easy to wrap
+ones head around.
