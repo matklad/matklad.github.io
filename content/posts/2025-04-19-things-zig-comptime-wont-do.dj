@@ -1,0 +1,363 @@
+# Things Zig comptime Won't Do
+
+> Es el disco de Odín. Tiene un solo lado. En la tierra no hay otra cosa que tenga un solo lado.
+
+Zig's comptime feature is most famous for what it can do: generics!, [conditional
+compilation](https://mitchellh.com/writing/zig-comptime-conditional-disable)!,
+[subtyping](https://mitchellh.com/writing/zig-comptime-tagged-union-subset)!, serialization!,
+[ORM](https://matklad.github.io/2025/03/19/comptime-zig-orm.html)! That's fascinating, but, to be
+fair, there's a bunch of languages with quite powerful compile time evaluation capabilities that can
+do equivalent things. What I find more interesting is that Zig comptime is actually quite
+restrictive, by design, and won't do many things! It manages to be very expressive _despite_ being
+pretty limited. Let's see!
+
+## No Host Leakage
+
+When you execute code at compile time, on which machine it executes? The natural answer is "on your
+machine", but it is wrong! The code might not run on your machine, it can be cross compiled! For
+overall development sanity, it is important that `comptime` code observes the same behavior as the
+runtime code, and doesn't leak details about the host on which the code is compiled. Zig doesn't
+give comptime code access to host architecture (host --- machine on which you compile code).
+Consider this Zig program:
+
+```
+const std = @import("std");
+
+comptime {
+    const x: usize = 0xbeef;
+    const xs: []const u8 = std.mem.asBytes(&x);
+    for (xs) |byte| {
+        @compileLog(byte);
+    }
+}
+```
+
+I get the following output when compiling normally, on my computer for my computer:
+
+```
+λ ~/zig-0.14/zig build-lib main.zig
+@as(u8, 239)
+@as(u8, 190)
+@as(u8, 0)
+@as(u8, 0)
+@as(u8, 0)
+@as(u8, 0)
+@as(u8, 0)
+@as(u8, 0)
+```
+
+But if I cross compile to a 32 bit big-endian architecture, comptime observes correct `usize`:
+
+```
+λ ~/zig-0.14/zig build-lib -target thumbeb-freestanding-none main.zig
+@as(u8, 0)
+@as(u8, 0)
+@as(u8, 190)
+@as(u8, 239)
+```
+
+My understanding is that Jai, for example, doesn't do this, and runs comptime code on the host.
+
+Rust's declarative macros and const-fn don't observe host architecture, but procedural macros do.
+
+## No #eval
+
+Many powerful compile-time meta programming systems work by allowing you to inject arbitrary strings
+into compilation, sort of like `#include` whose argument is a shell-script that generates the text
+to include dynamically. For example, D mixins work that way:
+<https://dlang.org/articles/mixin.html>{.display}
+
+And Rust macros, while technically producing a token-tree rather than a string, are more or less the
+same. In contrast, there's absolutely no facility for dynamic source code generation in Zig. You
+just can't do that, the feature isn't!
+
+Zig has a completely different feature, partial evaluation/specialization, which, none the less, is
+enough to cover most of use-cases for dynamic code generation. Let's see an artificial example:
+
+```zig
+fn f(x: u32, y: u32) u32 {
+    if (x == 0) return y + 1;
+    if (x == 1) return y * 2;
+    return y;
+}
+```
+
+This is a normal function that dispatches on the first argument to select an operation to apply to
+the second argument. Nothing fancy! Now, the single feature that Zig has is marking the first
+argument with `comptime`
+
+```zig
+fn f(comptime x: u32, y: u32) u32 {
+    if (x == 0) return y + 1;
+    if (x == 1) return y * 2;
+    return y;
+}
+```
+
+The restriction here is that now, of course, when you call `f`, the first argument must be
+comptime-known. You can `f(92, user_input())`{.display}, but you can't `f(user_input(), 92)`{.display}.
+
+The carrot you'll get in exchange is a guarantee that, for each specific call with a particular
+value of `x`, the compiler will partially evaluate `f`, so only one branch will be left.
+
+Zig is an imperative language. Not everything is a function, there's also control flow expressions,
+and they include partially-evaluated variations. For example, `for(xs)` is a normal runtime for loop
+over a slice, `comptime for(xs)` evaluates the entire loop at compile time, requiring that `xs` is
+comptime-known, and `inline for(xs)` requires that just the length of `xs` is known at comptime.
+
+Let's apply specialization to the classic problem solved by code-generation --- printing. You can
+imagine a proc-macro style solution that prints a struct by reflecting on which fields it has and
+emitting the code to print each field.
+
+In Zig, the same is achieved by specializing a recursive `print` function on the value of type:
+
+```Zig
+const S = struct {
+    int: u32,
+    string: []const u8,
+    nested: struct {
+        int: u32,
+    },
+};
+
+pub fn main() void {
+    const s: S = .{
+        .int = 1,
+        .string = "hello",
+        .nested = .{ .int = 2 },
+    };
+    print(S, s);
+}
+
+fn print(comptime T: type, value: T) void {
+    if (T == u32) return print_u32(value);
+    if (T == []const u8) return print_string(value);
+    switch (@typeInfo(T)) {
+        .@"struct" => |info| {
+            print_literal("{");
+            var space: []const u8 = "";
+            inline for (info.fields) |field| {
+                print_literal(space);
+                space = ", ";
+
+                print_literal(field.name);
+                print_literal(" = ");
+                const field_value = @field(value, field.name);
+                print(field.type, field_value);
+            }
+            print_literal("}");
+        },
+        else => comptime unreachable,
+    }
+}
+
+fn print_u32(value: u32) void {
+    std.debug.print("{d}", .{value});
+}
+
+fn print_string(value: []const u8) void {
+    std.debug.print("\"{s}\"", .{value});
+}
+
+fn print_literal(literal: []const u8) void {
+    std.debug.print("{s}", .{literal});
+}
+```
+
+Our `print` is set up exactly as our `f` before --- the first argument is a comptime-known dispatch
+parameter. if `T` is an int or a string, the compiler calls `print_u32` or `print_string` directly.
+
+The third case is more complicated. First, we use `@typeInfo` to get a comptime value describing our
+type, and, in particular, the list of fields it has. Then, we iterate this list and recursively
+print each field. Note that although the list of fields is known in its entirety, we can't `comptime
+for` it, we need `inline for`. This is because the _body_ of our loop depends on the runtime
+`value`, and can't be fully evaluated at compile time. This might be easier to see if you think in
+terms of functions. The `for` loop is essentially a map:
+
+```
+map :: [a] -> (a -> b) -> [b]
+map xs f = ...
+```
+
+If both `xs` and `f` are comptime-known, you can evaluate the entire loop at compile time. But in
+our case `f` actually closes over a runtime value, so we can't evaluate everything. Still, we can
+specialize on the first argument, which _is_ known at compile time. This is precisely the difference
+between `comptime` and `inline` `for`.
+
+## No DSLs
+
+Many meta programming systems, like macros in Lisp or Rust, not only _produce_ arbitrary code, but
+also take arbitrary custom syntax as input, as long as parentheses are matched:
+
+```rust
+use inline_python::python;
+
+let who = "world";
+let n = 5;
+python! {
+    for i in range('n):
+        print(i, "Hello", 'who)
+    print("Goodbye")
+}
+```
+
+Zig doesn't have any extension points for custom syntax. Indeed, you can't pass Zig _syntax_ (code)
+to comptime functions at all! Everything operates on Zig values. That being said, Zig is very
+lightweight when it comes to describing free-form data, so this isn't much of a hindrance. _And_
+in any case, you can always pass your custom syntax as a comptime string. This is exactly how
+"printf" works:
+
+```zig
+pub fn print(comptime fmt: []const u8, args: anytype) void
+```
+
+Here, `fmt` is an embedded DSL, which is checked at compile time to match the arguments.
+
+## No RTTI
+
+Zig printing code looks suspiciously close to how you'd do this sort of thing in a dynamic language
+like Python. In fact, it is _precisely_ that same code, except that it is specialized over runtime
+type information Python has to enable this sort of thing. Furthermore, Zig actually _requires_ that
+all type meta programming is specialized away. Types as values _only_ exist at compile time. Still,
+looking at our print, we might be concerned over code size --- we are effectively generating a fresh
+copy of `print` for any data structure. Our code will be smaller, and will compile faster if there's
+just a single `print` that takes an opaque pointer and runtime parameter describing the type of the
+value (its fields and offsets). So let's roll our own runtime type information. For our example, we
+support ints, strings, and structs with fields. For fields, our RTTI should include their names and
+offsets:
+
+```zig
+const RTTI = union(enum) {
+    u32,
+    string,
+    @"struct": []const Field,
+
+    const Field = struct {
+        name: []const u8,
+        offset: u32,
+        rtti: RTTI,
+    };
+};
+```
+
+The printing itself is not particularly illuminating, we just need to cast an opaque pointer
+according to RTTI:
+
+```zig
+fn print_dyn(T: RTTI, value: *const anyopaque) void {
+    switch (T) {
+        .u32 => {
+            const value_u32: *const u32 = @alignCast(@ptrCast(value));
+            print_u32(value_u32.*);
+        },
+        .string => {
+            const value_string: *const []const u8 = @alignCast(@ptrCast(value));
+            print_string(value_string.*);
+        },
+        .@"struct" => |info| {
+            print_literal("{");
+            var space: []const u8 = "";
+            for (info) |field| {
+                print_literal(space);
+                space = ", ";
+
+                print_literal(field.name);
+                print_literal(" = ");
+                const field_ptr: *const anyopaque = @ptrFromInt(
+                    @intFromPtr(value) + field.offset,
+                );
+                print_dyn(field.rtti, field_ptr);
+            }
+            print_literal("}");
+        },
+    }
+}
+```
+
+Finally, we need to compute `RTTI`, which amounts to taking comptime-only Zig type info and
+extracting important bits into an `RTTI` struct which is computed at compile time, but can exist at
+runtime as well:
+
+```zig
+fn reflect(comptime T: type) RTTI {
+    comptime {
+        if (T == u32) return .u32;
+        if (T == []const u8) return .string;
+        switch (@typeInfo(T)) {
+            .@"struct" => |info| {
+                var fields: [info.fields.len]Field = undefined;
+                for (&fields, info.fields) |*slot, field| {
+                    slot.* = .{
+                        .name = field.name,
+                        .offset = @offsetOf(T, field.name),
+                        .rtti = reflect(field.type),
+                    };
+                }
+                const fields_frozen = fields;
+                return .{ .@"struct" = &fields_frozen };
+            },
+            else => unreachable,
+        }
+    }
+}
+```
+
+The call site is illustrative: we need `comptime` to _compute_ the type information, but then we
+reify it as some real bytes in the binary, and use it as runtime value when calling `print_dyn`.
+
+```zig
+pub fn main() void {
+    const s: S = .{
+        .int = 1,
+        .string = "hello",
+        .nested = .{ .int = 2 },
+    };
+    print_dyn(comptime RTTI.reflect(S), &s);
+}
+```
+
+## No New API
+
+You can use Zig comptime to create new types. That's how a [Zig
+ORM](https://matklad.github.io/2025/03/19/comptime-zig-orm.html) can work. However, it is impossible
+to add methods to generated types, they must be inert bundles of fields.  In Rust, when you use a
+derive macro, it can arbitrary extend type's public API, and you need to read proc macro docs (or
+look at the generated code) to figure out what's available. In Zig, types's API is always hand
+written, but it can use comptime reflection internally.
+
+So, if you are building a JSON serialization library in Zig, you can't add `.to_json` method to
+user-types. You'll necessary have to supply a normal top-level function like
+
+```zig
+fn to_json(comptime T: type, value: T, writer: Writer) !void {
+    ...
+}
+```
+
+If you want to make sure that types explicitly opt-in JSON serialization, you need to ask the user
+to mark types specially:
+
+```zig
+const Person = struct {
+    first_name: []const u8,
+    last_name: []const u8,
+
+    pub const JSONOptions = .{
+        .style = .camelCase,
+    };
+}
+```
+
+With this setup, `to_json` can only allow primitives and types with `JSONOptions`.
+
+## No IO
+
+Last but not least, Zig comptime does not allow any kind of input output. There's not any kind of
+sandbox even, as there's no IO facilities in the first place. So, while compiling the code, you
+can't talk to your database to generate the schema. In exchange, compile time evaluation is
+hermetic, reproducible, safe, and cacheable.
+
+If you do need to talk to the database at build time, you can still do that, just through the build
+system! Zig's `build.zig` is a general purpose build system, which easily supports the use-case of
+running an arbitrary Zig program to generate arbitrary Zig code which can then be normally
+`@import`ed.
