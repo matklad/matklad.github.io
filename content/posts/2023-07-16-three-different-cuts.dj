@@ -8,7 +8,7 @@ At a glance, it seems like a non-orthogonal jumbling together of searching and s
 However, in practice a lot of ad-hoc string processing can be elegantly expressed via `cut`.
 
 A lot of things are `key=value` pairs, and cut fits perfectly there.
-What's more, many more complex sequencies, like
+What's more, many more complex sequences, like
 [`--arg=key=value`,]{.display}
 can be viewed as nested pairs.
 You can cut around `=` once to get `--arg` and `key=value`, and then cut the second time to separate `key` from `value`.
@@ -26,7 +26,7 @@ where
 }
 ```
 
-Rust's `Option` is a good fit for the result type, it clearnly describes the behavior of the function when the pattern isn't found in the string at all.
+Rust's `Option` is a good fit for the result type, it clearly describes the behavior of the function when the pattern isn't found in the string at all.
 Lifetime `'a` expresses the relationship between the result and the input --- both pieces of result are substrings of `&'a self`, so, as long as they are used, the original string must be kept alive as well.
 Finally, the separator isn't another string, but a generic `P: Pattern`.
 This gives a somewhat crowded signature, but allows using strings, single characters, and even `fn(c: char) -> bool`{.display} functions as patterns.
@@ -129,3 +129,24 @@ let key = if (mem.cut(line, "=")) |cut| cut.first else line;
 
 Moral of the story?
 Work with the grain of the language --- expressing the same concept in different languages usually requires a slightly different vocabulary.
+
+**Update(2025-04-21):** These days, Zig supports tuple unpacking:
+
+```zig
+fn cut(
+    haystack: []const u8,
+    needle: []const u8,
+) ?struct { []const u8, []const u8 } {
+    const index = std.mem.indexOf(u8, haystack, needle) orelse
+        return null;
+    return .{
+        haystack[0..index],
+        haystack[index + needle.len ..],
+    };
+}
+
+test cut {
+    const salutation = "hello world";
+    const greeting, const target = cut(salutation, " ").?;
+}
+```
