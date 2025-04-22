@@ -1,0 +1,124 @@
+# Against Horizontal Scroll
+
+What's in common between these two blog posts (pardon me, my fellow crustaceans of lobster variety)?
+
+```=html
+<figure class="two-col">
+    <img alt="" style="max-width: 40%; border: 1px solid black;" src="https://github.com/user-attachments/assets/f55cb0fa-2410-4c92-82c6-f2411aa313f5">
+    <img alt="" style="max-width: 40%; border: 1px solid black;" src="https://github.com/user-attachments/assets/f7b4bfc7-eee2-4d30-9133-aee51750db4f">
+</figure>
+```
+
+They both have horizontal scroll on mobile! Horizontal scroll is very distracting -- when you scroll
+vertically with your thumb, you necessarily scroll horizontally as well. Any amount of horizontal
+scroll clips the left edge of the screen, chopping of begging of every sentence!
+
+This is a hard problem to fix, or at least I don't know a reliable simple solution. Still, I think
+this site should not have overflows, so let me share some things I've learned about the width of
+things!
+
+## Code Blocks
+
+In general, you want your main text to be pretty narrow, about 50-60 characters. This creates a
+problem for coding blogs --- code, unlike prose, wants to be a bit wider. While its a good idea to
+keep most of the examples narrow, an occasional line still wants to be longer than 60. My suggested
+solution here is to accept this, and allow code samples to be wider than the main text. This is not
+super trivial to achieve with CSS, but I managed to I borrowed a  solution from
+<https://blog.xoria.org>.
+
+My HTML structure looks roughly like this, `body` > `main` > `article` > `section?` > `p`:
+
+```html
+<body>
+  <main>
+    <article>
+    <h1>
+      Against Horizontal Scroll <time class="meta" datetime="2025-04-22">Apr 22, 2025</time>
+    </h1>
+    <p>
+      What’s in common between these two blog posts (pardon me, my fellow
+      crustaceans of lobster variety)?
+    </p>
+    <figure class="code-block">
+      <pre><code>A bunch of code here.</code></pre>
+    </figure>
+    </article>
+  </main>
+</body>
+```
+
+And I use the following CSS for narrow main text width and moderately wide code:
+
+```css
+/* Set the body width to how wide you want the code to be */
+body {
+    max-width: 80ch;
+    padding: 2ch;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Then, limit every "paragraph" of article to be narrower.
+ * Paragraph is just any descendant of the main article tag.
+ */
+article > *,
+article > section > *
+{ max-width: 55ch; }
+
+/* Finally, opt-out of narrow width for figures with code */
+article > section,
+article > figure,
+article > section > figure
+{ max-width: 80ch; }
+```
+
+Still, it is hard to enforce that _all_ code samples fit within the limit, and there are narrow
+screens where they can't physically fit.
+
+To solve this, you need to make sure that, when a horizontal scroll-bar appears due to a wide code
+block, it only appears on the code block, and not on the entire website:
+
+```css
+figure.code-block > pre > code {
+    overflow-x: auto;
+}
+```
+
+Code blocks are the primary cause of horizontal scroll, so it's great that this is fixed now! Two
+more left!
+
+## Word Breaking
+
+The browser can reflow your article to make it narrower by breaking text over multiple lines. This
+requires that your words are not too wide. This is usually not a problem, unless you are a German,
+but there are certain technical "words" that are, in fact, wide. For example, I like to use bare
+URLs in my writing, and, because urls typically do not contain spaces, they can't be broken over
+multiple lines and cause scrollbars. For such cases, you need to inform the browser that it is okay
+to break the thing anywhere:
+
+```css
+p { hyphens: auto; }
+a.url { word-break: break-all; }
+```
+
+## Flexbox
+
+The final issue that hit me relates to flexbox. Specifically, its `min-width` semantics. If you
+don't specify `min-width` of a flex item explicitly, it gets defaulted to  [`min-width:
+auto`.]{.display} This means that the _minimum_ width that the item can occupy is determined by
+_not_ breaking paragraphs in lines! This way, the computed minimal width of the element ends up
+being much wider than what you would naturally expect. To fix it, manually override it:
+
+```css
+aside.admn > div { flex: 1; min-width: 0; }
+```
+
+That's all for today. To underscore my point, and in solidarity with the authors of the two blogs
+that started this, let me include an url without `word-break` to make sure this article itself has
+the problem it talks about:
+
+```=html
+<p style="hyphens: none;"><a href="https://matklad.github.io/2025/04/22/horizontal-scroll.html"
+   class="url"
+   style="word-break: normal;">https://matklad.github.io/2025/04/22/horizontal-scroll.html</a></p>
+```
