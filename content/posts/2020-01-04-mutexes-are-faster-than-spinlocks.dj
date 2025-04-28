@@ -315,7 +315,7 @@ In particular I find the qualitative observation that, under contention mutexes 
 * [Spinlock](https://www.kernel.org/doc/Documentation/locking/spinlocks.txt) --- Linux kernel docs about spinlocks.
 * [Do not use spinlocks in user space](https://www.realworldtech.com/forum/?threadid=189711&curpostid=189723) --- Linus explains why user space spinlocks are usually bad.
 * [Almost all serious locking libraries try to do something exactly like that](https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755) --- Linus explains how good mutex might be implemented instead.
-* [Effcient Userspace Optimistic Spinning Locks](https://linuxplumbersconf.org/event/4/contributions/286/attachments/225/398/LPC-2019-OptSpin-Locks.pdf) --- a presentation about making fast-path spinlocking in futex-based locks even more efficient.
+* [Efficient Userspace Optimistic Spinning Locks](https://linuxplumbersconf.org/event/4/contributions/286/attachments/225/398/LPC-2019-OptSpin-Locks.pdf) --- a presentation about making fast-path spinlocking in futex-based locks even more efficient.
   The main problem with optimistic spinning is how much of it do you want (that is, tweaking the number of iterations parameter).
   The proposal solves this in an ingenious self-tweeking way (with the help of the kernel): we spin until the holder of the lock itself goes to sleep.
 
