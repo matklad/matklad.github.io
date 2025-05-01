@@ -195,10 +195,9 @@ async function build(params: {
   }
 
   const t_fmt = performance.now();
-  const { success } = await new Deno.Command(Deno.execPath(), {
+  await new Deno.Command(Deno.execPath(), {
     args: ["fmt", "./out/www"],
   }).output();
-  if (!success) throw "deno fmt failed";
   ctx.fmt_ms = performance.now() - t_fmt;
 
   ctx.total_ms = performance.now() - t;
@@ -318,4 +317,4 @@ async function* walk(root: string): AsyncIterableIterator<string> {
   }
 }
 
- if (import.meta.main) await main();
+if (import.meta.main) await main();
