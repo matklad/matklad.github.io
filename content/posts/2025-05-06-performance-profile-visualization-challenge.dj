@@ -1,0 +1,59 @@
+# Performance Profile Visualization Challenge
+
+I love profiling! There's a whole lot of different profiling tools available, and they provide a
+treasure trove of information. If you roughly know the slow area of the code, it's usually not a
+problem to understand why it is slow. What I have trouble with though, is _quickly_ identifying
+the rough point of interest. Today I am pretty good at trisecting performance issues, and, if
+I make it a mission to identify the bottleneck, I usually manage to do it in a couple of hours.
+However, I don't know a tool which can reliably identify bottlenecks automatically, in minutes. My
+problem is not that profilers don't give enough information to me. My problem is that profilers give
+_too much_ information, and its on the human to figure out what's signal and what's noise.
+
+Today, I've accidentally discovered a massive, 10x performance hole in
+[TigerBeetle's tests](https://github.com/tigerbeetle/tigerbeetle/blob/0.16.39/src/vsr/replica_test.zig)
+which can be traced to a single line of code. Which profiler can reliably identify the problematic
+line, and highlight it as _the_ single source of performance problems?
+
+Here's a reproducible setup for the challenge:
+
+```console
+# Clone the repo
+$ git clone https://github.com/tigerbeetle/tigerbeetle
+$ cd tigerbeetle
+$ git switch --detach 0e8be09fb44058c4b37af1fa66458f692e840f8b
+
+# Build the code once to cache compilation
+$ ./zig/download.sh
+$ ./zig/zig build test -- Cluster
+
+# This is the command we are optimizing
+$ /usr/bin/time ./zig/zig build test -- Cluster
+      151.46 real       146.78 user         4.56 sys
+```
+
+As you see, it takes quite some time to run. Now, I comment out a single line of code, and the
+runtime improves massively, almost 10x:
+
+```console
+$ vim src/mystery.zig
+$ /usr/bin/time ./zig/zig build test -- Cluster
+       16.51 real        12.34 user         4.15 sys
+$ git diff --stat
+ src/redacted.zig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+```
+
+Please find the line I've commented out! You of course can just check recent TigerBeetle pull
+requests, and it's not wrong to do that, but I figured it'd be more fun if I don't tell the answer
+right away :D
+
+Don't worry if you don't know Zig! The fact that the thing is written in an unfamiliar language, is
+built by a weird build system, and is run indirectly, is part of the challenge here! Ideally, the
+first line of profiling tooling shouldn't require tweaking the system under test much.
+
+What _is_ unrealistic here is just how skewed this hotspot is --- a single line of code is
+responsible for 90% of runtime! Usually, it is much less clear cut. But even in this ridiculous
+scenario, it took me an embarrassing amount of time to find it! Am I using the wrong tools
+incorrectly?
+
+Please post your solutions somewhere publicly, so that we all can learn to profile more efficiently!
