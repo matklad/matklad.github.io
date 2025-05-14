@@ -16,9 +16,15 @@ export interface FeedEntry {
 }
 
 async function blogroll_feed(url: string): Promise<FeedEntry[]> {
-  const response = await fetch(url);
-  const xml = await response.text();
-  const feed = await parseFeed(xml);
+  let feed;
+  try {
+    const response = await fetch(url);
+    const xml = await response.text();
+    feed = await parseFeed(xml);
+  } catch (error) {
+    console.error({ url, error });
+    return [];
+  }
 
   return feed.entries.map((entry) => {
     return {
