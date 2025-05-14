@@ -4,7 +4,7 @@ I've written a number of stateful services starting with an event loop at the co
 
 ```python
 async for event in events_incoming:
-    process(event)
+    await process(event)
 ```
 
 I had to refactor this loop later, every time. For an example, see the direct cause for the article,
@@ -30,7 +30,7 @@ events_incoming: Stream[Event] = merge(
 )
 
 async for event in events_incoming:
-    process(event)
+    await process(event)
 ```
 
 Here, `merge` is an operator that takes a number of event streams, and merges them into one. This
@@ -112,7 +112,7 @@ events_incoming_batched: Stream[List[Event]] =
 async for event_batch in events_incoming_batched:
     batch: List[Event] = coalesce(event_batch)
     for event in batch:
-        process(event)
+        await process(event)
 ```
 
 The secret sauce is the `batch_stream` function which waits until at least one event is available,
