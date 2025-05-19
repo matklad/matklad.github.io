@@ -1,0 +1,111 @@
+# Profiling Challenge Results
+
+A few days ago, I posted a
+
+[Performance Profile Visualization Challenge](https://matklad.github.io/2025/05/06/performance-profile-visualization-challenge.html){.display}
+
+```console
+# Clone the repo
+$ git clone https://github.com/tigerbeetle/tigerbeetle
+$ cd tigerbeetle
+$ git switch --detach 0e8be09fb44058c4b37af1fa66458f692e840f8b
+
+# Build the code once to cache compilation
+$ ./zig/download.sh
+$ ./zig/zig build test -- Cluster
+
+# This is the command we are optimizing
+$ /usr/bin/time ./zig/zig build test -- Cluster
+      151.46 real       146.78 user         4.56 sys
+```
+
+The performance bug in the above code is _massive_, and it is very obvious. It's really not hard to
+find it. The challenge is to find it _quickly_, to visualize the results in a way that directly
+points at the culprit, rather the presenting the user with bajillion of tables, graphs, timelines
+and fires.
+
+Here's the buggy line:
+
+```zig
+// For performance, don't run every tick.
+if (i % 100 == 0) JournalChecker.check(replica);
+```
+
+The logic is sound! The problem is a typo --- instead of `tick`, the counter for virtual time, the
+code uses `i`, the index of replica. So, instead of running a check every 100^th^ tick, the code
+ends up running the check every tick, but only for replcia 0.
+
+The results of profiling challenge are mixed for me. Looks like the next time something like this
+comes up, I'll be wasting some time again!
+
+Narrators voice: it is, in fact, coming up _right_ now, and matklad is simply procrastinating from
+slogging through actual profiling in favor of writing yet another article.
+
+---
+
+The only full solution was presented by
+[@vimpostor](https://github.com/tigerbeetle/tigerbeetle/pull/2941#issuecomment-2857976709),
+using [KDAB/hotspot](https://github.com/KDAB/hotspot).
+
+The results are  truly remarkable:
+
+> Go to the "By File" tab, sort by "Cycles:Pu (incl.)", navigate to the first non-Zig-Toolchain
+> file, and the line is visible directly at the top:
+
+![](https://github.com/user-attachments/assets/05d19e02-e31c-49aa-a04c-a427466e3267)
+
+That `cluster.zig:502` is precisely the offending line. That's excactly what I've been asking for!
+Granted, knowing that you need to click "By File" tab and then "Cycles:Pu" (who the heck is `Pu`?)
+_is_ arcane, but I can live with that. The bigger problem is that when _I_ run hotspot, there's
+simply no "By File" tab =/ I assume this is some sort of a newer feature (mine is `1.5.90`)?
+ Eagerly waiting for that!
+
+Anyway, @vimpostor, you are the official winner of the challenge, even if I can't reproduce the
+result!
+
+---
+
+A MacOS solution was presented by
+[@delamarch3](https://github.com/tigerbeetle/tigerbeetle/pull/2941#issuecomment-2869660869), using
+Instruments:
+
+> I found the line of code in xcode instruments using the cycles CPU counter. The default setting
+> of sampling every 1M events wasn't granular enough to find the specific line, only the function,
+> so I reduced it to 750K.
+
+![](https://github.com/user-attachments/assets/434536c7-fd4a-4a89-8be8-98674f3413a1)
+
+I have very mixed feelings here. Instruments is a beast, and even finding where do I change the
+sample rate was a challenge. And then, when I did that, the thing just failed with some obscure
+error. Using some other method, I was able to get a picture similar to that in the screenshot. I do
+have mixed feelings here --- the problem is that I need to click on the right function to see the
+right line, and it isn't obvious which function is the right one! It is in the middle of the stack
+of hottest functions!
+
+---
+
+Finally, @pierricgimmig shared this cool video profiling with
+[Orbit](https://github.com/google/orbit):
+
+<https://www.youtube.com/watch?v=FUh6ZgxeqRs>
+
+This does look great and simple, it took only 15 seconds to get something reasonable and identify
+the clump of hot functions. But it doesn't actually show the problematic line of code!
+
+Instead, the video focuses on `stdx.zeroed` and its caller, `check`, which are just below the actual
+problem. And this is _exactly_ the trap I myself fell into when doing this profiling for real!
+
+My profiler pointed me at `stdx.zeroed`, so I first went optimizing _that_, thinking that the
+problem was that it is horribly slow in debug due to un-eliminated bounds check, but that wasn't
+fruitful. Than, I spend some time looking at the `check` and thinking how could I speed it up, by
+introducing some kind of caching, or maybe moving the check forward to when the data are modified.
+That was hard, so I was discouraged and shelved the whole thing. Then, at the end of the day, when I
+was closing my editor windows I looked at the thing with fresh eyes, and noticed the `check`'s
+call-site by accident!
+
+---
+
+Summing up, it feels like profiling is easy to do if you do it every day, if you have working tacit
+knowledge of what to look at, and what's best ignored. If you are, like me, opening a profiler once
+every couple of months, you'll be wasting a lot of time every time to just get into the groove. At
+least until that presumably new version of hotspot comes out!
