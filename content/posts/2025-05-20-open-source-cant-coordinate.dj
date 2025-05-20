@@ -1,0 +1,53 @@
+# Open Source Can't Coordinate
+
+I was taking a shower this morning, and was pondering [yesterday's
+problem](https://matklad.github.io/2025/05/19/profiling-challenge-results.html), where I _suspect_
+that I have an outdated version of [hotspot](https://github.com/KDAB/hotspot) Linux profiler, but I
+can't just go and download a fresh release from GitHub, because hotspot is a KDE app, and I use
+NixOS. And NixOS isn't a problem --- it's a solution.
+
+Linux on desktop is a rickety tower of competing libraries, protocols and standards, which is always
+in an Escheresque sort of perpetual motion, taking off but simultaneously falling, and the best way
+to enjoy it is to take a photo, a frozen snapshot in time.
+
+The underlying force there is the absence of one unified baseline set of APIs for writing desktop
+programs. There's no single entity that can coordinate the API, in contrast to Windows and MacOS.
+
+But then, how can Linux exist? How does that square with "never break the user space?" I'll let you
+ponder the question, but let me first tell you a story from a domain where I consider myself an
+expert.
+
+## Better LSP Than Never
+
+The past ten years saw a big shift in how we are writing software: baseline level of "interactive
+static analysis" became the norm, go to definition is universally available. The surprising fact
+here is that the shift occurred a decade too late!
+
+The shift was caused by Microsoft releasing its Language Server Protocol specification. But there's
+little value in the protocol itself. Its implementation is
+[mediocre](https://matklad.github.io/2023/10/12/lsp-could-have-been-better.html), it was strictly
+worse than [the state of the art at that time](https://htmlpreview.github.io/?https://github.com/dart-lang/sdk/blob/8e6a02d899ef62ef5b8405518b36340e609198e2/pkg/analysis_server/doc/api.html), and its
+[governance is abysmal](https://github.com/microsoft/language-server-protocol/pull/2027#issuecomment-2822857896).
+The only great thing about LSP is that it exists!
+
+If you were anywhere near JetBrains a decade ago, it was blindingly obvious that the absence of
+broad availability of basic IDE features leaves a lot of the value on the table, and that the
+multi-process IPC architecture is the way to go (JetBrains did IPC for Rider). But it is also clear
+why JetBrains didn't do LSP --- why would they? While the right solution on the technical grounds,
+you aren't going to get paid for being technically right. As sad as it is, some amount of
+[deadweight loss](https://en.wikipedia.org/wiki/Deadweight_loss) is needed to capture some of the
+value you are producing, and you need to be able to capture value to invest in things! So the world
+had to wait for Microsoft to pick up the slack here, when they decided to gobble up the entire
+developer ecosystem as an investment.
+
+There was a decade of opportunity for OSS to coordinate around an IDE protocol, but that didn't
+happen, because OSS is bad at coordination.
+
+## Why Linux?
+
+But then, why and how does Linux exist? I think part of that is a rather unique governance
+structure, where there's a centralized control over the API area and strong commitment to the public
+interfaces. But the bigger part is POSIX. The reason why we have Linux, and BSDs, and XNU is that
+they all provide the same baseline API, which was defined from the outside. The coordination problem
+was pre-solved, and what remained is just filling-in the implementation. But there was no one to
+coordinate Linux on desktop.
