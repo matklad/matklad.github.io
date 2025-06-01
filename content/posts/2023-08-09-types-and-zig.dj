@@ -230,7 +230,7 @@ pub fn main() !void {
 Here, to check `main`, we actually do need to dissect `f`'s body, we can't treat the error union
 abstractly. When the compiler analyzes `main`, it needs to stop to process `f` signature (which is
 very fast, as it is very short) and then `f`’s body (this part could be quite slow, there might be a
-lot of code behind that `Mystery`! It's interesting to ponder alternative semantics, where, during
+lot of code behind that `Mystery`)! It's interesting to ponder alternative semantics, where, during
 type checking, inferred types are treated abstractly, and error exhastiveness is a separate late
 pass in the compiler. That way, compiler only needs `f`'s signature to check `main`. And that means
 that bodies of `main` and `f` could be checked in parallel.
