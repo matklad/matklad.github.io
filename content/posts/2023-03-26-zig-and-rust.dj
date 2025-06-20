@@ -59,7 +59,7 @@ TigerBeetle is the opposite of that.
 It is a database, with domain model fixed at compile time (we currently do double-entry bookkeeping).
 The database is distributed, meaning that there are six TigerBeetle replicas running on different geographically and operationally isolated machines, which together implement a replicated state machine.
 That is, TigerBeetle replicas exchange messages to make sure every replica processes the same set of transactions, in the same order.
-That's a surprisingly hard problem if you allow machines to fail (the whole point of using many machines for redundancy), so we use a smart [consensus algorithm](https://pmg.csail.mit.edu/papers/vr-revisited.pdf)  (non-byzantine) for this.
+That's a surprisingly hard problem if you allow machines to fail (the whole point of using many machines for redundancy), so we use a smart [consensus algorithm](http://pmg.csail.mit.edu/papers/vr-revisited.pdf)  (non-byzantine) for this.
 Traditionally, consensus algorithms assume reliable storage --- data once written to disk can be always retrieved later.
 In reality, storage is unreliable, nearly byzantine --- a disk can return bogus data without signaling an error, and even a single such error can [break consensus](https://www.usenix.org/conference/fast18/presentation/alagappan).
 TigerBeetle combats that by allowing a replica to repair its local storage using data from other replicas.
