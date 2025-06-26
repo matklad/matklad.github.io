@@ -11,6 +11,7 @@ import {
   PostList,
   Redirect,
 } from "./templates.tsx";
+import { spell } from "./spell.ts";
 
 async function main() {
   const params = {
@@ -64,6 +65,8 @@ async function main() {
     await build(params);
   } else if (subcommand === "watch") {
     await watch(params);
+  } else if (subcommand === "spell") {
+    await spell();
   } else {
     fatal("subcommand required");
   }
