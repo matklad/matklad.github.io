@@ -2,10 +2,10 @@ name: CI
 on:
   push:
     branches:
-    - master
+      - master
 
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 0 * * *" # Daily at midnight.
 
 jobs:
   CI:
@@ -15,14 +15,14 @@ jobs:
       id-token: write
 
     steps:
-    - uses: actions/checkout@v4
-    - uses: denoland/setup-deno@v2
-      with:
-        deno-version: v2.x
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
 
-    - run: deno task build --blogroll
+      - run: deno task build --blogroll
 
-    - uses: actions/upload-pages-artifact@v3
-      with:
-        path: ./out/www
-    - uses: actions/deploy-pages@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./out/www
+      - uses: actions/deploy-pages@v4

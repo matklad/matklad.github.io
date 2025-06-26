@@ -1,5 +1,11 @@
-// deno-lint-ignore-file
+// deno-lint-ignore-file no-explicit-any
 import { parseFeed } from "@rss";
+
+export interface FeedEntry {
+  title: string;
+  url: string;
+  date: Date;
+}
 
 export async function blogroll(): Promise<FeedEntry[]> {
   const urls = (await Deno.readTextFile("content/blogroll.txt"))
@@ -9,13 +15,9 @@ export async function blogroll(): Promise<FeedEntry[]> {
   return all_entries;
 }
 
-export interface FeedEntry {
-  title: string;
-  url: string;
-  date: Date;
-}
-
-async function blogroll_feed(url: string): Promise<FeedEntry[]> {
+async function blogroll_feed(
+  url: string,
+): Promise<FeedEntry[]> {
   let feed;
   try {
     const response = await fetch(url);
@@ -26,10 +28,10 @@ async function blogroll_feed(url: string): Promise<FeedEntry[]> {
     return [];
   }
 
-  return feed.entries.map((entry) => {
+  return feed.entries.map((entry: any) => {
     return {
       title: entry.title!.value!,
-      url: (entry.links.find((it) => {
+      url: (entry.links.find((it: any) => {
         it.type == "text/html" || it.href!.endsWith(".html");
       }) ?? entry.links[0])!.href!,
       date: (entry.published ?? entry.updated)!,
