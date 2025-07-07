@@ -1,0 +1,138 @@
+# Inverse Triangle Inequality
+
+`<math> <mrow> <mo>|</mo><mi>A</mi><mi>C</mi><mo>|</mo> <mo>&lt;</mo> <mo>|</mo><mi>A</mi> <mi>B</mi><mo>|</mo> <mo>+</mo> <mo>|</mo><mi>B</mi><mi>C</mi><mo>|</mo> </mrow> </math>`{=html}
+is one of the most hardworking inequalities in mathematics. It illustrates an obvious fact --- the fastest way to go from point A to point C is to go directly, without detours:
+
+```=html
+<svg width="500" height="200" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+  <line stroke="red" stroke-width="2" x1="30" x2="132.38" y1="130" y2="79.21"/>
+  <line stroke="green" stroke-width="2" x1="132.38" x2="201.43" y1="79.21" y2="130"/>
+  <line stroke="blue" stroke-width="2" x1="30" x2="201.43" y1="130" y2="130"/>
+  <text font-family="sans-serif" x="15" y="145">A</text>
+  <text font-family="sans-serif" x="125.38" y="69.21">B</text>
+  <text font-family="sans-serif" x="211.43" y="145">C</text>
+  <line stroke="red" stroke-width="2" x1="266.43" x2="380.72" y1="89.27" y2="89.27"/>
+  <line stroke="green" stroke-width="2" x1="380.72" x2="466.43" y1="89.27" y2="89.27"/>
+  <text font-family="sans-serif" x="256.43" y="79.27">A</text>
+  <text font-family="sans-serif" x="373.72" y="79.27">B</text>
+  <text font-family="sans-serif" x="459.43" y="79.27">C</text>
+  <line stroke="blue" stroke-width="2" x1="266.43" x2="437.86" y1="129.27" y2="129.27"/>
+  <text font-family="sans-serif" x="256.43" y="149.27">A</text>
+  <text font-family="sans-serif" x="427.86" y="149.27">C</text>
+</svg>
+```
+
+This is a tremendously useful inequality, not because most of the mathematics lives on the Euclidean
+plane, but because it works in many different contexts. For example, you could measure distance the
+[Manhattan way](https://en.wikipedia.org/wiki/Taxicab_geometry), as a sum of vertical and horizontal
+displacements, and the inequality still holds. Or you could measure [Levenshtein
+distance](https://en.wikipedia.org/wiki/Levenshtein_distance) between DNA strings, and observe the
+same inequality. The inequality is definitional --- if you have a notion of distance between some
+kinds of objects that obeys triangle inequality (and some other obvious properties), you immediately
+get a metric space with a bunch of useful properties.
+
+I like to think about software engineering as a mischievous younger sibling of mathematics, who
+respects all the hard work that went into theorems, but doesn't hesitate to give them a more
+light-hearted and silly touch.
+
+In programming, I find myself referring again and again to the idea of _inverse_ of triangle inequality,
+`<math> <mrow> <mo>|</mo><mi>A</mi><mi>C</mi><mo>|</mo> <mo>&gt;</mo> <mo>|</mo><mi>A</mi> <mi>B</mi><mo>|</mo> <mo>+</mo> <mo>|</mo><mi>B</mi><mi>C</mi><mo>|</mo> </mrow> </math>`{=html}.
+If you need to go from A to C, it is almost always easier to reach midpoint B first!
+
+## Smaller Commits
+
+Split large pull requests into smaller ones. Land simple, uncontroversial cleanups fast, and leave
+only meaningful changes up for discussion. Don't let work already done linger behind uncertain
+design decisions.
+
+There are many sub-genres here. Often, you notice an unrelated cleanup, file it right away as a
+separate PR. Sometimes, the cleanup is very much related and required to enable what you set out to
+do, but it can also stand on its own. If it can, it should! In many cases, "the thing" itself can be
+sliced up. When upgrading to a newer language version recently, we significantly reduced the diff by
+splitting out the changes that worked under both the new and the old version into a series of
+preparation pull requests.
+
+If you follow obvious development practices (no flaky tests,
+[not rocket science rule](https://graydon2.dreamwidth.org/1597.html), programmers prioritize
+reviewing code over writing more code), such PR chunking significantly reduces the time
+to land the aggregate work in: small increments land with the latency of the CI, because the review
+is trivial, and bigger increments land faster because the discussion is focused on the meaningful
+changes to the behavior of the software, and not on the large diff itself.
+
+Note, however, that the "size" of commit/pull-request is only a proxy! The _actual_ advice is to
+find _independent_ work. While it is true that bigger changes _usually_ tend to be composed of
+several independent, smaller changes, that is not always true. Most of my commits are tiny-tiny "fix
+punctuation in a comment", "clarify variable name", etc, but occasionally I do a massive change in
+one go, if it can't be reasonably split.
+
+## Smaller Refactors
+
+On a smaller scale, often when changing this and that, you can change this, and _then_ change that.
+One common pattern is that doing something requires threading some sort of parameter through a body
+of code. Thread the parameter first, _without_ actually doing the thing. Once the parameter is
+there, apply change to the logic. That way, you split a massive diff that changes the logic into a
+massive diff that just mechanically threads stuff, and a small diff that changes logic. This merits
+emphasizing, so let me repeat. There are two metrics to a code diff: number of lines changed, and
+the trickiness of logic. Many, many diffs change a lot of lines, and also contain tricky logic, but
+the tricky logic is only small part of affected lines. It is well-worth trying to split such a diff
+into two, one that just mindlessly applies a simple transformation to a large body of code, and the
+other that has all the smarts in a single file.
+
+As a specific example here, when refactoring a popular API, I like to put the focused change to the
+API itself and the shotgun change to all the callers into separate commits. Yes, that means that
+after the first commit the code doesn't build. No, I do not care about that because the not rocket
+science rule of software engineering only guarantees that the sequence of merge commits in the main
+branch passes all the tests, and such a merge commit is a unit of `git-bisect`.
+
+Another example (due to John Carmack I believe) is that, when you want to refactor to _change_
+something, you should start with _duplicating_ the implementation, then _changing_ the copy, then
+changing the call-sites to use the new copy, and finally with eliminating the original. This scales
+down! When I want to _change_ a `switch` statement inside a single function, I first _copy_ it, and
+change my copy. I have original visible just above (or in a split, if that's a large switch), and
+having it immediately available makes it much easier to copy-paste old fragments into the new
+version. Any change can be decomposed into an addition and a deletion, and it's usually worth it.
+
+## Smaller Releases
+
+Releasing software is often a stressful and a time-consuming affair. The solution is simple: do more
+releases. For software that needs to be delivered to the users, I find that a weekly cadence works
+best: you prepare a release on Friday, let fuzzers&early adopters kick the tiers during the weekend,
+and promote the release to latest on Monday. The killer feature? Because releases are so frequent,
+completely skipping a release is not a problem at all. So, if there's any doubt about code being
+good on Monday, you just skip one, and then have a whole week to investigate. Because the diff
+between two releases is small, it's much easier to assess the riskiness of the release, you reduce
+the risk of forgetting an important change, and, should the things go south, you _massively_
+simplify incident mitigation, because the circle of potential culprits is so narrow.
+
+Conversely, on the upgrading side, it's easier to do a boring, routine upgrade every week, with an
+occasional manual intervention, than to go through a giant list of breaking changes once a year,
+trying to figure out what might be breaking silently.
+
+## Extra Mile
+
+Curiously, we have an almost opposite (actually, complementary) principle at
+[TigerBeetle](http://github.com/tigerbeetle/tigerbeetle). We generally try to put a bit of extra
+into code we write. It's ok if a PR takes a day, a week, or a month longer to land, if we are able
+to explore the problem space more thoroughly, and solve the issue fully, rather than applying a
+simplest, smallest change to mitigate it. Spending time to get things exactly right is worth it,
+because the code is an asset, it will pay for itself many times over during its lifetime.
+
+Deep cuts approach mitigates the main risk of incremental, one inverse-triangle-inequality step at a
+time approach --- getting stuck in the local optimum. Going from A to Z one letter at a time might
+be fun and easy, unless you realize around K that Z is not the place you want to finish at. Undoing
+partial work is messy. In contrast, spiking the full solution in one go, and then going an extra
+mile to explore beyond its boundaries gives you way more confidence that the code you are writing is
+the code you should be writing.
+
+Another benefit of always doing one step deeper is that it minimizes context switches. Writing code
+is very easy. Reading is much harder. Code is a projection of the mental model of software from your
+head, writing, projecting, is an easy, mechanical task, while reconstructing the model from code is
+necessarily more involved. If you switched mental gears to think about a problem, you might as well
+think it through, write down the results, and then never return back!
+
+I often combine the two approaches. I do the same work twice. The first cut is an end-to-end
+solution with some corner-cutting and extremely messy git history. The goal is to explore, to try
+many approaches and find the one that fits. After I am satisfied with the end goal, I redo the work
+again, this time as a series of independent, incremental changes and refactors. The second time, I
+often end up doing things slightly differently, _immediate_ rewrites are much cheaper than
+after-the-fact rewrites, but still allow you to see the problem under a different angle.
