@@ -63,7 +63,7 @@ data. The speedup from 435 milliseconds stated in the previous post is
 due to Moore's law: I've upgraded the CPU :)
 
 We can bring run time down by tweaking how we calculate the minimum of
-three elements.
+three elements:
 
 ```rust
 fn min2(x: f64, y: f64) -> f64 {
@@ -84,7 +84,7 @@ minimum of two elements in the previous row can be calculated without
 waiting for the preceding element in the current row to be computed.
 
 The assembly for the main loop looks like this (AT&T syntax,
-destination register on the right)
+destination register on the right):
 
 ```
    18.32    vmovsd -0x8(%rax,%rsi,8),%xmm1
@@ -149,10 +149,10 @@ For our grand plan, we need to fit a rhombus peg in a square hole:
        . . . .  V
 ```
 
-* `id` is the index of the diagonal. There are twice as much diagonals
+* `id` is the index of the diagonal. There are twice as many diagonals
   as rows.
 * The outer loop is over `id`.
-* On each iteration we remember three columns (`d1`, `d2` `d3` in the
+* On each iteration we remember three columns (`d1`, `d2`, `d3` in the
   code).
 * There is a phase transition once we've crossed the main diagonal.
 * We can derive `iy` from the fact that `ix + iy = id`.
