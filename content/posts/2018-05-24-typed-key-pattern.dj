@@ -65,7 +65,7 @@ string literal and specify its type on the call site:
 ```rust
 impl Config {
     fn get<T: Deserialize>(&self, key: &str) -> Result<T> {
-        let json_value = self.map.get("key")
+        let json_value = self.map.get(key)
             .ok_or_else(|| bail!("key is missing: `{}`", key))?;
         Ok(T::deserialize(json_value)?)
     }
