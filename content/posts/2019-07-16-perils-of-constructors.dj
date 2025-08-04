@@ -95,7 +95,7 @@ fun main() {
 
 Examples like these seem contorted (and they are), but I did hit similar issues
 in real code
-(Kolmogorov's zero--one law of software engineering: in a sufficiently large code base, every code pattern exists almost surely, unless it is statically rejected by the compiler, in which case it almost surely doesn't exist).
+(Kolmogorov's zero--one law of software engineering: in a sufficiently large codebase, every code pattern exists almost surely, unless it is statically rejected by the compiler, in which case it almost surely doesn't exist).
 
 The reason why Kotlin can get away with this unsoundness is the same as with Java's covariant arrays: runtime does null checks anyway.
 All in all, I wouldn't want to complicate Kotlin's type system to make the above cases rejected at compile time:
@@ -147,7 +147,7 @@ class Derived: Base() {
 }
 ```
 
-Just think about it: code for Derived runs *before* the its constructor!
+Just think about it: code for Derived runs *before* its constructor!
 Doing a similar thing in C++ leads to even curiouser results.
 Instead of calling the function from Derived, a function from Base will be called.
 This makes _some_ sense, because Derived is not at all initialized (remember, we can't just say that all fields are null).
@@ -170,9 +170,9 @@ c. `[92, 2]`
 The problem with return type usually comes up if construction can fail.
 You can't return `Result<MyClass, io::Error>` or null from a constructor!
 
-This is often used as an argument that C++ with exceptions disabled is not viable, and that using constructors force one to use exceptions as well.
+This is often used as an argument that C++ with exceptions disabled is not viable, and that using constructors forces one to use exceptions as well.
 I don't think that's a valid argument though: factory functions solve both problems, because they can have arbitrary names and can return arbitrary types.
-I actually this to be an occasionally useful pattern in OO-languages:
+I actually consider this to be an occasionally useful pattern in OO-languages:
 
 * Make a single **private** constructor that accepts all the fields as arguments and just sets them.
   That is, this constructor acts almost like a record literal in Rust.
@@ -225,11 +225,11 @@ Celsius(fromFahrenheit: 212.0)
 Celsius(fromKelvin: 273.15)
 ```
 
-_Second_, to solve "constructor calls virtual function from an object's class that didn't came into existence yet" problem, Swift uses elaborate two-phase initialization protocol.
+_Second_, to solve "constructor calls virtual function from an object's class that didn't come into existence yet" problem, Swift uses elaborate two-phase initialization protocol.
 Although there's no special syntax for initializer lists, compiler statically checks that constructor's body has just the right, safe and sound, form.
 For example, calling methods is only allowed after all fields of the class and its ancestors are set.
 
-_Third_, there's special language-level support for failable constructors.
+_Third_, there's special language-level support for fallible constructors.
 A constructor can be declared nullable, which makes the result of a call to a constructor an option.
 A constructor can also have `throws` modifier, which works somewhat nicer with Swifts's semantic two-phase initialization than with C++ syntactic initializer lists.
 
@@ -258,7 +258,7 @@ impl Derived {
 }
 ```
 
-But this won't work in a typical single-inheritance OO language  object layout!
+But this won't work in a typical single-inheritance OO language object layout!
 Usually, an object starts with a header and continues with fields of classes, from the base one to the most derived one.
 This way, a prefix of an object of a derived class forms a valid object of a base class.
 For this layout to work though, constructor needs to allocate memory for the whole object at once.
