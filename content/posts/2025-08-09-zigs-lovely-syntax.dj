@@ -1,0 +1,691 @@
+# Zig's Lovely Syntax
+
+It's a bit of a silly post, because syntax is the least interesting detail about the language, but,
+still, I can't stop thinking how Zig gets this detail just right for the class of curly-braced
+languages, and, well, now you'll have to think about that too.
+
+On the first glance, Zig looks almost exactly like Rust, because Zig borrows from Rust liberally.
+And I think that Rust has great syntax, considering all the semantics it needs to express (see
+["Rust's Ugly Syntax"](https://matklad.github.io/2023/01/26/rusts-ugly-syntax.html)). But Zig
+improves on that, mostly by leveraging simpler language semantics, but also through some purely
+syntactical tasteful decisions.
+
+## Integer Literals
+
+How do you spell a number ninety-two? Easy, `92`. But what type is that? Statically-typed languages
+often come with several flavors of integers: `u32`, `u64`, `u8`. And there's often a syntax for
+literals of a particular types: `92u8`, `92l`, `92z`.
+
+Zig doesn't have suffixes, because, in Zig, all integer literals have the same type: `comptime_int`:
+
+```zig
+const an_integer = 92;
+assert(@TypeOf(an_integer) == comptime_int);
+```
+
+The value of an integer literal is known at compile time and is coerced to a specific type on
+assignment
+[`const x: i32 = 92;`]{.display}
+or ascription:
+[`@as(i32, 92)`]{.display}
+
+To emphasize, this is _not_ type inference, this is implicit comptime coercion. This does mean that
+code like
+[`var x = 92;`]{.display}
+generally doesn't work, and requires an explicit type.
+
+## String Literals
+
+Raw or multiline strings are spelled like this:
+
+```zig
+const raw =
+    \\Roses are red
+    \\  Violets are blue,
+    \\Sugar is sweet
+    \\  And so are you.
+    \\
+;
+```
+
+This syntax doesn't require a special form for escaping `\\` itself:
+
+```zig
+const still_raw =
+    \\const raw =
+    \\    \\Roses are red
+    \\    \\  Violets are blue,
+    \\    \\Sugar is sweet
+    \\    \\  And so are you.
+    \\    \\
+    \\;
+    \\
+;
+```
+
+It nicely dodges indentation problems that plague every other language with a similar feature. And,
+the best thing ever: lexically, each line is a separate token. As Zig has only line-comments, this
+means that `\n` is _always_ whitespace. Unlike most other languages, Zig can be correctly lexed in a
+line-by-line manner.
+
+Raw strings is perhaps the biggest improvement of Zig over Rust. Rust brute-forces the problem with
+`r##""##` syntax, which does the required job, technically, but suffers from the mentioned
+problems: indentation is messy, nesting quotes requires adjusting hashes, unclosed raw literal
+breaks the following lexical structure completely, and rustfmt's formatting of raw strings tends to
+be rather ugly. On the plus side, this syntax at least cannot be expressed by a context-free grammar!
+
+## Record Literals
+
+For the record, Zig takes C syntax (not that C would notice):
+
+```zig
+const p: Point = .{
+    .x = 1,
+    .y = 2,
+}
+```
+
+The `.{` feels weird! It will make sense by the end of the post. Here, I want only to note `.x = 1`
+part, which matches the assignment syntax `obj.x = 1`. This is great! This means that grepping for
+`".x = "` gives you _all_ instances where a field is written to. This is hugely valuable: most of
+usages are reads, but, to understand the flow of data, you only need to consider writes. Ability to
+mechanically partition the entire set of usages into majority of boring reads and a few interesting
+writes does wonders for code comprehension.
+
+## Prefix Types
+
+Where Zig departs from C the most is the syntax for types. C uses a needlessly confusing spiral
+rule. In Zig, all types are prefix:
+
+```zig
+u32      // An integer
+[3]u32   // An array of three integers
+?[3]u32  // An array of three integers or null
+
+// A pointer to...
+*const ?[3]u32
+```
+
+While pointer type is prefix, pointer dereference is postfix, which is a more natural subject-verb
+order to read: [`ptr.* = 92;`]{.display}
+
+## Identifiers
+
+Zig has general syntax for "raw" identifiers:
+[`@"a name which a space"`]{.display}
+It is useful to avoid collisions with keywords, or for exporting a symbol whose name is otherwise
+not a valid Zig identifier. It is a bit more to type than Kotlin's delightful
+[`` `a name with a space` ``,]{.display} but
+manages to re-use Zig's syntax for built-ins (`@TypeOf`) and strings.
+
+## Functions
+
+Like, Rust, Zig goes for `fn foo` function declaration syntax. This is such a massive improvement
+over C/Java style function declarations: it puts `fn` token (which is completely absent in
+traditional C family) and function name next to each other, which means that textual search for `fn
+name` allows you to quickly find the function. Then Zig adds a little twist. While in Rust we write
+
+```rust
+fn add(x: i32, i32) -> i32
+```
+
+Zig is
+
+```zig
+fn add(x: i32, i32) i32
+```
+
+The arrow is gone! Now that I've used this for some time, I find arrow very annoying to type, and
+adding to the visual noise. Rust needs the arrow: Rust has lambdas with an inferred return type,
+and, in a lambda, the return type is optional. So you need some sort of an explicit syntax to tell
+the parser if there is return type:
+
+```rust
+|| expression;
+|| -> Type { }
+```
+
+And its understandable that lambdas and functions would want to use compatible syntax. But Zig
+doesn't have lambdas, so it just makes the type mandatory. So the main is
+
+```zig
+pub fn main() void {}
+```
+
+Related small thing, but, as name of the type, I think I like `void` more than `()`.
+
+## Locals
+
+Zig is using `const` and `var` for binding values to names:
+
+```zig
+const mid = lo + @divFloor(hi - lo, 2);
+```
+
+This is ok, a bit weird after Rust's, whose `const` would be `comptime` in Zig, but not really
+noticeable after some months. I do think this particular part is not great, because `const`, the
+more frequent one, is longer. I think Kotlin nails it: `val`, `var`, `fun`. Note all three are
+monosyllable, unlike `const` and `fn`! Number of syllables matters more than the number of letters!
+
+Like Rust, Zig uses
+
+```ungrammar
+'name' (':' Type)?
+```
+
+syntax for ascribing types, which is better than
+
+```ungrammar
+Type 'name'
+```
+
+because optional suffixes are easier to parse visually and mechanically than optional prefixes.
+
+## Conjunction Is Control Flow
+
+Zig doesn't use `&&` and `||` and spells the relevant operators as `and` and `or`:
+
+```zig
+while (count > 0 and ascii.isWhitespace(buffer[count - 1])) {
+```
+
+This is easier to type and much easier to read, but there's also a deeper reason why they are not
+sigils. Zig marks any control flow with a keyword. And, because boolean operators short-circuit,
+they _are_ control flow! Treating them as normal binary operator leads to an entirely incorrect
+mental model. For bitwise operations, Zig of course uses `&` and `|`.
+
+## Explicit return
+
+Both Zig and Rust have statements and expressions. Zig is a bit more statement oriented, and
+requires explicit returns:
+
+```zig
+fn add(x: i32, y: i32) i32 {
+  return x + y;
+}
+```
+
+Furthermore, because there are no lambdas, scope of return is always clear.
+
+Relatedly, the value of a block expression is void. A block is a list of statements, and doesn't have
+an optional expression at the end. This removes the semicolon problem --- while Rust rules around
+semicolons are sufficiently clear (until you get to macros), there's some constant mental overhead
+to getting them right all the time. Zig is more uniform and mechanical here.
+
+If you need a block that yields a value, Zig supports a general syntax for breaking out of a labeled
+block:
+
+{highlight="1,9"}
+```zig
+const header_oldest = blk: {
+    var oldest: ?usize = null;
+    for (headers.slice, 0..) |*header, i| {
+        switch (Headers.dvc_header_type(header)) {
+            .blank => assert(i > 0),
+            .valid => oldest = i,
+        }
+    }
+    break :blk &headers.slice[oldest.?];
+};
+```
+
+## If
+
+Rust makes pedantically correct choice regarding `if`s: braces are mandatory:
+
+```rust
+if cond1 {
+  case_a
+} else {
+  if cond2 {
+    case_b
+  } else {
+    case_c
+  }
+}
+```
+
+This removes the dreaded "dangling else" grammatical ambiguity. While theoretically nice, it makes
+`if`-expression one-line feel too heavy. It's not the braces, it's the whitespace around them:
+
+```
+if (a) b else c
+if a { b } else { c }
+```
+
+But the ternary is important! Exploding a simple choice into multi-line condition _hurts_
+readability. Zig goes with traditional choice of making parentheses required and braces optional:
+
+```zig
+  .direction = if (prng.boolean()) .ascending else .descending,
+```
+
+By itself, this does create a risk of `goto: fail;` style bugs. But in Zig  formatter
+(non-configurable, user-directed) is a part of the compiler, and formatting errors that can mask
+bugs are caught during compilation. For example, `1 -2` is an error due to inconsistent whitespace
+around the minus sign, which signals a plausible mixup of infix and binary minus. No such errors are
+currently produced for incorrect indentation (the value add there is relatively little, given `zig
+fmt`), but this is planned.
+
+NB: because Rust requires `if` branches to be blocks, it is forced to make `{ expr }` synonym with
+`(expr)`. Otherwise, the ternary `if` would be even more unusable! Syntax design is tricky! Whether
+you need `return`s and whether you make `()` or `{}` mandatory in ifs are not orthogonal!
+
+## Loops
+
+Like Python, Zig allows `else` on loops. Unlike Python, loops are expressions, which leads to a
+nicely readable imperative searches:
+
+```zig
+pub const Word = for (.{ u8, u16, u32, u64, u128, u256 }) |W| {
+    if (@bitSizeOf(W) >= bitset_capacity) break W;
+} else unreachable;
+```
+
+Zig doesn't have syntactically-infinite loop like Rust's `loop {` or Go's `for {`. Normally I'd
+consider that a drawback, because these loops produce different control flow, affecting reachability
+analysis in the compiler, and I don't think it's great to make reachability dependent on condition
+being visibly constant. But! As Zig places `comptime` semantics front and center, and the rules for
+what is and isn't a comptime constant are a backbone of every feature, "anything equivalent to
+`while (true)`" becomes sufficiently precise. Incidentally, these days I tend to write "infinite"
+loops as
+
+```zig
+for (0..safety_bound) |_| {
+
+} else @panic("loop safety counter exceeded");
+```
+
+Almost always there is an up-front bound for the number of iterations until the break, and its worth
+asserting this bound, because debugging crashes is easier than debugging hangs.
+
+`for`, `while`, `if`, `switch`, and `catch` all use the same Ruby/Rust inspired syntax for naming
+captured values:
+
+```zig
+for (slice) |element| {
+  use(element);
+}
+
+while (iterator.next()) |element| {
+  use(element);
+}
+```
+
+I like how the iterator comes first, and then the name of an item follows, logically and
+syntactically.
+
+## Clarity of Names
+
+I have a very strong opinion about variable shadowing. It goes both ways: I spent hours debugging
+code which incorrectly tried to use a variable that was shadowed by something else, but I also spent
+hours debugging code that accidentally used the an variable that should have been shadowed! I really
+don't know whether on balance it is better to forbid or encourage shadowing!
+
+Zig of course forbids shadowing, but what's curious is that it's just on episode of the large
+crusade against any complexity in name resolution. There's no "prelude", if you want to use anything
+from std, you need to import it:
+
+```zig
+const std = @import("std");
+```
+
+There are no glob imports, if you want to use an item from std, you need to import it:
+
+```zig
+const ArrayList = std.ArrayList;
+```
+
+Zig doesn't have inheritance, mixins, argument-dependent lookup, extension functions, implicit or
+traits, so, if you see `x.foo()`, that `foo` is guaranteed to be a boring method declared on `x`
+type. Similarly, while ZIg has powerful comptime capabilities, it
+[intentionally disallows](https://matklad.github.io/2025/04/19/things-zig-comptime-wont-do.html)
+declaring methods at compile time.
+
+Like, Rust, Zig used to allow a method and a field to share a name, because it actually is
+syntactically clear enough at the call site which is which. But then this feature got removed from
+Zig.
+
+More generally, Zig doesn't have namespaces. There can be only one kind of `foo` in scope, while
+Rust allows things like
+
+```rust
+struct Point { x: i32, y: i32 }
+fn Point(x: i32, y: i32) -> Point { Point { x, y } }
+```
+
+I am astonished at the relative lack of inconvenience in Zig's approach. Turns out that `foo.bar.baz`
+is all the syntax you'll ever need for accessing things? For the historically inclined, see
+"The module naming situation" thread in the
+[rust mailing list archive](https://github.com/brson/rust-dev-archives)
+to learn the story of how rust got its `std::vec` syntax.
+
+## Everything Is an Expression
+
+The lack of namespaces touches on the most notable (by its absence) feature of Zig syntax, which
+deeply relates to the most profound aspect of Zig's semantics. Everything is an expression. By which
+I mean, there's no separate syntactic categories of values, types, and patterns. Values, types, and
+patterns are of course different things. And usually in the language grammar it is _syntactically_
+obvious whether a particular text fragment refers to a type or a value:
+
+```rust
+let PATTERN: TYPE = VALUE;
+```
+
+So the standard way is to have separate syntax families for the three categories, which need to be
+internally unambiguous, but _can_ be ambiguous across the categories because the place in the
+grammar dictates the category: when parsing `let`, everything until `:` is a pattern, stuff between
+`:` and `=` is a type, and after `=` we have a value.
+
+There are two problems here. First, there's a combinatorial explosion of sorts in the syntax,
+because, while three categories describe different things, it turns out that they have the same
+general tree-ish shape.
+
+The second problem is that it might be hard to maintain category separation in the grammar. Rust
+_started_ with the three categories separated by a bright line. But then, changes happen.
+Originally, Rust only allowed
+[`VALUE = VALUE;`]{.display}
+syntax for assignment. But today you can also write
+[`PATTERN = VALUE;`]{.display}
+to do unpacking like
+[`(a, b) = (b, a);`]{.display}
+
+Similarly, the turbofish used to move the parser from the value to the type mode, but now const
+parameters are values that can be found in the type position!
+
+The alternative is not to pick this fight at all. Rather than trying to keep the categories
+separately in the syntax, use the same surface syntax to express all three, and categorize later,
+during semantic analysis. In fact, this is already happens in the [`VALUE = VALUE`]{.display}
+example --- these are different things! One is a place (lvalue) and another is a "true" value
+(rvalue), but we use the same syntax for both.
+
+I don't think such syntactic unification necessarily implies semantic unification, but Zig does
+treat everything uniformly, as a value with comptime and runtime behavior (for some values, runtime
+behavior may be missing, for others --- comptime):
+
+```zig
+const E = enum { a, b };
+
+pub fn main() void {
+    const e: if (true) E else void = .a;
+    _ = switch (e) {
+        (if (true) .a else .b) => .a,
+        (if (true) .b else .a) => .b,
+    };
+}
+```
+
+The fact that you can write an `if` where a type goes is occasionally useful. But the fact that
+simple types look like simple values syntactically consistently make the language feel significantly
+less busy.
+
+## Generics
+
+As a special case of everything being an expression, instances of generic types look like this:
+[`ArrayList(u32)`]{.display}
+
+Just a function call! Though, there's some resistance to trickery involved to make this work.
+Usually, languages rely on type inference to allow eliding generic arguments. That in turn requires
+making argument _syntax_ optional, and that in turn leads to separating generic and non-generic
+arguments into separate parameter lists and some introducer sigil for generics, like `::<>` or
+`!()`.
+
+Zig solves this syntactic challenge in the most brute-force way possible. Generic parameters are
+never inferred, if a function takes 3 comptime arguments and 2 runtime arguments, it will always be
+called with 5 arguments syntactically. Like with the (absence of) importing flourishes, a reasonable
+reaction would be "wait, does this mean that I'll have to specify the types all the time?" And, like
+with import, in practice this is a non-issue. The trick are comptime closures. Consider a generic
+`ArrayList`:
+
+{highlight="12,15"}
+```zig
+fn ArrayListType(comptime T: type) type {
+    return struct {
+        const ArrayList = @This();
+
+        fn init(gpa: Allocator) ArrayList {}
+        fn deinit(list: *ArrayList, gpa: Allocator) void {}
+        fn push(list: *ArrayList, item: T) !void {}
+    };
+}
+
+fn usage(gpa: Allocator) !void {
+    var xs: ArrayListType(u32) = .init(gpa);
+    defer xs.deinit(gpa);
+
+    try xs.push(92);
+}
+```
+
+We have to specify type `T` when creating an instance of an `ArrayList`. But subsequently, when we
+are _using_ the array list, we don't have to specify the type parameter again, because the type of
+`xs` variable already closes over `T`. This is the major truth of object-orienting programming, the
+truth so profound that no one even notices it: in real code, 90% of functions are happiest as
+(non-virtual) methods. And, because of that, the annotation burden in real-world Zig programs is
+low.
+
+## Declaration Literals
+
+While Zig doesn't have Hindley-Milner constraint-based type inference, it relies heavily on one
+specific way to propagate types. Let's revisit the first `comptime_int` example:
+
+```zig
+const x = if (condition()) 1 else 2;
+```
+
+This doesn't compile: `1` and `2` are different `comptime` values, we can't select between two at
+runtime because they are different. We need to coerce the constants to a specific runtime type:
+
+```zig
+const x: u32 = if (condition()) 1 else 2;
+
+const x = @coerceTo(
+  u32,
+  if (condition()) 1 else 2,
+);
+```
+
+But this doesn't kick the can sufficiently far enough and essentially reproduces the `if` with two
+incompatible branches. We need to sink coercion down the branches:
+
+```zig
+const x = if (condition())
+    @coerceTo(u32, 1)
+else
+    @coerceTo(u32, 2);
+```
+
+And that's exactly how Zig's "Result Location Semantics" works. Type "inference" runs a simple
+left-to-right tree-walking algorithm, which resembles interpreter's `eval`. In fact, `eval` is
+_exactly_ what happens. Zig is not a compiler, it is an interpreter. When `zig` evaluates an
+expression, it gets:
+
+* expression's type (as a Zig value),
+* expression's value (if it can be evaluated at comptime),
+* code to compute expression's value otherwise.
+
+```
+eval("1 + 2") =
+  3
+
+eval("f() + g()") =
+  $1 = call 'f'
+  $2 = call 'g'
+  $3 = add $1 $2
+
+eval("f() + 2") =
+  $1 = call 'f'
+  $2 = add_immediate $1 2
+```
+
+When interpreting code like
+
+```
+obj.field = if (condition()) 1 else 2;
+```
+
+the interpreter passes the result location (`obj.field`) and type down the tree of subexpressions.
+If branches store result directly into object field (there's a `store` inside each branch, as
+opposed to one `store` after the `if`), and each coerces its comptime constant to the appropriate
+runtime type of the result.
+
+This mechanism enables concise `.variant` syntax for specifying enums:
+
+```zig
+const E = enum { a, b };
+
+fn example(e: E) u32 {
+    return switch (e) {
+        .a => 1,
+        (if (true) .b else .a) => 2,
+    };
+}
+```
+
+When `zig` evaluates the switch, it first evaluates the scrutinee, and realizes that it has type
+`E`. When evaluating `switch` arm, it sets result type to `E` for the condition, and a literal `.a`
+gets coerced to `E`. The same happens for the second arm, where result type further sinks down the
+`if`.
+
+Result type semantics also explains the leading dot in the record literal syntax:
+
+```zig
+const p: Point = .{
+    .x = 1,
+    .y = 2,
+};
+```
+
+Syntactically, we just want to disambiguate records from blocks. But, semantically, we want to
+coerce the literal to whatever type we want to get out of this expression. In Zig, `.whatever` is a
+shorthand for `@ResultType().whatever`.
+
+I must confess that `.{}` did weird me out a lot at first during _writing_ code (I don't mind
+reading the dot). It's not the easiest thing to type! But that was fixed once I added `..` snippet,
+expanding to `.{$0}`.
+
+The benefits to lightweight record literal syntax are huge, as they allow for some pretty nice
+APIs. In particular, you get named and default arguments for free:
+
+```zig
+fn exec(argv: []const u8, options: struct {
+    working_directory: ?[]const u8 = null
+}) !void {
+    // ...
+}
+
+fn usage() !void {
+    try exec(&.{ "git", "status"}, .{});
+
+    try exec(&.{ "git", "status"}, .{
+        .working_directory = "./src",
+    });
+}
+```
+
+I don't really miss the absence of named arguments in Rust, you can always design APIs without them.
+But they are free in Zig, so I use them liberally. Syntax wise, we get two features (calling
+functions and initializing objects) for the price of one!
+
+## Built-ins
+
+Finally, the thing that weirds out some people when they see Zig code, and makes others reconsider
+their choice GitHub handles, even when they haven't seen any Zig: `@divExact` syntax for
+built-in functions.
+
+Every language needs to glue "userspace" code with primitive operations supported by the compiler.
+Usually, the gluing is achieved by making the standard library privileged and allowing it to define
+intrinsic functions without bodies, or by adding ad-hoc operators directly to the language (like
+Rust's `as`). And Zig does have a fair amount of operators, like `+` or `orelse`. But the release
+valve for a lot of functionality are built-in functions in distinct syntactic namespace, so Zig
+separates out `@bitCast`, `@addrSpaceCast`, `@alignCast`, `@constCast`, `@ptrCast`, `@intCast`,
+`@floatCast`, `@volatileCast`, `@ptrFromInt`, and `@intFromPtr`. There's no need to overload casting
+when you can give each variant a name.
+
+There's also [`@as(i32, 92)`]{.display} for type ascription. The types goes first, because the
+mechanism here is result type semantics: `@as` evaluates the first argument as a type, and then uses
+that as the type for the second argument. Curiously, `@as` I think actually can be implemented in
+the userspace:
+
+```zig
+fn as(comptime T: type, value: T) T {
+    return value;
+}
+```
+
+In Zig, a type of function parameter may depend on values of preceding (comptime) ones!
+
+My favorite builtin is `@import()`. First, it's the most obvious way to import code:
+[`const foo = @import("./foo.zig")`]{.display}
+Its crystal clear where the file comes from.
+
+But, second, it is an instance of reverse syntax sugar. You see, import isn't really a function.
+You can't do
+
+```zig
+const name = "./foo.zig";
+const foo = @import(name);
+```
+
+The argument of `@import` has to be a string, syntactically. It really is
+[`import "./path.zig"`]{.display}
+syntax, except that the function-call form is re-used, because it already has the right shape.
+
+---
+
+So, this is it. Just a bunch of silly syntactical decisions, which add up to a language which is
+positively enjoyable to read. As for big lessons, obviously, the less features your language has,
+the less syntax you'll need. And less syntax is generally good, because varied syntactic constructs
+tend to step on each other toes. Languages are not combinations of orthogonal aspects. Features tug
+and pull the language in different directions and their combinations might turn to be miraculous
+features in their own right, or might drag the language down.
+
+Even with a small feature-set fixed, there's still a lot of work to pick a good concrete syntax:
+unambiguous to parse, useful to grep, easy to read and not to painful to write. A smart thing is of
+course to steal and borrow solutions from other languages, not because of familiarity, but because
+the ruthless natural selection tends to weed out poor ideas. But there's a lot of inertia in
+languages, so there's no need to fear innovation. If an odd-looking syntax is actually good, people
+will take to it.
+
+Is there anything about Zig's syntax I don't like? I thought no, when starting this post. But in the
+process of writing it I did discover one form that annoys me. It is the while with the increment
+loop:
+
+```zig
+var i: u32 = 0;
+while (i < 10) : (i+=1) {
+    print("{d}", .{i});
+}
+```
+
+This is two-thirds of a C-style `for` loop (without the declarator), and it sucks for the same
+reason: control flow jumps all other the place and is unrelated to the source code order. We go from
+condition, to the body, to the increment. But in the source order the increment is between the
+condition and the body. In Zig, this loop sucks for one additional reason: that `:` separating the
+increment I think is the single example of control flow in Zig that is expressed by a sigil, rather
+than a keyword.
+
+This form used to be rather important, as Zig lacked a counting loop. It has
+[`for(0..10) |i|`]{.display}
+form now, so I am tempted to call the while-with-increment redundant.
+
+Annoyingly,
+
+```zig
+while (condition) {
+    defer increment;
+
+    body
+}
+```
+
+is _almost_ equivalent to
+
+```zig
+while (condition) : (increment) {
+  body
+}
+```
+
+But not exactly: if `body` contains a `return`, `break` or `try`, the `defer` version would run the
+`increment` one extra time, which is useless and might be outright buggy. Oh well.
