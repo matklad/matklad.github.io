@@ -87,7 +87,7 @@ const p: Point = .{
 
 The `.{` feels weird! It will make sense by the end of the post. Here, I want only to note `.x = 1`
 part, which matches the assignment syntax `obj.x = 1`. This is great! This means that grepping for
-`".x = "` gives you _all_ instances where a field is written to. This is hugely valuable: most of
+`".x ="` gives you _all_ instances where a field is written to. This is hugely valuable: most of
 usages are reads, but, to understand the flow of data, you only need to consider writes. Ability to
 mechanically partition the entire set of usages into majority of boring reads and a few interesting
 writes does wonders for code comprehension.
@@ -511,11 +511,11 @@ eval("1 + 2") =
 eval("f() + g()") =
   $1 = call 'f'
   $2 = call 'g'
-  $3 = add $1 $2
+  $3 = add $1, $2
 
 eval("f() + 2") =
   $1 = call 'f'
-  $2 = add_immediate $1 2
+  $2 = add $1,  imm 2
 ```
 
 When interpreting code like
