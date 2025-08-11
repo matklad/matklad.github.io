@@ -20,7 +20,7 @@ To be clear, if you _don't_ call `join`, the thread will complete at some point 
 But this _some_ point is non-deterministic.
 
 _Third_, If a thread panics in a forest, and no one is around to hear it, does it make a sound?
-The `join` method returns a `Result`, which is be an `Err` if the thread has panicked.
+The `join` method returns a `Result`, which will be an `Err` if the thread has panicked.
 If you don't join the thread, you won't get a chance to react to this event.
 So, unless you are looking at the `stderr` at this moment, you might not realize that something is wrong!
 
@@ -67,10 +67,10 @@ Suppose, then, that while the lambda is running asynchronously, `conditionsAreSa
 In that case, `doWork` would return, and its local variables (including `goodVals`) would be destroyed.
 Its stack frame would be popped, and execution of its thread would continue at `doWork`'s call site.
 
-Statements following that call site would, at some point, make additional function calls, and at least one such call would probably end up using some or all of the memory that had once been occupied by the doWork stack frame.
+Statements following that call site would, at some point, make additional function calls, and at least one such call would probably end up using some or all of the memory that had once been occupied by the `doWork` stack frame.
 Let's call such a function `f`.
-While `f` was running, the lambda that doWork initiated would still be running asynchronously.
-That lambda could call push_back on the stack memory that used to be `goodVals` but that is now somewhere inside `f`'s stack frame.
+While `f` was running, the lambda that `doWork` initiated would still be running asynchronously.
+That lambda could call `push_back` on the stack memory that used to be `goodVals` but that is now somewhere inside `f`'s stack frame.
 Such a call would modify the memory that used to be `goodVals`, and that means that from `f`'s perspective, the content of memory in its stack frame could spontaneously change!
 Imagine the fun you'd have debugging _that_.
 :::
@@ -84,14 +84,14 @@ In Rust, unlike C++, implicit detach can't cause undefined behavior (compiler wi
 I suspect this "we can, so why not?" is the reason why Rust detaches by default.
 
 However, there's a twist!
-C++ core guidelines now recommend to always use `gsl::joining_thread` (which does implicit join) over `std::thread` in  [CP.25](http://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#cp25-prefer-gsljoining_thread-over-stdthread).
+C++ core guidelines now recommend to always use `gsl::joining_thread` (which does implicit join) over `std::thread` in [CP.25](http://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#cp25-prefer-gsljoining_thread-over-stdthread).
 The following [CP.26](http://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#cp26-dont-detach-a-thread) reinforces the point by advising against `.detach()` method.
 The reasoning is roughly similar to my post: detached threads make the program more chaotic, as they add superfluous degrees of freedom to the runtime behavior.
 
 It's interesting that I've learned about these two particular guidelines only today, when refreshing my C++ for this section of the post!
 
 So, it seems like both C++ and Rust picked the wrong default for the thread API in this case. But at least C++ has official guidelines recommending the better approach.
-And Rust, ... well, Rust has  my blog post now :-)
+And Rust, ... well, Rust has my blog post now :-)
 
 
 ## A Silver Bullet
@@ -110,8 +110,8 @@ It was about the usual setup with a worker thread that consumes items from a cha
 fn frobnicate() {
     let (sender, receiver) = channel();
     let worker = jod_thread::spawn(move || {
-        for item receiver {
-            do_work(item)
+        for item in receiver {
+            do_work(item);
         }
     });
 
@@ -129,8 +129,8 @@ There's a straightforward fix: drop the `sender` first!
 fn frobnicate() {
     let (sender, receiver) = channel();
     let worker = jod_thread::spawn(move || {
-        for item receiver {
-            do_work(item)
+        for item in receiver {
+            do_work(item);
         }
     });
 
@@ -147,7 +147,7 @@ In both case the result is a deadlock.
 What is the worst, now deadlock happens only on the _unhappy_ path!
 
 There is an elegant, but tricky fix for this. Take a minute to think about it!
-How to change the above snippet such that the `worker` thread is guranted to be joined, without deadlocks, regardless of the exit condition (normal termination,`?`, panic) of `frobnicate`?
+How to change the above snippet such that the `worker` thread is guaranteed to be joined, without deadlocks, regardless of the exit condition (normal termination,`?`, panic) of `frobnicate`?
 
 The answer will be below these beautiful Ukiyo-e prints :-)
 
@@ -188,7 +188,7 @@ Beautiful, isn't it?
 And super cryptic: the [real code](https://github.com/rust-analyzer/ra_vfs/blob/af1a6ace3d0edf57d62a76321e3e52eeb99d6d4c/src/io.rs#L71-L83) has a sizable comment chunk!
 
 [exceptions]: /2018/07/24/exceptions-in-structured-concurrency.html
-[stopworker]: /2018/03/03-stopping-a-rust-worker.html
+[stopworker]: /2018/03/03/stopping-a-rust-worker.html
 
 
 The second big issue with join by default is that, if you have many threads in the same scope, and one of them errors, you really want to not only _wait_ until others are finished, but to actually cancel them.
