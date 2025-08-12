@@ -145,7 +145,7 @@ the parser if there is return type:
 || -> Type { }
 ```
 
-And its understandable that lambdas and functions would want to use compatible syntax. But Zig
+And it's understandable that lambdas and functions would want to use compatible syntax. But Zig
 doesn't have lambdas, so it just makes the type mandatory. So the main is
 
 ```zig
@@ -254,7 +254,8 @@ if a { b } else { c }
 ```
 
 But the ternary is important! Exploding a simple choice into multi-line condition _hurts_
-readability. Zig goes with traditional choice of making parentheses required and braces optional:
+readability. Zig goes with the traditional choice of making parentheses required and braces 
+optional:
 
 ```zig
   .direction = if (prng.boolean()) .ascending else .descending,
@@ -659,7 +660,7 @@ while (i < 10) : (i+=1) {
 ```
 
 This is two-thirds of a C-style `for` loop (without the declarator), and it sucks for the same
-reason: control flow jumps all other the place and is unrelated to the source code order. We go from
+reason: control flow jumps all over the place and is unrelated to the source code order. We go from
 condition, to the body, to the increment. But in the source order the increment is between the
 condition and the body. In Zig, this loop sucks for one additional reason: that `:` separating the
 increment I think is the single example of control flow in Zig that is expressed by a sigil, rather
