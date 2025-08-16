@@ -1,0 +1,226 @@
+# Reserve First
+
+A short post about a coding pattern that is relevant for people who use the heap liberally and
+manage memory with their own hands.
+
+Let's start with two bugs. The first one is from Andrew Kelley's HYTRADBOI 2025 talk,
+["Programming Without Pointers"](https://www.hytradboi.com/2025/05c72e39-c07e-41bc-ac40-85e8308f2917-programming-without-pointers):
+
+```zig
+pub fn internString(
+    state: *State,
+    gpa: Allocator,
+    bytes: []const u8,
+) !String {
+    const gop = try state.string_table.getOrPutContextAdapted(
+        gpa,
+        @as([]const u8, bytes),
+        @as(String.TableIndexAdapter, .{
+            .bytes = state.string_bytes.items,
+         }),
+        @as(String.TableContext, .{
+            .bytes = state.string_bytes.items,
+         }),
+    );
+    if (gop.found_existing) return gop.key_ptr.*;
+
+    try state.string_bytes.ensureUnusedCapacity(gpa, bytes.len + 1);
+    const new_off: String =
+        @enumFromInt(state.string_bytes.items.len);
+
+    state.string_bytes.appendSliceAssumeCapacity(bytes);
+    state.string_bytes.appendAssumeCapacity(0);
+
+    gop.key_ptr.* = new_off;
+
+    return new_off;
+}
+```
+
+The second one is from the
+[Ghostty](https://github.com/ghostty-org/ghostty/tree/0930b2daff95c3550282b567c90d4c370fcd329b)
+terminal emulator:
+
+```zig
+// Grow the texture to the new size,
+// preserving all previously written data.
+pub fn grow(
+    self: *Atlas,
+    alloc: Allocator,
+    size_new: u32,
+) Allocator.Error!void {
+    assert(size_new >= self.size);
+    if (size_new == self.size) return;
+
+    // Preserve our old values so we can copy the old data
+    const data_old = self.data;
+    const size_old = self.size;
+
+    // Allocate our new data
+    self.data =
+        try alloc.alloc(u8, size_new * size_new * self.format.depth());
+    defer alloc.free(data_old);
+    errdefer {
+        alloc.free(self.data);
+        self.data = data_old;
+    }
+
+    // Add our new rectangle for our added righthand space. We do this
+    // right away since its the only operation that can fail and we
+    // want to make error cleanup easier.
+    try self.nodes.append(alloc, .{
+        .x = size_old - 1,
+        .y = 1,
+        .width = size_new - size_old,
+    });
+
+    // If our allocation and rectangle add succeeded, we can go ahead
+    // and persist our new size and copy over the old data.
+    self.size = size_new;
+    @memset(self.data, 0);
+    self.set(.{
+        .x = 0, // don't bother skipping border so we can avoid strides
+        .y = 1, // skip the first border row
+        .width = size_old,
+        .height = size_old - 2, // skip the last border row
+    }, data_old[size_old * self.format.depth() ..]);
+
+    // We are both modified and resized
+    _ = self.modified.fetchAdd(1, .monotonic);
+    _ = self.resized.fetchAdd(1, .monotonic);
+}
+```
+
+Can you spot the two bugs? In lieu of a spoiler, allow me to waste your bandwidth with a  Dante
+Gabriel Rossetti painting:
+
+![The Day Dream](https://upload.wikimedia.org/wikipedia/commons/b/b1/Dante_Gabriel_Rossetti_-_The_Day_Dream_-_Google_Art_Project.jpg)
+
+In both functions, a bug happens when the second `try` expression throws.
+
+In the `internString` case, we insert an item into a hash table, but leave it uninitialized.
+Accessing the item later will crash in the best case.
+
+The Ghostty example is even more interesting. It actually tries to avoid this exact problem, by
+attempting to carefully revert changes in the `errdefer` block. But it fails to do so properly!
+While the data is restored to `data_old` on error, the `defer` still frees `data_old`, so we end up
+with uninitialized memory all the same:
+
+```zig
+self.data =
+    try alloc.alloc(u8, size_new * size_new * self.format.depth());
+defer alloc.free(data_old); // Oups.
+errdefer {
+    alloc.free(self.data);
+    self.data = data_old;
+}
+```
+
+Both are "exception safety" problems: if we attempt an operation that mutates an object, and an
+error happens midway, there are three possible outcomes:
+
+: Strong Exception Safety
+
+  The object state remains as if we didn't attempt the operation (strong exception safety).
+
+: Basic Exception Safety
+
+  The object is left in a different, but valid state.
+
+: No Exception Safety
+
+  The object becomes invalid and unsafe to use.
+
+In these two cases in particular, the only source of errors is fallible allocation. And there's
+a pattern to fix it:
+
+* First, _reserve_ enough memory for operation, without applying any changes to the data structure,
+* Then, mutate the data structure in an error-free code path.
+
+[As a reminder](https://matklad.github.io/2024/03/21/defer-patterns.html),
+[`errdefer comptime unreachable;`]{.display}
+is a Zig idiom for expressing "no errors after this point".
+
+Applying the pattern to two examples we get:
+
+```zig
+pub fn internString(
+    state: *State,
+    gpa: Allocator,
+    bytes: []const u8,
+) !String {
+    try state.string_table.ensureUnusedCapacityContext(
+        gpa,
+        1,
+        @as(String.TableContext, .{
+        .bytes = state.string_bytes.items,
+        }),
+    );
+    try state.string_bytes.ensureUnusedCapacity(gpa, bytes.len + 1);
+    errdefer comptime unreachable; // End reservation phase.
+
+    const gop = state.string_table.getOrPutAssumeCapacityAdapted(
+        gpa,
+        @as([]const u8, bytes),
+        @as(String.TableIndexAdapter, .{
+            .bytes = state.string_bytes.items,
+        }),
+    );
+    if (gop.found_existing) return gop.key_ptr.*;
+
+    //...
+}
+```
+
+```zig
+pub fn grow(
+    self: *Atlas,
+    alloc: Allocator,
+    size_new: u32,
+) Allocator.Error!void {
+    assert(size_new >= self.size);
+    if (size_new == self.size) return;
+
+    try self.nodes.ensureUnusedCapacity(gpa, 1);
+    const data_new =
+        try alloc.alloc(u8, size_new * size_new * self.format.depth());
+    errdefer comptime unreachable; // End reservation phase.
+
+    // Preserve our old values so we can copy the old data
+    const data_old = self.data;
+    const size_old = self.size;
+
+    self.data = data_new;
+    defer alloc.free(data_old);
+
+    self.nodes.appendAssumeCapacity(.{
+        .x = size_old - 1,
+        .y = 1,
+        .width = size_new - size_old,
+    });
+
+    // ...
+```
+
+Memory reservation is a magic trick, `ensureUnusedCapacity` contains all the failures, but doesn't
+change the data structure! Do you see how powerful that is?
+
+## Spicy Takes
+
+I haven't measured the optimal level of spice here to make the truest possible  statement. Instead I
+opted for dumping as much spice as possible to get the brain gears grinding:
+
+Zig should remove `append` and rename `appendAssumeCapacity` to just `append`. If you want to insert
+a single item, that's two lines now. Don't insert items one-by-one, reserve memory in bulk,
+up-front.
+
+Zig applications should consider aborting on OOM. While the design goal of handling OOM errors
+correctly is laudable, and Zig makes it possible, I've seen only one application,
+[xit](https://github.com/radarroark/xit) which passes "matklad spends 30 minutes grepping for
+`errdefer`" test. For libraries, prefer leaving allocation to the caller, or use generative testing
+with an allocator that actually returns errors.
+
+Alternatively, do as TigerBeetle. We take this pattern literally, reserve _all_ resources in main,
+and never allocate memory afterwards:
+
+[ARCHITECTURE.md#static-memory-allocation](https://github.com/tigerbeetle/tigerbeetle/blob/0.16.54/docs/internals/ARCHITECTURE.md#static-memory-allocation){.display}
