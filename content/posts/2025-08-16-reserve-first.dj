@@ -180,7 +180,7 @@ pub fn grow(
     assert(size_new >= self.size);
     if (size_new == self.size) return;
 
-    try self.nodes.ensureUnusedCapacity(gpa, 1);
+    try self.nodes.ensureUnusedCapacity(alloc, 1);
     const data_new =
         try alloc.alloc(u8, size_new * size_new * self.format.depth());
     errdefer comptime unreachable; // End reservation phase.
