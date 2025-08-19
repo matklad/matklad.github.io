@@ -74,3 +74,79 @@ the meaning of font size. So, the guideline I'd use is:
 > into your CSS reset, right next to `box-sizing: border-box`.
 
 Why `0.53`? That's the invariant ratio for Helvetica, but any number in that vicinity should work!
+
+## Bonus Content: Line Height
+
+While `font-size-adjust` fixes the size of the glyph relative to em-square, it doesn't fix
+_position_ of the glyph. This can create line height problems. Consider these two paragraphs that
+are styled with `line-height: 24px`, but where the second paragraph is using monospace font for
+`coreutils`:
+
+```=html
+<style>
+.bonus-content p { margin-bottom: 24px; }
+.bonus-content p, .bonus-content code {
+    font-size: 16px;
+    line-height: 24px;
+}
+.bonus-content {
+    background-image: repeating-linear-gradient(
+        transparent 0 23px,
+        #ba3925 23px 24px
+    );
+}
+.vertically-aligned * { vertical-align: bottom; }
+</style>
+```
+::: bonus-content
+You are supposed to use coreutils to solve this problem. \
+You are supposed to use coreutils to solve this problem. \
+You are supposed to use coreutils to solve this problem. \
+You are supposed to use coreutils to solve this problem. \
+
+You are supposed to use `coreutils` to solve this problem. \
+You are supposed to use `coreutils` to solve this problem. \
+You are supposed to use `coreutils` to solve this problem. \
+You are supposed to use `coreutils` to solve this problem. \
+:::
+
+```css
+.bonus-content p { margin-bottom: 24px; }
+.bonus-content p, .bonus-content code {
+    font-size: 16px;
+    line-height: 24px;
+}
+.bonus-content {
+    background-image: repeating-linear-gradient(
+        transparent 0 23px,
+        #ba3925 23px 24px
+    );
+}
+```
+
+In the first paragraph, each line is indeed 24 pixels high, but in the second paragraph each line is
+slightly larger, despite the line-height being set to 24px explicitly. How can this be? The full
+answer is in:
+
+<https://iamvdo.me/en/blog/css-font-metrics-line-height-and-vertical-align>
+
+The TL;DR is that `line-height` doesn't actually set the the height of the line (who would have
+thought!). Instead, it sets the height of each individual span of the text on the line. So, both
+"supposed" and "`coreutils`" have a 24 pixels high box around them. But because relative position of
+glyphs inside the em-box is different between the two fonts, the boxes are shifted relative to each
+other to align the baselines. You can see that by adding `vertical-align: bottom`:
+
+{.bonus-content .vertically-aligned}
+You are supposed to use `coreutils` to solve this problem. \
+You are supposed to use `coreutils` to solve this problem. \
+You are supposed to use `coreutils` to solve this problem. \
+You are supposed to use `coreutils` to solve this problem.
+
+If we align the boxes, than baselines are not aligned. It follows that when we align the baselines,
+the boxes are misaligned, and the line-height ends up larger than the height of any box, because
+boxes stick out!
+
+I don't know a great solution here. A hack is to say something like
+[`p > code { line-height: 0px; }`]{.display}
+such that text set in monospace font doesn't affect line height calculation. Counter-intuitively,
+this will work even if the line is entirely monospace (see `strut` in the abovelinked article).
