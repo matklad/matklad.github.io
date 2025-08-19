@@ -160,7 +160,6 @@ pub fn internString(
     errdefer comptime unreachable; // End reservation phase.
 
     const gop = state.string_table.getOrPutAssumeCapacityAdapted(
-        gpa,
         @as([]const u8, bytes),
         @as(String.TableIndexAdapter, .{
             .bytes = state.string_bytes.items,
