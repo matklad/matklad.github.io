@@ -147,10 +147,8 @@ export function Page(name: string, content: HtmlString) {
 export function PostList({ posts }: { posts: PostData[] }) {
   const list_items = posts.map((post) => (
     <li>
-      <h2>
-        <Time className="meta" date={post.date} />
-        <a href={post.path}>{post.title}</a>
-      </h2>
+      <Time className="meta" date={post.date} />
+      <h2><a href={post.path}>{post.title}</a></h2>
     </li>
   ));
 

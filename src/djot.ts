@@ -44,22 +44,20 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
       return result;
     },
     heading: (node: Heading, r: HTMLRenderer) => {
-      const tag = `h${node.level}`;
-      const date = node.level == 1 && ctx.date
-        ? time_html(ctx.date, "meta")
-        : "";
-      const children = r.renderChildren(node);
       if (node.level == 1) ctx.title = get_string_content(node);
-      const id = node.level > 1 && section?.autoAttributes?.id;
-      if (id) {
+      if (node.level == 1 && ctx.date) {
+        const date = time_html(ctx.date, "meta");
+        const children = r.renderChildren(node);
         return `
-    <${tag}${r.renderAttributes(node)}>
-    <a href="#${id}">${children} ${date}</a>
-    </${tag}>\n`;
+<header>
+  <h1${r.renderAttributes(node)}>${children}</h1>
+  ${date}
+</header>
+`;
       } else {
-        return `\n<${tag}${
-          r.renderAttributes(node)
-        }>${children} ${date}</${tag}>\n`;
+        const tag = `h${node.level}`;
+        const children = r.renderChildren(node);
+        return `\n<${tag}${r.renderAttributes(node)}>${children}</${tag}>\n`;
       }
     },
     ordered_list: (node: OrderedList, r: HTMLRenderer): string => {

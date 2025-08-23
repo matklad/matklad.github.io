@@ -167,7 +167,9 @@ async function build(params: {
   for (const page of pages) {
     const text = await Deno.readTextFile(`content/${page}.dj`);
     const ast = await djot.parse(text);
-    const html = djot.render(ast, {});
+    const html = djot.render(ast, {
+      date: page == "resume" ? new Date("May 21, 2024") : undefined,
+    });
     await update_file(
       `out/www/${page}.html`,
       html_ugly(Page(page, html)),
