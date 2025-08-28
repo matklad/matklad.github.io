@@ -56,8 +56,12 @@ export function render(doc: Doc, ctx: RenderCtx): HtmlString {
 `;
       } else {
         const tag = `h${node.level}`;
+        const id = node.level > 1 && section?.autoAttributes?.id;
         const children = r.renderChildren(node);
-        return `\n<${tag}${r.renderAttributes(node)}>${children}</${tag}>\n`;
+        const children_anchored = id
+          ? `<a href="#${id}">${children}</a>`
+          : `${children}`;
+        return `\n<${tag}${r.renderAttributes(node)}>${children_anchored}</${tag}>\n`;
       }
     },
     ordered_list: (node: OrderedList, r: HTMLRenderer): string => {

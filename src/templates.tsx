@@ -183,12 +183,8 @@ export function BlogRoll({ posts }: { posts: FeedEntryData[] }) {
 
   const list_items = posts.map((post) => (
     <li>
-      <h2>
-        <span class="meta">
-          <Time date={post.date} />, {domain(post.url)}
-        </span>
-        <a href={post.url}>{post.title}</a>
-      </h2>
+      <span class="meta"> <Time date={post.date} />, {domain(post.url)}</span>
+      <h2><a href={post.url}>{post.title}</a></h2>
     </li>
   ));
 
