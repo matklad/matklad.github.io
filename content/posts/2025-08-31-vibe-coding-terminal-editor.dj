@@ -1,0 +1,154 @@
+# Vibe Coding Terminal Editor
+
+I "wrote" [a small tool](https://github.com/matklad/terminal-editor/) for myself as my biannual
+routine check of where llms are currently at. I think I've learned a bunch from this exercise. This
+is frustrating! I don't want to learn by trial and error, I'd rather read someone's blog post with
+lessons learned. Sadly, _most_ of the writing on the topic that percolates to me tends to be
+high-level --- easy to nod along while reading, but hard to extract actionable lessons. So this is
+what I want to do here, list specific tricks learned.
+
+## Terminal Editor
+
+Let me quickly introduce the project. It's a VS Code extension that allows me to run "shell"  inside
+my normal editor widget, such that the output is normal text buffer where all standard
+motion/editing commands work. So I can "goto definition" on paths printed as a part of backtrace,
+use multiple cursors to copy compiler's suggestions, or just [PageUp]{.kbd} / [PageDown]{.kbd} to
+scroll the output. If you are familiar with Emacs, it's
+[Eshell](https://www.gnu.org/software/emacs/manual/html_mono/eshell.html), just worse:
+
+![](https://github.com/user-attachments/assets/acaf653e-a170-4685-8cce-5ca8dd31b9b4){width=1398 height=1086}
+
+I now use `terminal-editor` to launch most of my compilation commands, as it has several niceties on
+top of what my normal shell provides. For example, by default only the last 50 lines of output are
+shown, but I can hit tab to fold and unfold full output. Such a simple feature, but such a pain to
+implement in a UNIX shell/terminal!
+
+What follows is an unstructured bag of things learned:
+
+## Plan / Reset
+
+I originally tried to use `claude` code normally, by iteratively prompting in the terminal until I
+get the output I want. This was frustrating, as it was too easy to miss a good place to commit a
+chunk of work, or to rein in a conversation going astray. This "prompting-then-waiting" mode also had
+a pattern of mental context switches not matching my preferred style of work. This article suggests
+a better workflow: <https://harper.blog/2025/05/08/basic-claude-code/>{.display}
+
+Instead of writing your single prompt in the terminal, you write an entire course of action as a
+task list in `plan.md` document, and the actual prompt is then something along the lines of
+
+> Read @plan.md, complete the next task, and mark it with `X`.
+
+After `claude` finishes iterating on a step you look at the diff and interactively prompt for
+necessary corrections. When you are happy, `git commit` and `/clear` the conversation, to start the
+next step from the clean slate.
+
+The plan pattern reduces context switches, because it allows you to plan several steps ahead, while
+you are in the planning mode, even if it makes sense to do the work one step at a time. I often also
+work on continuing the plan when `claude` is working on the current task.
+
+## Whiteboard / Agent Metaphor
+
+A brilliant metaphor from another post
+<https://crawshaw.io/blog/programming-with-agents>{.display}
+is that prompting LLM for some coding task and then expecting it to one-shot a working solution is
+quite a bit like asking a candidate to whiteboard an algorithm during the interview.
+
+LLMs are clearly superhuman at whiteboarding, but you can't go far without feedback. "Agentic"
+programming like `claude` allows LLMs to iterate on solution.
+
+LLMs are _much_ better at whiteboarding than at iterating. My experience is that, starting with
+suboptimal solution, LLM generally can't improve it by itself along the fuzzy aesthetic metrics I
+care about. They can make valid changes, but the overall quality stays roughly the same.
+
+However, LLMs are tenacious, and can do a lot of iterations. If you _do_ have a value function, you
+can use it to extract useful work from random walk! A _bad_ value function is human judgement.
+Sitting in the loop with LLM and pointing out mistakes is both frustrating and slow (you are the
+bottleneck). In contrast "make this test green" is very efficient at getting working (≠ good)
+code.
+
+## Spec Is Code Is Tests
+
+LLMs are good at "closing the loop", they can make the ends meet. This insight combined with the
+`plan.md` pattern gives my current workflow --- spec ↔ code ↔ test loop. Here's the story:
+
+I coded the first version of `terminal-editor` using just the `plan.md` pattern, but at some point I
+hit complexity wall. I realized that my original implementation strategy for syntax highlighting was
+a dead end, and I needed to change it, but that was hard to do without making a complete mess of the
+code. The accumulated `plan.md` reflected a bunch of historical detours, and the tests were too
+brittle and coupled to the existing implementation (more on tests later). This worked for
+incremental additions, but now I wanted to change something in the middle.
+
+I realized that what I want is not an append-only `plan.md` that reflects history, but rather a
+mutable `spec.md` that describes clearly how the software should behave. For normal engineering,
+this would have been "damn, I guess I need to throw one out and start afresh" moment. With `claude`,
+I added `plan.md` and all the code to the context and asked it to write `spec.md` file in the same
+task list format. There are two insights here:
+
+_First_, mutable spec is a good way to instruct LLM. When I want to apply a change to
+`terminal-editor` now, I prompt `claude` to update the spec first (unchecking any items that need
+re-doing), manually review/touch-up the spec, and use a canned prompt to align the code and tests
+with the spec.
+
+_Second_, that you can think of an LLM as a machine translation, which can automatically convert
+between working code, specification, and tests. You can treat _any_ of those things as an input, as
+if you are coding in [miniKanren](https://minikanren.org)!
+
+## Tests
+
+I did have this idea of closing the loop when I started with `terminal-editor`, so I crafted the
+prompts to emphasize testing. You can guess the result! `claude` wrote a lot of tests, following all
+the modern "best practices" --- a deluge of unit tests that were just needlessly nailing down
+internal API, a jungle of bug-hiding mocks, and a bunch of unfocused integration tests which were
+slow, flaky, and contained a copious amount of sleeps to paper over synchronization bugs. Really,
+this was eerily similar to a typical test suite you can find in the wild. I am wondering why is
+that?
+
+This is perhaps my main take away: if I am vibe-coding anything again, and I want to maintain it and
+not just one-shot it, I will think very hard about the testing strategy. Really, to tout my own
+horn, I think that perhaps [_How to Test?_](https://matklad.github.io/2021/05/31/how-to-test.html)
+is the best article out there about agentic coding. Test iteration is a multiplier for humans, but a
+hard requirement for LLMs. Test must be very fast, non-flaky, and should end-to-end test application
+_features_, rather than code.
+
+Concretely, I just completely wiped out all the existing tests. Then I added testing strategy to the
+spec. There are two functions:
+
+```ts
+export async function sync(): Promise<void>
+export function snapshot(): string
+```
+
+The `sync` function waits for all outstanding async work (like external processes) to finish. This
+requires properly threading causality throughout the code. E.g., there's a promise you can `await`
+on to join currently running process. The `snapshot` function captures the entire state of the
+extension as a single string. There's just one mock for the clock (another improvement on the
+usual terminal --- process runtime is always show).
+
+Then, I prompted `claude` with something along the lines of
+
+> Oups, looks like someone wiped out all the tests here, but the code and the spec look decent,
+> could you re-create the test suite using `snapshot` function as per @spec.md?
+
+It worked. Again, "throw one away" is very cheap.
+
+## Conclusions
+
+That's it! LLMs obviously can code. You need to hold them right. In particular, you need to engineer
+a  feedback loop to let LLM iterate at its own pace. You don't want human in the "data plane" of the
+loop, only in the control plane.
+Learn to [architecture for testing](https://matklad.github.io/2021/05/31/how-to-test.html).
+
+LLM drastically reduce the activation energy for writing custom tools. I wanted something like
+`terminal-editor` forever, but it was never the most attractive yak to shave. Well, now I have the
+thing, I use it daily.
+
+LLMs don't magically solve all software engineering problems. The biggest time sink with
+`terminal-editor` was solving the `pty` problem, but LLMs are not yet at the "give me UNIX, but
+without `pty` mess" stage.
+
+LLMs don't solve maintenance. A while ago I wrote about
+[_LSP for jj_](https://matklad.github.io/2024/12/13/majjit-lsp.html). I think I can actually code
+that up in a day with Claude now? Not the proof of concept, the production version with everything
+_I_ would need. But I don't want to _maintain_ that. I don't want to context switch to fix a minor
+bug, if I am the only one using the tool. And, well, if I make this for other people, I'd definitely
+be on the hook for maintaining it :D
