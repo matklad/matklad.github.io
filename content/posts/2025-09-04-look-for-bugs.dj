@@ -1,0 +1,89 @@
+# Look Out For Bugs
+
+One of my biggest mid-career shifts in how I write code was internalizing the idea from this post:
+[_Don't Write Bugs_](https://www.teamten.com/lawrence/programming/dont-write-bugs.html){.display}
+
+Historically, I approached coding with an iteration-focused mindset --- you write a draft version of
+a program, you set up some kind of a test to verify that it does what you want it to do, and then
+you just quickly iterate on your draft until the result passes all the checks.
+
+This was a great approach when I was only learning to code, as it allowed me to iterate past the
+things which were not relevant for me at that point, and focus on what matters. Who cares if it is
+`String args` or `String[] args` in the "паблик статик войд мэйн стринг а-эр-джи-эс", it's just some
+obscure magic spell anyway, and completely irrelevant to the maze-traversing thingy I am working on!
+
+Carrying over this approach past the learning phase was a mistake. As Lawrence points out, while you
+_can_ spend time chasing bugs in the freshly written code, it is possible to dramatically cut the
+amount of bugs you introduce in the first place, if you focus on optimizing that (and not just the
+iteration time). It felt (and still feels) like a superpower!
+
+But there's already a perfectly fine article about not making bugs, so I am not going to duplicate
+it. Instead, I want to share a related, but different super power:
+
+> You can find bugs by just reading code.
+
+I remember feeling this superpower for the first time. I was investigating various rope
+implementations, and, as a part of that, I looked at the `ImmutableText.java`, the implementation
+powering IntelliJ, very old and battle tested code.  And, by just reading the code, I found a bug,
+[since fixed](https://github.com/JetBrains/intellij-community/commit/b16987177e6023cd971d22a503663b7d63691bb2).
+It wasn't hard, the original code is just 500 lines of verbose Java (yup, that's all that you need
+for a production rope). And I wasn't even _trying_ to find a bug, it just sort-of jumped out at me
+while I was trying to understand how the code works.
+
+That is, you can find some existing piece of software, carefully skim through implementation, and
+discover real problems that can be fixed. You can do this to _your_ software as well! By just
+re-reading a module you wrote last year, you might find subtle problems.
+
+I regularly discover TigreBeetle issues by just covering this or that topic on
+[IronBeetle](https://www.youtube.com/watch?v=hPUL8Xo6MJw&list=PL9eL-xg48OM3pnVqFSRyBFleHtBBw-nmZ):
+[bug discovered live](https://youtu.be/2_IJJZFMH2M?si=oNnqd8oCckXo8OLf&t=1691),
+[fixed](https://youtu.be/2_IJJZFMH2M?si=hluxJXQuK3XtDT3I&t=2090),
+[and PR merged](https://github.com/tigerbeetle/tigerbeetle/pull/3194).
+
+Here are some tips for getting better at this:
+
+The key is careful, slow reading. What you actually are doing is building the mental model of a
+program inside your head. Reading the source code is just an instrument for achieving that goal. I
+can't emphasize this enough: programming is all about building a precise understanding inside your
+mind, and then looking for the diff between your brain and what's in git.
+
+Don't dodge an opportunity to read more of the code. If you are reviewing a PR, don't review _just_
+the diff, review the entire subsystem. When writing code, don't hesitate to stop and to probe and
+feel the context around. Go for `git blame` or `git log -S` to understand the historical "why" of
+the code.
+
+When reading, _mostly_ ignore the textual order, don't just read each source file top-down. Instead,
+use these two other frames:
+
+: Follow the control flow
+
+  Start at `main` or subsystem equivalent, and use "goto definition" to follow an imaginary program
+  counter.
+
+: Stare at the state
+
+  Identify the key data structures and fields, and search for all all places where they are
+  created and modified.
+
+You want to see a slice across space and time, state and control flow (c.f.
+[_Concurrent Expression Problem_](https://matklad.github.io/2021/04/26/concurrent-expression-problem.html)).
+
+Just earlier today I used the second trick to debug an issue for which I haven't got a repro.
+I identified
+`connection.peer = header_peer;`{.display}
+as the key assignment that was recently introduced, then [ctrl + f]{.kbd} for `connection.peer`, and
+that immediately revealed a gap in my mental model. Note how this was helped by the fact that the
+thing in question, `connection`, was always called that in the source code! If your language allows
+it, avoid `self`, use proper names.
+
+Identify and collect specific error-prone patterns or general smells in the code. In Zig, if there's
+an allocator and a `try` in the same scope, [you need to be very
+careful](https://matklad.github.io/2025/08/16/reserve-first.html). If there's an isolated tricky
+function, it's probably fine. If there's a tricky _interaction_ between functions, it is a smell,
+and some bugs are lurking there.
+
+---
+
+Bottom line: reading the code is surprisingly efficient at proactively revealing problems.
+Create space for calm reading. When reading, find ways to build mental models quickly, this is not
+entirely trivial.
