@@ -97,22 +97,22 @@ function Base({ children, src, title, path, description, extra_css }: {
             <a
               href={`https://github.com/matklad/matklad.github.io/edit/master${src}`}
             >
-              <Icon name="edit" />
+              <FooterIcon name="edit" />
               Fix typo
             </a>
 
             <a href="/feed.xml">
-              <Icon name="rss" />
+              <FooterIcon name="rss" />
               Subscribe
             </a>
 
             <a href="mailto:aleksey.kladov+blog@gmail.com">
-              <Icon name="email" />
+              <FooterIcon name="email" />
               Get in touch
             </a>
 
             <a href="https://github.com/matklad">
-              <Icon name="github" />
+              <FooterIcon name="github" />
               matklad
             </a>
           </p>
@@ -122,9 +122,9 @@ function Base({ children, src, title, path, description, extra_css }: {
   );
 }
 
-function Icon({ name }: { name: string }) {
+function FooterIcon({ name }: { name: string }) {
   return (
-    <svg class="icon">
+    <svg>
       <use href={`/assets/icons.svg#${name}`} />
     </svg>
   );
@@ -148,7 +148,9 @@ export function PostList({ posts }: { posts: PostData[] }) {
   const list_items = posts.map((post) => (
     <li>
       <Time className="meta" date={post.date} />
-      <h2><a href={post.path}>{post.title}</a></h2>
+      <h2>
+        <a href={post.path}>{post.title}</a>
+      </h2>
     </li>
   ));
 
@@ -183,8 +185,12 @@ export function BlogRoll({ posts }: { posts: FeedEntryData[] }) {
 
   const list_items = posts.map((post) => (
     <li>
-      <span class="meta"> <Time date={post.date} />, {domain(post.url)}</span>
-      <h2><a href={post.url}>{post.title}</a></h2>
+      <span class="meta">
+        <Time date={post.date} />, {domain(post.url)}
+      </span>
+      <h2>
+        <a href={post.url}>{post.title}</a>
+      </h2>
     </li>
   ));
 
