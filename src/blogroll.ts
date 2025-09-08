@@ -12,7 +12,7 @@ export async function blogroll(): Promise<FeedEntry[]> {
     .split("\n").filter((line) => line.trim().length > 0);
   const all_entries = (await Promise.all(urls.map(blogroll_feed))).flat();
   all_entries.sort((a, b) => b.date.getTime() - a.date.getTime());
-  return all_entries;
+  return newest_first(all_entries);
 }
 
 async function blogroll_feed(
@@ -28,7 +28,7 @@ async function blogroll_feed(
     return [];
   }
 
-  return feed.entries.map((entry: any) => {
+  const entries_all: FeedEntry[] = feed.entries.map((entry: any) => {
     return {
       title: entry.title!.value!,
       url: (entry.links.find((it: any) => {
@@ -36,5 +36,10 @@ async function blogroll_feed(
       }) ?? entry.links[0])!.href!,
       date: (entry.published ?? entry.updated)!,
     };
-  }).slice(0, 3);
+  });
+  return newest_first(entries_all).slice(0, 3);
+}
+
+function newest_first(entries: FeedEntry[]): FeedEntry[] {
+  return entries.toSorted((a, b) => b.date.getTime() - a.date.getTime());
 }
