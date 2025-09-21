@@ -251,12 +251,54 @@ thread up, there are two possibilities: either the worker thread wakes up on the
 wakes up on the with the message in cache, and the network thread gets moved to a different core:
 
 In the first case, when the worker thread attempts to access the message, the cache coherency
-protocol needs to be involved to physically move message bytes between two caches. In the second
-case, the worker can immediately start processing the message, but the network thread than incurs
-context misses to move its state over to the second cache.
+protocol needs to be involved to physically move message bytes between two caches. Multicore
+programming model generally assumes shared memory --- writes issued by one core are "just" visible
+to other cores, as if the memory was literally shared between cores. In reality, for performance,
+each core maintains its local copy of the memory in the cache or in the registers (CPUs execute
+`store` instructions lazily, keeping the data in a write buffer for a while). Physically, message
+passing involves using instructions with fence semantics, which force the CPU to flush its write
+buffers, and a cache coherency protocol. Caches of all CPUs are on the shared bus, and maintain an
+invariant that each cache line can be mutably borrowed by only one cache at a time. So, when the
+worker thread tries to access the message, the relevant memory won't be found in its core's cache,
+and the two caches will communicate over the shared bus to physically move the bytes around to the
+correct core.
+
+An alternative to waking the worker thread on the second core is to wake it on the first one, and
+move the network thread to another core. This way the worker can immediately start processing the
+message, as it is in its local cache. But now the network thread suffers coherence cache misses to
+move its state over to the second cache.
 
 Which is the optimal schedule? I think that perhaps neither? What we actually want to do is to _not_
-run the worker thread immediately, and let the network thread to run for a little bit more, so that
-it can loop around, issue another `read` syscall against the socket to fetch the next message, and
-go to sleep. At _that_ point we want to hand over the core to the worker thread, so that we don't
-have to move _any_ data between the caches.
+run the worker thread immediately, and let the network thread to run for a little more, so that it
+can loop around, issue another `read` syscall against the socket to fetch the next message, and go
+to sleep. At _that_ point we want to hand over the core to the worker thread, so that we don't have
+to move _any_ data between the caches.
+
+## HyperThreading
+
+There's another way to run two threads at the same time. Recall that CPU  pipelines and parallelizes
+instruction execution, it tries to keep many instructions in flight. The main obstacle to magically
+extracting infinite performance out of this trick are instruction dependencies: if one instruction
+consumes data produced by another instruction, the CPU can't run them in parallel.
+
+However, there's a great source of instructions that are guaranteed to be independent --- threads!
+Instructions in different threads can't depend on each other, unless they are explicitly
+synchronization instructions.
+
+Hence, hyper threading not only CPU has more registers than specified in the ISA several ALU, it
+also has _two_ registers to store instruction pointer, and executes two instruction streams at the
+same time, interleaving instructions based on available hardware resources. There's a single
+hardware state machine that keeps track of all in-flight instructions. Context switching happens in
+hardware on per-cycle basis!
+
+Why do we need cores anyway? Can we put a huge register file, a bunch of ALUs, and a dozen of
+instruction pointer registers on a single microchip, and have our 32 threads on a single core? My
+understanding is that dependency tracking in register file is not scalable: you can fit two threads
+into a single core, but anything more becomes progressively challenging. In contrast, you can
+basically copy-paste independent cores without any changes.
+
+That being said, I think GPUs have a more interesting dependency between the cores and the threads.
+As far as I understand, the GPU's _interface_ is that it can run N hardware threads. But
+implementations vary, and a given implementation has M != N hardware cores. So there's a hardware
+scheduler that maps threads to cores. The catch is that all threads must execute _the same_ code,
+which removes the need to dynamically share resources between the threads.
