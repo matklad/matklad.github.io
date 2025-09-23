@@ -2,7 +2,9 @@
 
 I guess I can call myself a professional asynchronous programmer, given that I've been working on
 stateful, concurrent, highly asynchronous systems for the past few years. However, I still feel like
-a clueless novice, I don't have a solid mental model for concurrent programming. For example,
+a clueless novice, I don't have a solid mental model for concurrent programming.
+
+For example,
 <https://github.com/jimblandy/context-switch>{.display}
 compares context-switch overhead between OS threads and `tokio` tasks and finds that switching tasks
 is faster, _unless you pin the whole thing to a single core!_ I can't really explain this result
@@ -16,11 +18,11 @@ correct 30 years ago!
 
 ## Time Sharing
 
-The central example of context switch! You are running two applications, say, a compiler and a
-breakout game, and the operating system switches between the two every few milliseconds or so,
+The central example of context switch! You are running a pair of applications, say, a compiler and a
+breakout game, and an operating system switches between the two every few milliseconds or so,
 providing illusion of concurrency. When happens when we switch from compiling to gaming?
 
-Let's enumerate the things we need to switch first. The main thing is of course is the instruction
+Let's enumerate the things we need to switch first. The centerpiece is of course the instruction
 pointer, the address of the "current" instruction. Then, there's processor state,  the contents of
 all registers that we need to save and restore. Curiously, the state of _memory_ isn't shared ---
 each application uses its own physical pages, both processes are resident. What we do need to change
@@ -302,3 +304,11 @@ As far as I understand, the GPU's _interface_ is that it can run N hardware thre
 implementations vary, and a given implementation has M != N hardware cores. So there's a hardware
 scheduler that maps threads to cores. The catch is that all threads must execute _the same_ code,
 which removes the need to dynamically share resources between the threads.
+
+## Stackfull Coroutines
+
+## Stackless Coroutines
+
+## Iteratorg
+
+## Function Call
