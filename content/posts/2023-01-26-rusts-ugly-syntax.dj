@@ -147,7 +147,7 @@ It is needed because Rust loves exposing physical layout of bytes in memory as a
 In particular, the meaning of `Path` is not that it is some abstract representation of a file path, but that it is just literally a bunch of contiguous bytes in memory.
 So we need `AsRef` to make this work with _any_ abstraction which is capable of representing such a slice of bytes.
 But if we don't care about performance, we can require that all interfaces are fairly abstract and mediated via virtual function calls, rather than direct memory access.
-Then we won't need `AsRef`at all:
+Then we won't need `AsRef` at all:
 
 ```rust
 pub fn read(path: &Path) -> io::Result<Vec<u8>> {
