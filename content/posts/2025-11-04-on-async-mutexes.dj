@@ -1,0 +1,76 @@
+# On Async Mutexes
+
+A short note on contradiction or confusion in my language design beliefs I noticed today.
+
+One of the touted benefits of concurrent programming multiplexed over a single thread is that
+mutexes become unnecessary. With only one function executing at any given moment in time data races
+are impossible.
+
+The standard counter to this argument is that mutual exclusion is a property of the logic itself,
+not of the runtime. If a certain snippet of code must be executed atomically with respect to
+everything else that is concurrent, then it must be annotated as such in the source code. You can
+still introduce logical races by accidentally adding an `.await` in the middle of the code that
+should be atomic. And, while programming, you are adding new `.await`s all the time!
+
+This argument makes sense to me, as well its as logical conclusion. Given that you want to annotate
+atomic segments of code anyway, it makes sense to go all the way to Kotlin-style explicit async
+implicit await.
+
+The contradiction I realized today is that for the past few years I've been working on a system
+build around implicit exclusion provided by a single thread --- TigerBeetle! Consider compaction, a
+code that is responsible for rewriting data on disk to make it smaller without changing its logical
+contents. During compaction, TigerBeetle schedules _a lot_ of concurrent disk reads, disk writes,
+and CPU-side merges. Here's an average callback:
+
+```zig
+fn read_value_block_callback(
+    grid_read: *Grid.Read,
+    value_block: BlockPtrConst,
+) void {
+    const read: *ResourcePool.BlockRead =
+        @fieldParentPtr("grid_read", grid_read);
+    const compaction: *Compaction = read.parent(Compaction);
+
+    const block = read.block;
+    compaction.pool.?.reads.release(read);
+
+    assert(block.stage == .read_value_block);
+    stdx.copy_disjoint(.exact, u8, block.ptr, value_block);
+    block.stage = .read_value_block_done;
+    compaction.counters.in +=
+        Table.value_block_values_used(block.ptr).len;
+    compaction.compaction_dispatch();
+}
+```
+
+This is the code
+([source](https://github.com/tigerbeetle/tigerbeetle/blob/0.16.63/src/lsm/compaction.zig#L1857-L1870))
+that runs when a disk read finishes, and it mutates `*Compaction` --- shared state across all
+outstanding IO. It's imperative that no other IO completion mutates compaction concurrently,
+especially inside that `compaction_dispatch`
+[monster of a function](https://github.com/tigerbeetle/tigerbeetle/blob/0.16.63/src/lsm/compaction.zig#L1015-L1269).
+
+Applying "make exclusion explicit" rule to the code would mean that the entire `Compaction` needs to
+be wrapped in a mutex, and every callback needs to start with lock/unlock pair. And there's much
+more to TigerBeetle than just compaction! While _some_ pairs of callbacks probably can execute
+concurrently relatively to each other, this changes over time. For example, once we start
+overlapping compaction and execution, those will be using our GridCache (buffer manager) at the same
+time. So explicit locking probably gravitates towards having just a single global lock around the
+entire state, which is acquired for the duration of any callback. At which point, it makes sense to
+push lock acquisition up to the event loop, and we are back to the implicit locking API!
+
+## Observations
+
+This seems to be another case of
+[two paradigms for structuring concurrent programs](https://matklad.github.io/2021/04/26/concurrent-expression-problem.html).
+The async/await discussion usually presupposes CSP programming style, where you define a set of
+concurrent threads of execution, and the threads are mostly independent, sharing a little of data.
+TigerBeetle is written in a state machine/actor style, where the focal point is the large amount of
+shared state, which is evolving in discrete steps in reaction to IO events (there's only one "actor"
+in TigerBeetle). Additionally, TigerBeetle uses manual callbacks instead of async/await syntax, so
+inserting an `.await` in the middle of critical section doesn't really happen. Any new concurrency
+requires introducing an explicit named continuation function, and each continuation (callback)
+generally starts with a bunch of assertions to pin down the current state and make sure that the
+ground hasn't shifted too far since the IO was originally scheduled. Or, as is the case with
+`compaction_dispatch`, sometimes the callback doesn't assume anything at all about the state of the
+world and instead carries out an exhaustive case analysis from scratch.
