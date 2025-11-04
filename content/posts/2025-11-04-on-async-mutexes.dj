@@ -17,7 +17,7 @@ atomic segments of code anyway, it makes sense to go all the way to Kotlin-style
 implicit await.
 
 The contradiction I realized today is that for the past few years I've been working on a system
-build around implicit exclusion provided by a single thread --- TigerBeetle! Consider compaction, a
+built around implicit exclusion provided by a single thread --- TigerBeetle! Consider compaction, a
 code that is responsible for rewriting data on disk to make it smaller without changing its logical
 contents. During compaction, TigerBeetle schedules _a lot_ of concurrent disk reads, disk writes,
 and CPU-side merges. Here's an average callback:
