@@ -1,0 +1,114 @@
+# Error Codes for Control Flow
+
+Two ideas today:
+
+* Displaying an error message to the user is a different aspect of error handling than branching
+  based on a specific error condition.
+* In Zig, error sets are fancy error codes, not poor man's sum types.
+
+In other words, it's worth thinking about diagnostic reporting and error handling (in the literal
+sense) separately. There are generally two destinations for any error. An error can be bubbled to an
+isolation boundary and presented to the operator (for example, as an HTTP 500 message, or stderr
+output). Alternatively, an error can be handled by taking an appropriate recovery action.
+
+For the first case (reporting), often it is sufficient that an error is an interface that knows how
+to present itself. The catch is that the presentation interface isn't fixed: HTML output is different
+from terminal output. If you know the ultimate destination up front, it usually is simpler to render
+the error immediately. Otherwise, an error can be made a structured product type to allow (require)
+the user full control over the presentation (localization of error messages is a good intuition
+pump).
+
+If you need to _branch_ on error to handle it, you generally need a sum type. Curiously though,
+there's going to be a finite number of branches up the stack across all call-sites, so, just like a
+lean reporting type might contain only the final presentation, a lean handling type might be just an
+enumeration of all different code-paths --- an error code.
+
+As usual, Zig's design is (thought) provocative. The language handles the "handling" part, leaving
+almost the entirety of reporting to the user. Zig uses type system to fix problems with error codes,
+mostly keeping runtime semantics as is.
+
+In C, error codes are in-band, and it's easy to confuse a valid
+result with an error code (e.g. doing `kill(-1)` by accident). Zig uses type-checked error unions:
+[`ReadError!usize`]{.display}
+which require explicit unpacking with `catch`. Error codes are easy to ignore by mistake, but,
+because the compiler knows which values are errors, Zig requires a special form for ignoring an
+error: [`catch {}`]{.display}
+
+As a nice touch, while Zig requires explicit discards for all unused values, discarding non-error
+value requires a different syntax:
+
+```zig
+pub fn main() void {
+    _ = can_fail();
+    // ^ error: error union is discarded
+
+    can_fail() catch {};
+    // ^ error: incompatible types: 'u32' and 'void'
+
+    _ = can_fail() catch {};
+    // Works.
+}
+
+fn can_fail() !u32 {
+    return error.Nope;
+}
+```
+
+This protects from a common error when initially a result of an infallible function is ignored, but
+then the function grows a failing path, and the error gets silently ignored. That's
+the [I power letter](https://docs.rs/powerletters/latest/powerletters/fn.I.html)!
+
+As an aside, [I used to be
+unsure](https://internals.rust-lang.org/t/use-of-must-use-in-the-standard-library/15425/14) whether
+its best to annotate specific APIs with `#[must_use]` or do the opposite and, Swift-style, require
+all return values to be used. My worry was that adding a lot of trivial discards will drown
+load-bearing discards in the noise. After using Zig, I can confidently say that trivial discards
+happen rarely and are a non-issue (but it certainly helps to separate value- and error-discards
+syntactically). This doesn't mean that retrofitting mandatory value usage into existing languages is
+a good idea! This drastic of a change usually retroactively invalidates a lot of previously
+reasonable API design choices.
+
+Zig further leverages the type system to track _which_ errors can be returned by the API:
+
+```zig
+pub fn readSliceAll(
+    r: *Reader,
+    buffer: []u8,
+) error{ReadFailed, EndOfStream}!void {
+    const n = try readSliceShort(r, buffer);
+    if (n != buffer.len) return error.EndOfStream;
+}
+
+pub fn readSliceShort(
+    r: *Reader,
+    buffer: []u8,
+) error{ReadFailed}!usize {
+    // ...
+}
+```
+
+The tracking works additively (calling two functions unions the error sets) and subtractively (a
+function can handle a subset of errors and propagate the rest). Zig also leverages its whole-program
+compilation model to allow fully inferring the error sets. The closed world model is also what
+allows assigning unambiguous numeric code to symbolic error constants, which in turn allows a
+catchall `anyerror` type.
+
+But the symbolic name is all you get out of the error value. The language doesn't ship anything
+first-class for reporting, and diagnostic information is communicated out of band using diagnostic
+sink pattern:
+
+```zig
+/// Parses the given slice as ZON.
+pub fn fromSlice(
+    T: type,
+    gpa: Allocator,
+    source: [:0]const u8,
+    diag: ?*Diagnostics,
+) error{ OutOfMemory, ParseZon }!T {
+    // ...
+}
+```
+
+If the caller wants to handle the error, they pass `null` sink and `switch` on the error value. If
+the caller wants to present the error to the user, they pass in `Diagnostics` and extract formatted
+output from that.

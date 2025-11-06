@@ -44,7 +44,7 @@ Here is the blog post to check:
 ${content}`;
 
   const process = new Deno.Command("llm", {
-    args: ["-m", "claude-3.5-sonnet-latest", prompt],
+    args: ["-m", "claude-3.7-sonnet-latest", prompt],
     stdout: "piped",
     stderr: "piped",
   });
