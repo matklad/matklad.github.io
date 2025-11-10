@@ -31,7 +31,7 @@ above, this is suboptimal, as it spills small hot values to memory because of la
 
 A smarter way to do this is to say that the ABI of `-> Result<T, E>` is exactly the same as `T`,
 except that a single register is reserved for `E` (this requires the errors to be register-sized).
-On architectures with status flags, one can even signal a presence of error via, e.g., the carry flag.
+On architectures with status flags, one can even signal a presence of error via, e.g., the overflow flag.
 
 Finally, another option is to say that `-> Result<T, E>` behaves _exactly_ as `-> T` ABI-wise, no
 error affordances whatsoever. Instead, when _returning_ an error, rather than jumping to the return
