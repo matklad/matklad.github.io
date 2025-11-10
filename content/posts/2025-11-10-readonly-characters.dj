@@ -1,0 +1,60 @@
+# Readonly Characters Are a Big Deal
+
+I like Emacs UX as exemplified by [Magit](https://magit.vc). I consider it to be a user interface
+paradigm on the same footing as UNIX pipes:
+[_An Engine for an Editor_](https://matklad.github.io/2023/03/08/an-engine-for-an-editor.html){.display}
+
+Pipes give you 1D read-only streams of characters which excel at batch processing.
+Emacs is all about interactive mutable 2D buffers of attributed text.
+
+Today I realized that an important feature of Emacs text buffers is read-only characters
+([manual](https://www.gnu.org/software/emacs/manual/html_node/elisp/Special-Properties.html#:~:text=read-only)).
+
+Like in any editor, you can mark an entire Emacs buffer as read-only. But you also can mark
+individual substrings read-only, so that you can edit anywhere except specific ranges. This is a
+useful feature for bidirectional interaction.
+
+Consider the
+[in-editor terminal](https://matklad.github.io/2025/08/31/vibe-coding-terminal-editor.html)
+I am using currently, which looks like this:
+
+{highlight=3}
+```
+./zig/zig build fuzz -- message_bus
+
+= time: 3s =
+
+info(fuzz): Fuzz seed = 2355780251053186744
+info(message_bus_fuzz): command weight: reserved = 0
+info(message_bus_fuzz): command weight: ping = 0
+info(message_bus_fuzz): command weight: pong = 0
+info(message_bus_fuzz): command weight: ping_client = 0
+info(message_bus_fuzz): command weight: pong_client = 0
+info(message_bus_fuzz): command weight: request = 0
+info(message_bus_fuzz): command weight: prepare = 37
+info(message_bus_fuzz): command weight: prepare_ok = 0
+```
+
+The first line is the command to execute, this is typed by me manually, and then I hit a "submit"
+shortcut to actually run the command. Then goes the status line, which shows how long the command
+has been running so far and the exit code (when the command terminates). The status line is
+determined by the "terminal" itself. Finally, there's output of the command itself, updated live.
+
+In this sort of the interface, command is modifiable by the user, but is read-only for the editor.
+Status is the opposite --- the editor updates it every second, but the user should be prevented from
+touching it. And the output can be CRDT-style edited by both parties (I often find it useful to edit
+the output in place before pasting it elsewhere).
+
+Sadly, in VS Code I can't prevent the user from editing the status, so my implementation is a bit
+janky, and this, I think, goes to the core of why I don't see VS Code as a great platform for the kind
+of interactive tools I want to write.
+
+Read-only ranges are hard to implement! [Text editing hates
+you](https://lord.io/text-editing-hates-you-too/) as is, but this feature requires tracking text
+attributes in an intelligent way under modifications (see [sticky
+properties](https://www.gnu.org/software/emacs/manual/html_node/elisp/Sticky-Properties.html)), and
+_also_ feeds back into modifications themselves! No wonder Monaco, the editor engine underlying VS
+Code, [lost this ability](https://github.com/microsoft/monaco-editor/issues/874) at some point.
+
+Still, I feel like "does it support sticky read-only attribute?" is a good litmus test to
+check if an editor can support interactive applications a-la Magit seamlessly.
