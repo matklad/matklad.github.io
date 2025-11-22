@@ -6,7 +6,7 @@ import { Post as PostData } from "./main.ts";
 import { FeedEntry as FeedEntryData } from "./blogroll.ts";
 
 const site_url = "https://matklad.github.io";
-const blurb = "Matklad's Arts&Crafts";
+const blurb = "matklad's Arts&Crafts";
 
 export function html_ugly(node: VNode, doctype = "<!DOCTYPE html>"): string {
   return `${doctype}\n${render(node)}`;
