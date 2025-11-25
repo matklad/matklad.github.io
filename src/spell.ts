@@ -78,11 +78,13 @@ ${content}`;
       const match = line.match(/replace\s+"([^"]+)"\s+with\s+"([^"]*)"/);
       if (match) {
         const [, old_text, new_text] = match;
-        if (content_corrected.includes(old_text)) {
-          content_corrected = content_corrected.replace(old_text, new_text);
-          console.log(`ok:  "${old_text}" -> "${new_text}"`);
-        } else {
-          console.warn(`ERR: "${old_text}" -> "${new_text}"`);
+        if (old_text != new_text) {
+          if (content_corrected.includes(old_text)) {
+            content_corrected = content_corrected.replace(old_text, new_text);
+            console.log(`ok:  "${old_text}" → "${new_text}"`);
+          } else {
+            console.warn(`ERR: "${old_text}" → "${new_text}"`);
+          }
         }
       }
     }
