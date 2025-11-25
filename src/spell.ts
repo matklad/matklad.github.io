@@ -1,5 +1,5 @@
-export async function spell() {
-  const post_path = await latest_post();
+export async function spell(path: string | undefined) {
+  const post_path = path ?? await latest_post();
 
   const content_original = await Deno.readTextFile(post_path);
 
@@ -80,9 +80,9 @@ ${content}`;
         const [, old_text, new_text] = match;
         if (content_corrected.includes(old_text)) {
           content_corrected = content_corrected.replace(old_text, new_text);
-          console.log(`Applied: "${old_text}" → "${new_text}"`);
+          console.log(`ok:  "${old_text}" -> "${new_text}"`);
         } else {
-          console.warn(`Could not find text to replace: "${old_text}"`);
+          console.warn(`ERR: "${old_text}" -> "${new_text}"`);
         }
       }
     }

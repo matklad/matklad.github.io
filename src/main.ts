@@ -32,6 +32,11 @@ async function main() {
     return;
   }
 
+  if (subcommand === "spell") {
+    spell(Deno.args.at(1));
+    return;
+  }
+
   let i = 1;
   for (; i < Deno.args.length; i++) {
     switch (Deno.args[i]) {
@@ -65,8 +70,6 @@ async function main() {
     await build(params);
   } else if (subcommand === "watch") {
     await watch(params);
-  } else if (subcommand === "spell") {
-    await spell();
   } else {
     fatal("subcommand required");
   }
