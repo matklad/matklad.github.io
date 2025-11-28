@@ -1,0 +1,76 @@
+# Size Matters
+
+[TigerStyle](https://github.com/tigerbeetle/tigerbeetle/blob/809fe06a2ffcc09a92110f6aa46546ba9a8ad2bf/docs/TIGER_STYLE.md) is pretty
+strict about some arbitrary limits:
+
+> ...we enforce a **hard limit of 70 lines per function** ...
+>
+> ... hard limit all line lengths, without exception, to at most 100 columns ...
+
+At the same time, we have a few quite large files, to the point of having to explicitly exclude them
+from our "no large binary blobs in the git history" policy:
+[tidy.zig#L746](https://github.com/tigerbeetle/tigerbeetle/blob/809fe06a2ffcc09a92110f6aa46546ba9a8ad2bf/src/tidy.zig#L746).
+
+Just how large should you make your functions/classes/files? I have two answers here.
+
+## Minimize The Cut
+
+The first principle is that the size is irrelevant. Instead, you want to keep related things
+together, and independent things apart. You don't want to minimize just the size of individual
+components, or the number of dependencies between components. If you do, you end up with a
+degenerate solution where there's just a single component, or every line of code is its own file.
+
+Instead, you want to optimize the _ratio_ of module size to its interface. You need to divide the
+volume by the surface area. It's not about the size, it's about the shape!
+
+You should move a data structure to a separate file when it is self contained. It doesn't matter if
+it is ten or ten thousand lines long. We have
+[replica.zig](https://github.com/tigerbeetle/tigerbeetle/blob/809fe06a2ffcc09a92110f6aa46546ba9a8ad2bf/src/vsr/replica.zig),
+but also [timestamp_range.zig](https://github.com/tigerbeetle/tigerbeetle/blob/809fe06a2ffcc09a92110f6aa46546ba9a8ad2bf/src/lsm/timestamp_range.zig).
+
+There's a good visual metaphor when this rule is applied to functions. A function has inputs, the
+number of arguments. It also has outputs (usually there's just one, but it can be a bundle of
+unrelated things). The number of inputs and the outputs together is the size of the interface. And
+the length of the body measures implementation. You want functions with bodies that are large
+_relative_ to their interfaces. You need inverted hourglass shape. The converse is  more helpful:
+hourglass functions/modules are a smell.
+
+This is a useful principle for picking dependencies as well. Dependencies are useful, they do the
+work! But often enough, if you take a dependency apart, you might notice that it doesn't do
+anything meaningful by _itself_, and just repackages the actual logic (implemented in a transitive
+dependency) with a different interface. You want to cut through the glue, and get straight to the
+algorithmic core.
+
+## Honor Physical Limits
+
+Against the logic stand physical limits. Your display is only so many pixels long, and you do want
+to fit the code in. Hence, the 100 columns limit, as that allows you to comfortably fit two copies
+of code side by side on a modern 16x9 display. Two is important --- you must be able to compare two
+versions of code, you need to see caller _and_ callee [to make the invariants
+meet](https://tigerbeetle.com/blog/2023-12-27-it-takes-two-to-contract/).
+
+Your vertical space is limited just as much as the horizontal space. There's a sharp discontinuity
+between a function fitting on a screen, and just an ever so slightly larger function, when you
+can't even immediately see the end of it. Hence, the Schelling point for the upper bound on function
+length: it'd be better to fit on a screen. Which is about 60-70 lines.
+
+But there's no inherent limit on the file size or number of files. So those can grow. Just make sure
+to not limit yourself by linear search. You need to be able quickly open any file in a project by
+typing just a few letters of its name. Fuzzy search is not optional. Similarly, learn to navigate
+large files efficiently. Can you quickly get a list of all functions? Can you jump to a function by
+fuzzy name?
+
+## Art Is Born Of Constraints
+
+Physical constraints are limiting, but they can be a helpful guide to better design. The size of the
+"cut" doesn't directly depend on the number of lines in a module, but there often is a correlation.
+Are you sure that that 10k line file isn't three different subsystems, fighting each other? As I
+mentioned in
+[today's other article](https://tigerbeetle.com/blog/2025-11-28-tale-of-four-fuzzers/), good
+interface design is not natural. The resulting interface shape is obvious, once you see it. The hard
+part is to realize that there is (or there could be) an interface in the first place. And, if you
+can't quite fit your code into your field of view, maybe it's time to step away from the screen and
+think?
+
+
+P.S.: Matters are plural, not a verb.
