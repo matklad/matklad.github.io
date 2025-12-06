@@ -1,0 +1,197 @@
+# Mechanical Habits
+
+My schtick as a software engineer is establishing automated processes --- mechanically enforced
+patterns of behavior. I have collected a Santa Claus bag of specific tricks I've learned from
+different people, and want to share them in turn.
+
+Caution: engineering processes can be tricky to apply in a useful way. A process is a logical cut
+--- there's some goal we _actually_ want, and automation can be a shortcut to achieve it, but
+automation per se doesn't explain what the original goal is. Keep the goal and adjust the processes
+on the go. Sanity checks: A) automation should reduce toil. If robots create work for humans, down
+with the robots! B) good automation usually is surprisingly simple, simplistic even. Long live the
+duct tape!
+
+## Weekly Releases
+
+By far the most impactful trick --- make a release of your software every Friday. The first order
+motivation here is to reduce the stress and effort required for releases. If releases are small,
+writing changelogs is easy, assessing the riskiness of release doesn't require anything more than
+mentally recalling a week's worth of work, and there's no need to aim to land features into a
+particular releases. Delaying a feature by a week is nothing, delaying by a year is a reason to put
+in an all-nighter.
+
+As an example, this Friday I was filling my US visa application, so I was feeling somewhat tired in
+the evening. I was also the release manager. So I just messaged "sorry, I am feeling too tired to
+make a release, we are skipping this one" without thinking much about it. It's cheap to skip the
+release, so there's no temptation to push yourself to get the release done (and quickly follow up
+with a point release, the usual consequence).
+
+But the real gem is the second order effect --- weekly releases force you to fix all _other_
+processes to keep the codebase healthy all the time. And it is _much_ easier to keep the flywheel
+going at roughly the same speed, rather than periodically to struggle to get it going. Temporal
+locality is the king: "I don't have time to fix X right now, I'll do it before the release" is the
+killer. By the time of release you'll need 2X time just to load X in your head! It's much faster
+overall to immediately make every line of code releasable. Work the iron while it is hot!
+
+## Epistemic Aside
+
+I've done releases every Friday in IntelliJ Rust, rust-analyzer, and TigerBeetle, to a great
+success. It's worth reflecting how I got there. The idea has two parents:
+
+- Pieter Hintjens writings, specifically, the idea of
+  [Optimistic Merging](https://hintjens.gitbooks.io/social-architecture/content/chapter4.html#:~:text=Maintainers%20SHALL%20merge%20correct%20patches%20rapidly.)
+- Rust's [six-weekly release process](https://blog.rust-lang.org/2014/10/30/Stability/) (itself inspired by the browser world)
+
+Both seemed worthwhile to try for me, and I figured that a nicely synthesis would be to release
+every Monday, not every six weeks (I later moved cutting the release to Friday, so that it can bake
+in beta/fuzzers during the weekend). I just finished University at that point, and had almost zero
+working experience! The ideas made sense to me not based on my past experiences, or on being
+promulgated by some big names, but because they made sense if you just think about them from first
+principles. It's the other way around --- I fell in love with Rust and Pieter's writing because of
+the quality of the ideas. And I only needed common sense to assess the ideas, no decade in the
+industry required.
+
+This applies to the present blog post --- engage with ideas, remix them, and improve them. Don't
+treat the article as a mere cook book, it is not.
+
+## Not Rocket Science Rule
+
+I feel like I link
+<https://graydon2.dreamwidth.org/1597.html>{.display}
+from every second post of mine, so I'll keep it short this time.
+
+- Only advance the tip of the master branch to a commit hash, for which you _already know_ the tests
+  results. That is, make a detached merge commit, test that, then move the tip.
+- Don't do it yourself, let the robot do it.
+
+The _direct_ benefit is asynchronizing the process of getting the code in. When you submit PR, you
+don't need to wait until CI is complete, and then make a judgement call if the results are fresh
+enough or you need to rebase to the new version of master branch. You just tell the robot "merge
+when the merge commit is green". The standard setup uses robots to create work for humans. Merge
+queue inverts this.
+
+But the true benefit is second-order! You can't really ask the robot nicely to let your very
+important PR in, despite a completely unrelated flaky failure elsewhere. You are forced to keep your
+CI setup tidy.
+
+There's also a third-order benefit. NRSR encourages holistic view of your CI, as a set of invariants
+that _actually_ hold for your software, a type-system of sorts. And that thinking makes you realize
+that every automatable check can be a test. Again, good epistemology helps: it's not the idea of bors
+that is most valuable, it's the reasoning behind that: "automatically maintain a repository of code
+that always passes all the tests", "monotonically increasing test coverage". Go re-read Graydon's
+post!
+
+## Tidy Script
+
+This is another idea borrowed from Rust. Use a `tidy` file to collect various project-specific
+linting checks as tests. The biggest value of such
+[`tidy.zig`](https://github.com/tigerbeetle/tigerbeetle/blob/0.16.66/src/tidy.zig)
+is its mere existence. It's much easier to add a new check than to create "checking infrastructure".
+Some checks we do at TigerBeetle:
+
+- No large binary blobs in big history. Don't repeat my rust-analyzer mistake here, and look for
+  actual git objects, not just files in the working repository. Someone once sneaked 1MiB of
+  reverted protobuf nonsense past me and my file-based check.
+- Line & function length.
+- No problematic (for our use case) std APIs are used.
+- No `// FIXME` comments. This is used positively --- I add `// FIXME` comments to code I want to
+  change before the merge (this one is also from Rust!).
+- No dead code (Zig specific, as the compiler is not well-positioned to tackle that, due to lazy
+  compilation model).
+
+Pro tip for writing tidings --- shell out to `git ls-files -z` to figure out what needs tidying.
+
+## DevHub
+
+I don't remember the origin here, but
+<https://deno.com/benchmarks>{.display}
+certainly is an influence.
+
+The habit is to maintain, for every large project, a directory with static files which is directly
+deployed from the master branch as a project's internal web page. E.g., for TigerBeetle:
+
+- <https://github.com/tigerbeetle/tigerbeetle/tree/0.16.66/src/devhub>
+- <http://tigerbeetle.github.io/tigerbeetle/>
+
+Again, motivation is mere existence and removal of friction. This is an office whiteboard which you
+can just write on, for whatever purpose! Things we use ours for:
+
+- Release rotation.
+- Benchmark&fuzzing results. This is a bit of social engineering: you check DevHub out of anxiety,
+  to make sure its not your turn to make a release this week, but you get to spot performance
+  regressions!
+- Issues in needs of triaging.
+
+I gave a talk about using DevHub for visualizing fuzzing results for HYTRADBOI
+([video](https://www.hytradboi.com/2025/c222d11a-6f4d-4211-a243-f5b7fafc8d79-rocket-science-of-simulation-testing))
+
+Another tip: JSON file in a git repository is a fine database to power such an internal website.
+[JSONMutexDB](https://tailscale.com/blog/an-unlikely-database-migration) for the win.
+
+## Micro Benchmarks
+
+The last one for today, and the one that prompted this article! I am designing a new mechanical
+habit for TigerBeetle and I want to capture the process while it is still fresh in my mind.
+
+It starts with something rotten. Micro benchmarks are hard. You write one when you are working on
+the code, but then it bitrots, and by the time the next person has a brilliant optimization idea,
+they can not compile the benchmark anymore, and they also have no idea which part of the three pages
+of output is important.
+
+A useful trick for solving bitrot is to chain a new habit onto an existing one. Avoid multiplying
+entry points ([_O(1) Build File_](https://matklad.github.io/2023/12/31/O(1)-build-file.html)). The
+appropriate entry point here are the tests. So each micro benchmark is going to be just a test:
+
+```zig
+test "benchmark: binary search" {
+    // ...
+}
+```
+
+Bitrot problem solved. Now we have two new ones. _First_ is that you generally want to run the
+benchmark long enough to push the times into human range (~2 seconds), so that any improvements are
+immediately, viscerally perceived. But 2 seconds are too slow for a test, _and_ test are usually run
+in Debug mode. The second problem is that you want to see the timing outcome of the benchmark
+printed when you run that benchmark. But you don't want to see the output when you run the tests!
+
+So, we really want two modes here: in the first mode, we really are running a benchmark, it is
+compiled with optimizations, we aim to make runtime low seconds at least, and we want to print the
+seconds afterwards. In the second mode, we are running our test suite, and we want to run the
+benchmark just for some token amount of time. DWIM (do what I mean) principle helps here. We run
+the entire test suite as
+[`./zig/zig build test`,]{.display}
+and a single benchmark as
+[`./zig/zig build test -- "benchmark: search"`]{.display}
+So we use the shape of CLI invocation to select benchmarking mode.
+
+This `mode` then determines whether we should pick large or small parameters. Playing around with
+the code, it feels like the following is a nice shape of code to get parameter values:
+
+```zig
+var bench = Bench.init();
+
+const element_count =
+    bench.parameter("element_count", 1_000, 10_000_000);
+
+const search_count =
+    bench.parameter("search_count", 5_000, 500_000);
+```
+
+The small value is test mode, the big value is benchmark mode, and the name is useful to print
+actual parameter value:
+
+```zig
+bench.report("{s}={}", .{ name, value });
+```
+
+This `report` function is what decides whether to swallow (test mode) or show (benchmark mode) the
+output. Printing the values is useful to make copy-pasted benchmarking results obvious without
+context. And, now that we have put the names in, we get to override values of parameters via
+environmental variables for free!
+
+And this is more or less it? We now have a standard pattern to grow the set of microbenchmarks,
+which feels like it should hold up with the time passing?
+
+<https://github.com/tigerbeetle/tigerbeetle/pull/3405>
+
+Check back in a couple of years to see if this mechanical habit sticks!
