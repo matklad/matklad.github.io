@@ -1,0 +1,134 @@
+# Do Not Optimize Away
+
+Compilers are sneaky beasts. If you time code like this:
+
+```zig
+var total: u32 = 0;
+for (0..N) |i| total += i;
+print("total={}", .{total});
+```
+
+You will discover that LLVM is as smart as a little kid named Gauss, and replaces the summation
+with an equivalent formula [`
+<math>
+  <mfrac>
+    <mrow>
+      <mi>N</mi>
+      <mo>(</mo>
+      <mi>N</mi>
+      <mo>+</mo>
+      <mn>1</mn>
+      <mo>)</mo>
+    </mrow>
+    <mn>2</mn>
+  </mfrac>
+</math>
+`{=html}.]{.display}
+
+What's more, if you write something more complicated like [`total += i + 2*i*i - i*i*i`,]{.display}
+you'll see that LLVM figures out a closed-form expression for that as well (a generalization
+of the Gauss trick I proudly figured out in 11th grade). See for yourself:
+<https://godbolt.org/z/T9EcTb8zq>{.display}
+
+Usually, this kind of thing is desirable --- code runs faster! Except when you are trying to
+benchmark your code, and instead end up benchmarking an elaborate no-op.
+
+
+There are two pitfalls with benchmarking. _First_, in
+
+```zig
+const start = now();
+_ = computation()
+const elapsed = now() - start;
+```
+
+a reasonable compiler can notice that `computation`'s result is not used, and optimize the entire
+computation away.
+
+_Second_, in
+
+```zig
+const parameter_a = 1_000_000;
+const parameter_b = 1_000;
+
+const start = now();
+_ = computation(parameter_a, parameter_b);
+const elapsed = now() - start;
+```
+
+even if the computation is not elided as a whole, compiler can constant-fold parts of it, taking
+advantage of the fact that values of parameters are known at compile time.
+
+## Time To Be Killing The Dragon Again
+
+Usually languages provide some sort of an explicit "please do not optimize this away" function, like
+Rust's `hint::black_box` or Zig's `mem.doNotOptimizeAway`, but they always felt like dragon oil to
+me:
+
+- Their semantics is tricky. It is sort of impossible to explain what exactly can and can not be
+  optimized: the whole compilation pipeline is based on erasing everything about the original form
+  of the code, maintaining only the semantics.
+- There's a simpler and more direct way to achieve the desired result. Just open the box and check
+  if the cat is there!
+
+It's easier to explain via an example. Let's say I am benchmarking binary search:
+
+```zig
+fn insertion_point(xs: []const u32, x: u32) usize { ... }
+```
+
+I would use the following benchmarking scaffold:
+
+{highlight="3,5,15,19"}
+```zig
+fn benchmark(arena: Allocator) !void {
+    const element_count =
+        try parameter("element_count", 1_000_000);
+    const search_count =
+        try parameter("search_count", 10_000);
+
+    const elements: []const u32 =
+        make_elements(arena, element_count);
+    const searches: []const u32 =
+        make_searches(arena, search_count);
+
+    const start = now();
+    var hash: u32 = 0;
+    for (searches) |key| {
+        hash +%= insertion_point(elements, key);
+    }
+    const elapsed = now().duration_since(start);
+
+    print("hash={}\n", .{hash});
+    print("elapsed={}\n", .{elapsed});
+}
+
+fn parameter(comptime name: []const u8, default: u64) !u64 {
+    const value = if (process.hasEnvVarConstant(name))
+        try process.parseEnvVarInt(name, u64, 10)
+    else
+        default;
+    print(name ++ "={}\n", .{value});
+}
+```
+
+On the input side, the `parameter` function takes a symbolic name and a default value. It looks up
+the value among the environmental variables, with fallback. Because the value _can_ be specified at
+runtime, compiler can't optimize assuming a particular constant. And you also get a convenient way
+to re-run benchmark with a different set of parameters without recompiling.
+
+On the output side, we compute an (extremely weak) "hash" of the results. For our binary search ---
+just the sum of all the indexes. Then we print this hash together with the timing information.
+Because we use the results of our computation, compiler can't optimize them away!
+
+Similarly to the `parameter` function, we also get a bonus feature for free. You know who also
+_loves_ making code faster by deleting "unnecessary" functionality? I do! Though I am not as smart
+as a compiler, and usually end up deleting code that actually _is_ required to get the right answer.
+With the hash, if I mess my optimization work to the point of getting a wrong answer, I
+_immediately_ see that reflected in an unexpected value of the hash.
+
+Consider avoiding black boxes for your next benchmark. Instead, stick to natural
+anti-optimizing-compiler remedies:
+
+- Make input parameters runtime overridable (with compile time defaults),
+- print the result (or the hash thereof).
