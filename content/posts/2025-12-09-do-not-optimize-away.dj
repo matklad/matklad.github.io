@@ -65,11 +65,12 @@ Usually languages provide some sort of an explicit "please do not optimize this 
 Rust's `hint::black_box` or Zig's `mem.doNotOptimizeAway`, but they always felt like dragon oil to
 me:
 
-- Their semantics is tricky. It is sort of impossible to explain what exactly can and can not be
-  optimized: the whole compilation pipeline is based on erasing everything about the original form
-  of the code, maintaining only the semantics.
-- There's a simpler and more direct way to achieve the desired result. Just open the box and check
-  if the cat is there!
+- Their meaning is tricky. The whole compilation pipeline is based on erasing everything about the
+  original form of the code, maintaining only the semantics. But `black_box` is transparent in the
+  semantic spectrum! It is unexplainable using the normal "semantics-preserving transformations"
+  compiler vocabulary.
+- There's a _simpler_ and _more direct_ way to achieve the desired result. Just open the box and
+  check if the cat is there!
 
 It's easier to explain via an example. Let's say I am benchmarking binary search:
 
