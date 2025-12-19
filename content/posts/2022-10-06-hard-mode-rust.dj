@@ -304,7 +304,7 @@ in_parallel(&|| {
 
 This is _similar_ to a typical threadpool, but different.
 Similar to a threadpool, there's a number of threads (typically one per core) which execute arbitrary jobs.
-The first difference is that a typical threadpool sends a job to to a single thread, while in this design the same job is broadcasted to all threads.
+The first difference is that a typical threadpool sends a job to a single thread, while in this design the same job is broadcasted to all threads.
 The job is `Fn + Sync` rather than `FnOnce + Send`.
 The second difference is that we _block_ until the job is done on all threads, so we can borrow data from the stack.
 
