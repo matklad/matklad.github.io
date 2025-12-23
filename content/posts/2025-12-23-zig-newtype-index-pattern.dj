@@ -1,0 +1,175 @@
+# Newtype Index Pattern In Zig
+
+In efficiency-minded code, it is idiomatic to use indexes rather than pointers. Indexes have several
+advantages:
+
+_First_, they save memory. Typically a 32-bit index is enough, a saving of four bytes per pointer on
+64-bit architectures. I haven't seen this measured, but my gut feeling is that this is much more
+impactful than it might initially seem. On modern architectures, saving memory saves time (and
+energy) as well, because the computing bottleneck is often the bit pipe between the memory and the
+CPU, not the computation per se. Dense data structures use CPU cache more efficiently, removing
+prohibitive latency of memory accesses. Bandwidth savings are even better: smaller item size
+obviously improves bandwidth utilization, but having more items in cache obviates the need to use
+the bandwidth in the first place. Best case, the working set fits into the CPU cache!
+
+Note well that memory savings are evenly spread out. Using indexes makes every data structure
+slightly more compact, which improves performance across the board, regardless of hotspot
+distribution. It's hard to notice a potential for such saving in a profiler, and even harder to test
+out. For these two reasons, I would default to indexes for code where speed matters, even when I
+don't have the code written yet to profile it!
+
+There's also a more subtle way in which indexes save memory. Using indexes means storing multiple
+items in an array, but such dense storage contains extra information in relative positions of the
+items. If you need to store a list of items, you can often avoid materializing the list of indexes
+by storing a range "pointing" into the shared storage. Occasionally, you can even do UTF-8 trick and
+use just a single bit to mark the end of a list.
+
+_The second_ benefit of indexes is more natural modeling of cyclic and recursive data structures.
+Creating a cycle fundamentally requires mutability somewhere ("tying the knot" in Haskell relies on
+mutability of lazy thunks). This means that you need to make some pointers nullable, and that
+usually gets awkward even without borrow checker behind your back. Even without cycles and just
+recursion, pointers are problematic, due to a combination of two effects:
+
+- pointers encourage recursive functions, and
+- recursive data structures lead to arbitrary long (but finite) chains of pointers.
+
+The combination works fine at small scale, but then it fails with stack overflow in production every
+single time, requiring awkward work-arounds. For example, `rustc` serializes error traces from
+nested macro expansions as a deeply nested tree of JSON objects, which requires using
+[stacker](https://docs.rs/stacker/latest/stacker/) hack when parsing the output (which you'll learn
+about only _after_ crashes in the hands of macro connoisseur users).
+
+_Finally_, indexes greatly help serialization, they make it trivial to communicate data structures
+both through space (sending a network message) and time (saving to disk and reading later). Indexes
+are naturally relocatable, it doesn't matter where in memory they are. But this is just a half of
+serialization benefit. The other is that, because everything is in few arrays, you can do bulk
+serialization. You don't need to write the items one by one, you can directly `memcpy` arrays around
+(but be careful to not leak data via padding, and be sure to checksum the result).
+
+The big problem with "naive" `u32` indexes is of course using the right index with the wrong array,
+or vice verse. The standard solution here is to introduce a newtype wrapper around the raw index.
+[@andrewrk](https://codeberg.org/andrewrk) recently popularized a nice "happy accident of language
+design" pattern for this in Zig. The core idea is to define an index via non-exhaustive `enum`:
+
+```zig
+const ItemIndex = enum(u32) {
+    _
+};
+```
+
+---
+
+In Zig, `enum` designates a strongly-typed collection of integer constants, not a Rust-style ADT
+(there's `union(enum)` for that). By default an backing integer type is chosen by the compiler, but
+you can manually override it with `enum(u32)` syntax:
+
+```zig
+const Color = enum(u16) { red, green, blue };
+```
+
+Finally, Zig allows making enums non-exhaustive with `_`. In a non-exhaustive enum, any numeric
+value is valid, and some have symbolic labels:
+
+```zig
+const FontWeight = enum(u16) {
+    normal = 400,
+    bold = 700,
+
+    pub fn value(weight: FontWeight) u16 {
+        return @intFromEnum(weight);
+    }
+}
+
+test FontWeight {
+    assert(FontWeight.value(.normal) == 400);
+
+    const bold: FontWeight = @enumFromInt(700);
+    assert(bold == .bold);
+}
+```
+
+[`@intFromEnum`](https://ziglang.org/documentation/0.15.2/#intFromEnum) and
+[`@enumFromInt`](https://ziglang.org/documentation/0.15.2/#enumFromInt) builtins switch abstraction
+level between a raw integer and an enum value. So,
+
+```zig
+const ItemIndex = enum(u32) {
+    _
+};
+```
+
+ is a way to spell "`u32`, but a distinct type". Note that there's no _strong_ encapsulation
+ boundary here, anyone can `@enumFromInt`. Zig just doesn't provide language-enforced encapsulation
+ mechanisms.
+
+ Putting everything together, this is how I would model n-ary tree with parent pointers in Zig:
+
+ ```zig
+ pub const Tree = struct {
+    nodes: []const Node.Data,
+
+    pub const Node = enum(u32) {
+        root = 0,
+        invalid = std.math.maxInt(u32),
+        _,
+
+        pub const Data = struct {
+            parent: Node, // .invalid means no parent.
+            children: struct {
+                index: u32,
+                count: u32,
+            },
+
+            comptime {
+                assert(@sizeOf(Data) == 12);
+            }
+        };
+    };
+
+    fn get(
+        tree: *const Tree,
+        node: Node,
+    ) Node.Data {
+        return tree.nodes[@intFromEnum(node)];
+    }
+
+    pub fn parent(
+        tree: *const Tree,
+        node: Node,
+    ) ?Node {
+        const result = tree.get(node).parent;
+        return if (result == .invalid) null else result;
+    }
+
+    pub fn children(
+        tree: *const Tree,
+        node: Node,
+    ) []const Node {
+        const range = tree.get(node).children;
+        return tree.nodes[range.index..][0..range.count];
+    }
+};
+```
+
+Some points of note:
+
+* As usual with indexes, you start with defining the collective noun first, a `Tree` rather than a
+  `Node`.
+* In my experience, you usually don't want `Index` suffix in your index types, so `Node` is just
+  `enum(u32)`, not the underlying data.
+* Nested types are good! `Node.Data` feels just right.
+* For readability, the order is fields, then nested types, then functions.
+* In `Node`, we have a couple of symbolic constants. `.root` is for the root node that is stored
+  first, `.invalid` for whenever we want to apply offensive programing and make bad indexes blow up.
+  Here, we use `.invalid` for "null" parent. An alternative would be to use `?Node`, but that would
+  waste of space, or making the root its own parent.
+* If you care about performance, its a good idea to `comptime assert` sizes of structures, not to
+  prevent changes, but as a comment that explains to the reader just how the large the struct is.
+* I don't know if I like `index/count` or `start/end` more for representing ranges, but I use the
+  former just because the names align in length.
+* Both `tree.method(node)` and `node.method(tree)` are reasonable shapes for the API. I don't know
+  which one I prefer more. I default to the former because it works even if there are several node
+  arguments.
+
+P.S. Apparently I also wrote a Rust version of this post a while back?
+[<https://matklad.github.io/2018/06/04/newtype-index-pattern.html>]{.display}
