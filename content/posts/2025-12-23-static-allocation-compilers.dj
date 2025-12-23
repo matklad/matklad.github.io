@@ -1,0 +1,72 @@
+# Static Allocation For Compilers
+
+TigerBeetle famously
+[uses "static allocation"](https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/internals/ARCHITECTURE.md#static-memory-allocation).
+Infamously, the use of the term is idiosyncratic: what is meant is _not_ `static` arrays, as found
+in embedded development, but rather a weaker "no allocation after startup" form. The amount of
+memory TigerBeetle process uses is not hard-coded into the Elf binary. It depends on the runtime
+command line arguments. However, all allocation happens at startup, and there's no deallocation. The
+long-lived event loop goes round and round happily without `alloc`.
+
+I've wondered for years if a similar technique is applicable to compilers. It seemed impossible, but
+today I've managed to extract something actionable from this idea?
+
+## Static Allocation
+
+Static allocation depends on the physics of the underlying problem. And distributed databases have
+surprisingly simple physics, at least in the case of TigerBeetle.
+
+The only inputs and outputs of the system are messages. Each message is finite in size (1MiB). The
+actual data of the system is stored on disk and can be arbitrarily large. But the diff applied by a
+single message is finite. And, if your input is finite, and your output is finite, it's actually
+quite hard to need to allocate extra memory!
+
+This is worth emphasizing --- it might seem like doing static allocation is tough and requires
+constant vigilance and manual accounting for resources. In practice, I learned that it is
+surprisingly compositional. As long as inputs and outputs of a system are finite, non-allocating
+processing is easy. And you can put two such systems together without much trouble.
+[routing.zig](https://github.com/tigerbeetle/tigerbeetle/blob/0.16.67/src/vsr/routing.zig) is a good
+example of such an isolated subsystem.
+
+The only issue here is that there isn't a physical limit on how many messages can arrive at the same
+time. Obviously, you can't process arbitrary many messages simultaneously. But in  the context of a
+distributed system over an unreliable network, a safe move is to drop a message on the floor if the
+required processing resources are not available.
+
+Counter-intuitively, not allocating is simpler than allocating, provided that you can pull it off!
+
+## For Compilers
+
+Alas, it seems impossible to pull it off for compilers. You _could_ say something like "hey, the
+largest program will have at most one million functions", but that will lead to both wasted memory
+and poor user experience. You _could_ also use a single yolo arena of a fixed size, like I did in
+[_Hard Mode Rust_](https://matklad.github.io/2022/10/06/hard-mode-rust.html), but that isn't at all
+similar to "static allocation". With arenas, the size is fixed explicitly, but you can OOM. With
+static allocation it is the opposite --- no OOM, but you don't know how much memory you'll need
+until startup finishes!
+
+The "problem size" for a compiler isn't fixed --- both the input (source code) and the output
+(executable) can be arbitrarily large. But that is _also_ the case for TigerBeetle --- the size of
+the database is not fixed, it's just that TigerBeetle gets to cheat and store it on disk, rather
+than in RAM. And TigerBeetle doesn't do "static allocation" on disk, it can fail with `ENOSPACE` at
+runtime, and it includes a dynamic block allocator to avoid that as long as possible by re-using no
+longer relevant sectors.
+
+So what we could say is that a compiler consumes arbitrarily large input, and produces arbitrarily
+large output, but those "do not count" for the purpose of static memory allocation. At the start, we
+set aside an "output arena" for storing finished, immutable results of compiler's work. We then say
+that this output is accumulated after processing a sequence of chunks, where chunk size is strictly
+finite.  While limiting the total size of the code-base is unreasonable, limiting a single file to,
+say, 4 MiB (runtime-overridable) is fine. Compiling then essentially becomes a "stream processing"
+problem, where both inputs and outputs are arbitrary large, but the filter program itself must
+execute in O(1) memory.
+
+With this setup, it is natural to use indexes rather than pointers for "output data", which then
+makes it easy to persist it to disk between changes. And it's also natural to think about "chunks of
+changes" not only spatially (compiler sees a new file), but also temporally (compiler sees a new
+version of an old file).
+
+Is there any practical benefits here? I don't know! But seems worth playing around with! I feel that
+a strict separation between O(N) compiler output and O(1) intermediate processing artifacts can
+clarify compiler's architecture, and I won't be too surprised if O(1) processing in compilers would
+lead to simpler code the same way it does for databases?
