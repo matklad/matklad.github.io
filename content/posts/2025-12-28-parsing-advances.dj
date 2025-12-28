@@ -1,0 +1,213 @@
+# Parsing Advances
+
+I find myself writing yet another toy parser, as one does during a Christmas break. It roughly follows
+[_Resilient LL Parsing Tutorial_](https://matklad.github.io/2023/05/21/resilient-ll-parsing-tutorial.html).
+Not because I need resilience, but mostly because I find producing a syntax tree and a collection of
+diagnostics a more natural fit for the problem than bailing out on the first error.
+
+One practical pitfall with the approach is infinite loops/recursion. Resilience sometimes means
+_not_ consuming a token, and, if you do that in a loop or a Pratt recursive call, you'll get
+yourself an annoying to debug error:
+
+```
+running 1 test from ./src/corpus_test.ts
+corpus ...Task test deno test --allow-read=./src/corpus --allow-write=./src/corpus "--" "--update"
+Check src/corpus_test.ts
+
+<--- Last few GCs --->
+4,[26641:0x9d1574000]     7390 ms: Mark-Compact (reduce) 3924.9 (3927.3) -> 3924.9 (3926.3) MB, pooled: 0.0 MB, 1224.00 / 0.00 ms (+ 0.3 ms in 1 steps since start of marking, biggest step 0.3 ms, walltime since start of marking 1232 ms) (average mu = 0.200,[26641:0x9d1574000]     8804 ms: Mark-Compact (reduce) 4009.9 (4011.3) -> 4009.9 (4011.3) MB, pooled: 0.0 MB, 1294.67 / 0.00 ms (+ 0.2 ms in 1 steps since start of marking, biggest step 0.2 ms, walltime since start of marking 1302 ms) (average mu = 0.141,
+
+
+#
+# Fatal JavaScript out of memory: Ineffective mark-compacts near heap limit
+#
+==== C stack trace ===============================
+
+    0   deno                                0x0000000102ce8404 v8::base::debug::StackTrace::StackTrace() + 24
+    1   deno                                0x0000000102ceeb9c v8::platform::(anonymous namespace)::PrintStackTrace() + 24
+    2   deno                                0x0000000102ce4094 v8::base::FatalOOM(v8::base::OOMType, char const*) + 68
+    3   deno                                0x0000000102d3a7a8 v8::internal::V8::FatalProcessOutOfMemory(v8::internal::Isolate*, char const*, v8::OOMDetails const&) + 296
+    4   deno                                0x0000000102f37378 v8::internal::Heap::stack() + 0
+    5   deno                                0x0000000102f3581c v8::internal::Heap::CheckMemoryPressure() + 0
+    6   deno                                0x0000000102ead4f8 v8::internal::StackGuard::HandleInterrupts(v8::internal::StackGuard::InterruptLevel) + 504
+    7   deno                                0x000000010335fe44 v8::internal::Runtime_HandleNoHeapWritesInterrupts(int, unsigned long*, v8::internal::Isolate*) + 304
+    8   deno                                0x00000001043887b4 Builtins_CEntry_Return1_ArgvOnStack_NoBuiltinExit + 84
+    9   ???                                 0x0000000126997874 0x0 + 4942559348
+    10  ???                                 0x000000012698a758 0x0 + 4942505816
+...
+```
+
+For a concrete example, you might parse function argument list using code like this:
+
+```ts
+const result: ast.Expression[] = [];
+p.expect("(");
+while (!p.eof() && !p.at(")")) {
+  result.push(expression(p));
+  if (!p.at(")")) p.expect(",");
+}
+p.expect(")");
+return result;
+```
+
+The implicit contract here is that `expression` consumes at least one token, even if there are
+errors in the source code. If there's some token that makes `expression` bail without consuming
+anything, the code loops forever, and you'll need a debugger to get at the stack trace!
+
+The way I solved this issue traditionally is via a combination of two techniques:
+
+_Fuel:_ parser has a `fuel: Cell<u32>` field, which is decremented even by "readonly" lookahead
+methods, and topped up every time the parser consumes a token. Fuel is useful to make you parser
+crash somewhat cleanly, though the crash is typically still removed from problematic function by
+several stack frames.
+
+The second technique is to maintain a mental map of functions which always consume at least one
+token of input, and functions which might bail without consuming anything. And, whenever you write a
+loop or a recursive call, consult this map to be sure to call at least one token-consuming function.
+Hard and error prone!
+
+Well, I think I've figured something better today! You can assert that parser did advance when you
+expect it two. The _smaller_ benefit here is that if parser didn't advance, you get an immediate
+error. The _bigger_ benefit is that these asserts materialize the mental map of advancing functions
+in the source code, so it doesn't have to be mental anymore!
+
+This seems like an obvious idea in retrospect, but, well, took me more than one parser to figure it
+out!
+
+Concretely, I came up with the following base parser API:
+
+```ts
+class Parser {
+  private tokens: ast.Token[];
+  private index: number = 0;
+  private advances: number[] = [];
+
+  advance_push() {
+    this.advances.push(this.index);
+  }
+  advance_pop() {
+    const advance = this.advances.pop();
+    assert(advance !== undefined);
+    assert(advance < this.index);
+  }
+  advance_drop() {
+    const advance = this.advances.pop();
+    assert(advance !== undefined);
+  }
+}
+```
+
+And here is the buggy function that lead to the error at the start of the article:
+
+```ts
+function expression_pratt(
+  p: Parser,
+  left: ast.TokenTag,
+): ast.Expression {
+  let lhs: ast.Expression = expression_delimited(p);
+
+  while (p.at("(")) {
+    lhs = expression_call(p, lhs);
+  }
+
+  while (true) {
+    const right = p.token();
+    if (expression_pratt_right_binds_tighter(left, right.tag)) {
+      const rhs = expression_pratt(p, right.tag);
+      lhs = {
+        tag: "ExpressionBinary",
+        location: right.location,
+        operator: right.tag as ast.BinaryOperation,
+        lhs,
+        rhs,
+      };
+    } else {
+      return lhs;
+    }
+  }
+}
+```
+
+The same function, but with advanced assertions:
+
+{highlight="12,24,27"}
+```ts
+function expression_pratt(
+  p: Parser,
+  left: ast.TokenTag,
+): ast.Expression {
+  let lhs: ast.Expression = expression_delimited(p);
+
+  while (p.at("(")) {
+    lhs = expression_call(p, lhs);
+  }
+
+  while (true) {
+    p.advance_push();
+    const right = p.token();
+    if (expression_pratt_right_binds_tighter(left, right.tag)) {
+      const rhs = expression_pratt(p, right.tag);
+      lhs = {
+        tag: "ExpressionBinary",
+        location: right.location,
+        operator: rhs.tag as ast.BinaryOperation,
+        lhs,
+        rhs,
+      };
+    } else {
+      p.advance_drop();
+      return lhs;
+    }
+    p.advance_pop();
+  }
+}
+```
+
+The new error message:
+
+```
+running 1 test from ./src/corpus_test.ts
+corpus ... FAILED (11ms)
+
+ ERRORS
+
+corpus => ./src/corpus_test.ts:47:6
+error: Error: assertion failed
+  if (!condition) throw new Error("assertion failed");
+                        ^
+    at assert (./src/stdx.ts:2:25)
+    at Parser.advance_pop (./src/parse.ts:132:5)
+    at expression_pratt (./src/parse_grammar.ts:169:7)
+    at expression (./src/parse_grammar.ts:143:10)
+    at expression_block (./src/parse_grammar.ts:305:21)
+    at declaration_fun (./src/parse_grammar.ts:73:7)
+    at declaration (./src/parse_grammar.ts:25:12)
+    at Module.file (./src/parse_grammar.ts:10:15)
+    at Module.parse (./src/parse.ts:13:18)
+    at ast_dump (./src/corpus_test.ts:85:22)
+```
+
+and the fix:
+
+{highlight="5"}
+```ts
+  while (true) {
+    p.advance_push();
+    const right = p.token();
+    if (expression_pratt_right_binds_tighter(left, right.tag)) {
+      p.bump();
+      const rhs = expression_pratt(p, right.tag);
+      lhs = {
+        tag: "ExpressionBinary",
+        location: right.location,
+        operator: rhs.tag as ast.BinaryOperation,
+        lhs,
+        rhs,
+      };
+    } else {
+      p.advance_drop();
+      return lhs;
+    }
+    p.advance_pop();
+  }
+```
