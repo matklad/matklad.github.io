@@ -1,0 +1,160 @@
+# The Second Great Error Model Convergence
+
+I feel like this has been said before, more than once, but I want to take a moment to note that
+most modern languages converged to the error management approach described in Joe Duffy's
+[_The Error Model_](https://joeduffyblog.com/2016/02/07/the-error-model/#recoverable-errors-type-directed-exceptions),
+which is a generational shift from the previous consensus on exception handling.
+
+C++, JavaScript, Python, Java, C# all have roughly equivalent `throw`, `catch`, `finally`
+constructs with roughly similar runtime semantics and typing rules. Even functional languages like
+Haskell, OCaml, and Scala feature exceptions prominently in their grammar, even if their usage is
+frowned upon by parts of the community.
+
+But the same can be said about Go, Rust, Swift, and Zig! Their error handling is similar to each
+other, and quite distinct from the previous bunch, with Kotlin and Dart being notable, ahem,
+exceptions. Here are some commonalities of modern error handling:
+
+_First_, and most notably, functions that can fail are annotated at the call side. While the old way
+looked like this:
+
+```java
+Widget widget = make_widget();
+```
+
+the new way is
+
+```rust
+let widget = make_widget()?;
+```
+
+```zig
+const widget = try make_widget();
+```
+
+```swift
+let widget = try makeWidget()
+```
+
+```go
+widget, err := makeWidget()
+if err != nil {
+    return err
+}
+```
+
+There's a syntactic marker alerting the reader that a particular operation is fallible, though the
+verbosity of the marker varies. For the writer, the marker ensures that changing the function
+contract from infallible to fallible (or vice versa) requires changing not only the function
+definition itself, but the entire call chain. On the other hand, adding a new error condition to a
+set of possible errors of a fallible function generally _doesn't_ require reconsidering rethrowing
+call-sites.
+
+_Second_, there's a separate, distinct mechanism that is invoked in case of a detectable bug. In
+Java, index out of bounds or null pointer dereference (examples of programming errors) use the same
+language machinery as operational errors. Rust, Go, Swift, and Zig use a separate panic path. In Go
+and Rust, panics unwind the stack, and they are recoverable via a library function. In Swift and
+Zig, panic aborts the entire process. Operational error of a lower layer can be classified as a
+programming error by the layer above, so there's generally a mechanism to escalate an erroneous
+result value to a panic. But the opposite is more important: a function which does only "ordinary"
+computations _can_ be buggy, and _can_ fail, but such failures are considered _catastrophic_ and are
+invisible in the type system, and sufficiently transparent at runtime.
+
+_Third_, results of fallible computation are first-class values, as in Rust's `Result<T, E>`.
+There's generally little type system machinery dedicated exclusively to errors and `try` expressions
+are just a little more than syntax sugar for that little Go spell. This isn't true for Swift, which
+does treat errors specially. For example, the generic
+[`map`](https://developer.apple.com/documentation/swift/sequence/map(_:)) function has to explicitly
+care about errors, and hard-codes the decision to bail early:
+
+```swift
+func map<T, E>(
+    _ transform: (Self.Element) throws(E) -> T
+) throws(E) -> [T] where E : Error
+```
+
+Swift does provide [first-classifier type](https://developer.apple.com/documentation/swift/result)
+for errors.
+
+Should you want to handle an exception, rather than propagate it, the handling is localized to
+a single throwing expression to deal with a single specific errors, rather than with any error from
+a block of statements:
+
+```rust
+let widget = match make_widget() {
+    Ok(it) => it,
+    Err(WidgetError::NotFound) => default_widget(),
+};
+```
+
+```zig
+let widget = make_widget() catch |err| switch (err) {
+    error.NotFound => default_widget(),
+};
+```
+
+Swift again sticks to more traditional try catch, but, interestingly, Kotlin does have `try`
+expressions.
+
+---
+
+The largest remaining variance is in what the error value looks like. This still feels like a
+research area. This is a hard problem due to a fundamental tension:
+
+- On the one hand, at lower-levels you want to exhaustively enumerate errors to make sure that:
+
+    * internal error handling logic is complete and doesn't miss a case,
+    * public API doesn't leak any extra surprise error conditions.
+
+- On the other hand, at higher-levels, you want to string together widely different functionality
+  from many separate subsystems without worrying about specific errors, other than:
+
+    * separating fallible functions from infallible,
+    * ensuring that there is some top-level handler to show a 500 error or an equivalent.
+
+The two extremes are well understood. For exhaustiveness, nothing beats sum types (`enum`s in Rust).
+This I think is one of the key pieces which explains why the pendulum seemingly swung back on
+checked exceptions.
+
+In Java, a method can throw one of the several exceptions:
+
+```java
+void f() throws FooException, BarException;
+```
+
+Critically, you _can't_ abstract over this pair. The call chain has to either repeat the two cases,
+or type-erase them into a superclass, losing information. The former has a nasty side-effect that
+the entire chain needs updating if a third variant is added. Java-style checked exceptions are
+sensitive to "N to N + 1" transitions. Modern value-oriented error management is only sensitive  to
+"0 to 1" transition.
+
+Still, if I am back to writing Java at any point, I'd be _very_ tempted to standardize on
+coarse-grained `throws Exception` signature for all throwing methods. This is exactly the _second_
+well understood extreme: there's a type-erased universal error type, and the "throwableness" of a
+function contains one bit of information. We only care _if_ the function can throw, and the error
+itself can be whatever. You still can downcast dynamic error value handle specific conditions, but
+the downcasting is not checked by the compiler. That is, downcasting is "save" and nothing will
+panic in the error handling mechanism itself, but you'll never be sure if the errors you are
+handling can actually arise, and whether some errors _should_ be handled, but aren't.
+
+Go and Swift provide first-class universal errors, like Midori. Starting with Swift 4, you can also
+narrow the type down.
+
+Rust doesn't really have super strong conventions about the errors, but it started with mostly
+enums, and then `failure` and `anyhow` shone spotlight on the universal error type.
+
+But overall, it feels like "midpoint" error handling is poorly served by either extreme. In larger
+applications, you sorta care about error kinds, and there are usually a few place where it is pretty
+important to be exhaustive in your handling, but threading necessary types to those few places
+infects the rest of the codebases, and ultimately leads to "a bag of everything" error types with
+many "dead" variants.
+
+Zig makes an interesting choice of assuming mostly closed-world compilation model, and relying on
+cross-function inference to learn who can throw what.
+
+---
+
+What I find the most fascinating about the story is the generational aspect. There really was a
+strong consensus about exceptions, and then [an agreement that checked exceptions are a
+failure](https://www.artima.com/articles/the-trouble-with-checked-exceptions), and now, suddenly, we
+are back to "checked exceptions" with a twist, in the form of "errors are values" philosophy. What
+happened between the lull of the naughts and the past decade industrial PLT renaissance?
