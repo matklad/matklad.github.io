@@ -1,0 +1,130 @@
+# Memory Safety Is ...
+
+Memory safety is one of those elusive concepts like intelligence, consciousness, or
+[porn](https://en.wikipedia.org/wiki/I_know_it_when_I_see_it), that resist attempts to be put to
+words. Thus, I am not going to attempt to define it. Instead, I want to poke holes in definitions of
+others.
+
+Note that the present post is 90% sophistry in the style of Zeno --- I don't think you need a
+water-tight definition to have a reasonable discussion, and no definition can save an unreasonable
+one. But thinking _about_ definitions focuses the mind.
+
+The crux of my argument:
+
+> Memory safety is a property of an _implementation_.
+
+That's the problem with many definitions --- they are about a wrong kind of thing, and are confused
+for that reason. For example, a definition used in
+[_Memory Safety for Skeptics_](https://queue.acm.org/detail.cfm?id=3773095):
+
+> A program execution is memory safe so long as a particular list of bad things, called
+> memory-access errors, never occur:
+>
+> - Buffer overflow
+> - Null pointer dereference
+> - Use after free
+> - Use of uninitialized memory
+> - Illegal free (of an already freed pointer, or a non-malloc-ed pointer)
+
+This is obvious nonsense! Java programs dereference null pointers all the time! And on typical
+architectures dereferencing a null pointer in user-space is well-defined to trap. Many JVMs
+implement Java-level NPE checks by relying on OS-level segfaults!
+
+Another popular definition comes from
+[_Type Systems_](https://courses.grainger.illinois.edu/cs421/fa2018/CS421A/resources/cardelli.pdf)
+paper by Luca Cardelli.
+
+> A program fragment is safe if it does not cause untrapped errors to occur.
+> Languages where all program fragments are safe are called safe languages.
+
+This definition is not wrong, but it is vacuous. It is internally consistent, but doesn't define
+anything useful.
+
+To see that we need to sketch our domain of discourse.
+
+We start with a source language, L, such as Java or C. L is defined by its syntax and semantics.
+Syntax defines the set of programs, and semantics ascribes meaning to them. Semantics is necessarily
+defined in terms of _abstract_ machine LM --- a mathematical device that captures all the real and
+"virtual" state to explain execution behavior of a program. For example, in languages with pointer
+provenance, provenance is a concrete "field" of every pointer in the abstract machine.
+
+In addition to LM (abstract machine), we also have a concrete machine CM on hand, such as x86_64
+running Linux userspace, or Wasm in the browser. Concrete machine comes with its own language C and
+its own semantics.
+
+Finally, we have an implementation I that we use to run L programs on our concrete machine CM.
+Roughly, if P is an L program, then implementation transforms it to a C program with a matching
+semantics:
+
+```
+∀ P ∈ L:
+    I(P) ∈ C
+  ∧ LSema(P) ≈ CSema(I(P))
+```
+
+Concretely, if we have a Java program, we can reason about what this program does without thinking
+where it will run. It's a job of the JVM to faithfully preserve our mental model when the
+program is executed on an aarch64 laptop. See
+[Compcert](https://xavierleroy.org/publi/compcert-backend.pdf) paper for details.
+
+The key detail here is that on the level of abstract semantics, you simply can not have undefined
+behavior. For the specification to be consistent, you need to explain what abstract machine does in
+every case exhaustively, even if it is just "AM gets stuck". If UB is set complement to defined
+behaviors, then it is defined just as precisely!
+Again, Compcert paper _defines_ what UB is on
+[page 15](https://xavierleroy.org/publi/compcert-backend.pdf#page=15).
+
+And this is the problem I have with Cardelli's definition. It hinges on how we _name_ a particular
+set in our abstract semantics. If the set is called "trapped error" the language is safe, but if it
+is "undefined behavior", it is unsafe.
+
+This is useless! Here, I've just made a language called Lil-C, which exactly like C, except that
+every UB is formally defined to trap. It is safe! And it can run any C program! Have I just done
+anything useful? No!
+
+To recap, we have source language L, target language/machine C, and an implementation I that maps
+the former to the latter. Any memory safety definition should talk about I. If it talks about L or
+C, it can't be right.
+
+Cardelli's definition ends up being vacuous, because it tries to talk about L in isolation.
+
+"Skeptics" definition is doubly confused. It's unclear if it has L or C in mind (null pointer
+dereference in the source code, or in the generated machine code), but it would be wrong in either
+count, as it definitely doesn't touch I.
+
+As a positive example, consider [Fil-C](https://fil-c.org) (see also [_A note on
+Fil-C_](https://graydon2.dreamwidth.org/320265.html)). This is an _implementation_ of C that
+maintains C semantics, is safe, and is arguably sufficiently efficient to be practical. Unlike my
+Lil-C, Fil-C is a useful thing (and requires _much_ more effort to pull off).
+
+I know I promised not to define memory safety here, but, having skimmed that Compcert paper (hat tip
+to [@pervognsen](https://lobste.rs/s/va2mvi/without_futex_it_s_futile#c_uu3y6v)), I think I'll go
+out on a limb and just do it? Compcert paper defines backward simulation as a property that every
+behavior of a compiled program is a behavior of the source program (semantics of a program is a
+_set_ of behaviors, due to non-determinism). Using this article's notation:
+
+```
+P ∈ L        -- source program
+I: L -> C    -- implementation (e.g L to C compiler)
+I(P) ∈ C     -- compiled program
+LSema(P)     -- possible behaviors of P
+CSema(I(P))  -- behaviors of P under implementation I
+
+-- Backward simulation:
+∀B: B ∈ CSema(I(P)) => B ∈ LSema(P)
+```
+
+Memory safety is a weakening of backward simulation:
+
+```
+-- Memory safety of implementation I:
+MemorySafe(I) :=
+    ∀ P: ∀B: B ∈ CSema(I(P)) => (B ∈ LSema(P) ⋁ B = crash)
+```
+
+An implementation I of L is memory safe, if it cannot give rise to new, surprising behaviors, for
+arbitrary programs P (including buggy ones), except that crashing is allowed. As a smoke test, an
+implementation that produces programs that always immediately crash is safe according to this
+definition, as it should be.
+
+Thinking about definitions focuses the mind indeed!
