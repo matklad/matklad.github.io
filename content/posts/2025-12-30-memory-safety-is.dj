@@ -86,6 +86,14 @@ To recap, we have source language L, target language/machine C, and an implement
 the former to the latter. Any memory safety definition should talk about I. If it talks about L or
 C, it can't be right.
 
+Consider "dereference of a wild pointer". At the level of L, it is a well-defined operation that
+causes abstract machine to get stuck. It's _the job_ of abstract machine to precisely tell us which
+pointers are valid to dereference. At the level of C, this operation is also well defined! Physical
+address is looked up in the page table, protection bits are checked, an interrupt is raised if
+something's off, etc. Undefined Behavior and memory unsafety arise in _translation_ of semantics of
+L into C, where "stuck" L states give raise to "unexpected" behaviors in C, which can not be
+explained in terms of L.
+
 Cardelli's definition ends up being vacuous, because it tries to talk about L in isolation.
 
 "Skeptics" definition is doubly confused. It's unclear if it has L or C in mind (null pointer
