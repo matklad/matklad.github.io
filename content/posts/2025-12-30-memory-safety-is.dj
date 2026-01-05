@@ -53,7 +53,7 @@ running Linux userspace, or Wasm in the browser. Concrete machine comes with its
 its own semantics.
 
 Finally, we have an implementation I that we use to run L programs on our concrete machine CM.
-Roughly, if P is an L program, then implementation transforms it to a C program with a matching
+Roughly, if P is an L program, then an implementation transforms it to a C program with a matching
 semantics:
 
 ```
@@ -63,15 +63,14 @@ semantics:
 ```
 
 Concretely, if we have a Java program, we can reason about what this program does without thinking
-where it will run. It's a job of the JVM to faithfully preserve our mental model when the
-program is executed on an aarch64 laptop. See
-[Compcert](https://xavierleroy.org/publi/compcert-backend.pdf) paper for details.
+where it will run. It's a job of the JVM to faithfully preserve our mental model when the program is
+executed on an aarch64 laptop. See [Compcert](https://xavierleroy.org/publi/compcert-backend.pdf)
+paper for details.
 
 The key detail here is that on the level of abstract semantics, you simply can not have undefined
-behavior. For the specification to be consistent, you need to explain what abstract machine does in
-every case exhaustively, even if it is just "AM gets stuck". If UB is set complement to defined
-behaviors, then it is defined just as precisely!
-Again, Compcert paper _defines_ what UB is on
+behavior. For the specification to be consistent, you need to explain what the abstract machine does
+in every case exhaustively, even if it is just "LM gets stuck". If UB is set complement to defined
+behaviors, then it is defined just as precisely! Again, Compcert paper _defines_ what UB is on
 [page 15](https://xavierleroy.org/publi/compcert-backend.pdf#page=15).
 
 And this is the problem I have with Cardelli's definition. It hinges on how we _name_ a particular
