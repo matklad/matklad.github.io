@@ -1,0 +1,438 @@
+# Vibecoding #2
+
+I feel like I got substantial value out of Claude today, and want to document it. I am at the tail
+end of AI adoption, so I don't expect to say anything particularly useful or novel. However, I am
+constantly complaining about the lack of boring AI posts, so it's only proper if I write one.
+
+## Problem Statement
+
+At TigerBeetle, we are big on
+[deterministic simulation testing](https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/ARCHITECTURE.md#simulation-testing).
+We even use it
+[to track performance](https://tigerbeetle.com/blog/2025-11-28-tale-of-four-fuzzers/#fuzzer-5-can-i-count-no),
+to some degree. Still, it is crucial to verify performance numbers on a real cluster in its natural
+high-altitude habitat.
+
+To do that, you need to procure six machines in a cloud, get your custom version of `tigerbeetle`
+binary on them, connect cluster's replicas together and hit them with load. It feels like, quarter
+of a century into the third millennium, "run stuff on six machines" should be a problem just a notch
+harder than opening a terminal and typing `ls`, but I personally don't know how to solve it without
+wasting a day. So, I spent a day vibecoding my own square wheel.
+
+The _general_ shape of the problem is that I want to spin a fleet of ephemeral machines with given
+specs on demand and run ad-hoc commands in a SIMD fashion on them. I don't want to manually type
+slightly different commands into a six-way terminal split, but I also do want to be able to ssh into
+a specific box and poke it around.
+
+## Solution
+
+My idea for the solution comes from these three sources:
+
+* <https://github.com/catern/rsyscall>
+* <https://peter.bourgon.org/blog/2011/04/27/remote-development-from-mac-to-linux.html>
+* <https://github.com/dsherret/dax>
+
+The big idea of `rsyscall` is that you can program distributed system in direct style. When
+programming locally, you do things by issuing syscalls:
+
+```zig
+const fd = open("/etc/passwd");
+```
+
+This API works for doing things on remote machines, if you specify which machine you want to run the
+syscall on:
+
+```zig
+const fd_local = open(.host, "/etc/passwd");
+const fd_cloud = open(.{.addr = "1.2.3.4"}, "/etc/passwd");
+```
+
+Direct manipulation is the most natural API, and it pays to extend it over the network boundary.
+
+---
+
+Peter's post is an application of a similar idea to a narrow, mundane task of developing on Mac and
+testing on Linux. Peter suggests two scripts:
+
+`remote-sync` synchronizes a local and remote projects. If you run `remote-sync` inside `~/p/tb`
+folder, then `~/p/tb` materializes on the remote machine. `rsync` does the heavy lifting, and the
+wrapper script implements `DWIM` behaviors.
+
+It is typically followed by
+[`remote-run some --command`,]{.display}
+which runs command on the remote machine in the matching directory, forwarding output back to you.
+
+So, when I want to test local changes to `tigerbeetle` on my Linux box, I have roughly the following
+shell session:
+
+```console
+$ cd ~/p/tb/work
+$ code . # hack here
+$ remote-sync
+$ remote-run ./zig/zig build test
+```
+
+The killer feature is that shell-completion works. I first type the command I want to run, taking
+advantage of the fact that local and remote commands are the same, paths and all, then hit `^A` and
+prepend `remote-run` (in reality, I have `rr` alias that combines sync&run).
+
+The big thing here is not the commands per se, but the shift in the mental model. In a traditional
+ssh & vim setup, you have to juggle two machines with a separate state, the local one and the remote
+one. With `remote-sync`, the state is the same across the machines, you only choose whether you want
+to run commands here or there.
+
+With just two machines, the difference feels academic. But if you want to run your tests across
+_six_ machines, the ssh approach fails --- you don't want to re-vim your changes to source files six
+times, you really do want to separate the place where the code is edited from the place(s) where the
+code is run. This is a general pattern --- if you are not sure about a particular aspect of your
+design, try increasing the cardinality of the core abstraction from 1 to 2.
+
+---
+
+The third component, `dax` library, is pretty mundane --- just a JavaScript library for shell
+scripting. The notable aspects there are:
+
+* JavaScript's [template literals](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals),
+  which allow implementing command interpolation in a safe by construction way. When processing
+  [`` $`ls ${paths}` ``,]{.display}
+  a string is never materialized, it's arrays all the way to the `exec` syscall (
+  [more on the topic](https://matklad.github.io/2021/07/30/shell-injection.html)).
+* JavaScript's async/await, which makes managing _concurrent_ processes (local or remote) natural:
+
+  ```ts
+  await Promise.all([
+    $`sleep 5`,
+    $`remote-run sleep 5`,
+  ]);
+  ```
+* Additionally, deno specifically
+  [valiantly strives](https://docs.deno.com/api/deno/~/Deno.CommandOptions.detached)
+  to impose process-level structured concurrency, ensuring that no processes spawned by the script
+  outlive the script itself, unless explicitly marked `detached` --- a
+  [sour](https://github.com/oconnor663/duct.py/blob/0764961a8c799873a9375d4100ae9ddbee624594/gotchas.md#killing-grandchild-processes)
+  [spot](http://catern.com/process.html#orgaf6e157) of UNIX.
+
+---
+
+Combining the three ideas, I now have a deno script, called `box`, that provides a multiplexed
+interface for running ad-hoc code on ad-hoc clusters.
+
+A session looks like this:
+
+```console
+# Switch to project with local modifications
+$ cd ~/p/tb/work
+$ git status --short
+ M src/lsm/forest.zig
+
+# Spin up 3 machines, print their IPs
+$ box create 3
+108.129.172.206,52.214.229.222,3.251.67.25
+
+$ box list
+0 108.129.172.206
+1 52.214.229.222
+2 3.251.67.25
+
+# Move my code to remote machines
+$ box sync 0,1,2
+
+# Run pwd&ls on machine 0; now the code is there:
+$ box run 0 pwd
+/home/alpine/p/tb/work
+
+$ box run 0 ls
+CHANGELOG.md  LICENSE       README.md     build.zig
+docs/         src/          zig/
+
+# Setup dev env and run build on all three machines.
+$ box run 0,1,2 ./zig/download.sh
+Downloading Zig 0.14.1 release build...
+Extracting zig-x86_64-linux-0.14.1.tar.xz...
+Downloading completed (/home/alpine/p/tb/work/zig/zig)!
+Enjoy!
+
+# NB: using local commit hash here (no git _there_).
+$ box run 0,1,2 \
+    ./zig/zig build -Drelease -Dgit-commit=$(git rev-parse HEAD)
+
+# ?? is replaced by machine id
+$ box run 0,1,2 \
+    ./zig-out/bin/tigerbeetle format \
+    --cluster=0 --replica=?? --replica-count=3 \
+    0_??.tigerbeetle
+2026-01-20 19:30:15.947Z info(io): opening "0_0.tigerbeetle"...
+
+# Cleanup machines (they also shutdown themselves after 8 hours)
+$ box destroy 0,1,2
+```
+
+I like this! Haven't used in anger yet, but this is something I wanted for a long time, and now I
+have it
+
+## Structure
+
+The problem with implementing above is that I have zero practical experience with modern cloud. I
+only created my AWS account today, and just looking at the console interface ignited the urge to
+re-read The Castle. Not my cup of pu-erh. But I had a hypothesis that AI should be good at wrangling
+baroque cloud API, and it mostly held.
+
+I started with a couple of paragraphs of rough, super high-level description of what I want to get.
+Not a specification at all, just a general gesture towards unknown unknowns. Then I asked ChatGPT to
+expand those two paragraphs into a more or less complete spec to hand down to an agent for
+implementation.
+
+This phase surfaced a bunch of unknowns for me. For example, I wasn't thinking at all that I somehow
+need to identify machines, ChatGPT suggested using random hex numbers, and I realized that I do need
+0,1,2 naming scheme to concisely specify batches of machines. While thinking about this, I realized
+that sequential numbering scheme also has an advantage that I _can't_ have two concurrent clusters
+running, which is a desirable property for my use-case. If I forgot to shutdown a machine, I'd
+rather get an error on trying to re-create a machine with the same name, then to silently avoid the
+clash. Similarly, turns out the questions of permissions and network access rules are something to
+think about, as well as what region and what image I need.
+
+With the spec document in hand, I turned over to Claude code for actual implementation work. The
+first step was to further refine the spec, asking Claude if anything is unclear. There were couple
+of interesting clarifications there.
+
+First, the original ChatGPT spec didn't get what I meant with my "current directory mapping" idea,
+that I want to materialize a local `~/p/tb/work` as remote `~/p/tb/work`, even if `~` are different.
+ChatGPT generated an incorrect description _and_ an incorrect example. I manually corrected example,
+but wasn't able to write a concise and correct description. Claude fixed that working from the
+example. I feel like I need to internalize this more --- for current crop of AI, examples seem to be
+far more valuable than rules.
+
+Second, the spec included my desire to auto-shutdown machines once I no longer use them, just to
+make sure I don't forget to turn the lights off when leaving the room. Claude grilled me on what
+_precisely_ I want there, and I asked it to DWIM the thing.
+
+The spec ended up being 6KiB of English prose. The final implementation was 14KiB of TypeScript. I
+wasn't keeping the spec and the implementation perfectly in sync, but I think they ended up pretty
+close in the end. Which means that prose specifications are somewhat more compact than code, but not
+_much_ more compact.
+
+My next step was to try to just one-shot this. Ok, this is embarrassing, and I usually avoid
+swearing in this blog, but I just typoed that as "one-shit", and, well, that is one flavorful
+description I won't be able to improve upon. The result was just not good (more on why later), so I
+almost immediately decided to throw it away and start a more incremental approach.
+
+In my [previous vibe-post](https://matklad.github.io/2025/08/31/vibe-coding-terminal-editor.html), I
+noticed that LLM are good at closing the loop. A variation here is that LLMs are good at producing
+results, and not necessarily good code. I am pretty sure that, if I had let the agent to iterate on
+the initial script and actually _run_ it against AWS, I would have gotten something working. I
+didn't want to go that way for three reasons:
+
+- Spawning VMs takes time, and that significantly reduces the throughput of agentic iteration.
+- No way I let the agent run with a real AWS account, given that AWS doesn't have a fool-proof way
+  to cap costs.
+- I am fairly confident that this script will be a part of my workflow for at least several years,
+  so I care _more_ about long-term code maintenance, than immediate result.
+
+And, as I said, the code didn't feel good, for these specific reasons:
+
+- It wasn't the code that I would have written, it lacked my character, which made it hard for me
+  to understand it at a glance.
+- The code lacked any character whatsoever. It could have worked, it wasn't "naively bad", like the
+  first code you write when you are learning programming, but there wasn't anything good there.
+- I never know what the code _should_ be up-front. I don't design solutions, I discover them in the
+  process of refactoring. Some of my best work was spending a quiet weekend rewriting large
+  subsystems implemented before me, because, with _an_ implementation at hand, it was possible for
+  me to see the actual, beautiful core of what _needs_ to be done. With a slop-dump, I just don't
+  get to even see what could be wrong.
+- In particular, while you are working the code (as in "wrought iron"), you often go back to
+  requirements and change them. Remember that ambiguity of my request to "shut down idle cluster"?
+  Claude tried to DWIM and created some horrific mess of bash scripts, timestamp files, PAM policy
+  and systemd units. But the right answer there was "lets maybe not have that feature?" (in
+  contrast, simply shutting the machine down after 8 hours is a one-liner).
+
+The incremental approach worked much better, Claude is good at filling-in the blanks. The very first
+thing I did for `box-v2` was manually typing-in:
+
+```ts
+type CLI =
+  | CLICreate
+  | CLIDestroy
+  | CLIList
+  | CLISync
+
+type BoxList = string[];
+type CLICreate = { tag: "create"; count: number };
+type CLIDestroy = { tag: "destroy"; boxes: BoxList };
+type CLIList = { tag: "list" };
+type CLISync = { tag: "sync"; boxes: BoxList; };
+
+function fatal(message: string): never {
+  console.error(message);
+  Deno.exit(1);
+}
+
+function CLIParse(args: string[]): CLI {
+
+}
+```
+
+Then I asked Claude to complete the `CLIParse` function, and I was happy with the result. Note
+[_Show, Don't Tell_](https://haskellforall.com/2026/01/prompting-101-show-dont-tell){.display}
+
+I am not _asking_ Claude to avoid throwing an exception and fail fast instead. I just give `fatal`
+function, and it code-completes the rest.
+
+I can't say that the code _inside_ `CLIParse` is top-notch. I'd probably written something more
+spartan. But the important part is that, at this level, I don't care. The abstraction for parsing
+CLI arguments feel right to me, and the details I can always fix later. This is how this overall
+vibe-coding session transpired --- I was providing structure, Claude was painting by the numbers.
+
+In particular, with that CLI parsing structure in place, Claude had little problem adding new
+subcommands and new arguments in a satisfactory way. The only snag was that, when I asked to add an
+optional path to `sync`, it went with `string | null`, while I strongly prefer `string | undefined`.
+Obviously, its better to pick your null in JavaScript and stick with it. The fact that `undefineed`
+is unavoidable predetermines the winner. Given that the argument was added as an incremental small
+change, course-correcting was trivial.
+
+The null vs undefined issue perhaps illustrates my complaint about the code lacking character.
+`| null` is the default non-choice. `| undefined` is an insight, which I personally learned from VS
+Code LSP implementation.
+
+The hand-written skeleton/vibe-coded guts worked not only for the CLI. I wrote
+
+```ts
+async function main() {
+  const cli = CLIParse(Deno.args);
+
+  if (cli.tag === "create") return await mainCreate(cli.count);
+  if (cli.tag === "destroy") return await mainDestroy(cli.boxes);
+  ...
+}
+
+async function mainDestroy(boxes: string[]) {
+  for (const box of boxes) {
+    await instanceDestroy(box);
+  }
+}
+
+async function instanceDestroy(id: string) {
+
+}
+```
+
+and then asked Claude to write the body of a particular function according to the SPEC.md.
+
+Unlike with the CLI, Claude wasn't able to follow this pattern itself. With one example it's not obvious,
+but the overall structure is that `instanceXXX` is the AWS-level operation on a single box, and
+`mainXXX` is the CLI-level control flow that deals with looping and parallelism. When I asked Claude
+to implement `box run`, _without_ myself doing the `main` / `instance` split, Claude failed to
+noticed it and needed a course correction.
+
+## Implementation
+
+_However_, Claude was _massively_ successful with the actual logic. It would have taken me hours to
+acquire specific, non-reusable knowledge to write:
+
+```ts
+// Create spot instance
+const instanceMarketOptions = JSON.stringify({
+  MarketType: "spot",
+  SpotOptions: { InstanceInterruptionBehavior: "terminate" },
+});
+const tagSpecifications = JSON.stringify([
+  { ResourceType: "instance", Tags: [{ Key: moniker, Value: id }] },
+]);
+
+const result = await $`aws ec2 run-instances \
+  --image-id ${image} \
+  --instance-type ${instanceType} \
+  --key-name ${moniker} \
+  --security-groups ${moniker} \
+  --instance-market-options ${instanceMarketOptions} \
+  --user-data ${userDataBase64} \
+  --tag-specifications ${tagSpecifications} \
+  --output json`.json();
+
+const instanceId = result.Instances[0].InstanceId;
+
+// Wait for instance to be running
+await $`aws ec2 wait instance-status-ok --instance-ids ${instanceId}`;
+```
+
+I want to be careful --- I can't vouch for _correctness_ and especially _completeness_ of the above
+snippet. However, given that the nature of the problem is such that I can just run the code and see
+the result, I am fine with it. If I were writing this myself, trial-and-error would totally be my
+approach as well.
+
+Then there's synthesis --- with several instance commands implemented, I noticed that many started
+with querying AWS to resolve symbolic machine name, like "1", to the AWS name/IP. At that point I
+realized that resolving symbolic names is a fundamental part of the problem, and that it should only
+happen once, which resulting in the following refactored shape of the code:
+
+```ts
+async function main() {
+  const cli = CLIParse(Deno.args);
+  const instances = await instanceMap();
+
+  if (cli.tag === "create") return await mainCreate(instances, cli.count);
+  if (cli.tag === "destroy") return await mainDestroy(instances, cli.boxes);
+  ...
+}
+```
+
+Claude was ok with extracting the logic, but messed up the overall code layout, so the final code
+motions were on me. "Context" arguments go _first_, not last, common prefix is more valuable than
+common suffix because of visual alignment.
+
+The original "one-shotted" implementation also didn't do up-front querying. This is an example of a
+shape of a problem I only discover when working with code closely.
+
+---
+
+Of course, the script didn't work perfectly the first time and we needed quite a few iterations on
+the real machines both to fix coding bugs, as well gaps in the spec. That was an interesting
+experience of speed-running rookie mistakes. Claude made naive bugs, but was also good at fixing
+them.
+
+For example, when I first tried to `box ssh` after `box create`, I got an error. Pasting it into
+Claude immediately showed the problem. Originally, the code was doing
+[`aws ec2 wait instance-running`]{.display}
+and not
+[`aws ec2 wait instance-status-ok`.]{.display}
+
+The former checks if instance is logically created, the latter waits until the OS is booted. It
+makes sense that these two exist, and the difference is clear (and its also clear that OS booted !=
+SSH demon started). Claude's value here is in providing specific names for the concepts I
+already know to exist.
+
+Another fun one was about the disk. I noticed that, while the instance had an SSD, it wasn't
+actually used. I asked Claude to mount it as home, but that didn't work. Claude immediately asked me
+to run
+[`$ box run 0 cat /var/some/unintuitive/long/path.log`]{.display}
+and that log immediately showed
+the problem. This is remarkable! 50% of my typical Linux debugging day is wasted not knowing that a
+useful log exists, and the other 50% is for searching for the log I know should exist _somewhere_.
+
+After the fix, I lost the ability to SSH. Pasting the error immediately gave the answer --- by
+mounting over `/home`, we were overwriting ssh keys configured prior.
+
+There were couple of more iterations like that. Rookie mistakes _were_ made, but they were debugged
+and fixed _much_ faster than my personal knowledge allows (and again, I feel that is trivia
+knowledge, rather than deep reusable knowledge, so I am happy to delegate it!).
+
+It worked satisfactorily in the end, and, what's more, I am happy to maintain the code, at least to
+the extent that I personally need it. Kinda hard to measure productivity boost here, but, given just
+the sheer number of CLI flags required to make this work, I am pretty confident that time was saved,
+even factoring the writing of the present article!
+
+## Coda
+
+I've recently read _The Art of Doing Science and Engineering_ by Hamming (of distance and code), and
+one story stuck with me:
+
+> A psychologist friend at Bell Telephone Laboratories once built a machine with about 12 switches and
+> a red and a green light. You set the switches, pushed a button, and either you got a red or a green
+> light. After the first person tried it 20 times they wrote a theory of how to make the green light
+> come on. The theory was given to the next victim and they had their 20 tries and wrote their theory,
+> and so on endlessly. The stated purpose of the test was to study how theories evolved.
+>
+> But my friend, being the kind of person he was, had connected the lights to a random source! One day
+> he observed to me that no person in all the tests (and they were all high-class Bell Telephone
+> Laboratories scientists) ever said there was no message. I promptly observed to him that not one of
+> them was either a statistician or an information theorist, the two classes of people who are
+> intimately familiar with randomness. A check revealed I was right!
