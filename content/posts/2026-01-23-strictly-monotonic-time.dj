@@ -1,0 +1,46 @@
+# Considering Strictly Monotonic Time
+
+Monotonic time is a frequently used, load bearing abstraction. Monotonicity is often enforced using
+the following code:
+
+```zig
+fn now(clock: *Clock) Instant {
+    const t_raw = os_time_monotonic();
+
+    const t = @max(t_raw, clock.guard);
+    assert(t >= clock.guard);
+    assert(t >= t_raw);
+
+    clock.guard = t;
+    return t;
+}
+```
+
+That is, ask the OS about the current monotonic time, but don't trust the result too much and clamp
+it using an in-process guard. Under normal scenarios, you can trust the OS promise of monotonicity,
+but, empirically, there's a long tail of different scenarios where the promise isn't upheld:
+<https://github.com/rust-lang/rust/pull/56988>{.display}
+
+Today I realized that, if you are doing the above, you might as well force the time to be _strictly_
+monotonic:
+
+```zig
+const t = @max(t_raw, clock.guard + 1ns);
+assert(t > clock.guard);
+```
+
+The benefit of strict monotonicity is that you can tighten asserts,
+[`assert(past <= present)`]{.display}
+can become
+[`assert(past < present)`]{.display}
+and that _additionally_ catches the bug where you pass in _exactly_ the same instance.
+In other words, the `<=` version explicitly allows either query-ing the time again, or using the old
+value directly.
+
+Conversely, with strictly monotonic time, you know that if you see two numerically identical time
+instances, they must have been ultimately derived from the exact same call to `now()`. Time becomes
+fundamentally less ambiguous.
+
+The constraint here is that the resolution of the time value (_not_ the clock resolution) needs to
+be hight enough, to make sure that repeated `+1` don't move you into the future, but nanosecond
+precision seems fine for that.
