@@ -11,11 +11,15 @@ have adapted the workflow years earlier.
 
 ## The Pattern
 
-Use a file for interactive scripting. Instead of entering a command directly into the terminal,
-write it to a file first, and then run the file. For me, I type stuff into `make.ts` and then run
-`./make.ts` in my terminal (Ok, I need _one_ [Up Enter]{.kbd} for that). I want to be clear here, I
-am not advocating writing "proper" scripts, just capturing your interactive, ad-hoc command to a
-persistent file.
+Use a (gitignored) file for interactive scripting. Instead of entering a command directly into the
+terminal, write it to a file first, and then run the file. For me, I type stuff into `make.ts` and
+then run `./make.ts` in my terminal (Ok, I need _one_ [Up Enter]{.kbd} for that).
+
+I want to be clear here, I am not advocating writing "proper" scripts, just capturing your
+interactive, ad-hoc command to a persistent file. Of course any command that you want to execute
+_repeatedly_ belongs to the build system. The surprising thing is that even more complex one-off
+commands benefit from running through file, because it will take you several tries to get them
+right!
 
 There are many benefits relative to [Up Up Up]{.kbd} workflow:
 
@@ -119,6 +123,9 @@ cluster
 (using my [box](https://matklad.github.io/2026/01/20/vibecoding-2.html) from the other week):
 
 ```ts
+#!/usr/bin/env -S deno run --allow-all
+import $ from "jsr:@david/dax@0.44.2";
+
 await $`./zig/zig build -Drelease -Dtarget=x86_64-linux`;
 await $`box sync 0-5 ./tigerbeetle`;
 await $`box run 0-5
