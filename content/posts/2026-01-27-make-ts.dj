@@ -1,0 +1,226 @@
+# make.ts
+
+[Up Enter]{.kbd} [Up Up Enter]{.kbd} [Up Up Up Enter]{.kbd}
+
+Sounds familiar? This is how I historically have been running benchmarks and other experiments
+requiring a repeated sequence of commands --- type them manually once, then rely on shell history
+(and maybe some terminal splits) for reproduction. These past few years I've arrived at a much better
+workflow pattern --- `make.ts`. I was forced to adapt it once I started working with multiprocess
+applications, where manually entering commands is borderline infeasible. In retrospect, I should
+have adapted the workflow years earlier.
+
+## The Pattern
+
+Use a file for interactive scripting. Instead of entering a command directly into the terminal,
+write it to a file first, and then run the file. For me, I type stuff into `make.ts` and then run
+`./make.ts` in my terminal (Ok, I need _one_ [Up Enter]{.kbd} for that). I want to be clear here, I
+am not advocating writing "proper" scripts, just capturing your interactive, ad-hoc command to a
+persistent file.
+
+There are many benefits relative to [Up Up Up]{.kbd} workflow:
+
+- Real commands tend to get large, and it is so much nicer to use a real 2D text editor rather than
+  shell's line editor.
+- If you need more than one command, you can write several commands, and still run them all with a
+  single key (before `make.ts`, I was prone to constructing rather horrific && conjuncts for this
+  reason).
+- With a sequence of command outlined, you nudge yourself towards incrementally improving them,
+  making them idempotent, and otherwise investing into your own workflow for the next few minutes,
+  without falling into the YAGNI pit from the outset.
+- At some point you might realize after, say, running a series of ad-hoc benchmarks interactively,
+  that you'd rather write a proper script which executes a collection of benchmarks with varying
+  parameters. With the file approach, you already have the meat of the script implemented, and you
+  only need to wrap in a couple of fors and ifs.
+- Finally, if you happen to work with multi-process projects, you'll find it easier to manage
+  concurrency declaratively, spawning a tree of processes from a single script, rather than
+  switching between terminal splits.
+
+## Details
+
+Use a consistent filename for the script. I use `make.ts`, and so there's a `make.ts` in the root
+of most projects I work on. Correspondingly, I have `make.ts` line in project's `.git/info/exclude`
+--- the `.gitignore` file which is not shared. The fixed name reduces fixed costs --- whenever I
+need complex interactivity I don't need to come up with a name for a new file, I open my
+pre-existing `make.ts`, wipe whatever was there and start hacking. Similarly, I have `./make.ts` in
+my shell history, so
+[fish autosuggestions](https://fishshell.com/docs/current/interactive.html#autosuggestions)
+work for me. At one point, I had a VS Code task to run `make.ts`, though I now use
+[terminal editor](https://matklad.github.io/2025/08/31/vibe-coding-terminal-editor.html).
+
+Start the script with hash bang,
+[`#!/usr/bin/env -S deno run --allow-all`]{.display}
+in my case, and
+[`chmod a+x make.ts`]{.display}
+the file, to make it easy to run.
+
+Write the script in a language that:
+
+- you are comfortable with,
+- doesn't require huge setup,
+- makes it easy to spawn subprocesses,
+- has good support for concurrency.
+
+For me, that is TypeScript. Modern JavaScript is sufficiently ergonomic, and structural, gradual
+typing is a sweet spot that gives you reasonable code completion, but still allows brute-forcing any
+problem by throwing enough stringly dicts at it.
+
+JavaScript's tagged template syntax is brilliant for scripting use-cases:
+
+```ts
+function $(literal, ...interpolated) {
+  console.log({ literal, interpolated });
+}
+
+const dir = "hello, world";
+$`ls ${dir}`;
+```
+
+prints
+
+```json
+{
+    literal: [ "ls ", "" ],
+    interpolated: [ "hello, world" ]
+}
+```
+
+What happens here is that `$` gets a list of literal string fragments inside the backticks, and
+then, separately, a list of values to be interpolated in-between. It _could_ concatenate everything
+to just a single string, but it doesn't have to. This is precisely what is required for process
+spawning, where you want to pass an array of strings to the `exec` syscall.
+
+Specifically, I use [dax](https://github.com/dsherret/dax) library with Deno, which is excellent as
+a single-binary batteries-included scripting environment
+(see [<3 Deno](https://matklad.github.io/2023/02/12/a-love-letter-to-deno.html)). Bun has a dax-like
+library in the box and is a good alternative (though I personally stick with Deno because of
+`deno fmt` and `deno lsp`). You could also use famous zx, though be mindful that it
+[uses your shell as a middleman](https://google.github.io/zx/configuration#shell), something I
+consider to be sloppy ([explanation](https://julialang.org/blog/2012/03/shelling-out-sucks/)).
+
+While `dax` makes it convenient to spawn a single program, `async/await` is excellent for herding a
+slither of processes:
+
+```ts
+await Promise.all([
+    $`sleep 5`,
+    $`sleep 10`,
+]);
+```
+
+## Concrete Example
+
+Here's how I applied this pattern earlier today. I wanted to measure how TigerBeetle cluster
+recovers from the crash of the primary. The manual way to do that would be to create a bunch of ssh
+sessions for several cloud machines, format datafiles, start replicas, and then create some load. I
+_almost_ started to split my terminal up, but then figured out I can do it the smart way.
+
+The first step was cross-compiling the binary, uploading it to the cloud machines, and running the
+cluster
+(using my [box](https://matklad.github.io/2026/01/20/vibecoding-2.html) from the other week):
+
+```ts
+await $`./zig/zig build -Drelease -Dtarget=x86_64-linux`;
+await $`box sync 0-5 ./tigerbeetle`;
+await $`box run 0-5
+    ./tigerbeetle format --cluster=0 --replica-count=6 --replica=?? 0_??.tigerbeetle`;
+await $`box run 0-5
+    ./tigerbeetle start --addresses=?0-5? 0_??.tigerbeetle`;
+```
+
+Running the above the second time, I realized that I need to kill the old cluster first, so two new
+commands are "interactively" inserted:
+
+
+```ts
+await $`./zig/zig build -Drelease -Dtarget=x86_64-linux`;
+await $`box sync 0-5 ./tigerbeetle`;
+
+await $`box run 0-5 rm 0_??.tigerbeetle`.noThrow();
+await $`box run 0-5 pkill tigerbeetle`.noThrow();
+
+await $`box run 0-5
+    ./tigerbeetle format --cluster=0 --replica-count=6 --replica=?? 0_??.tigerbeetle`;
+await $`box run 0-5
+    ./tigerbeetle start --addresses=?0-5? 0_??.tigerbeetle`;
+```
+
+At this point, my investment in writing this file and not just entering the commands one-by-one
+already paid off!
+
+The next step is to run the benchmark load in parallel with the cluster:
+
+```ts
+await Promise.all([
+    $`box run 0-5 ./tigerbeetle start     --addresses=?0-5? 0_??.tigerbeetle`,
+    $`box run 6   ./tigerbeetle benchmark --addresses=?0-5?`,
+])
+```
+
+I don't need two terminals for two processes, and I get to copy-paste-edit the mostly same command.
+
+For the next step, I actually want to kill one of the replicas, and I also want to capture live
+logs, to see in real-time how the cluster reacts. This is where `0-5` multiplexing syntax of box
+falls short, but, given that this is JavaScript, I can just write a for loop:
+
+```ts
+const replicas = range(6).map((it) =>
+    $`box run ${it}
+        ./tigerbeetle start --addresses=?0-5? 0_??.tigerbeetle
+        &> logs/${it}.log`
+        .noThrow()
+        .spawn()
+);
+
+await Promise.all([
+    $`box run 6 ./tigerbeetle benchmark --addresses=?0-5?`,
+    (async () => {
+        await $.sleep("20s");
+        console.log("REDRUM");
+        await $`box run 1 pkill tigerbeetle`;
+    })(),
+]);
+
+replicas.forEach((it) => it.kill());
+await Promise.all(replicas);
+```
+
+At this point, I do need two terminals. One runs `./make.ts` and shows the log from the benchmark
+itself, the other runs `tail -f logs/2.log` to watch the next replica to become primary.
+
+I have definitelly crossed the line where writing a script makes sense, but the neat thing is that
+the gradual evolution up to this point. There isn't a discontinuity where I need to spend 15
+minutes trying to shape various ad-hoc commands from five terminals into a single coherent script, it
+was in the file to begin with.
+
+And then the script is easy to evolve. Once you realize that it's a good idea to also run the same
+benchmark against a different, baseline version TigerBeetle, you replace `./tigerbeetle` with
+`./${tigerbeetle}` and wrap everything into
+
+```ts
+async function benchmark(tigerbeetle: string) {
+    // ...
+}
+
+const tigerbeetle = Deno.args[0]
+await benchmark(tigerbeetle);
+```
+
+```console
+$ ./make.ts tigerbeetle-baseline
+$ ./make.ts tigerbeetle
+```
+
+A bit more hacking, and you end up with a repeatable benchmark schedule for a matrix of parameters:
+
+```ts
+for (const attempt of [0, 1])
+for (const tigerbeetle of ["baseline", "tigerbeetle"])
+for (const mode of ["normal", "viewchange"]) {
+    const results = $.path(
+        `./results/${tigerbeetle}-${mode}-${attempt}`,
+    );
+    await benchmark(tigerbeetle, mode, results);
+}
+```
+
+That's the gist of it. Don't let the shell history be your source, capture it into the file first!
