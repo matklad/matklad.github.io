@@ -1,0 +1,159 @@
+# Diagnostics Factory
+
+In
+[[_Error Codes For Control Flow_](https://matklad.github.io/2025/11/06/error-codes-for-control-flow.html),]{.display}
+I explained that Zig's strongly-typed error codes solve the "handling" half of error management,
+leaving "reporting" to the users. Today, I want to describe my personal default approach to
+the reporting problem, that is, showing the user a useful error message.
+
+The approach is best described in the negative: _avoid_ thinking about error payloads, and what
+the type of error should be. Instead, provide a set of functions for constructing errors.
+
+To give a concrete example, in TigerBeetle's
+[`tidy.zig`](https://github.com/tigerbeetle/tigerbeetle/blob/0.16.73/src/tidy.zig#L54-L188)
+(a project-specific linting script, another useful meta-pattern), we define errors as follows:
+
+```zig
+const Errors = struct {
+    pub fn add_long_line(
+        errors: *Errors,
+        file: SourceFile,
+        line_index: usize,
+    ) void { ... }
+
+    pub fn add_banned(
+        errors: *Errors,
+        file: SourceFile,
+        offset: usize,
+        banned_item: []const u8,
+        replacement: []const u8,
+    ) void { ... }
+
+    pub fn add_dead_declaration(...) void { ... }
+
+    ...
+};
+```
+
+and the call-site looks like this:
+
+```zig
+fn tidy_file(file: SourceFile, errors: *Errors) void {
+    // ...
+    var line_index: usize = 0;
+    while (lines.next()) |line| : (line_index += 1) {
+        const line_length = line_length(line);
+        if (line_length > 100 and !contains_url(line)) {
+            errors.add_long_line(file, line_index);
+        }
+    }
+}
+```
+
+In this case, I collect multiple errors so I don't return right away. Fail fast would look like
+this:
+
+```zig
+errors.add_long_line(file, line_index);
+return error.Tidy;
+```
+
+Note that the error code is intentionally independent of the specific error produced.
+
+---
+
+Some interesting properties of the solution:
+
+* The error representation is a set of constructor functions, the calling code doesn't care what
+  _actually_ happens inside. This is why the error factory is my _default_ solution --- I don't have
+  to figure out up-front what I'll do with the errors, and I can change my mind later.
+* There's a natural place to convert information from the form available at the place where we emit
+  the error to a form useful for the user. In `add_banned` above, the caller passes in a absolute
+  offset in a file, and it is resolved to line number and column inside (tip: use `line_index` for
+  0-based internal indexes, and `line_number` for user-visible 1-based ones). Contrast this with a
+  traditional error as sum-type approach, where there's a sharp syntactic discontinuity between
+  constructing a variant directly and calling a helper function.
+* This syntactic uniformity in turn allows easily grepping for all error locations:
+  [`rg 'errors.add_'`.]{.display}
+* Similarly, there's one central place that enumerates all possible errors (which is either a
+  benefit or a drawback).
+
+A less trivial property is that this structure enables polymorphism. In fact, in the `tidy.zig`
+code, there are two different representations of errors. When running the script, errors are
+directly emitted to stderr. But when testing it, errors are collected into an in-memory buffer:
+
+
+```zig
+pub fn add_banned(
+    errors: *Errors,
+    file: SourceFile,
+    offset: usize,
+    banned_item: []const u8,
+    replacement: []const u8,
+) void {
+    errors.emit(
+        "{s}:{d}: error: {s} is banned, use {s}\n",
+        .{
+            file.path, file.line_number(offset),
+            banned_item, replacement,
+        },
+    );
+}
+
+fn emit(
+    errors: *Errors,
+    comptime fmt: []const u8,
+    args: anytype,
+) void {
+    comptime assert(fmt[fmt.len - 1] == '\n');
+    errors.count += 1;
+    if (errors.captured) |*captured| {
+        captured.writer(errors.gpa).print(fmt, args)
+            catch @panic("OOM");
+    } else {
+        std.debug.print(fmt, args);
+    }
+}
+```
+
+There isn't a giant `union(enum)` of all errors, because it's not needed for the present use-case.
+
+This pattern can be further extended to a full-fledged diagnostics framework with error builders,
+spans, ANSI colors and such, but that is tangential to the main idea here: even when "programming in
+the small", it might be a good idea to avoid constructing enums directly, and mandate an
+intermediate function call.
+
+---
+
+Two more meta observations here:
+
+_First_, the entire pattern is of course the expression of duality between a sum of two types and a
+product of two functions (the visitor pattern)
+
+```rust
+fn foo() -> Result<T, E>;
+
+fn bar(ok: impl FnOnce(T), err: impl FnOnce(E));
+```
+
+
+```rust
+enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+
+trait Result<T, E> {
+    fn ok(self, T);
+    fn err(self, E);
+}
+```
+
+_Second_, every abstraction is a thin film separating two large bodies of code. Any interface has
+two sides, the familiar one presented to the user, and the other, hidden one, presented to the
+implementor. Often, default language machinery pushes you towards using the same construct for both
+but that can be suboptimal. It's natural for the user and the provider of the abstraction to
+disagree on the optimal interface, and to evolve independently. Using a single big enum for errors
+couples error emitting and error reporting code, as they have to meet in the middle. In contrast,
+the factory solution is optimal for producer (they literally just pass whatever they already have on
+hand, without any extra massaging of data), and is flexible for consumer(s).
