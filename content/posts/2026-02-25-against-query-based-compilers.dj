@@ -112,6 +112,42 @@ call can be found almost anywhere. For every trait method call, you get a depend
 block that supplies the implementation, but you _also_ get a dependency on non-existence of
 conflicting `impl`s in every other file!
 
+Again, refer to the
+[_Three Architectures_](https://rust-analyzer.github.io/blog/2020/07/20/three-architectures-for-responsive-ide.html)
+for positive ideas, but the general trick is to leverage language semantics to manually cut the
+compilation tasks into somewhat coarse-grained chunks which are independent by definition (of the
+source language). Grug builds an incremental map-reduce compiler for his language:
+
+* Recursive directory walk finds all files to be compiled.
+
+* In parallel, independently, each file is parsed, name-resolved, and lowered. As much as possible,
+  language features (and errors) are syntax driven and not type driven, and can be processed at this
+  stage.
+
+* In parallel, a "summary" is extracted from each file, which is essentially just a list of types
+  and signatures, with function bodies empty.
+
+* Sequentially, a "type resolution" phase is run on this set of summaries, which turns type
+  references in signatures into actual types, dealing with mutual dependencies between files. This
+  phase is re-run whenever a summary of a file changes. Conversely, changes to the body of any
+  function do not invalidate type resolution.
+
+* In parallel, every function's body is type-checked, and lowered to type-and-layout resolved IR,
+  applying function-local optimizations.
+
+* Sequentially, a thin-lto style set of analyses are run on compiled functions, making inlining
+  decisions and computing call-graph dependent attributes like function purity.
+
+* In parallel, each function is codegened to machine code with unresolved references to other
+  functions (relocations).
+
+* Sequentially, functions are concatenated into an executable file, receiving an address.
+
+* In parallel, all relocations are resolved to now known addresses.
+
+The above scheme works only if the language has a property that changing the body of function `foo`
+(not touching its signature) can't introduce type errors into an unrelated function `bar`.
+
 ---
 
 Another trick that becomes less available if you blindly apply queries are in-place updates.
