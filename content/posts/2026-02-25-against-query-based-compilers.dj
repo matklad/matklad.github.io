@@ -127,10 +127,10 @@ source language). Grug builds an incremental map-reduce compiler for his languag
 * In parallel, a "summary" is extracted from each file, which is essentially just a list of types
   and signatures, with function bodies empty.
 
-* Sequentially, a "type resolution" phase is run on this set of summaries, which turns type
+* Sequentially, a "signature evaluation" phase is run on this set of summaries, which turns type
   references in signatures into actual types, dealing with mutual dependencies between files. This
   phase is re-run whenever a summary of a file changes. Conversely, changes to the body of any
-  function do not invalidate type resolution.
+  function do not invalidate resolved signatures.
 
 * In parallel, every function's body is type-checked, and lowered to type-and-layout resolved IR,
   applying function-local optimizations.
