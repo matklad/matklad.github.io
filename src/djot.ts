@@ -276,6 +276,8 @@ const add_string_content = function (
     buffer.push(node.text);
   } else if ("tag" in node && node.tag === "hard_break") {
     buffer.push("\n");
+  } else if ("tag" in node && node.tag === "soft_break") {
+    buffer.push(" ");
   } else if ("children" in node) {
     for (const child of node.children) {
       add_string_content(child, buffer);
