@@ -196,7 +196,7 @@ async function build(params: {
     "resume.pdf",
     "css/*",
     "assets/*",
-    "assets/resilient-parsing/*",
+    "assets/2026-02-25-against-query-based-compilers/*",
   ];
   for (const path of paths) {
     await update_path(path);
