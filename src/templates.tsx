@@ -97,7 +97,6 @@ function Base({ children, src, title, path, description, extra_css }: {
             <a
               href={`https://github.com/matklad/matklad.github.io/edit/master${src}`}
             >
-              <FooterIcon name="edit" />
               Fix typo
             </a>
 
@@ -105,6 +104,8 @@ function Base({ children, src, title, path, description, extra_css }: {
               <FooterIcon name="rss" />
               Subscribe
             </a>
+
+            <a href="/">All posts</a>
 
             <a href="mailto:aleksey.kladov+blog@gmail.com">
               <FooterIcon name="email" />
