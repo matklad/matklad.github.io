@@ -1,0 +1,18 @@
+# JJ LSP Follow Up
+
+In [_Majjit LSP_](https://matklad.github.io/2024/12/13/majjit-lsp.html), I described an idea of
+implementing [Magit](https://magit.vc) style UX for [jj](jj-vcs.dev) once and for all, leveraging
+LSP protocol.
+
+I've learned today that the upcoming 3.18 version of LSP has a feature to make this massively less
+hacky:  [_Text Document Content Request_](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/#workspace_textDocumentContent){.display}
+
+LSP can now provide virtual documents, which aren't actually materialized on disk. So this:
+
+![](https://github.com/user-attachments/assets/f65cedf9-5fa8-4506-b8bb-2e55e1ee1913){width=856 height=620}
+
+can now be such a virtual document, where highlighting is provided by semantic tokens, things like
+"check out this commit" are code actions, and "goto definition" jumps from the diff in the virtual
+file to a real file in the working tree.
+
+Exciting!
