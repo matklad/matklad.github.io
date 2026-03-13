@@ -80,7 +80,7 @@ function fatal(message: string) {
   Deno.exit(1);
 }
 
-async function watch(params: { filter: string }) {
+async function watch(params: { filter: string, profile: boolean }) {
   let signal = Promise.withResolvers();
   (async () => {
     let build_id = 0;
@@ -92,7 +92,7 @@ async function watch(params: { filter: string }) {
         blogroll: false,
         update: true,
         spell: false,
-        profile: false,
+        profile: params.profile || false,
         filter: params.filter,
       });
     }
