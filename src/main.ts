@@ -197,6 +197,7 @@ async function build(params: {
     "css/*",
     "assets/*",
     "assets/2026-02-25-against-query-based-compilers/*",
+    "assets/2026-03-19-consensus-board-game/*",
   ];
   for (const path of paths) {
     await update_path(path);
