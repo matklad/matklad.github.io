@@ -91,3 +91,7 @@ The drawbacks of this pattern:
   there's no `/dev/reads-and-writes-block-forever`{.display}
 * It is not actually structured. Ideally, parent's exit should block on all descendants exiting, but
   that's not the case in this pattern. Still, it's good enough for cleaning up in tests!
+
+**Update(2026-04-01):** As I've learned today, on Linux and MacOS you can directly react to your
+parent's exit, see this implementation from qemu:
+[`exit-with-parent.c`](https://github.com/qemu/qemu/blob/v10.2.2/system/exit-with-parent.c){.display}
