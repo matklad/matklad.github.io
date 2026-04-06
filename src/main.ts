@@ -80,7 +80,7 @@ function fatal(message: string) {
   Deno.exit(1);
 }
 
-async function watch(params: { filter: string, profile: boolean }) {
+async function watch(params: { filter: string; profile: boolean }) {
   let signal = Promise.withResolvers();
   (async () => {
     let build_id = 0;
@@ -196,6 +196,7 @@ async function build(params: {
     "resume.pdf",
     "css/*",
     "assets/*",
+    "assets/resilient-parsing/*",
     "assets/2026-02-25-against-query-based-compilers/*",
     "assets/2026-03-19-consensus-board-game/*",
   ];
