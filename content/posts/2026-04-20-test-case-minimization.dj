@@ -1,0 +1,727 @@
+# 256 Lines or Less: Test Case Minimization
+
+Property Based Testing and fuzzing are a deep and science-intensive topic. There are enough advanced
+techniques there for a couple of PhDs, a PBT daemon, and
+a [client-server architecture](https://antithesis.com/blog/2026/hegel/). But I have this weird
+parlor-trick PBT library, implementable in a couple of hundred lines of code in one sitting.
+
+This week I've been thinking about a cool variation of a consensus algorithm. I implemented it on the
+weekend. And it took just a couple of hours to write a PBT library itself first, and then a test,
+that showed a deep algorithmic flaw in my thinking (after a dozen trivial flaws in my coding).
+So, I don't get to write more about consensus yet, but I at least can write about the library. It is
+very simple, simplistic even. To use an old Soviet joke about
+[Babel](https://en.wikipedia.org/wiki/Isaac_Babel) and [Bebel](https://en.wikipedia.org/wiki/August_Bebel),
+it's Gogol rather than Hegel. But for just 256 lines, it's one of the highest power-to-weight ratio
+tools in my toolbox.
+
+Read this post if:
+
+* You want to stretch your generative testing muscles.
+* You are a do-it-yourself type, and wouldn't want to pull a ginormous PBT library off the shelf.
+* You would pull a library, but want to have a more informed opinion about available options, about
+  essential and accidental complexity.
+* You want some self-contained real-world Zig examples :P
+
+Zig works well here because it, too, is exceptional in its power-to-weight.
+
+## FRNG
+
+The implementation is a single file,
+[`FRNG.zig`](https://gist.github.com/matklad/343d13547c8bfe9af310e2ca2fbfe109),
+because the core abstraction here is a Finite
+Random Number Generator --- a PRNG where all numbers are pre-generated, and can run out. We start
+with standard boilerplate:
+
+```zig
+const std = @import("std");
+const assert = std.debug.assert;
+
+entropy: []const u8,
+
+pub const Error = error{OutOfEntropy};
+
+const FRNG = @This();
+
+pub fn init(entropy: []const u8) FRNG {
+    return .{ .entropy = entropy };
+}
+```
+
+In Zig, files are structs: you obviously need structs, and the language becomes simpler if structs
+are re-used for what files are. In the above
+[`const FRNG = @This()`]{.display}
+assigns a conventional name to the file struct, and
+[`entropy: []const u8`]{.display}
+declares instance fields (only one here). `const Error` and `fn init` are "static" (container
+level) declarations.
+
+The only field we have is just a slice of raw bytes, our pre-generated random numbers. And the only
+error condition we can raise is `OutOfEntropy`.
+
+The simplest thing we can generate is a slice of bytes. Typically, API for this takes a mutable
+slice as an out parameter:
+
+```zig
+pub fn fill(prng: *PRNG, bytes: []u8) void { ... }
+```
+
+But, due to pre-generated nature of FRNG, we can return the slice directly, provided that we have
+enough entropy. This is going to be our (sole) basis function, everything else is going to be a
+convenience helper on top:
+
+
+```zig
+pub fn bytes(frng: *FRNG, size: usize) Error![]const u8 {
+    if (frng.entropy.len < size) return error.OutOfEntropy;
+    const result = frng.entropy[0..size];
+    frng.entropy = frng.entropy[size..];
+    return result;
+}
+```
+
+The next simplest thing is an array (a slice with a fixed size):
+
+```zig
+pub fn array(frng: *FRNG, comptime size: usize) Error![size]u8 {
+    return (try frng.bytes(size))[0..size].*;
+}
+```
+
+Notice how Zig goes from runtime-known slice length, to comptime known array type. Because `size` is
+a `comptime` constant, slicing `[]const u8` with `[0..size]` returns a pointer to array,
+[`*const [size]u8`.]{.display}
+
+We can re-interpret a 4-byte array into `u32`. But, because this is Zig, we can trivially generalize
+the function to work for any integer type, by passing in `Int` comptime parameter of type `type`:
+
+```zig
+const builtin = @import("builtin");
+
+pub fn int(frng: *FRNG, Int: type) Error!Int {
+    comptime {
+        assert(@typeInfo(Int).int.signedness == .unsigned);
+        assert(builtin.cpu.arch.endian() == .little);
+    }
+    return @bitCast(try frng.array(@sizeOf(Int)));
+}
+```
+
+This function is monomorphised for every `Int` type, so `@sizeOf(Int)` becomes a compile-time
+constant we can pass to `fn array`.
+
+Production code would be endian-clean here, but, for simplicity, we encode our endianness assumption
+as a compile-time assertion. Note how Zig communicates information about endianness to the program.
+There isn't any kind of side-channel or extra input to compilation, like `--cfg` flags. Instead, the
+compiler materializes all information about target CPU as Zig code. There's a `builtin.zig` file
+somewhere in the compiler caches directory that contains
+
+```zig
+pub const cpu: std.Target.Cpu = .{
+    .arch = .aarch64,
+    .model = &std.Target.aarch64.cpu.apple_m3,
+    // ...
+}
+```
+
+This file can be accessed via [`@import("builtin")`]{.display} and all the constants inspected at
+compile time.
+
+We can make an integer, and a boolean is even easier:
+
+```zig
+pub fn boolean(frng: *FRNG) Error!bool {
+    return (try frng.int(u8)) & 1 == 1;
+}
+```
+
+Strictly speaking, we only need one bit, not one byte, but tracking individual bits is too much of a
+hassle.
+
+From an arbitrary int, we can generate an int in range. As per
+[_Random Numbers Included_](https://matklad.github.io/2025/03/31/random-numbers-included.html),
+we use a closed range, which makes the API infailable and is usually more convenient at the
+call-site:
+
+```zig
+pub fn int_inclusive(frng: *FRNG, Int: type, max: Int) Error!Int
+```
+
+As a bit of PRNG trivia, while this could be implemented as
+[`frng.int(Int) % (max + 1)`,]{.display}
+the result will be biased (not uniform). Consider the case where `Int = u8`, and a call like
+[`frng.int_inclusive(u8, 64 * 3)`.]{.display}
+
+The numbers in `0..64` are going to be twice as likely as the numbers in `64..(64*3)`, because the
+last quarter of 256 range will be aliased with the first one.
+
+Generating an _unbiased_ number is tricky and might require drawing _arbitrary_ number of bytes from
+entropy. Refer to
+[<https://www.pcg-random.org/posts/bounded-rands.html>]{.display}
+for details. I didn't, and copy-pasted code from the Zig standard library. Use at your own risk!
+
+```zig
+pub fn int_inclusive(frng: *FRNG, Int: type, max: Int) Error!Int {
+    comptime assert(@typeInfo(Int).int.signedness == .unsigned);
+    if (max == std.math.maxInt(Int)) return try frng.int(Int);
+
+    const bits = @typeInfo(Int).int.bits;
+    const less_than = max + 1;
+
+    var x = try frng.int(Int);
+    var m = std.math.mulWide(Int, x, less_than);
+    var l: Int = @truncate(m);
+    if (l < less_than) {
+        var t = -%less_than;
+
+        if (t >= less_than) {
+            t -= less_than;
+            if (t >= less_than) t %= less_than;
+        }
+        while (l < t) {
+            x = try frng.int(Int);
+            m = std.math.mulWide(Int, x, less_than);
+            l = @truncate(m);
+        }
+    }
+    return @intCast(m >> bits);
+}
+```
+
+Now we can generate an int bounded from above and below:
+
+```zig
+pub fn range_inclusive(
+    frng: *FRNG, Int: type,
+    min: Int, max: Int,
+) Error!Int {
+    comptime assert(@typeInfo(Int).int.signedness == .unsigned);
+    assert(min <= max);
+    return min + try frng.int_inclusive(Int, max - min);
+}
+```
+
+Another common operation is picking a random element from a slice. If you want to return a pointer
+to a element, you'll need a `const` and `mut` versions of the function. A simpler and more general
+solution is to return an index:
+
+```zig
+pub fn index(frng: *FRNG, slice: anytype) Error!usize {
+    assert(slice.len > 0);
+    return try frng.range_inclusive(usize, 0, slice.len - 1);
+}
+```
+
+At the call site,
+[`xs[try frng.index(xs)]`]{.display}
+doesn't look too bad, is appropriately `const`-polymorphic, and is also usable for multiple parallel
+arrays.
+
+## Simulation
+
+So far, we've spent about 40% of our line budget implementing a worse random number generator that
+can fail with `OutOfEntropy` at any point in time. What is it good for?
+
+We use it to feed our system under test with random inputs, see how it reacts, and check that it
+does not crash. If we code our system to crash if anything unexpected happens and our random inputs
+cover the space of all possible inputs, we get a measure of confidence that bugs will be detected in
+testing.
+
+For my consensus simulation, I have a `World` struct that holds a `FRNG` and a set of replicas:
+
+```zig
+const World = struct {
+    frng: *FRNG,
+    replicas: []Replica,
+    // ...
+};
+```
+
+`World` has methods like:
+
+```zig
+fn simulate_request(world: *World) !void {
+    const replica = try world.frng.index(world.replicas);
+    const payload = try world.frng.int(u64);
+
+    world.send_payload(replica, payload);
+}
+```
+
+I then select which method to call at random:
+
+
+```zig
+fn step(world: *World) !void {
+    const action = try world.frng.weighted(.{
+        .request = 10,
+        .message = 20,
+        .crash = 1,
+    });
+    switch (action) {
+        .request => try world.simulate_request(),
+        .message => { ... },
+        .crash => { ... },
+    }
+}
+```
+
+Here, `fn weighted` is another FRNG helper that selects an action at random, proportional to its
+weight. This helper needs quite a bit more reflection machinery than we've seen so far:
+
+```zig
+pub fn weighted(
+    frng: *FRNG,
+    weights: anytype,
+) Error!std.meta.FieldEnum(@TypeOf(weights)) {
+    const fields =
+        comptime std.meta.fieldNames(@TypeOf(weights));
+
+    var total: u32 = 0;
+    inline for (fields) |field|
+        total += @field(weights, field);
+    assert(total > 0);
+
+    var pick = try frng.int_inclusive(u64, total - 1);
+    inline for (fields) |field| {
+        const weight = @field(weights, field);
+        if (pick < weight) {
+            return @field(
+                std.meta.FieldEnum(@TypeOf(weights)),
+                field,
+            );
+        }
+        pick -= weight;
+    }
+    unreachable;
+}
+```
+
+`weights: anytype` is compile-time duck-typing. It means that our `weighted` function is callable
+with any type, and each specific type creates a new monomorphised instance of a function. While we
+don't explicitly name the type of `weights`, we can get it as `@TypeOf(weights)`.
+
+`FieldEnum` is a type-level function that takes a struct type:
+
+```zig
+const S = struct {
+    foo: bool,
+    bar: u32,
+    baz: []const u8
+};
+```
+
+and turns it into an enum type, with a variant per-field, exactly what we want for the return type:
+
+```zig
+const E = enum { foo, bar, baz };
+```
+
+Tip: if you want to quickly learn Zig's reflection capabilities, study the implementation of
+[`std.meta`](https://codeberg.org/ziglang/zig/src/tag/0.16.0/lib/std/meta.zig) and
+[`std.enums`](https://codeberg.org/ziglang/zig/src/tag/0.16.0/lib/std/enums.zig)
+in Zig's standard library.
+
+The `@field` built-in function accesses a field given `comptime` field name. It's exactly like
+Python's `getattr` / `setattr` with an extra restriction that it must be evaluated at compile time.
+
+To add one more twist here, I always find it hard to figure out which weights are reasonable, and
+like to generate the weights themselves at random at the start of the test:
+
+```zig
+pub fn swarm_weights(frng: *FRNG, Weights: type) Error!Weights {
+    var result: Weights = undefined;
+    inline for (comptime std.meta.fieldNames(Weights)) |field| {
+        @field(result, field) = try frng.range_inclusive(u32, 1, 100);
+    }
+    return result;
+}
+```
+
+(If you feel confused here, check out
+[_Swarm Testing Data Structures_](https://tigerbeetle.com/blog/2025-04-23-swarm-testing-data-structures/))
+
+## Stepping And Runnig
+
+Now we have enough machinery to describe the shape of test overall:
+
+```zig
+fn run_test(gpa: Allocator, frng: *FRNG) !void {
+    var world = World.init(gpa, &frng) catch |err|
+        switch (err) {
+            error.OutOfEntropy => return,
+            else => return err,
+        };
+    defer world.deinit(gpa);
+
+    while (true) {
+        world.step() catch |err| switch (err) {
+            error.OutOfEntropy => break,
+        };
+    }
+}
+
+const World = struct {
+    frng: *FRNG,
+    weights: ActionWeights,
+
+    // ...
+
+    const ActionWeights = struct {
+        request: u32,
+        message: u32,
+        crash: u32,
+        // ...
+    };
+
+    pub fn init(gpa: Allocator, frng: *FRNG) !void {
+        const weights = try frng.swarm_weights(ActionWeights);
+        // ...
+    }
+
+    fn step(world: *World) error{OutOfEntropy}!void {
+        const action = try world.frng.weighted(world.weights);
+        switch (action) {
+            .request => { ... },
+            // ...
+        }
+    }
+};
+```
+
+A test needs an `FRNG` (which ultimately determines the outcome) and an General Purpose Allocator
+for the `World`. We start by creating a simulated `World` with random action weights. If `FRNG`
+entropy is very low, we can run out of entropy even at this stage. We assume that the code is
+innocent until proven guilty --- if we don't have enough entropy to find a bug, this particular test
+returns success. Don't worry, we'll make sure that we have enough entropy elsewhere.
+
+We use `catch |err| switch(err)` to peel off `OutOfEntropy` error. I find that, whenever I handle
+errors in Zig, very often I want to discharge just a single error from the error set. I wish I could
+use parenthesis with a `catch`:
+
+```zig
+// NOT ACTUALY ZIG :(
+
+var world = try World.init(gpa, &frng)
+    catch (error.OutOfEntropy) return;
+```
+
+Anyway, having created the `World`, we step through it while we still have entropy left. If any step
+detects an internal inconsistency, the entire `World` crashes with an assertion failure. If we got
+to the end of `while(true)` loop, we know that at least that particular slice of entropy didn't
+uncover anything suspicious.
+
+Notice what _isn't_ there. We aren't generating a complete list of actions up-front. Rather, we make
+random decisions as we go, and can freely use the current state of the `World` to construct a menu
+of possible choices (e.g., when sending a message, we can consider only not currently crashed
+replicas).
+
+## Binary Search the Answer
+
+And here we can finally see the reason why we bothered writing a custom _Finite_ PRNG, rather than
+using an off-the-shelf one. The amount of entropy in FRNG defines the complexity of the test. The
+fewer random bytes we start with, the faster we exit the step loop. And this gives us an ability to
+minimize test cases essentially for free.
+
+Suppose you know that a particular entropy slice makes the test fail (cluster enters split brain at
+the millionth step). Let's say that the slice was 16KiB. The obvious next step is to see if just
+8KiB would be enough to crash it. And, if 8KiB isn't, than perhaps 12KiB?
+
+You can **binary search** the minimal amount of entropy that's enough for the test to fail. And this
+works for _any_ test, it doesn't have to be a distributed system. If you can write the code to
+generate _your_ inputs randomly, you can measure complexity of each particular input by measuring
+how many random bytes were drawn in its construction.
+
+And now the hilarious part --- of course it seems that the way to minimize entropy is to start with
+a particular failing slice and apply genetic-algorithm mutations to it. But a much simpler approach
+seems to work in practice --- just generated a fresh, shorter entropy slice. If you found _some_
+failure at random, then you should be able to randomly stumble into a smaller failing example, if
+one exists --- there are much fewer small examples, so finding a failing one becomes easier when the
+`size` goes down!
+
+## The Searcher
+
+The problem with binary searching for failing entropy is that a tripped assertion crashes the
+program. There's no unwinding in Zig. For this reason, we'll move the search code to a different
+process. So a single test will be a binary with a `main` function, that takes entropy on `stdin`.
+
+Zig's new juicy main makes writing this easier than in any previous versions of Zig :D
+
+
+```zig
+pub fn main(init: std.process.Init) !void {
+    const gpa = init.gpa;
+    const io = init.io;
+
+    var stdin_reader = std.Io.File.stdin().reader(io, &.{});
+    const entropy = try stdin_reader.interface
+        .allocRemaining(gpa, .unlimited);
+    defer gpa.free(entropy);
+
+    var frng = FRNG.init(entropy);
+
+    var world = World.init(gpa, &frng, .{}) catch |err|
+        switch (err) {
+            error.OutOfEntropy => return,
+            else => return err,
+        };
+    defer world.deinit(gpa);
+
+    world.run();
+}
+```
+
+Main gets `Init` as an argument, which provides access to things like command line arguments,
+default allocator and a default `Io` implementation. These days, Zig eschews global ambient IO
+capabilities, and requires threading an Io instance whenever we need to make a syscall. Here,
+we need Io to read stdin.
+
+Now we will implement a harness to call this main. This will be `FRNG.Driver`:
+
+```zig
+pub const Driver = struct {
+    io: std.Io,
+    sut: []const u8,
+    buffer: []u8,
+
+    const log = std.log;
+};
+```
+
+It will be spawning external processes, so it'll need an `Io`. We also need a path to an executable
+with a test main function, a System Under Test. And we'll need a buffer to hold the entropy. This
+driver will be communicating successes and failures to the users, so we also prepare a `log` for
+textual output.
+
+How we get entropy to feed into `sut`? Because we are only interested in entropy size, we won't be
+storing the actual entropy bytes, and instead will generate it from a `u64` seed. In other words,
+just two numbres, entropy size and seed, are needed to reproduce a single run of the test:
+
+```zig
+fn run_once(driver: Driver, options: struct {
+    size: u32,
+    seed: u64,
+    quiet: bool,
+}) !enum { pass, fail } {
+    assert(options.size <= driver.buffer.len);
+    const entropy = driver.buffer[0..options.size];
+
+    var rng = std.Random.DefaultPrng.init(options.seed);
+    rng.random().bytes(entropy);
+
+    var child = try std.process.spawn(driver.io, .{
+        .argv = &.{driver.sut},
+        .stdin = .pipe,
+        .stderr = if (options.quiet) .ignore else .inherit,
+    });
+
+    try child.stdin.?.writeStreamingAll(driver.io, entropy);
+    child.stdin.?.close(driver.io);
+    child.stdin = null;
+
+    const term = try child.wait(driver.io);
+    return if (success(term)) .pass else .fail;
+}
+
+fn success(term: std.process.Child.Term) bool {
+    return term == .exited and term.exited == 0;
+}
+```
+
+We use default deterministic PRNG to expand our short seed into entropy slice of the required size.
+Then we spawn `sut` proces, feeding the resulting entropy via stdin. Closing child's stdin signals
+the end of entropy. We then return either `.pass` or `.fail` depending on child's exit code. So, both
+explicit errors and crashes will be recognized as failures.
+
+Next, we implement the logic for checking if a particular seed size is sufficient to find a failure.
+Of course, we won't be able to say that for sure in a finite amount of time, so we'll settle for some
+user-specified amount of retries:
+
+
+```zig
+fn run_multiple(driver: Driver, options: struct {
+    size: u32,
+    attempts: u32,
+}) !union(enum) { pass, fail: u64 } {
+    // ...
+}
+```
+
+The user passes us the number of `attempts` to make, and we return `.pass` if they all were
+successfull, or a specific failing seed if we found one:
+
+```zig
+assert(options.size <= driver.buffer.len);
+
+for (0..options.attempts) |_| {
+    var seed: u64 = undefined;
+    driver.io.random(@ptrCast(&seed));
+
+    const outcome = try driver.run_once(.{
+        .seed = seed,
+        .size = options.size,
+        .quiet = true,
+    });
+    switch (outcome) {
+        .fail => return .{ .fail = seed },
+        .pass => {},
+    }
+}
+return .pass;
+```
+
+To generate a real seed we need "true" cryptographic non-deterministic randomness, which is provided
+by `io.random`.
+
+Finally, the search for the size:
+
+```zig
+fn search(driver: Driver, options: struct {
+    attempts: u32 = 100,
+}) !union(enum) {
+    pass,
+    fail: struct { size: u32, seed: u64 },
+} {
+    // ...
+}
+```
+
+Here, we are going to find a smallest entropy size that crashes `sut`. If we succeed, we return the
+seed and the size. The upper bound for the size is the space available in the pre-allocated entropy
+buffer.
+
+The search loop is essentially a binary search, with a twist --- rather than using dichotomy on the
+`size` directly, we will be doubling a `step` we use to change the size between iterations.
+
+That is, we start with a small size and step, and, on every iteration, double the step and add it to
+the size, until we hit a failure (or run out of buffer for the entropy).
+
+Once we found a failure, we continue the serach in the other direction --- halving the step and
+subtracting it from the `size`, keeping the smaller `size` if it still fails.
+
+On each step, we log the current size and outcome, and report the smallest failing size at the end.
+
+```zig
+var found_size: ?u32 = null;
+var found_seed: ?u64 = null;
+
+var pass: bool = true;
+var size: u32 = 16;
+var step: u32 = 16;
+for (0..1024) |_| {
+    if (step == 0) break;
+    const size_next = if (pass) size + step else size -| step;
+    if (size > driver.buffer.len) break;
+
+    const outcome = try driver.run_multiple(.{
+        .size = size_next,
+        .attempts = options.attempts,
+    });
+    switch (outcome) {
+        .pass => log.info("pass: size={}", .{size_next}),
+        .fail => |seed| {
+            found_size = size_next;
+            found_seed = seed;
+            log.err("fail: size={} seed={}", .{ size_next, seed });
+        },
+    }
+    const pass_next = (outcome == .pass);
+
+    if (pass and pass_next) {
+        step *= 2;
+    } else if (!pass and !pass_next) {
+        // Keep the step.
+    } else {
+        step /= 2;
+    }
+
+    if (pass or !pass_next) {
+        size = size_next;
+        pass = pass_next;
+    }
+} else @panic("safety counter");
+
+if (found_size == null) return .pass;
+return .{ .fail = .{
+    .size = found_size.?,
+    .seed = found_seed.?,
+} };
+```
+
+Finally, we wrap Driver's functionality into main that works in two modes --- either reproduces a
+given failure from seed and size, or searches for a minimal failure:
+
+```zig
+pub fn main(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    sut: []const u8,
+    operation: union(enum) {
+        replay: struct { size: u32, seed: u64 },
+        search: struct {
+            attempts: u32 = 100,
+            size_max: u32 = 4 * 1024 * 1024,
+        },
+    },
+) !void {
+    const size_max = switch (operation) {
+        .replay => |options| options.size,
+        .search => |options| options.size_max,
+    };
+
+    const buffer = try gpa.alloc(u8, size_max);
+    defer gpa.free(buffer);
+
+    var driver: Driver = .{
+        .io = io,
+        .buffer = buffer,
+        .sut = sut,
+    };
+
+    switch (operation) {
+        .replay => |options| {
+            const outcome = try driver.run_once(.{
+                .size = options.size,
+                .seed = options.seed,
+                .quiet = false,
+            });
+            log.info("{t}", .{outcome});
+        },
+        .search => |options| {
+            const outcome = try driver.search(.{
+                .attempts = options.attempts,
+             });
+            switch (outcome) {
+                .pass => log.info("ok", .{}),
+                .fail => |fail| {
+                    log.err("minimized size={} seed={}", .{
+                        fail.size, fail.seed,
+                     });
+                },
+            }
+        },
+    }
+}
+```
+
+Running the search routine looks like this in a terminal:
+
+```=html
+<figure>
+<script src="https://asciinema.org/a/954634.js" id="asciicast-954634" async="true"></script>
+</figure>
+```
+
+Those final seed&size can then be used for `.replay`, giving you a minimal reproducible failure for
+debugging!
+
+This ... of course doesn't look too exciting without visualizing a _specific_ bug we can find this
+way, but the problem there is that interesting examples of systems to test in this way usually take
+more than 256 lines to implement. So I'll leave it to your imagination, but you get the idea: if you
+can make a system fail under a "random" input, you can also systematically search the space of all
+inputs for the smallest counter-example, _without_ adding knowledge about the system to the
+searcher. [This article](https://matklad.github.io/2024/07/05/properly-testing-concurrent-data-structures.html)
+also provides a concrete (but somewhat verbose) example.
+
+Here's the full code:
+
+<https://gist.github.com/matklad/343d13547c8bfe9af310e2ca2fbfe109>
