@@ -494,7 +494,7 @@ textual output.
 
 How we get entropy to feed into `sut`? Because we are only interested in entropy size, we won't be
 storing the actual entropy bytes, and instead will generate it from a `u64` seed. In other words,
-just two numbres, entropy size and seed, are needed to reproduce a single run of the test:
+just two numbers, entropy size and seed, are needed to reproduce a single run of the test:
 
 ```zig
 fn run_once(driver: Driver, options: struct {
@@ -595,7 +595,7 @@ The search loop is essentially a binary search, with a twist --- rather than usi
 That is, we start with a small size and step, and, on every iteration, double the step and add it to
 the size, until we hit a failure (or run out of buffer for the entropy).
 
-Once we found a failure, we continue the serach in the other direction --- halving the step and
+Once we found a failure, we continue the search in the other direction --- halving the step and
 subtracting it from the `size`, keeping the smaller `size` if it still fails.
 
 On each step, we log the current size and outcome, and report the smallest failing size at the end.
