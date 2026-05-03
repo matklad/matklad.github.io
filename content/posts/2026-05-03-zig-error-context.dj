@@ -1,0 +1,106 @@
+# Minimal Viable Zig Error Contexts
+
+```zig
+fn process_file(io: Io, path: []const u8) !void {
+    errdefer log.err("path={s}", .{path});
+
+    const fd = try Io.Dir.cwd().openFile(io, path, .{});
+    defer fd.close(io);
+
+    // ...
+}
+```
+
+Out of the box, Zig provides minimal and sufficient facilities for error _handling_ ---
+[strongly-typed error codes](https://matklad.github.io/2025/11/06/error-codes-for-control-flow.html).
+Error _reporting_ is left to the user. Idiomatic solution is to pass a `Diagnostics` out parameter
+("sink") to materialize human-readable strings as needed.
+
+Diagnostics pattern works well for "production" code, but for more script-y code it adds too much
+friction relative to the default option of a plain
+[`try fallible()`,]{.display}
+which of course gives a less than ideal message on failure:
+
+```
+λ zig build
+error: FileNotFound
+~/.cache/zig/p/../lib/std/Io/Threaded.zig:4866:35: 0x1044126c7 in dirOpenFilePosix (fail)
+                        .NOENT => return error.FileNotFound,
+                                  ^
+~/.cache/zig/p/../lib/std/Io/Dir.zig:578:5: 0x104347d8b in openFile (fail)
+    return io.vtable.dirOpenFile(io.userdata, dir, sub_path, options);
+    ^
+~/fail/main.zig:10:16: 0x10443da5f in f (fail)
+    const fd = try Io.Dir.cwd().openFile(io, path, .{});
+               ^
+~/fail/main.zig:6:5: 0x10443db47 in main (fail)
+    try process_file(io, "data.txt");
+    ^
+```
+
+Error trace is helpful, but knowing _which_ file is the problem is even more so.
+
+The first attempt at finding a middle ground between fully-fledged diagnostics sink pattern and a
+plain try is something like this:
+
+```zig
+const fd = dir.openFile(io, path, .{}) catch |err| {
+    log.err("failed to open file '{s}': {t}", .{path, err});
+    return err;
+}
+```
+
+Unsatisfactory. The friction is high, you need to come up with a reasonably-sounding error message,
+the "happy path" of the code is obscured, and you need to repeat this for every fallible operation.
+
+A worse-is-better version of the above code is
+
+```zig
+errdefer log.err("path={s}", .{path});
+const fd = try dir.openFile(io, path, .{});
+```
+
+That is, just log error context as `key=value` pairs, guarded by `errdefer`. The result is not
+pretty, but passable:
+
+```
+λ zig build
+error: path=./data.txt
+error: FileNotFound
+~/.cache/zig/p/../lib/std/Io/Threaded.zig:4866:35: 0x1044126c7 in dirOpenFilePosix (fail)
+                        .NOENT => return error.FileNotFound,
+                                  ^
+~/.cache/zig/p/../lib/std/Io/Dir.zig:578:5: 0x104347d8b in openFile (fail)
+    return io.vtable.dirOpenFile(io.userdata, dir, sub_path, options);
+    ^
+~/fail/main.zig:10:16: 0x10443da5f in f (fail)
+    const fd = try Io.Dir.cwd().openFile(io, path, .{});
+               ^
+~/fail/main.zig:6:5: 0x10443db47 in main (fail)
+    try process_file(io, "data.txt");
+    ^
+```
+
+The friction is reduced a lot:
+
+* No need to come up with any error messages beyond existing variable names.
+* No need to change any of the `try`s.
+* The context is set per-block. If a function does several fallible operations on a file, the
+  path needs to be specified only once.
+* The context is "telescopic" every function in the call-stack can add its own context.
+
+There's one huge drawback though --- the error message is logged, even if the error is subsequently
+handled. This is especially important in Zig 0.16, where cancelation
+([serendipitous-success](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1677r2.pdf))
+is a possible error for any IO-ing operation, and which is intended to be handled, rather than
+reported.
+
+---
+
+Generalizing:
+
+* Happy path adds context to all operations in-progress.
+* Errors materialize current context.
+
+This does feel like a better error management strategy than decorating errors individually, when
+they happen. I wonder which language features facilitate this style?
