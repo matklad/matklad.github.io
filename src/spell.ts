@@ -44,12 +44,17 @@ Here is the blog post to check:
 ${content}`;
 
   const process = new Deno.Command("llm", {
-    args: ["-m", "claude-sonnet-4.5", prompt],
+    args: ["-m", "claude-sonnet-4.6"],
+    stdin: "piped",
     stdout: "piped",
     stderr: "piped",
   });
 
-  const { code, stdout, stderr } = await process.output();
+  const child = process.spawn();
+  const writer = child.stdin.getWriter();
+  await writer.write(new TextEncoder().encode(prompt));
+  await writer.close();
+  const { code, stdout, stderr } = await child.output();
 
   if (code !== 0) {
     const error_text = new TextDecoder().decode(stderr);
