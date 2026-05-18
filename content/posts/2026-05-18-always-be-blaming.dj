@@ -1,0 +1,119 @@
+# Always Be Blaming
+
+A few tips on 4D-ing your code comprehension skills.
+
+I wrote on the importance of reading code before:
+[_Look Out For Bugs_](https://matklad.github.io/2025/09/04/look-for-bugs.html){.display}
+My default approach to reading is "predictive": I don't actually read the code line by line. Rather,
+I try to understand the problem that it wants to solve, then imagine my own solution, and read the
+"diff" between what I have in my mind and what I see in the editor. Non-empty "diff" signifies
+either a bug in my understanding, or an opportunity to improve the code.
+
+This is 2D reading, understanding a snapshot of code, frozen in time. This is usually enough to spot
+"this feels odd" anomalies, worthy of further investigation.
+
+Ideal code is memoryless --- it precisely solves the problem at hand. Most real code is Markov ---
+the shape of the code at time `T` depends not only on the problem statement, but also on the shape
+of the code at time `T - 1`. The 3D step is to trace the evolution of code over time,
+[_Where Do We Come From? What Are We? Where Are We Going?_](https://en.wikipedia.org/wiki/Where_Do_We_Come_From%3F_What_Are_We%3F_Where_Are_We_Going%3F#/media/File:Paul_Gauguin_-_D'ou_venons-nous.jpg).
+
+The step after that is to understand the _why_. What were we thinking back then, when we wrote this
+code? It's useful to have the "theory of mind" concept ready here. I personally learned the term way
+too late in my life, so let me give a short intro for [today's lucky 10 000](https://xkcd.com/1053/).
+Theory of mind is the ability to imagine yourself in someone else's skin. Not just in their shoes
+("I certainly would have acted differently in that situation"), but with their mind ("_I_ wouldn't
+have acted that way, but I get why _they_ did"). This is something people learn. The experimental
+setup here is to have a child in a room with toys, with a doll sitting near the opposite end of the
+room, and asking the child "what does the doll see?". Younger children describe the room from _their_
+perspective, older begin to intuit that doll's perspective is different.
+
+So _this_ is the goal of reading code --- understanding _what_ the original author was thinking, and
+_why_.
+
+---
+
+End of the mumbo-jumbo, some practical advice. First, read
+[[_Every line of code is always documented_](https://mislav.net/2014/02/hidden-documentation/),]{.display}
+it is very good.
+
+Second, make sure it is _effortless_ for you to find out how a given snippet of code evolved. This
+is harder than it seems! Just `git blame` isn't an answer --- mind the gap between the problem
+that's easy to solve, and the problem in need of solving.
+
+`git blame` answers spatial question of "how each line appeared in this file", because there's a
+relatively straightforward UI for this --- annotate each line with a commit hash. But this is not
+the question you are asking most of the time! You don't care about the file! There's a small snippet
+of code in the middle, and you want a temporal history of _that_.
+
+As much as I
+[don't like working in the browser](https://tigerbeetle.com/blog/2025-08-04-code-review-can-be-better/)
+GitHub's web interface for blaming is probably better than what you get locally by default. It
+starts with the [y]{.kbd} shortcut, which resolves a symbolic reference like
+
+```
+https://github.com/tigerbeetle/tigerbeetle/blob/main/src/vsr/replica.zig
+```
+
+into the one which has a commit hash in the URL:
+
+```
+https://github.com/tigerbeetle/tigerbeetle/blob/c54f613a2eb2a127a0ba212704e3fa988c42e5cb/src/vsr/replica.zig
+```
+
+This commit hash is critical, because it anchors the entire repository --- if you open a different
+file from the web UI, it will be shown as of that commit. This enables you to not myopically focus
+on just the diff in question, but to absorb the entire context at that point in time.
+
+So my usual web workflow is:
+
+* [ctrl+f]{.kbd} to find the line I am interested in
+* [b]{.kbd} to toggle blame
+* Click "blame prior to change" a couple of times, repeating [ctrl+f]{.kbd} to go back to the snippet
+  I am curious about.
+* [cmd]{.kbd}-click on the commits that are potentially relevant, pinning their commit hashes
+  in the URL in new tabs.
+* Then, from the commit page, "Browse files" button to then go and [t]{.kbd} to other files. Or,
+  [cmd+l]{.kbd} to focus browser's address bar, and `s/commit/tree/` (or back!) as needed, to switch
+  between diff and snapshot views.
+
+Again, my goal here is not to annotate a diff on a file but rather to get a "virtual checkout" as of
+the interesting commit.
+
+This web approach is what I was using throughout most of my career, but I've finally found a way to
+replicate it locally. The idea is to make blaming "in-place". Instead of `git blame` annotating
+lines of code, I directly switch to a historical commit. I have the following
+[devil](https://susam.github.io/devil/) [hydra](https://github.com/abo-abo/hydra) of shortcuts:
+
+[, b l]{.kbd} blames line. It notes the `$line` the cursor is at, runs
+[`git blame -L $line,$line`]{.display}
+to find `$commit` that introduced the line, and then runs
+[`git switch --detach $commit`]{.display}
+to check it out. I have
+[a dedicated worktree](https://matklad.github.io/2024/07/25/git-worktrees.html) for code archeology,
+so I don't worry about trashing my work. There's also a half-hearted attempt to maintain "logical"
+cursor position, but it doesn't work very well. Is there some git command that tells me directly
+"what's the equivalent of `$file:$line:column` in `$sha-A` for `$sha-B`?"
+
+[, b p]{.kbd} blames parent. Which is just switching to the parent commit of the current `HEAD`, what
+"blame before this change" does on GitHub (it works slightly differently because it assumes that
+[, b l]{.kbd} was the previous command)
+
+[, b u]{.kbd} undoes the last blaming operation, switching to the previous point. I _really_ love that, on
+the web, I can [cmd]{.kbd}-click to create an alternative branch of exploration. In theory, this is
+replicatable locally, but I prefer to destructively mutate a single working tree on disk. A big
+reason for preferring in-place blame is that LSP, `./zig/zig build test`, `rg` and the like just
+work. That's more important for me than the garden of forking paths, and undo is an acceptable
+work-around.
+
+Finally, [, b w]{.kbd} copies GitHub link to the current commit and line, which I can paste into the
+browser. An _enormous_ problem with modern version control landscape is that absolutely critical
+information in the form of code review comments is not a part of the git repository, and is locked
+in someone else's proprietary database. I [failed to
+solve](https://tigerbeetle.com/blog/2025-08-04-code-review-can-be-better/) this problem in one
+weekend, and had to begrudgingly adapt. Opening the commit in a browser links you to the PR and its
+discussion as well.
+
+Implementing this blame workflow required
+[a bit of custom code](https://github.com/matklad/config/blob/801d0781b005db574e6b42b813058741dd8ef390/tools/my-code/src/blame.ts).
+Feel free to use it, but beware that it's somewhat crufty, especially around maintaining current
+cursor position. Making a production-ready version of this sounds like a fun project ;-)
