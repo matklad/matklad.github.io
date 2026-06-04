@@ -1,0 +1,267 @@
+# CSS: Unavoidable Bad Parts
+
+An ersatz CSS tutorial for people who need to style a web page, but aren't web developers. I am a
+wrong person to write this kind of thing, as I have neither the time, nor experience. I'd much
+rather read a book about this. Alas, I had to learn all this stuff from trawling MDN, so perhaps
+it is valuable to document what I have so far.
+
+CSS, HTML and Web APIs are truly vast, and it takes a career to become professional. The good news
+is that modern web has a reasonably-sized, learnable subset which is enough for simple tasks like a
+programming blog or a simple GUI. I haven't seen a resources that teaches _just_ this subset, but
+its not too hard to figure this out. The bad news is that there's also a nasty set of gotchas,
+which will mess up your page, which you won't suspect to exist, and which will need days of
+debugging to figure out. Still, it's not _that_ bad. I am quite happy with the styling on this side,
+and it's only about [200 of readable CSS](https://matklad.github.io/css/main.css).
+
+**Good:** HTML5 semantics tag names\
+It's worth looking through MDN
+[Elements Reference](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements). There
+aren't that many elements, and things like `main`, `article`, `nav`, `kbd` make it much easier
+to structure your page. Less obvious:
+
+- `ul` for any kind of list, like site's sections in `header > nav`.
+- `details` for table-of-contents (check the source of MDN).
+- `dl`/`dt` for list of pairs.
+
+**Bad:** Wrappers\
+If you "View Source" on any "real" website, you'll notice that everything has
+layers and layers of wrapper elements, so you might be tricked into thinking that wrappers is how
+you solve layout problems. I can't really agree or disagree here, as I never wrote "production" CSS,
+but, in my experience, it's much easier to understand if you do the opposite --- restrict yourself
+to using only markup-meaningful semantic tags, and then figure out CSS which works with the markup
+you have.
+
+**Bad:** Layout\
+This one is not an exclusively Web problem, layout is a struggle in every GUI framework I know.
+Imagine a fixed sized raster image, and a paragraph of text describing it. There are many ways to
+arrange these two elements on the screen's rectangle. Generally, for every given width and height,
+you can do decent job, as long as the total area is enough. A typical GUI is a hierarchy of such
+boxes, with a lot of "layout freedom". The problem though is that layout of each box affects the
+layouts of all other boxes, as you generally want all boxes to meet exactly, without gaps and
+overlaps. An important negative realization is that _the_ layout algorithm doesn't exist. There
+isn't a fully general solution to positioning and sizing GUI boxes. Rather, different systems use
+different sets of heuristics to do the job, from simple
+[RectCut](https://web.archive.org/web/20210306102303/https://halt.software/dead-simple-layouts/), to
+fully general [constraint solvers](https://github.com/inamiy/Cassowary), with
+[everything in between](https://www.youtube.com/watch?v=UUfXWzp0-DU).
+It is hard to get the mental model of how layout works, _in general_. So, don't think "how
+can I do my layout in a given system", think instead "what possible layouts are allowed by the
+system".
+
+**Bad:** Browser defaults\
+Let's start with a bare (but still semantic) HTML markup of a blog
+article, without any CSS. If you open it in a browser, it will show _something_. The content isn't
+unstyled  --- the text is of a certain color, font and size. Headers are bigger than the main text,
+links are underlined, etc. These are the default styles of your browser. They are helpful! The
+problem is that these styles differ between the browsers. So, even when you add your own CSS, and
+the end result looks fine in your browser, I might see something different, because you might rely
+on a browser default, without knowing it. The last bit is the killer here --- the problem is in
+something you _didn't_ write.
+
+The general solution here is a [CSS reset](https://www.joshwcomeau.com/css/custom-css-reset/),
+or normalization --- starting your CSS with an explicit set of rules, overriding defaults. Not because defaults are inherently bad, because they are inconsistent. I don't know _which_ set of rules you need to override in practice, it's a good idea to
+compare several existing CSS resets.
+
+This touches on the big question: _should_ you style your web page? There are two competing views of
+the Web platform --- some people treat it as a flexible, adaptive, primarily visual medium for
+expressing design, others would prefer if the Web focused on delivering the content, allowing each
+user to customize the presentation. My personal answer here is pragmatic --- by default, an unstyled
+page is poorly usable and looks bad. I would have preferred the world where CSS-less pages were
+readable as is, but, in this world, I think it is helpful to style the content. At the same time,
+it's a good idea to allow advanced users to bring their own CSS. Make sure that your HTML markup is
+reasonable, that you don't overfit your HTML to CSS (vice-verse is fine), and that your page
+functions in reader mode.
+
+**Good:** [Classless CSS](https://boltcss.com)\
+You can't reset styles to true neutral nothing: if
+you make the text invisible (white or transparent), it is still a style. So you might as well
+embrace it: after reset, style common HTML elements directly. For example, to set your favorite font
+for all code snippets:
+
+```css
+code { font-family: "JetBrains Mono", monospace; }
+```
+
+If you use `main`, `header`, `footer`, `nav` tags you can set the overall page layout without
+writing any CSS selectors. This of course requires making assumptions, in CSS, about the structure
+of your HTML, but, like, this is your HTML and your CSS, you can do whatever, and, if you don't like
+the result, you can always change it!
+
+**Bad:** CSS selectors\
+In programming, we collectively came around to distrust inheritance and prefer composition. Default
+CSS is like supercharged inheritance, each design element on your web page is affected by multiple
+rules, and you can always "monkey patch" existing elements by appending to your CSS. There's an
+unfortunate gap between CSS affordances, and what you actually want to do. The two reasonable
+approaches are:
+
+A) Conclude that CSS selectors add abstraction capability along the wrong axis, and stick to
+classless CSS and inline styles, using something like Tailwind to make writing inlines prettier, and
+something like JSX (or any other templating engine supporting composition) to avoid repetition in
+HTML.
+
+B) Use [CSS nesting](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Nesting) to avoid
+writing "far reaching" selectors and style component-per-component:
+
+```css
+header { /* Site Header */
+    margin-bottom: 2rem;
+    & nav {
+        /* Styles, specific to nav in the Header. */
+    }
+}
+```
+
+**Bad:** [box-sizing](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/box-sizing)\
+UIs are recursive rectangles, layout is the process of figuring out where each rectangles
+goes, and it is determined by the sizes of rectangles themselves. So, understanding _what_ is the
+size is quite fundamental. Sadly, by default the definition of size in HTML is very unintuitive:
+element's width and height do not include element's border and padding, which leads to surprising
+results: everything looks perfect at first, but increasing padding somewhere shifts the entire
+layout unexpectedly. For this reason,
+[`* { box-sizing: border-box; }`]{.display}
+deserves to be the first line in your CSS reset. It make elements encapsulated, such that adding
+borders is a local-only change.
+
+**Chaotic Good:** [margin collapsing](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Box_model/Margin_collapsing)\
+Suppose you want to have a `8px` gap around an element. You would _think_ that you need to set the
+padding property. But that would be wrong --- if you have two such elements next to each other,
+the gap between them would be `16px`. The paddings would add, creating a visual gap larger than
+intended. You want something more akin to social distancing, where if one person is more
+introverted, this person's bigger radius of exclusion is what defines the distance. And that's how
+the `margin` property works. Two neighboring margins are combined using `max` rather than `sum`.
+Margin collapsing is very useful, but it can surprise you. E.g. I _think_ child margin can
+stick beyond parent's? To be honest, I don't have a good intuitive understanding of margins, but I
+know enough to at least identify when it is the problem.
+
+Margins are also one of the indirect inspirations for this post. In
+
+[[_Moving away from Tailwind, and learning to structure my CSS_](https://jvns.ca/blog/2026/05/15/moving-away-from-tailwind--and-learning-to-structure-my-css-/)]{.display}
+
+Julia Evans writes that you generally don't want to set margin on an element, and should rather let
+the parent control the inter-element margin of the children, using the so-called owl selector:
+
+```css
+section > *+* {
+  margin-top: 1rem;
+}
+```
+
+That is, add margin to all `section`'s children exempting the first one. I didn't know that! And,
+given all the pain that margin gave me so far, I actually get why you want to do this, and why this
+is a good idea. But it bugs me that you can't learn that without becoming "professional" web
+developer, or reverse-engineering someone else's CSS framework.
+
+**Bad:** [Default (flow)
+layout](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Display/Block_and_inline_layout)\
+Layout in general is tricky, because there's no universal "layout
+algorithm", just a bunch of special cases. But what does HTML actually do? The default layout
+algorithm I _think_ goes back to the origin of HTML as a language for documents, and overfits a
+use-case of producing papers --- mostly text content with some illustrations, where the text can
+flow around the pictures. That's actually what you want for the main body of text of your blog, but,
+as soon as you want to actually control the spatial arrangement of the elements on your page, you
+want something different, for example...
+
+**Good:** [flexbox](https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout/Flexbox)\
+This really what separates modern web-development from the olden days, where you'd need a CSS PhD or
+a full-blown opaque CSS framework to be able to say "this goes to the left, and this goes to the
+right". This layout allows you to arrange a series of elements either vertically or horizontally,
+adapting to the available space. It is rather complex and I can't use flexbox without referencing
+MDN all the time, but usually I am able to get things done in the end.
+
+**Bad:** responsive design\
+Modern CSS allows querying screen size, and implementing conditional logic based on that --- a
+design that "responds" to user-agent constraints. This probably what you should use for "real" CSS,
+but note that HTML is _inherently_ responsive. Unlike PostScript (PDF), it will automatically reflow
+the paragraphs when you change window size. So, it's a good idea to avoid writing _explicit_
+responsive rules, and just rely on layout to do the reasonable thing. For example, this blogs looks
+OK on mobile, tablet and desktop without any explicit `@media` queries. Unconditionally setting `max-width ` on the main column of text is all that it takes.
+
+**Lawful Evil:** pixels\
+`1px` does what you want, but not what it says. It's _not_ a size of one physical
+pixel on your screen. Rather, its a measure of [visual
+angle](http://inamidst.com/stuff/notes/csspx). That is, `1px` should look perceptually the same on
+any screen, and it is converted to different number of physical pixels, depending on the screen size, its pixel density, and the typical viewing distance. So you _can_ just size everything in pixels, without thinking about different
+displays' pixel densities. It gets weirder. CSS allows "real" units like centimeters or inches, but
+they are _also_ angles, because everything is _defined_ in terms of pixels.
+
+**Doubleplusungood:** [font-size](https://tonsky.me/blog/font-size/)\
+Flexbox is a good way to layout UI-elements. Flow layout works ok for layout out paragraphs of text.
+But what happens on the level of individual lines and glyphs, is, in my opinion, a train wreck and a
+noob trap. Let's start with the basics: if you write
+[`font-size: 16px`]{.display}
+then `16px` is the size of what? Sadly, the answer is "nothing in particular" --- this is a size of
+a virtual box around the glyph, but the box isn't tight, and the size of the glyph varies, depending
+on the font. Luckily, `font-size-adjust` property can fix it, and make `font-size` consistent across
+fonts. See these two posts for details:
+
+* [font-size-adjust Is Useful](https://matklad.github.io/2025/07/16/font-size-adjust.html)
+* [Font size is useless; let's fix it](https://tonsky.me/blog/font-size/)
+
+Though, at the moment `font-size-adjust` seems to be very niche, so, while personally I'd  put
+[`font-size-adjust: ex-height 0.53;`]{.display}
+right next to `box-sizing`, few pages do that.
+
+The next issue with `font-size` is a thorny question of defaults. The good news is that it's one of
+the properties that is fairly consistent across browsers, with `16px` being the overwhelming
+default. The bad news is that, depending on the font, `16px` can be on the smaller size. Not
+completely illegible, but very close to the lower bound. What's worse, some _default_ fonts are
+particularly small. For example, on Apple,
+[`font-family: serif`]{.display}
+looks much smaller than `sans-serif`, and is almost uncomfortable to read at 16px.
+
+Can you just set
+[`font-size: 18px`]{.display}
+or whatever works best for our chosen font? I think the answer is yes, but there are some caveats to
+keep in mind. Refer to
+[[_Accessibility: px or rem?_](https://matklad.github.io/2022/11/05/accessibility-px-or-rem.html)]{.display}
+for details. The issue is that modern browsers support two ways of making text on a page bigger:
+
+- Zoom, which has a dedicated UI element, shortcuts/gestures, per-page persistence/overrides
+  and a global default.
+- Changing default font-size, a global setting buried deeply in the configuration page.
+
+Setting `font-size` in your CSS disables that second approach.
+
+Taking everything together: don't assume that text on your page will be readable by default, check
+different configurations. Set `font-size-adjust` to reduce the number of degrees of freedom and to
+pin down the meaning of `font-size`. If the result looks fine with your chosen (or your user's
+default) font and default font-size of `16px`, then you are done. Otherwise, set `font-size` to a
+bigger number. Afterwards, check that the page is readable in reader mode as well.
+
+**Bad:** [`line-height`](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/line-height)\
+Despite the name, `line-height` doesn't set the height of a line. It is a height of a run of glyphs,
+_set in the same font_. The two coincide when all the text is in the same font. But if you have,
+e.g., some words set in `monospace` font, you are in for a surprise. While `font-size-adjust` fixes
+the size of a glyph inside the box, it still leaves its relative position unspecified. So, when two
+runs of text in different fonts are aligned vertically to share the baseline, their line-height
+line-boxes get shifted relative to each other: one sticks below, one sticks above. The line height
+overall becomes larger that what you'd expect, as it is configured as a union. See
+
+[Deep dive CSS: font metrics, line-height and vertical-align](https://iamvdo.me/en/blog/css-font-metrics-line-height-and-vertical-align){.display}
+
+for a thorough explanation of this effect.
+
+**Bad:** vertical rhythm\
+If you google long enough this cluster of problems, sooner or later you'll come across the idea of
+vertical rhythm, that you should make sure that lines are in the same relative position across
+different paragraphs, even if you have headings, images, and that not. As if there's invisible
+lined paper behind your web-page. As far as I can tell, this is pure voodoo and is not useful. _If_
+you do two-column layout, then you want lines on opposite sides to align, but it makes no sense to
+jump through hoops for a single-column layout (hat tip to [@chrismorgan](https://lobste.rs/s/noahb3/readable_css#c_pre4ii)).
+
+**Bad:** `word-break`\
+The genius of the flow layout is its dynamism. It takes a moment of reflection to appreciate the
+technical marvel of text breaking itself neatly into lines as the window is resized to be narrower.
+Getting that to work for the first time ever in the world of durably printed text must have felt
+incredible. But the magic has its limits --- you can only break the line at the whitespace, or at
+the hyphenation points. And some long spans, like `inline code` or URLs, might be unbreakable. This
+leads to overflow annoyance on mobile devices, something you notice only _after_ you publish your
+work. There's no one trick to fix it, but some tips are available here:
+[_Against Horizontal Scroll_](https://matklad.github.io/2025/04/22/horizontal-scroll.html){.display}
+for details.
+
+---
+
+And ... that's all I remember so far? I re-iterate my request for someone to write a short 100-page
+book explaining just enough of HTML&CSS to make a simple blog without getting collapsed by the
+margins!
