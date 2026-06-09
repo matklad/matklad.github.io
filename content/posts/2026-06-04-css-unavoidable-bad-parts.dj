@@ -5,15 +5,15 @@ wrong person to write this kind of thing, as I have neither the time, nor experi
 rather read a book about this. Alas, I had to learn all this stuff from trawling MDN, so perhaps
 it is valuable to document what I have so far.
 
-CSS, HTML and Web APIs are truly vast, and it takes a career to become professional. The good news
+CSS, HTML and Web APIs are truly vast, and it takes a career to become a professional. The good news
 is that modern web has a reasonably-sized, learnable subset which is enough for simple tasks like a
-programming blog or a simple GUI. I haven't seen a resources that teaches _just_ this subset, but
-its not too hard to figure this out. The bad news is that there's also a nasty set of gotchas,
+programming blog or a simple GUI. I haven't seen a resource that teaches _just_ this subset, but
+it's not too hard to figure this out. The bad news is that there's also a nasty set of gotchas,
 which will mess up your page, which you won't suspect to exist, and which will need days of
-debugging to figure out. Still, it's not _that_ bad. I am quite happy with the styling on this side,
+debugging to figure out. Still, it's not _that_ bad. I am quite happy with the styling on this site,
 and it's only about [200 of readable CSS](https://matklad.github.io/css/main.css).
 
-**Good:** HTML5 semantics tag names\
+**Good:** HTML5 semantic tag names\
 It's worth looking through MDN
 [Elements Reference](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements). There
 aren't that many elements, and things like `main`, `article`, `nav`, `kbd` make it much easier
@@ -25,7 +25,7 @@ to structure your page. Less obvious:
 
 **Bad:** Wrappers\
 If you "View Source" on any "real" website, you'll notice that everything has
-layers and layers of wrapper elements, so you might be tricked into thinking that wrappers is how
+layers and layers of wrapper elements, so you might be tricked into thinking that wrappers are how
 you solve layout problems. I can't really agree or disagree here, as I never wrote "production" CSS,
 but, in my experience, it's much easier to understand if you do the opposite --- restrict yourself
 to using only markup-meaningful semantic tags, and then figure out CSS which works with the markup
@@ -35,7 +35,7 @@ you have.
 This one is not an exclusively Web problem, layout is a struggle in every GUI framework I know.
 Imagine a fixed sized raster image, and a paragraph of text describing it. There are many ways to
 arrange these two elements on the screen's rectangle. Generally, for every given width and height,
-you can do decent job, as long as the total area is enough. A typical GUI is a hierarchy of such
+you can do a decent job, as long as the total area is enough. A typical GUI is a hierarchy of such
 boxes, with a lot of "layout freedom". The problem though is that layout of each box affects the
 layouts of all other boxes, as you generally want all boxes to meet exactly, without gaps and
 overlaps. An important negative realization is that _the_ layout algorithm doesn't exist. There
@@ -69,7 +69,7 @@ user to customize the presentation. My personal answer here is pragmatic --- by 
 page is poorly usable and looks bad. I would have preferred the world where CSS-less pages were
 readable as is, but, in this world, I think it is helpful to style the content. At the same time,
 it's a good idea to allow advanced users to bring their own CSS. Make sure that your HTML markup is
-reasonable, that you don't overfit your HTML to CSS (vice-verse is fine), and that your page
+reasonable, that you don't overfit your HTML to CSS (vice-versa is fine), and that your page
 functions in reader mode.
 
 **Good:** [Classless CSS](https://boltcss.com)\
@@ -119,7 +119,7 @@ element's width and height do not include element's border and padding, which le
 results: everything looks perfect at first, but increasing padding somewhere shifts the entire
 layout unexpectedly. For this reason,
 [`* { box-sizing: border-box; }`]{.display}
-deserves to be the first line in your CSS reset. It make elements encapsulated, such that adding
+deserves to be the first line in your CSS reset. It makes elements encapsulated, such that adding
 borders is a local-only change.
 
 **Chaotic Good:** [margin collapsing](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Box_model/Margin_collapsing)\
@@ -162,7 +162,7 @@ as soon as you want to actually control the spatial arrangement of the elements 
 want something different, for example...
 
 **Good:** [flexbox](https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout/Flexbox)\
-This really what separates modern web-development from the olden days, where you'd need a CSS PhD or
+This is really what separates modern web-development from the olden days, where you'd need a CSS PhD or
 a full-blown opaque CSS framework to be able to say "this goes to the left, and this goes to the
 right". This layout allows you to arrange a series of elements either vertically or horizontally,
 adapting to the available space. It is rather complex and I can't use flexbox without referencing
@@ -173,20 +173,20 @@ Modern CSS allows querying screen size, and implementing conditional logic based
 design that "responds" to user-agent constraints. This probably what you should use for "real" CSS,
 but note that HTML is _inherently_ responsive. Unlike PostScript (PDF), it will automatically reflow
 the paragraphs when you change window size. So, it's a good idea to avoid writing _explicit_
-responsive rules, and just rely on layout to do the reasonable thing. For example, this blogs looks
+responsive rules, and just rely on layout to do the reasonable thing. For example, this blog looks
 OK on mobile, tablet and desktop without any explicit `@media` queries. Unconditionally setting `max-width ` on the main column of text is all that it takes.
 
 **Lawful Evil:** pixels\
 `1px` does what you want, but not what it says. It's _not_ a size of one physical
-pixel on your screen. Rather, its a measure of [visual
+pixel on your screen. Rather, it's a measure of [visual
 angle](http://inamidst.com/stuff/notes/csspx). That is, `1px` should look perceptually the same on
 any screen, and it is converted to different number of physical pixels, depending on the screen size, its pixel density, and the typical viewing distance. So you _can_ just size everything in pixels, without thinking about different
 displays' pixel densities. It gets weirder. CSS allows "real" units like centimeters or inches, but
 they are _also_ angles, because everything is _defined_ in terms of pixels.
 
 **Doubleplusungood:** [font-size](https://tonsky.me/blog/font-size/)\
-Flexbox is a good way to layout UI-elements. Flow layout works ok for layout out paragraphs of text.
-But what happens on the level of individual lines and glyphs, is, in my opinion, a train wreck and a
+Flexbox is a good way to layout UI-elements. Flow layout works ok for laying out paragraphs of text.
+But what happens on the level of individual lines and glyphs is, in my opinion, a train wreck and a
 noob trap. Let's start with the basics: if you write
 [`font-size: 16px`]{.display}
 then `16px` is the size of what? Sadly, the answer is "nothing in particular" --- this is a size of
@@ -197,7 +197,7 @@ fonts. See these two posts for details:
 * [font-size-adjust Is Useful](https://matklad.github.io/2025/07/16/font-size-adjust.html)
 * [Font size is useless; let's fix it](https://tonsky.me/blog/font-size/)
 
-Though, at the moment `font-size-adjust` seems to be very niche, so, while personally I'd  put
+Though, at the moment `font-size-adjust` seems to be very niche, so, while personally I'd put
 [`font-size-adjust: ex-height 0.53;`]{.display}
 right next to `box-sizing`, few pages do that.
 
@@ -211,7 +211,7 @@ looks much smaller than `sans-serif`, and is almost uncomfortable to read at 16p
 
 Can you just set
 [`font-size: 18px`]{.display}
-or whatever works best for our chosen font? I think the answer is yes, but there are some caveats to
+or whatever works best for your chosen font? I think the answer is yes, but there are some caveats to
 keep in mind. Refer to
 [[_Accessibility: px or rem?_](https://matklad.github.io/2022/11/05/accessibility-px-or-rem.html)]{.display}
 for details. The issue is that modern browsers support two ways of making text on a page bigger:
@@ -244,7 +244,7 @@ for a thorough explanation of this effect.
 **Bad:** vertical rhythm\
 If you google long enough this cluster of problems, sooner or later you'll come across the idea of
 vertical rhythm, that you should make sure that lines are in the same relative position across
-different paragraphs, even if you have headings, images, and that not. As if there's invisible
+different paragraphs, even if you have headings, images, and what not. As if there's invisible
 lined paper behind your web-page. As far as I can tell, this is pure voodoo and is not useful. _If_
 you do two-column layout, then you want lines on opposite sides to align, but it makes no sense to
 jump through hoops for a single-column layout (hat tip to [@chrismorgan](https://lobste.rs/s/noahb3/readable_css#c_pre4ii)).
@@ -262,6 +262,6 @@ for details.
 
 ---
 
-And ... that's all I remember so far? I re-iterate my request for someone to write a short 100-page
+And ... that's all I remember so far? I reiterate my request for someone to write a short 100-page
 book explaining just enough of HTML&CSS to make a simple blog without getting collapsed by the
 margins!
