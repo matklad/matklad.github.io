@@ -84,7 +84,7 @@ First, let's define a (somewhat artificial) problem which is trivially NP-comple
 Let's start with this one: "Given a Turing machine and an input for it of length N, will the machine output {"yes"} after N^k^ steps?"
 (here k is a fixed parameter; pedantically, I describe a family of problems, one for each k)
 
-This is _very_ similar to a halting problem, but also much easier.
+This is _very_ similar to the halting problem, but also much easier.
 We explicitly bound the runtime of the Turing machine by a polynomial, so we don't need to worry about "looping forever" case --- that would be a "no" for us.
 The naive algorithm here works: we just run the given machine on a given input for a given amount of steps and look at the answer.
 
@@ -103,12 +103,12 @@ This is because SAT is powerful enough to encode a Turing machine!
 _First_, note that we can encode a state of a Turing machine as a set of boolean variables.
 We'll need a boolean variable T~i~ for each position on a tape.
 The tape is in general infinite, but all our Turing machines run for polynomial (finite) time, so they use only a finite amount of cells, and it's enough to create variables only for those cells.
-Position of the head can also be described by a set of booleans variables.
+Position of the head can also be described by a set of boolean variables.
 For example, we can have a P~i~ "is the head at a cell `i`" variable for each cell.
 Similarly, we can encode the finite number of states our machine can be in as a set of S~i~ variables (is the machine in state `i`?).
 
 _Second_, we can write a set of boolean equations which describe a single transition of our Turing machine.
-For example  the value of cell i at the second step T2~i~ will depend on its value on the previous step T1~i~, whether the head was at `i` (P1~i~) and the rules of our specific states.
+For example, the value of cell i at the second step T2~i~ will depend on its value on the previous step T1~i~, whether the head was at `i` (P1~i~) and the rules of our specific states.
 For example, if our machine flips bits in state `0` and keeps them in state `1`, then the formula we get for each cell is
 
 ```
