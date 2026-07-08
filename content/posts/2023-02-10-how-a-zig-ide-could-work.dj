@@ -13,9 +13,9 @@ It's useful to discuss a bit how the compiler works today.
 For something more thorough, refer to this excellent series of posts: <https://mitchellh.com/zig>.
 
 First, each Zig file is parsed into an AST.
-Delightfully, parsing doesn't require any context whatsoever, it's a pure `[]const u8 -> Ast` function, and the resulting Ast is just a piece of data.
+Delightfully, parsing doesn't require any context whatsoever, it's a pure `[]const u8 -> Ast` function, and the resulting AST is just a piece of data.
 
-After parsing, the Ast is converted to an intermediate representation, Zir.
+After parsing, the AST is converted to an intermediate representation, Zir.
 This is where Zig diverges a bit from more typical statically compiled languages.
 Zir actually resembles something like Python's bytecode --- an intermediate representation that an interpreter for a dynamically-typed language would use.
 That's because it _is_ an interpreter's IR --- the next stage would use Zir to evaluate comptime.
@@ -24,14 +24,14 @@ Let's look at an example:
 
 ```zig
 fn generic_add(comptime T: type, lhs: T, rhs: T) T {
-  return lhs + rhs;
+    return lhs + rhs;
 }
 ```
 
 Here, the Zir for `generic_add` would encode addition as a typeless operation, because we don't know types at this point.
 In particular, `T` can be whatever.
 When the compiler would _instantiate_ `generic_add` with different `T`s, like `generic_add(u32, ...)`, `generic_add(f64, ...)`, it will re-use the same Zir for different instantiations.
-That's the two purposes of Zir: to directly evaluate code at compile time, and to serve as a template for monomorphisation.
+That's the two purposes of Zir: to directly evaluate code at compile time, and to serve as a template for monomorphization.
 
 The next stage is where the magic happens --- the compiler partially evaluates dynamically typed Zir to convert it into a fairly standard statically typed IR.
 The process starts at the `main` function.
@@ -46,7 +46,7 @@ const T = u8;
 const x = generic_add(T, a, b);
 ```
 
-the compiler monomorphises the generic call.
+the compiler monomorphizes the generic call.
 It checks that all comptime arguments (`T`) are fully evaluated, and starts partial evaluation of the called function, with comptime parameters fixed to particular values (this of course is memoized).
 
 The whole process is lazy --- only things transitively used from main are analyzed.
@@ -103,17 +103,17 @@ There are two, separate interesting questions to ask here:
 ## Just Compile Everything
 
 It's useful to start with a pedantically correct approach.
-Let's run our usual compilation (recursively monomorphising called functions starting from the `main`).
-The result would contain a bunch of different monomorphisations of `guinea_pig`, for different values of `T`.
-For each _specific_ monomorphisation it's now clear what is the correct answer.
-For the unspecialized case as written in the source code, the IDE can now show something reasonable by combining partial results from each monomorphisation.
+Let's run our usual compilation (recursively monomorphizing called functions starting from the `main`).
+The result would contain a bunch of different monomorphizations of `guinea_pig`, for different values of `T`.
+For each _specific_ monomorphization it's now clear what is the correct answer.
+For the unspecialized case as written in the source code, the IDE can now show something reasonable by combining partial results from each monomorphization.
 
 There are several issues with this approach.
 
-_First_, collecting the _full_ set of monomorphisations is not well-defined in the presence of conditional compilation.
+_First_, collecting the _full_ set of monomorphizations is not well-defined in the presence of conditional compilation.
 Even if you run the "full" compilation starting from main, today compiler assumes some particular environment (eg, Windows or Linux), which doesn't give you a full picture.
 There's a fascinating issue about multibuilds --- making the compiler process all combinations of conditional compilation flags at the same time: [zig#3028](https://github.com/ziglang/zig/issues/3028).
-With my IDE writer hat on, I really hope it gets in, as it will move IDE support from inherently heuristic territory, to something where, in principle, there's a correct result (even if might not be particularly easy to compute).
+With my IDE writer hat on, I really hope it gets in, as it will move IDE support from inherently heuristic territory, to something where, in principle, there's a correct result (even if it might not be particularly easy to compute).
 
 The _second_ problem is that this probably is going to be much too slow.
 If you think about IDE support for the first time, a very tantalizing idea is to try to lean just into incremental compilation.
@@ -124,20 +124,20 @@ So the trick for IDE-grade interactive performance is just to implement sufficie
 The problem with sufficiently incremental compiler is that even the perfect incrementality, which does the minimal required amount of work, will be slow in a non-insignificant amount of cases.
 The nature of code is that a small change to the source in a single place might lead to a large change to resolved types all over the project.
 For examples, changing the name of some popular type invalidates all the code that uses this type.
-That's the fundamental reason why IDE try hard to maintain an ability to _not_ analyze everything.
+That's the fundamental reason why IDEs try hard to maintain the ability to _not_ analyze everything.
 
 On the other hand, at the end of the day you'll have to do this work at least by the time you run the tests.
 And Zig's compiler is written from the ground up to be very incremental and very fast, so perhaps this will be good enough?
 My current gut feeling is that the answer is no --- even if you _can_ re-analyze everything in, say, 100ms, that'll still require burning the battery for essentially useless work.
 Usually, there's a lot more atomic small edits for a single test run.
 
-The _third_ problem with the approach of collection all monomorphisations is that it simply does not work if the function isn't actually called, yet.
+The _third_ problem with the approach of collecting all monomorphizations is that it simply does not work if the function isn't actually called yet.
 Which is common in incomplete code that is being written, exactly the use-case where the IDE is most useful!
 
 ## Compile Only What We Need
 
 Thinking about the "full" approach more, it feels like it could be, at least in theory, optimized somewhat.
-Recall that in this approach we have a graph of function instantiations, which starts at the root (`main`), and contains various monomorphisations of `guinea_pig` on paths reachable from the root.
+Recall that in this approach we have a graph of function instantiations, which starts at the root (`main`), and contains various monomorphizations of `guinea_pig` on paths reachable from the root.
 
 It is clear we actually don't need the full graph to answer queries about instantiations of `guinea_pig`.
 For example, if we have something like
@@ -150,10 +150,10 @@ fn helper() i32 {
 
 and the `helper` does not (transitively) call `guinea_pig`, we can avoid looking into its body, as the signature is enough to analyze everything else.
 
-More precisely, given the graph of monomorphisations, we can select minimal subgraph which includes all paths from `main` to `guinea_pig` instantiations, as well as all the functions whose bodies we need to process to understand their signatures.
+More precisely, given the graph of monomorphizations, we can select minimal subgraph which includes all paths from `main` to `guinea_pig` instantiations, as well as all the functions whose bodies we need to process to understand their signatures.
 My intuition is that the size of that subgraph is going to be much smaller than the whole thing, and, in principle, an algorithm which would analyze only that subgraph should be speedy enough in practice.
 
-The problem though is that, as far as I know, it's not possible to understand what belongs to the subgraph without analysing the whole thing!
+The problem though is that, as far as I know, it's not possible to understand what belongs to the subgraph without analyzing the whole thing!
 In particular, using compile-time reflection our `guinea_pig` can be called through something like `comptime "guinea" ++ "_pig"`.
 It's impossible to infer the call graph just from Zir.
 
@@ -176,7 +176,7 @@ fn guinea_pig(comptime T: type, foo: Foo) void {
 
 from a different direction.
 What if we just treat this function as the root of our graph?
-We can'd do that exactly, because it has some comptime parameters.
+We can't do that exactly, because it has some comptime parameters.
 But we _can_ say that we have some opaque values for the parameters: `T = opaquevalue`.
 Of course, we won't be able to fully evaluate everything and things like `if (T == int)` would probably need to propagate opaqueness.
 At the same time, something like the result of `BoundedArray(opaque)` would still be pretty useful for an IDE.
@@ -200,7 +200,7 @@ Given the unused function problem, I think it's impossible to avoid at least som
 
 With abstract interpretation machinery in place, it can be used as a first, responsive layer of IDE support.
 
-Computing the full set of monomoprisations in background can be used to augment these limited synchronous features with precise results asynchronously.
+Computing the full set of monomorphizations in the background can be used to augment these limited synchronous features with precise results asynchronously.
 Though, this might be tough to express in existing editor UIs.
 Eg, the goto definition result is now an asynchronous stream of values.
 
