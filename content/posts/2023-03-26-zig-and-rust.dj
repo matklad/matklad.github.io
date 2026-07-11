@@ -59,7 +59,7 @@ TigerBeetle is the opposite of that.
 It is a database, with domain model fixed at compile time (we currently do double-entry bookkeeping).
 The database is distributed, meaning that there are six TigerBeetle replicas running on different geographically and operationally isolated machines, which together implement a replicated state machine.
 That is, TigerBeetle replicas exchange messages to make sure every replica processes the same set of transactions, in the same order.
-That's a surprisingly hard problem if you allow machines to fail (the whole point of using many machines for redundancy), so we use a smart [consensus algorithm](http://pmg.csail.mit.edu/papers/vr-revisited.pdf)  (non-byzantine) for this.
+That's a surprisingly hard problem if you allow machines to fail (the whole point of using many machines for redundancy), so we use a smart [consensus algorithm](http://pmg.csail.mit.edu/papers/vr-revisited.pdf) (non-byzantine) for this.
 Traditionally, consensus algorithms assume reliable storage --- data once written to disk can be always retrieved later.
 In reality, storage is unreliable, nearly byzantine --- a disk can return bogus data without signaling an error, and even a single such error can [break consensus](https://www.usenix.org/conference/fast18/presentation/alagappan).
 TigerBeetle combats that by allowing a replica to repair its local storage using data from other replicas.
@@ -145,7 +145,7 @@ I noticed that a lot of Zig code written in "let's replace [RAII](https://doc.ru
 
 But it often is possible to architect the software such that there's little resource management to do (eg, allocating everything up-front, like TigerBeetle, or even at compile time, like many smaller embedded systems).
 It's hard --- simplicity is always hard.
-But, if you go this  way, I feel like Zig can provide substantial benefits.
+But, if you go this way, I feel like Zig can provide substantial benefits.
 
 Zig has just a single feature, dynamically-typed comptime, which subsumes most of the special-cased Rust machinery.
 It is definitely a tradeoff, instantiation-time errors are much worse for complex cases.
@@ -164,10 +164,10 @@ I don't think any popular Rust frameworks do this --- using the global allocator
 Zig forces you to pass the allocator in, so you might as well think about the most appropriate one!
 
 Similarly, the standard library is very conscious about allocation, more so than Rust's.
-Collections are _not_ parametrized by an allocator, like in C++ or (future) Rust.
+Collections are _not_ parameterized by an allocator, like in C++ or (future) Rust.
 Rather, an allocator is passed in explicitly to every method which actually needs to allocate.
 This is [_Call Site Dependency Injection_](https://matklad.github.io/2020/12/28/csdi.html), and it is more flexible.
-For example in TigerBeetle we need a couple of hash maps.
+For example, in TigerBeetle we need a couple of hash maps.
 These maps are sized at a startup time to hold just the right number of elements, and are never resized.
 So we pass an allocator to [`init`](https://github.com/tigerbeetledb/tigerbeetle/blob/53092098d69cc8facf94a2472bc79ca9d525a605/src/vsr/replica.zig#L540) method, but we don't pass it to the [event loop](https://github.com/tigerbeetledb/tigerbeetle/blob/53092098d69cc8facf94a2472bc79ca9d525a605/src/vsr/replica.zig#L758).
 We get to both use the standard hash-map, and to feel confident that there's no way we can allocate in the actual event loop, because it doesn't have access to an allocator.
@@ -202,7 +202,7 @@ But, with the lazy compilation model and the absence of out-of-the-language meta
 To position itself well for the future in terms of IDE support, I think it would be nice if the compiler gets the basic data model for IDE use-case.
 That is, there should be an API to create a persistent analyzer process, which ingests a stream of code edits, and produces a continuously updated model of the code without explicit compilation requests.
 The model can be very simple, just "give me an AST of this file at this point in time" would do --- all the fancy IDE features can be filled in later.
-What matters is a shape of data flow through the compiler --- not an edit-compile cycle, but rather a continuously updated view of the world.
+What matters is the shape of the data flow through the compiler --- not an edit-compile cycle, but rather a continuously updated view of the world.
 
 _Fourth_, one of the values of Zig which resonates with me a lot is a preference for low-dependency, self-contained processes.
 Ideally, you get yourself a `./zig` binary, and go from there.
