@@ -229,7 +229,7 @@ fn call2(f: fn()) {
 
 So, the first rule is to make most of the calls statically resolvable, to allow inlining.
 Function pointers and dynamic dispatch prevent inlining.
-Separate compilation might also get in a way of inlining, see this [separate essay](https://matklad.github.io/2021/07/09/inline-in-rust.html) on the topic.
+Separate compilation might also get in the way of inlining, see this [separate essay](https://matklad.github.io/2021/07/09/inline-in-rust.html) on the topic.
 
 Similarly, indirection in _memory_ can cause troubles for the compiler.
 
@@ -293,7 +293,7 @@ Make sure that most calls are known at compile time and can be inlined, trust th
 Let's apply this general framework of giving a compiler optimizable code to work with to auto-vectorization.
 We will be optimizing the function which computes the longest common prefix between two slices of bytes (thanks [@nkkarpov](https://github.com/nkkarpov) for the example).
 
-A  direct implementation would look like this:
+A direct implementation would look like this:
 
 ```rust
 use std::iter::zip;
