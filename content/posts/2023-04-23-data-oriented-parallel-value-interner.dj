@@ -78,7 +78,7 @@ Let's start with concurrent `SegmentedList`:
 ```zig
 fn SegmentList(comptime T: type) type {
     return struct {
-        echelons: [31]?[*]T,
+        echelons: [32]?[*]T,
     };
 }
 ```
@@ -88,7 +88,7 @@ In normal `ArrayList`, when the backing storage fills up, you allocate a slice t
 In `SegmentList`, you leave the old slice where it is, and just allocate a new one.
 
 Now, as we are writing an interner and want to use `u32` for an index, we know that we need to store `1<<32` items max.
-But that means that we'll need at most 31 segments for our `SegmentList`:
+But that means that we'll need at most 32 segments for our `SegmentList`:
 
 ```
 [1 << 0]T
@@ -98,10 +98,10 @@ But that means that we'll need at most 31 segments for our `SegmentList`:
 [1 << 31]T
 ```
 
-So we can just "pre-allocate" array of 31 _pointers_ to the segments, hence
+So we can just "pre-allocate" array of 32 _pointers_ to the segments, hence
 
 ```zig
-echelons: [31]?[*]T,
+echelons: [32]?[*]T,
 ```
 
 If we want to be more precise with types, we can even use a tuple whose elements are nullable pointers to arrays of power-of-two sizes:
@@ -109,7 +109,7 @@ If we want to be more precise with types, we can even use a tuple whose elements
 ```zig
 fn SegmentList(comptime T: type) type {
     return struct {
-        echelons: std.meta.Tuple(get_echelons(31, T)),
+        echelons: std.meta.Tuple(get_echelons(32, T)),
     };
 }
 
@@ -374,7 +374,7 @@ fn intern(table: *LocalTable, value_full: ValueFull) Value {
 
     // Either find that this value has been interned already...
     const gop = value_set.get_or_put(hash, value_full, ...);
-    if (gop.found_existing) return got.key_ptr.*;
+    if (gop.found_existing) return gop.key_ptr.*;
 
     // ... or proceed to allocate a new index for it
 
@@ -472,7 +472,7 @@ But the end result looks rather beautiful, and builds upon many interesting idea
 
 * `SegmentList` allows to maintain index stability despite insertions.
 
-* There will be at most 31 echelons in a `SegmentList`, so you can put pointers to them into an array, removing the need to synchronize to read an echelon.
+* There will be at most 32 echelons in a `SegmentList`, so you can put pointers to them into an array, removing the need to synchronize to read an echelon.
 
 * With this setup, it becomes easy to initialize a new echelon with a single CAS.
 
