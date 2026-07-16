@@ -17,7 +17,7 @@ While some aspects of it, like a "just works" build system, help with prototypin
 still extra complexity tax due to the necessity to model physical layout of data. The usual advice,
 when you start building a compiler in Rust, is to avoid pointers and use indexes. Indexes are great!
 In large codebase, they allow greater decoupling (side tables can stay local to relevant modules),
-improved performance (an index is  `u32` and nudges you towards struct-of-arrays layouts), and more
+improved performance (an index is `u32` and nudges you towards struct-of-arrays layouts), and more
 flexible computation strategies (indexes are easier to serialize or plug into incremental
 compilation framework). But they do make programming-in-the-small significantly more annoying, which
 is a deal-breaker for hobbyist tinkering.
@@ -66,7 +66,7 @@ export type ExprKind = ExprBool | ExprInt | ... ;
 
 One more thing --- as we are going for something quick, we'll be storing inferred types directly in
 the AST nodes. Still, we want to keep raw and type-checked AST separate, so what we are going to do
-here is to parametrize the `Expr` over associated data it stores. A freshly parsed expression would
+here is to parameterize the `Expr` over associated data it stores. A freshly parsed expression would
 use `void` as data, and the type checker will set it to `Type`. Here's what we get:
 
 ```ts
@@ -121,7 +121,7 @@ export interface ExprBinary<T> {
 `tag: "binary"` means that the only possible runtime value for `tag` is the string `"binary"`.
 
 Similarly to various binary expressions, boolean literal and int literal expressions have _almost_
-identical shape.  Almost, because the payload (`boolean` or `number`) is different. TypeScript
+identical shape. Almost, because the payload (`boolean` or `number`) is different. TypeScript
 allows us to neatly abstract this over:
 
 ```ts
@@ -170,7 +170,7 @@ Because TypeScript fully erases types, everything related to types lives in a se
 you can have a type and a value sharing the same name. Which is exactly what we use to define the
 singletons!
 
-Finally, we can take advantage of our associated-data parametrized expression and write the
+Finally, we can take advantage of our associated-data parameterized expression and write the
 signature of
 
 ```ts
@@ -259,7 +259,7 @@ function result_type(op: ast.BinaryOp): Type {
 ```
 
 Before we go further, let's generalize this visiting pattern a bit! Recall that our expressions are
-parametrized by the type of associated data, and type-checker-shaped transformations are essentially an
+parameterized by the type of associated data, and type-checker-shaped transformations are essentially an
 `Expr<U> -> Expr<V>`{.display}
 transformation.
 
@@ -321,7 +321,7 @@ export function transform<U, V>(expr: Expr<U>, v: Visitor<V, V>): Expr<V> {
 }
 ```
 
-1) Note how here `expr.kind` is both `Expr<U>` and  `Expr<V>` --- literals don't depend on this type
+1) Note how here `expr.kind` is both `Expr<U>` and `Expr<V>` --- literals don't depend on this type
    parameter, and TypeScript is smart enough to figure this out without us manually re-assembling
    the same value with a different type.
 
@@ -424,8 +424,8 @@ three aspects:
 
 Just kidding, here's one more cute thing. Let's say that we want to have lots of syntactic sugar,
 and also want type-safe desugaring. We could tweak our setup a bit for that: instead of `Expr` and
-`ExprKind` being parametrized over associated data, we circularly parametrize `Expr` by the whole
-`ExprKind` and  vice verse:
+`ExprKind` being parameterized over associated data, we circularly parameterize `Expr` by the whole
+`ExprKind` and vice versa:
 
 ```ts
 interface Expr<K> {
