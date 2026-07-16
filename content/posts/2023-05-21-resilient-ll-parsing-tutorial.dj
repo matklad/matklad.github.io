@@ -136,7 +136,7 @@ Do make mistakes to see how a partial tree is recovered.
 
 ```=html
 <aside id="playground" style="min-height: 400px; min-width: 400px; ; display: flex; flex-direction: row;">
-<textarea class="input"  style="height: 400px; width: 50%; margin: 2px; padding: 2px; resize: none;">
+<textarea class="input" style="height: 400px; width: 50%; margin: 2px; padding: 2px; resize: none;">
 fn fib_rec(f1: u32,
 
 fn fib(n: u32) -> u32 {
@@ -277,7 +277,7 @@ Won't be covering lexer here, let's just say we have [`fn lex(text: &str) -> Vec
 
 ## Parser
 
-With homogenous syntax trees, the task of parsing admits an elegant formalization --- we want to insert extra parenthesis into a stream of tokens.
+With homogeneous syntax trees, the task of parsing admits an elegant formalization --- we want to insert extra parenthesis into a stream of tokens.
 
 ```
 +-Fun
@@ -323,7 +323,7 @@ impl Parser {
     mark
   }
 
-  fn close(  <1>
+  fn close( <1>
     &mut self,
     m: MarkOpened,
     kind: TreeKind, <2>
@@ -410,6 +410,10 @@ It juggles three things: an iterator of events, an iterator of tokens, and a sta
 ```rust
 impl Parser {
   fn build_tree(self) -> Tree {
+    // Special case: pop the `Eof` token to ensure
+    // that the iterator is empty at the end.
+    assert!(matches!(self.tokens.pop(), Some(Token { kind: TokenKind::Eof, .. })));
+
     let mut tokens = self.tokens.into_iter();
     let mut events = self.events;
     let mut stack = Vec::new();
@@ -479,13 +483,13 @@ fn file(p: &mut Parser) {
 
   while !p.eof() { <2>
     if p.at(FnKeyword) {
-      func(p)
+      func(p);
     } else {
       p.advance_with_error("expected a function"); <3>
     }
   }
 
-  p.close(m, File);  <1>
+  p.close(m, File); <1>
 }
 ```
 
@@ -499,7 +503,6 @@ fn file(p: &mut Parser) {
    Otherwise, we consume the token and wrap it into an error node.
 
 Lets parse functions now:
-
 
 ```rust
 // Fn = 'fn' 'name' ParamList ('->' TypeExpr)? Block
@@ -687,7 +690,6 @@ Expressions are tricky.
 They always are.
 For starters, let's handle just the clearly-delimited cases, like literals and parenthesis:
 
-
 ```rust
 fn expr(p: &mut Parser) {
   expr_delimited(p)
@@ -708,7 +710,7 @@ fn expr_delimited(p: &mut Parser) {
       p.close(m, ExprName)
     }
 
-    // ExprParen   = '(' Expr ')'
+    // ExprParen = '(' Expr ')'
     LParen => {
       p.expect(LParen);
       expr(p);
@@ -914,7 +916,7 @@ fn right_binds_tighter( <1>
   }
 
   let Some(right_tightness) = tightness(right) else { <3>
-    return false
+    return false;
   };
   let Some(left_tightness) = tightness(left) else {
     assert!(left == Eof);
@@ -1255,7 +1257,7 @@ fn expr_delimited(p: &mut Parser) -> Option<MarkClosed> {
       p.close(m, ExprName)
     }
 
-    // ExprParen   = '(' Expr ')'
+    // ExprParen = '(' Expr ')'
     LParen => {
       let m = p.open();
       p.expect(LParen);
