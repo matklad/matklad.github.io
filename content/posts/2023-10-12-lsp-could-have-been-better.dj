@@ -5,10 +5,10 @@
 >
 > [The Success and Failure of Ninja](https://neugierig.org/software/blog/2020/05/ninja.html)
 
-The  [_Why LSP_](https://matklad.github.io/2022/04/25/why-lsp.html) post discusses the "social
+The [_Why LSP_](https://matklad.github.io/2022/04/25/why-lsp.html) post discusses the "social
 issues" solved by LSP. LSP (as a part of overarching Microsoft strategy) is brilliant, because it
 moved the world to a new equilibrium where not having basic IDE support is frowned upon. This post
-instead discusses architectural aspects of LSP, which I personally find not as brilliant(especially given that
+instead discusses architectural aspects of LSP, which I personally find not as brilliant (especially given that
 [Dart Analysis Protocol](https://htmlpreview.github.io/?https://github.com/dart-lang/sdk/blob/8e6a02d899ef62ef5b8405518b36340e609198e2/pkg/analysis_server/doc/api.html)
 predates LSP and is technically superior in some aspects). Perhaps it
 could be useful for someone designing other LSP-shaped protocols! Note that it's been couple of
@@ -54,7 +54,7 @@ data. For example, LSP has separate requests for:
 - code folding.
 
 Although all four features are just different views into an AST, there's no "get AST" request in the
-LSP. Different requests allow to fine-tune presentation for the  different use-cases, and the
+LSP. Different requests allow to fine-tune presentation for the different use-cases, and the
 details do differ! Semantic selection might contain some sub-syntax ranges inside string literals
 and comments, breadcrumb need to include things like conditionals of `if` expressions, while the
 outline might want to get rid of less important nodes. Attentive reader will notice that breadcrumbs
@@ -262,16 +262,16 @@ unrelated documents. For example, for a rename refactor, if a new usage was intr
 after the refactor was computed, version numbers of the changed files would wrongly tell you that
 the edit is still correct, while it will miss this new usage.
 
-Practically, this is a small problem --- it works most of the  time (I _think_ I have seen zero
+Practically, this is a small problem --- it works most of the time (I _think_ I have seen zero
 actual bugs caused by causality loss), and even the proper solution can't order events originating
-from the client relative to the events originating from the file system. But the fix is also very
+from the client relative to events originating from the file system. But the fix is also very
 simple --- just don't voluntarily lose causality links!
 
 ## Remote Procedural State Synchronization
 
 And this touches what I think is the biggest architectural issue with LSP. LSP is an RPC protocol
 --- it is formed by "edge triggered" requests that make something happen on the other side. But this
-is not how most of IDE features work. What actually is needed is "level triggered" *state
+is not how most IDE features work. What actually is needed is "level triggered" *state
 synchronization*. The client and the server need to agree what something _is_, deciding the course
 of action is secondary. It is "to be or not to be" rather than "what is to be done".
 
@@ -282,7 +282,7 @@ Above is synchronization of derived data. For example, there's a set of errors i
 set changes when the underlying text files change. Errors change with some lag, as it takes time to
 compute them (and sometimes files changes faster than the errors could be re-computed).
 
-Things like file outline, syntax highlighting, cross-reference information, e.t.c, all follow the
+Things like file outline, syntax highlighting, cross-reference information, etc., all follow the
 same pattern.
 
 Crucially, predicting which changes to the source invalidate which derived data requires language
