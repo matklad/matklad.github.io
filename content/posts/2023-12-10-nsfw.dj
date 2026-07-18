@@ -29,7 +29,7 @@ at a time has access to a value. An example here would be an `Arc<Cell<i32>>`. I
 to safely send such an `Arc` to a different thread, because a `.clone` call can be used to get an
 independent copy of an `Arc`, effectively creating a _share_ operation out of a _send_ one.
 
-But turns out both cases are covered by just a single trait, `Send`. The thing is, to _share_ a
+It turns out both cases are covered by just a single trait, `Send`. The thing is, to _share_ a
 `Cell<i32>` across two threads, it is necessary to _send_ an `&Cell<i32>`. So we get the following
 table:
 
@@ -60,12 +60,12 @@ leads to simpler code. In Rust, you can explicitly designate certain parts of a 
 non-thread-safe, and then avoid worrying about threads, because compiler will catch your hand if you
 _accidentally_ violate this constraint.
 
-The power of Rust is not defensively making everything thread safe, its the ability to use
+The power of Rust is not defensively making everything thread safe, it's the ability to use
 thread-unsafe code fearlessly.
 
 And it seems like `async` doesn't quite have this power. Let's build an example, a litmus test!
 
-Let's start with a `Context` pattern,  where a bunch of stuff is grouped into a single struct, so
+Let's start with a `Context` pattern, where a bunch of stuff is grouped into a single struct, so
 that they can be threaded through the program as one parameter. Such `Context` object is usually
 scoped to a particular operation --- the ultimate owner of `Context` is a local variable in some
 top-level "main" function, it is threaded as `&Context` or `&mut Context` everywhere, and usually
@@ -215,7 +215,7 @@ Let me explain first why this works, and then why this can't work.
 A `Future` is essentially a stack-frame of an asynchronous function. Original tokio version requires
 that all such stack frames are thread safe. This is not what happens in synchronous code --- there,
 functions are free to put cells on their stacks. The `Send`ness is only guarded when data are
-actually send to a different thread, in `Chanel::send` and `thread::spawn`. The `spawn` function in
+actually sent to a different thread, in `Channel::send` and `thread::spawn`. The `spawn` function in
 particular says nothing about the _stack_ of a new thread. It only requires that the data used to
 create the first stack frame is `Send`.
 
@@ -224,7 +224,7 @@ sync version, takes a closure. The closure is moved to a different execution con
 `: Send`. The actual future created by the closure in the new context can be whatever. An async
 runtime is free to poll this future from different threads regardless of its `Sync` status.
 
-Async work-stealing still works for the same reason that blocking work stealing works. Logical
+Async work-stealing still works for the same reason that blocking work-stealing works. Logical
 threads of execution can migrate between physical CPU cores because OS restores execution context
 when switching threads. Task can migrate between threads because async runtime restores execution
 context when switching tasks. Go is a proof that this is possible --- goroutines migrate between
@@ -259,10 +259,10 @@ locals to use the `OsThread` variants. It seems that everything else works?
 
 I would like to posit four questions to the wider async Rust community.
 
-1. Does this work in theory? As far as I can tell, this does indeed works, but I am not an async
+1. Does this work in theory? As far as I can tell, this does indeed work, but I am not an async
    expert. Am I missing something?
 
-   Ideally, I'd love to see small, self-contained litmus test  examples that break `OsThreadSend`
+   Ideally, I'd love to see small, self-contained litmus test examples that break `OsThreadSend`
    Rust.
 
 2. Is this an important problem in practice to look into? On the one hand, people are quite
