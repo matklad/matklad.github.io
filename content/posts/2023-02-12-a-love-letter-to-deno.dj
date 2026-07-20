@@ -1,13 +1,13 @@
 # <3 Deno
 
 [Deno](https://deno.land/manual@v1.30.3/introduction) is a relatively new JavaScript runtime.
-I find quite interesting and aesthetically appealing, in-line with the recent trend to rein in the worse-is-better law of software evolution.
+I find it quite interesting and aesthetically appealing, in-line with the recent trend to rein in the worse-is-better law of software evolution.
 This post explains why.
 
 The way I see it, the primary goal of Deno is to simplify development of software, relative to the status quo.
 Simplifying means removing the accidental complexity.
 To me, a big source of accidental complexity in today's software are implicit dependencies.
-Software is built of many components, and while some components are relatively well-defined (Linux syscall interface, amd64 ISA), others are much less so.
+Software is built out of many components, and while some components are relatively well-defined (Linux syscall interface, amd64 ISA), others are much less so.
 Example: upgrading OpenSSL for your Rust project from 1.1.1 to 3.0.0 works on your machine, but breaks on CI, because 3.0.0 now needs some new perl module, which is _expected_ to usually be there together with the perl installation, but that is not universally so.
 One way to solve these kinds of problems is by putting {-an abstraction boundary-} a docker container around them.
 But a different approach is to very carefully avoid creating the issues.
@@ -39,7 +39,7 @@ Similarly, Deno is a TypeScript runtime --- there's no transpilation step involv
 Deno does not rely on system's shell.
 Most scripting environments, including node, python, and ruby, make a grave mistake of adding an API to spawn a process intermediated by the shell.
 This is slow, insecure, and brittle (_which_ shell was that, again?).
-I have a  [longer post](https://matklad.github.io/2021/07/30/shell-injection.html) about the issue.
+I have a [longer post](https://matklad.github.io/2021/07/30/shell-injection.html) about the issue.
 Deno doesn't have this vulnerable API.
 Not that "not having an API" is a particularly challenging technical achievement, but it _is_ better than the current default.
 

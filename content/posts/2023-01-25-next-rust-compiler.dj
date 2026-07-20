@@ -23,9 +23,9 @@ Here's what I think an awesome rust compiler would do:
 : rust-native compilation model
 
   Like C++, Rust (ab)uses the C compilation model --- compilation units are separately compiled into object files, which are then linked into a single executable by the linker.
-  This model is at odds with how the language work.
+  This model is at odds with how the language works.
   In particular, compiling a generic function isn't actually possible until you know specific type parameters at the call-site.
-  Rust and C++ hack around that by compiling a separate copy for every call-site (C++ even re-type-checks every call-site), and deduplicating instantiations during the link step.
+  Rust and C++ hack around that by compiling a separate copy for every call-site (C++ even re-typechecks every call-site), and deduplicating instantiations during the link step.
   This creates a lot of wasted work, which is only there because we try to follow "compile to object files then link" model of operation.
   It would be significantly more efficient to merge compiler and linker, such that only the minimal amount of code is compiled, compiled code is fully aware about surrounding context and can be inlined across crates, and where the compilation makes the optimal use of all available CPU and RAM.
 
@@ -51,11 +51,11 @@ Here's what I think an awesome rust compiler would do:
 
   However, for more complex projects you want to have more direct relationship with the code.
   You want tools other than compiler to understand the meaning of the code, and to act on it.
-  For example automated large scale refactors and code analysis, project-specific linting rules or formal proofs of correctness all could benefit from having an access to semantically rich model of the language.
+  For example, automated large scale refactors and code analysis, project-specific linting rules or formal proofs of correctness could all benefit from having access to a semantically rich model of the language.
 
-  Providing such semantic  model, where AST is annotated with resolved names, inferred types, and bodies are converted to a simple and precise IR, is a huge ask.
+  Providing such a semantic model, where the AST is annotated with resolved names, inferred types, and bodies are converted to a simple and precise IR, is a huge ask.
   Not because it is technically hard to implement, but because this adds an entirely new stable API to the language.
-  Nonetheless, such an API would unlock quite a few use cases, so the tradeoff is worth it.
+  Nonetheless, such an API would unlock quite a few use cases, so the trade-off is worth it.
 
 : hermetic deterministic compilation
 
@@ -75,7 +75,7 @@ Here's what I think an awesome rust compiler would do:
   For the task of providing immediate feedback right in the editor when the user types the code, compilation "pipeline" needs to be changed significantly.
   It should be lazy (so that only the minimal amount of code is inspected and re-analyzed on typing) and resilient and robust to errors (IDE job mostly ends when the code is error free).
   [rust-analyzer](https://rust-analyzer.github.io) shows one possible way to do that, with the only drawback of being a completely separate tool for IDE, and only IDE.
-  There's no technical limitation why the full compiler can't be like that, just the organizational limitation of it being very hard to re-architecture existing entrenched code, perfected for its local optimum.
+  There's no technical limitation why the full compiler can't be like that, just the organizational limitation of it being very hard to re-architect existing entrenched code, perfected for its local optimum.
 
 : `cargo install rust-compiler`
 
