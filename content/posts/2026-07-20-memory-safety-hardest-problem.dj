@@ -1,0 +1,58 @@
+# Memory Safety's Hardest Problem
+
+Uplifting a
+[lobsters comment](https://lobste.rs/s/vzkmtj/forget_borrow_checkers_c3_solved_memory#c_uuhbpy)
+for easier reference.
+
+The central memory safety counter example, the hardest case to solve, doesn't have anything to do
+with destructors or heap:
+
+
+```zig
+const std = @import("std");
+
+const E = union(enum) {
+    a: u128,
+    b: []const u8,
+};
+
+pub fn main() void {
+    const bad_addr: u128 = @intFromPtr(&main);
+
+    var e: E = .{ .b = "hello" };
+    const oh_no_pointer: *const []const u8 = switch (e) {
+        .a => unreachable,
+        .b => |*p| p,
+    };
+    e = .{ .a = (16 << 64) + bad_addr };
+    const oh_no: []const u8 = oh_no_pointer.*;
+    std.debug.print("{s}\n", .{oh_no});
+}
+```
+
+```
+$ zig run main.zig
+��C���
+```
+
+This sort of example also breaks Ada:
+
+<https://www.enyo.de/fw/notes/ada-type-safety.html>
+
+We have a tagged union, which can hold either `A` or `B`. We initialize the union as
+`A`, take a pointer to its internals, overwrite the original with `B`, and then use the pointer. The
+pointer is still typed as `A`, but the bytes it points to now belong to `B`: a type confusion.
+
+---
+
+This being said, we care about memory unsafety primarily because it leads to exploitable software,
+and it's unclear just how impactful the example above is in practice. It is a happy coincidence that
+by far the most exploitable memory error in practice, the infamous buffer overflow, is also trivial
+to fix with compiler-inserted bounds checks. The biggest miss of the industry when it comes to
+memory safety is not listening to Walter Bright:
+
+<https://digitalmars.com/articles/C-biggest-mistake.html>
+
+I bet that, had we got `char a[..]` syntax around C11, quite a few issues wouldn't have happened!
+
+See also [_What is Memory Safety?_](https://matklad.github.io/2025/12/30/memory-safety-is.html)
