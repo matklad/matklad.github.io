@@ -85,7 +85,7 @@ syscall might get interrupted by signal unrelated to cancelation.
 The actual protocol is that the canceling thread sets a flag in shared memory to request
 cancelation, and then signals the cancelee, in a loop, until the cancelation is acknowledged (a
 different value for a flag in the shared memory). Upon receiving `EINTR` from a syscall, the thread
-potentially being canceled checks the vale of the flag and either retries the syscall, or
+potentially being canceled checks the value of the flag and either retries the syscall, or
 acknowledges the cancelation and begins unwinding. See
 [`signalCanceledSyscall`](https://codeberg.org/ziglang/zig/src/commit/16b42da3fd359bf5ae602aa0153e3ec1d6d14822/lib/std/Io/Threaded.zig#L1266){.display}
 and, eg
