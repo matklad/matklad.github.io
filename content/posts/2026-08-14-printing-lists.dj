@@ -1,0 +1,10 @@
+# Printing Lists
+
+To print a comma-separated list, a concise idiom is to optionally print the comma first, before the element:
+
+```zig
+for (items, 0..) |item, item_index| {
+    if (item_index > 0) std.debug.print(", ");
+    std.debug.print("{}", .{item})
+}
+```
