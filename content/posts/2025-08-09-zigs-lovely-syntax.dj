@@ -206,6 +206,16 @@ fn add(x: i32, y: i32) i32 {
 ```
 
 Furthermore, because there are no lambdas, scope of return is always clear.
+Contrast with Rust:
+
+```rust
+async fn f() -> i32 {
+    let x = async {
+        return 92;
+    }.await;
+    x + 1
+}
+```
 
 Relatedly, the value of a block expression is void. A block is a list of statements, and doesn't have
 an optional expression at the end. This removes the semicolon problem --- while Rust rules around
@@ -254,7 +264,7 @@ if a { b } else { c }
 ```
 
 But the ternary is important! Exploding a simple choice into multi-line condition _hurts_
-readability. Zig goes with the traditional choice of making parentheses required and braces 
+readability. Zig goes with the traditional choice of making parentheses required and braces
 optional:
 
 ```zig
@@ -262,7 +272,8 @@ optional:
 ```
 
 By itself, this does create a risk of `goto: fail;` style bugs. But in Zig  formatter
-(non-configurable, user-directed) is a part of the compiler, and formatting errors that can mask
+(non-configurable, [user-directed](https://matklad.github.io/2026/05/08/steering-zig-fmt.html))
+is a part of the compiler, and formatting errors that can mask
 bugs are caught during compilation. For example, `1 -2` is an error due to inconsistent whitespace
 around the minus sign, which signals a plausible mixup of infix and binary minus. No such errors are
 currently produced for incorrect indentation (the value add there is relatively little, given `zig
