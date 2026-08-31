@@ -1,0 +1,129 @@
+# Cancelation Terminology
+
+A short note explaining the difference between synchronous cancelation,
+asynchronous cancelation, and graceful shutdown. I am not too attached to these
+specific three _terms_, but I want to call your attention to the three
+_things_ behind them, which are important not to confuse with each other.
+
+[synchronous cancelation]{.dfn} is an (often implicit) control flow structure.
+It unwinds the stack and looks like this:
+
+```rust
+task.cancel();
+// The task will have finished by this point.
+```
+
+Synchronous cancelation is a bit like Molière's prose --- we do it all the time,
+but not necessarily in full consciousness. The primary source of synchronous
+cancelation is error handling --- every time an `Exception` is thrown or an
+`error` returned, the code promptly breaks out of all the loops, ifs, and
+blocks, invoking the necessary cleanup actions via RAII, `finally`, `with`/`try`
+with resources or `defer`.
+
+[asynchronous cancelation]{.dfn} is a communication protocol between two
+parties. One party requests cancelation (synchronously), but then it has to wait
+until the other party acknowledges it and winds down. It looks like this:
+
+```rust
+task.request_cancelation();
+// The task could still be running here.
+task.join().await;
+// After the requisite wait, the task is finished.
+```
+
+Like synchronous cancelation, this is a relatively low-level concern when
+implementing a concurrent program in a way that doesn't crash or hang. I know
+two central example where an asynchronous cancelation is required.
+
+First is the CPU thread pool. Imagine you have offloaded encrypting a buffer to
+a separate thread as a part of handling user's request. Some time later, you
+learn that the request must be canceled (perhaps the user had left). You can't
+just abandon the encrypting thread. First, it would be smart not to waste CPU
+cycles for useless work, but, more importantly, the underlying _buffer_ must
+remain tied up. If it were to be freed as a result of request cancelation,
+something else might re-use that memory, leading to data races.
+
+But you also can't just cancel that thread synchronously! It's in the middle of a
+hyper-optimized SIMD loop, and you really don't want it to check the cancelation
+flag before reading every byte. What you'd want is to split the buffer into
+reasonably-sized chunks, and check the cancelation status after every chunk. But
+that means that the party that requested the cancelation must wait for at least
+one chunk's worth of work!
+
+::: note
+For the curious, there's actually a bit more leeway with canceling CPU work
+non-cooperatively, see
+
+<https://go.dev/src/runtime/preempt.go>{.display}
+:::
+
+Another example here is `io_uring`. It has exactly the same shape: if you submit
+a write with a buffer to the kernel, that buffer must remain tied up until the
+write finishes (and you can cancel the write to make it finish faster). While
+`io_uring` is still at least a somewhat exotic technology (though, arguably,
+it's the interfaces we have had before which are byzantine), the thread pool
+example demonstrates that the phenomenon of asynchronous cancelation itself is
+rather mundane.
+
+Asynchronous cancelation comes up all the time when writing concurrent software.
+Because it affects the overall shape of the code, it's useful to identify it
+early. Conversely, it is useful to ask yourself whether you need asynchronous
+cancelation at all, and whether synchronous one can be made to work. This is
+especially important in Rust, which makes synchronous cancelation too easy, and
+doesn't provide great mechanisms for asynchronous one.
+
+Finally, [graceful shutdown]{.dfn} is an application programming pattern for
+handling connections. It lives on a higher level of abstraction than the two
+cancelations. If you are implementing a web service, you can implement shutdown
+by stopping your `accept` loop (rejecting new connections), but continuing to
+serve all existing connections until their respective clients disconnect. If the
+load balancer is configured to route new connection requests to different
+instances of the service, this pattern allows you to do rolling upgrades without
+service disruptions.
+
+As a bonus point, a related idea is that of
+[crash-only software](https://www.usenix.org/legacy/events/hotos03/tech/full_papers/candea/candea_html/index.html).
+Cancelation is all good, but your entire program can get SIGKILLed arbitrarily
+by an OOM killer, and the entire computer might get rebooted on powerloss.
+Reliable software has to handle ungraceful shutdown without losing data. But, if
+you can survive powerloss, you might as well implement the [Quit]{.kbd} button
+by SIGKILLing yourself, simultaneously simplifying the implementation and
+increasing testing coverage for powerloss scenarios.
+
+---
+
+To give some examples from TigerBeetle,
+[`Grid.cancel`](https://github.com/tigerbeetle/tigerbeetle/blob/47aeb2212a255273dda508288412e537d11e4b7c/src/vsr/grid.zig#L589)
+is an asynchronous cancelation. It takes a callback to notify the caller when
+the cancelation is done. This API is used during state sync. When a replica
+determines that that cluster is so far ahead that event based transfer doesn't
+work, and that a state transfer is required to catch up, it must cancel all
+outstanding grid read operations. A read can be backed either by replica's local
+disk, or by transparent fetch of the data from a neighboring replica. In the
+first case, we have to wait until the read is done. In the second case, we need
+to abandon the read --- remote read getting stuck is probably _the_ reason for
+us to state sync in the first place.
+
+[`StateMachine.reset`](https://github.com/tigerbeetle/tigerbeetle/blob/47aeb2212a255273dda508288412e537d11e4b7c/src/state_machine.zig#L942)
+is an example of a synchronous cancelation. This is the part of the same flow as
+`Grid.cancel`, and is an example of how you can simplify the code if you think
+clearly about asynchronous vs synchronous cancelation. Ultimately,
+`StateMachine` sits on top of the `Grid`, but there's a bunch of intermediate
+layers (`Forest`, `Tree`, `Compaction`, `Scan`, etc). A naive approach would be
+to notice that `Grid` requires asynchronous cancelation and propagate asynchrony
+throughout the stack. What we do instead is asynchronously canceling _just_ the
+`Grid` directly, and then synchronously `reset`ing everything else.
+
+Another example of asynchronous cancelation is
+[`Client.shutdown`](https://github.com/tigerbeetle/tigerbeetle/blob/47aeb2212a255273dda508288412e537d11e4b7c/src/vsr/client.zig#L194-L203).
+When an application using TigerBeetle "drops" the `Client` object, we need to
+free all OS resources. Our client also uses io_uring, so we must first wait for
+all outstanding syscalls to complete. In the comment, we call it "graceful
+shutdown", but I think this is wrong, and this is the motivation for writing
+down this article. We don't do graceful shutdown at TigerBeetle --- it's crash
+only all the way. Tail latency tolerance (asking several nodes for an answer and
+picking the fastest one) is a more general solution, as it handles not only
+crash faults, but also
+[gray failures](https://www.microsoft.com/en-us/research/wp-content/uploads/2017/06/paper-1.pdf).
+In a distributed system, a very slow node looks exactly the same as a crashed
+one. A crash is just a degree of slowness.
