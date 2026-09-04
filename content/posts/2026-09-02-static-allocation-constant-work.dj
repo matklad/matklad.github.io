@@ -91,7 +91,7 @@ matching engine, losing the other million orders, or, better yet, to kill the
 supervisor process so that you can't even restart.
 
 Static allocation gives you peace of mind. The system might fail to start if you
-don't have enough memory, but, if it did start, you can be rest assured that it
+don't have enough memory, but, if it did start, you can rest assured that it
 would handle overload gracefully, continuing to render the service while you are
 provisioning a beefier machine.
 
@@ -149,14 +149,14 @@ Your initialization then becomes [`@memset(orders, .reserved)`.]{.display}
 One benefit here is cognitive, you no longer think in terms of creating and
 destroying orders. Instead, the orders merely circulate in the system according
 to the law of the conservation of the number of orders. It becomes harder to
-loose track of an order if you must always pay attention not only to where the
+lose track of an order if you must always pay attention not only to where the
 order goes, but also to where it came from. You explicitly write state
 transition functions for each _pair_ of states, and that makes it easier to
-exhaustively enumerate all the cases. And you double check that with asserting,
+exhaustively enumerate all the cases. And you double-check that with asserting,
 at every point, that the state is what you expect it to be (and then you DST the
 asserts) .
 
-Another benefit is code simplification and predictability. You no longer need to
+Another benefit is code-simplification and predictability. You no longer need to
 track a separate collection of "live" orders. Instead, you always iterate the
 full set, doing no-ops for reserved. This feels wasteful: should we make the
 code run faster when there are few orders? But consider this: by specifying the
@@ -173,7 +173,7 @@ for (orders) |order| {
 }
 ```
 
-is much easier for compiler to vectorize, and for CPU Cache to prefetch, than
+is much easier for a compiler to vectorize, and for a CPU Cache to prefetch, than
 this:
 
 ```zig
@@ -204,5 +204,5 @@ that theres a _unique_ matching item:
 
 ---
 
-As usual, this is _a_ trick which is useful to have in your arsenal, but it
+As usual, this is _a_ trick that is useful to have in your arsenal, but it
 isn't a universal solution to all programming's problems.
