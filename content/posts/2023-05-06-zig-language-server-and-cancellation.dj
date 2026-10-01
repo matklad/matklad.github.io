@@ -8,7 +8,7 @@ If you correctly implement a store of source code which evolves over time and al
 If, however, you don't start with a rock-solid data model, and rush to implement language features, you might find yourself needing to make a sharp U-turn several years down the road.
 
 I find this pretty insightful!
-At least, this evening I've been pondering a  particular aspect of the data model, and I think I realized something new about the problem space!
+At least, this evening I've been pondering a particular aspect of the data model, and I think I realized something new about the problem space!
 The aspect is cancellation.
 
 ## Cancellation
@@ -136,7 +136,7 @@ So, our choices for computing results are:
 
   Of course, we must also handle the case where there's no `ready` yet (it's a first compilation, or we switched branches), so completion would be somewhat non-deterministic.
 
-One important flow where non-determinism would get in a way is refactoring.
+One important flow where non-determinism would get in the way is refactoring.
 When you rename something, you should be 100% sure that you've found all usages.
 So, any refactor would have to be a blocking operation where we first wait for the current `working` to complete, then update `working` with the `pending` accumulated so far, and wait for _that_ to complete, to, finally, apply the refactor using only up-to-date `ready`.
 Luckily, refactoring is almost always a two-phase flow, reminiscent of a GET/POST flow for HTTP form ([more about that](https://rust-analyzer.github.io/blog/2020/09/28/how-to-make-a-light-bulb.html)).
