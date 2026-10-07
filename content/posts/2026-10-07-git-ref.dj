@@ -1,0 +1,211 @@
+# On Git Refs
+
+I have recently improved my mental model of Git. Consider these two git commands:
+
+```console
+$ git fetch origin master
+$ git switch -c my-feature origin/master
+```
+
+Do you understand why is it `origin master` in one command, and `origin/master`
+in the other? I didn't, until a few weeks ago!
+
+My understanding was that git is a content-addressable database. Git stores
+commits, a commit is identified by the hash of its content, and the content
+of a commit is, primarily:
+
+- a memory-less snapshot of a state of the codebase at a given point in time,
+- a list of (hashes of) parent commits.
+
+That was enough git for me to understand `git log` output and get me out of any
+botched rebase without having to re-clone the repo (For roughly half of my
+career, I _was_ re-cloning the repo. No shame in that! Learning git is useful,
+but it's not the _highest_ priority thing to learn when you start).
+
+---
+
+I now understand that git not only comes with an append-only ("immutable")
+content-addressable database, but is also a boring mutable key-value store.
+
+Git has a mutable map whose keys are strings, and whose values are
+content-addressed objects. The keys are conventionally formatted as file system
+paths, and you can usually inspect the state of the mapping by listing
+`.git/refs` directory:
+
+```console
+$ eza -T .git/refs
+.git/refs
+├── heads
+│   ├── make
+│   ├── master
+│   ├── my-feature
+│   └── pbd-adt
+├── origin
+├── remotes
+│   └── origin
+│       ├── context-switches
+│       ├── gh-pages
+│       ├── HEAD
+│       ├── make
+│       └── master
+└── tags
+
+$ cat .git/refs/heads/master
+b59148228e52f7c615ead7fdd4e91001994ad50f
+
+$ git show-ref refs/heads/master
+b59148228e52f7c615ead7fdd4e91001994ad50f refs/heads/master
+```
+
+What makes this `refs` KV infrastructure confusing is that:
+
+- It powers many distinct user-visible git features, but refs themselves are an
+  implementation detail.
+- It is a bit of a leaky abstraction, refs are _almost_ invisible in the
+  day-to-day usage.
+- Git CLI uses shorthand notation for refs and many default arguments, which
+  makes it not obvious that a particular CLI argument is a ref.
+- And, as usual, git likes to give several names to one thing, and re-uses the
+  same name for distinct things.
+
+Branches, tags, and git notes are all just refs!
+
+---
+
+The structure becomes much more obvious once you elaborate all CLI shortcuts. The original command
+
+```console
+$ git fetch origin master
+```
+
+then becomes
+
+```console
+$ git fetch \
+    https://github.com/matklad/matklad.github.io \
+    refs/heads/master:refs/remotes/origin/master
+```
+
+The first argument of `fetch` (`https://...`) is a location of a remote
+repository. Git will "dial" that address, and will transfer some data from that
+computer locally over the network.
+
+The second argument is a `source:target` pair of string keys (refs). The
+`source` is a key on the remote repo, the `target` is the name of a local key,
+and fetch as a whole asks git to read a value from a remote repository and save
+it locally under a different name.
+
+To avoid typing repository URLs all the time, git assigns them symbolic names,
+with `origin` being the conventional name for the primary remote repository:
+
+```console
+$ git fetch origin \
+    refs/heads/master:refs/remotes/origin/master
+```
+
+`refs/heads/master` is a fully elaborated name of a branch on the remote repo.
+That is, branch `my-feature` is just a
+`refs/heads/my-feature`{.display}
+ref. It could
+have been
+[`refs/branch/my-feature`,]{.display}
+but it isn't :)
+
+I don't know the specific shorthand rules, but, generally, git allows you to
+spell only the suffix of a ref:
+
+```console
+$ git fetch origin \
+    master:refs/remotes/origin/master
+```
+
+`refs/remotes/origin/master` is the name of the local ref we'll use to store the
+result. It would seem natural to just use the same name locally as the one on
+the remote, but this only works if there's a single remote. If there are two
+upstream repositories (for example, your fork, and the original repo you forked
+from), their ref names will collide. That's why we want to namespace the refs
+for remote called `foo` under `refs/remotes/foo`. And `origin` is just a
+conventional name for _the_ remote in simple setups.
+
+Again, it would be more natural to _directly_ mirror remote ref structure
+locally:
+
+```
+refs/ heads/my-branch -> refs/ remotes/origin/ heads/my-branch
+```
+
+but git strips the redundant heads component. And this `-heads`,
+`+remotes/$remote` mapping is built in, which compresses the command to
+
+```console
+$ git fetch origin master
+```
+
+It's worth reflecting _why_ it works this way. Git model is offline first.
+What's more, it assumes _explicit_ synchronization points. Rather than
+synchronizing with the remote repository in background when there's
+connectivity, git requires explicit `fetch` and `push` operations to transfer
+bytes over the wire. In this paradigm, it is useful to model the state of the
+remote party at the moment when we talked to them the last time. Theory of mind!
+
+This _hopefully_ deconfuses git's concept of local and remote branches. Consider
+the `main` branch. It exists on the remote named `origin` as `refs/heads/main`.
+When you synchronize your local repository with `origin`, you get
+[`refs/remotes/origin/main` ---]{.display}
+you current best knowledge about the the state of
+`main` on the `origin`.
+
+And then there's your local `refs/heads/main`. It typically starts pointing at
+the same commit as
+[`refs/remotes/origin/main`.]{.display}
+But, when you make a commit, `refs/heads/main` advances, but
+`refs/remotes/origin/main`{.display}
+stays the same.
+
+When you try to push your local commit to origin, you will get a conflict, if
+the `main` branch on the `origin` advanced in the meanwhile. In that case, git
+automatically updates
+`refs/remotes/origin/main`{.display}
+(as that's just a local mirror of the remote state), but then it's on you to
+update `refs/heads/main` and push it again.
+
+Revisiting the full example:
+
+```console
+$ git fetch origin master
+$ git switch -c my-feature origin/master
+```
+
+The first command looks up the URL for the `origin` remote in `.git/config` and
+makes a network request to that machine. As a result, the local
+`refs/remotes/origin/master` gets updated to the same commit as
+`refs/heads/master` remotely (the commit and its ancestors are transferred
+locally as a result).
+
+The second command creates a `refs/heads/my-feature` ref (a branch), whose
+starting point is `refs/remotes/origin/master`. It is an example of a leaky
+abstraction.
+
+The second argument there is a (shorthand of a) ref, so you can do
+
+```
+$ git switch -c my-feature \
+    refs/remotes/origin/master
+```
+
+But, although the first argument _creates_ a ref, it isn't a ref itself. In
+other words, if you try to elaborate it as well
+
+```
+$ git switch -c refs/heads/my-feature \
+    refs/remotes/origin/master
+```
+
+you'll get
+
+```
+refs/heads/refs/heads/my-feature
+```
+
+That's all! I am pretty sure this isn't particularly useful, but maybe it is
+interesting!
