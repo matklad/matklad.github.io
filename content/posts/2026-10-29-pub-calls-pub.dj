@@ -1,0 +1,80 @@
+# Avoid Public Functions Calling Other Public Functions
+
+A small-scale rule of thumb. This article will land much better with a concrete
+example, but I am drawing a blank here, so you gotta just blindly trust my say
+so!
+
+When implementing a software module, it's often a case that you are writing a
+public function `foo`, and at least part of what `foo` does is already handled
+by another public function `bar`. The DRY instinct encourages you to call
+`bar()` from within `foo`. This usually creates problems down the line. Instead,
+create a new _private_ function and refactor both `foo` and `bar` to call that
+shared helper:
+
+```zig
+// BAD
+pub fn foo() void {
+    return bar(.{ .frobnicate = true });
+}
+
+pub fn bar(options: struct {
+    frobnicate: bool = false,
+}) void {
+    // ...
+}
+```
+
+```zig
+// GOOD
+pub fn foo() void {
+    return helper(.frobnicate);
+}
+
+pub fn bar() void {
+    return helper(.transmogrify);
+}
+
+fn helper(mode: enum { frobnicate, transmogrify }) void {
+    // ...
+}
+```
+
+Rationale: the goal of a public API is to provide an interface that works best
+at the call site. If parts of public API are re-used to implement the rest of
+the API, then there's a tension between making the interface convenient for the
+outside user and making it convenient to use from within abstraction itself.
+Namely, functions tend to grow optional parameters that should never be set by
+the user. Crucially, the parameter growth and interface degradation can happen
+_after_ the original code sharing.
+
+By proactively making the shared implementation private, the tension is defused.
+You still might need to tinker with `helper` signature until it does everything
+it needs to do, but, because the helper is private, this is a cheap, local
+change.
+
+A notable exception to this rule of thumb are "shortcut" APIs, where a public
+function is _defined_ as a commonly used chain of calls to other public
+functions. There, the rule is the opposite --- _no_ private calls are allowed,
+to make sure that it is a genuine shortcut, and not a midlayer mistake.
+
+P.S. While researching if anyone wrote a better blog post already, I stumbled
+upon a fun stack overflow question, asking, paraphrasing:
+
+> I've heard that it is bad when a public function calls another public
+> function. Is this really so?
+
+The most upvoted answer explains that it is indeed bad, because this makes
+mocking to test a single method in isolation more complicated. Which is, imo, a
+natural, but horrible consequence of misguided approach to testing. You
+shouldn't be mocking your methods, you should mock your IO. And, similarly, you
+shouldn't test methods, but rather software functionality (unless you are
+building a public library with a stable API, which is a fun and important, but
+very narrow fraction of software development).
+
+The accepted answer says that this recommendation makes no sense if it is not
+backed by an industry wide or an organizational standard. Which somehow manages
+to make even less sense --- you shouldn't follow the guideline rules because
+they are written in sanctified ink! Rather, you should apply each particular
+rule because of the underlying reasons that motivate the rule. Guidelines and
+best practices articles can concentrate lots of good reasoning in a single
+place, but they don't absolve you from thinking!
