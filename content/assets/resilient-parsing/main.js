@@ -6,10 +6,10 @@ async function main() {
   const output = document.querySelector("#playground > .output");
 
   function update(text) {
-    output.textContent = print_syntax_tree(text);
+    output.value = print_syntax_tree(text);
   }
   input.addEventListener("input", (event) => update(event.target.value));
-  update(input.textContent);
+  update(input.value);
 }
 
 main();
