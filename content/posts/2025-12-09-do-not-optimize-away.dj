@@ -38,7 +38,7 @@ There are two pitfalls with benchmarking. _First_, in
 
 ```zig
 const start = now();
-_ = computation()
+_ = computation();
 const elapsed = now() - start;
 ```
 
@@ -110,6 +110,7 @@ fn parameter(comptime name: []const u8, default: u64) !u64 {
     else
         default;
     print(name ++ "={}\n", .{value});
+    return value;
 }
 ```
 
